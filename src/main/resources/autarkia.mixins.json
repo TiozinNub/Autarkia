@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "dev.luizloyola.autarkia.mixin",
+  "compatibilityLevel": "${java}",
+  "mixins": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
