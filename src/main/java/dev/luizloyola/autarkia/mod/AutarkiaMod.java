@@ -2,8 +2,10 @@ package dev.luizloyola.autarkia.mod;
 
 import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
+import dev.luizloyola.autarkia.mod.inv.ModMenus;
 import dev.luizloyola.autarkia.mod.item.ModComponents;
 import dev.luizloyola.autarkia.mod.item.ModItems;
+import dev.luizloyola.autarkia.mod.nav.PathfinderService;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +21,9 @@ public class AutarkiaMod implements ModInitializer {
         ModEntities.init();
         ModComponents.init();
         ModItems.init();
+        ModMenus.init();
         AutarkiaCommands.register();
+        PathfinderService.init();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
     }
 }

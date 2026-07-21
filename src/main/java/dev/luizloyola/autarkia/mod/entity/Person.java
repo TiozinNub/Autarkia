@@ -1,10 +1,16 @@
 package dev.luizloyola.autarkia.mod.entity;
 
+import dev.luizloyola.autarkia.compat.inv.Inventories;
+import dev.luizloyola.autarkia.compat.inv.ItemStacks;
+import dev.luizloyola.autarkia.core.inv.ArmorType;
+import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
+import dev.luizloyola.autarkia.mod.inv.PersonContainer;
+import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
 import dev.luizloyola.autarkia.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.UUID;
@@ -15,12 +21,19 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.ValueInput;
@@ -68,6 +81,9 @@ public class Person extends Avatar {
 
     private static final String TAG_PERSON_ID = "PersonId";
 
+    /** NBT key under which this entity persists its carried inventory (see {@link Inventories#CODEC}). */
+    private static final String TAG_INVENTORY = "Inventory";
+
     /** Whether this load has projected the directory identity onto the synced fields yet. */
     private boolean identityProjected;
 
@@ -91,6 +107,30 @@ public class Person extends Avatar {
      * server-authoritative and not persisted across reloads.
      */
     private final Navigator navigator = new Navigator(this);
+
+    /**
+     * This person's carried inventory — 9 hotbar + 27 main + 4 armor + 1 offhand, exactly a player's
+     * 41 slots, and the <em>source of truth</em>: the equipment slots are mirrored onto this entity
+     * each server tick ({@link #syncEquipmentMirror()}), and the whole thing persists in NBT and
+     * drops on death. Item components ride along losslessly, as an opaque {@code core} payload.
+     */
+    private final Inventory inventory = new Inventory();
+
+    /**
+     * The last value {@link #syncEquipmentMirror() the equipment mirror} synced for each slot, in
+     * core form — the reference for deciding which side moved. Transient; rebuilt from the inventory
+     * on the first tick after load.
+     */
+    private final java.util.EnumMap<EquipmentSlot, dev.luizloyola.autarkia.core.inv.ItemStack> mirroredEquipment =
+            new java.util.EnumMap<>(EquipmentSlot.class);
+
+    /**
+     * A copy of the vanilla stack last pushed to each equipment slot, so a cheap {@code
+     * ItemStack.matches} tells us whether vanilla mutated the slot (totem consumed, armor durability
+     * spent) without re-encoding component SNBT every tick. Transient.
+     */
+    private final java.util.EnumMap<EquipmentSlot, ItemStack> mirroredVanilla =
+            new java.util.EnumMap<>(EquipmentSlot.class);
 
     /**
      * A player's forward movement input is damped to {@code 0.98} before it reaches {@code travel}
@@ -155,6 +195,7 @@ public class Person extends Avatar {
     @Override
     protected void serverAiStep() {
         super.serverAiStep();
+        syncEquipmentMirror();
         if (this.debugRunForward) {
             // getAttributeValue includes the sprint modifier applied by setSprinting, so this is
             // already the ×1.3 sprint speed; the 0.98 damping keeps it exact vs a player.
@@ -176,17 +217,102 @@ public class Person extends Avatar {
         return this.navigator;
     }
 
+    /** This person's carried inventory — the source of truth the brain (and commands) read/write. */
+    public Inventory inventory() {
+        return this.inventory;
+    }
+
     /**
-     * Send this person walking toward {@code target} (world coordinates). The {@link Navigator}
-     * steers from here on. Cancels the debug jump-sprinter first — the two both own the forward
-     * input, so only one may drive at a time.
+     * Keeps the inventory's equipment slots — main hand (the selected hotbar slot), offhand and the
+     * four armor pieces — in sync with this entity's real equipment, so vanilla renders them and
+     * applies armor mechanics. <b>Two-way:</b> a core change is pushed onto the entity, and a change
+     * vanilla made (a totem consumed, armor durability spent) is pulled back into the inventory.
+     */
+    private void syncEquipmentMirror() {
+        reconcile(EquipmentSlot.MAINHAND, this.inventory.selectedSlot());
+        reconcile(EquipmentSlot.OFFHAND, Inventory.OFFHAND_SLOT);
+        reconcile(EquipmentSlot.HEAD, armorSlotIndex(ArmorType.HEAD));
+        reconcile(EquipmentSlot.CHEST, armorSlotIndex(ArmorType.CHEST));
+        reconcile(EquipmentSlot.LEGS, armorSlotIndex(ArmorType.LEGS));
+        reconcile(EquipmentSlot.FEET, armorSlotIndex(ArmorType.FEET));
+    }
+
+    private static int armorSlotIndex(ArmorType type) {
+        return Inventory.ARMOR_START + type.ordinal();
+    }
+
+    /**
+     * Syncs one core inventory slot with its vanilla equipment slot. If core moved since the last
+     * sync we push it onto the entity; otherwise, if vanilla mutated the entity slot (cheap
+     * {@code ItemStack.matches} against what we last pushed), we pull that back into the inventory.
+     */
+    private void reconcile(EquipmentSlot slot, int coreSlot) {
+        dev.luizloyola.autarkia.core.inv.ItemStack coreStack = this.inventory.get(coreSlot);
+        if (!coreStack.equals(this.mirroredEquipment.get(slot))) {
+            ItemStack pushed = ItemStacks.toVanilla(coreStack, registryAccess());
+            setItemSlot(slot, pushed);
+            this.mirroredEquipment.put(slot, coreStack);
+            this.mirroredVanilla.put(slot, pushed.copy());
+            return;
+        }
+        ItemStack entityStack = getItemBySlot(slot);
+        ItemStack lastPushed = this.mirroredVanilla.get(slot);
+        if (lastPushed != null && ItemStack.matches(entityStack, lastPushed)) {
+            return; // vanilla didn't touch it
+        }
+        dev.luizloyola.autarkia.core.inv.ItemStack entityAsCore = ItemStacks.toCore(entityStack, registryAccess());
+        this.inventory.set(coreSlot, entityAsCore);
+        this.mirroredEquipment.put(slot, entityAsCore);
+        this.mirroredVanilla.put(slot, entityStack.copy());
+    }
+
+    /**
+     * Send this person to the cell containing {@code target} (world coordinates): the
+     * {@link Navigator} computes a route (off the main thread) and walks it. Cancels the debug
+     * jump-sprinter first — the two both own the forward input, so only one may drive at a time.
      */
     public void navigateTo(Vec3 target) {
         if (this.debugRunForward) {
             this.debugRunForward = false;
             setSprinting(false);
         }
-        this.navigator.moveTo(target);
+        this.navigator.pathTo(net.minecraft.core.BlockPos.containing(target));
+    }
+
+    /**
+     * Right-click opens this Person's inventory as a container screen (all 41 slots, take/put),
+     * backed by a live {@link PersonContainer} over the core inventory, so edits write through to
+     * the source of truth. Server-authoritative; the client predicts success so the arm swings.
+     * Main hand only.
+     */
+    @Override
+    public InteractionResult interact(Player player, InteractionHand hand, Vec3 hitPos) {
+        // A held item takes precedence — vanilla calls entity.interact() before the item's
+        // interactLivingEntity, so we must step aside (PASS) to let e.g. the debug wand
+        // select/command the Person.
+        if (hand != InteractionHand.MAIN_HAND || !player.getItemInHand(hand).isEmpty()) {
+            return super.interact(player, hand, hitPos);
+        }
+        if (!this.level().isClientSide()) {
+            player.openMenu(new SimpleMenuProvider(
+                    (syncId, playerInv, opener) ->
+                            new PersonInventoryMenu(syncId, playerInv, new PersonContainer(this)),
+                    getName()));
+        }
+        return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * Wears down worn armor on taking damage, like a player: vanilla's {@code hurtArmor} is a no-op
+     * for a generic {@code LivingEntity}. {@link #doHurtEquipment} applies vanilla's own durability
+     * rules ({@code damageOnHurt}/{@code canBeHurtBy}); the two-way
+     * {@link #syncEquipmentMirror() mirror} carries the wear back into the inventory.
+     */
+    @Override
+    protected void actuallyHurt(ServerLevel level, DamageSource source, float amount) {
+        super.actuallyHurt(level, source, amount);
+        doHurtEquipment(source, amount,
+                EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
     }
 
     /**
@@ -196,17 +322,56 @@ public class Person extends Avatar {
      * input is consumed and reset each tick.
      */
     public void driveForward(float heading) {
+        driveForward(heading, 1.0F);
+    }
+
+    /**
+     * As {@link #driveForward(float)}, with the forward input scaled by {@code throttle} (0..1) —
+     * the navigator's careful gait near edges. Like a player easing the stick, not a speed
+     * attribute change: friction and physics stay vanilla.
+     */
+    public void driveForward(float heading, float throttle) {
         face(heading);
         // getAttributeValue includes any sprint modifier; for a plain (non-sprinting) walk this is
         // MOVEMENT_SPEED (0.1), and the 0.98 damping keeps it exact versus a walking player.
         setSpeed((float) getAttributeValue(Attributes.MOVEMENT_SPEED));
-        this.zza = PLAYER_INPUT_DAMPING; // forward along the current yRot; no strafe
+        this.zza = PLAYER_INPUT_DAMPING * throttle; // forward along the current yRot; no strafe
+        // jumping is a HELD input on LivingEntity — aiStep only clears it for immobile entities
+        // (26.1.2 bytecode). Left set, one press would auto-jump every landing, so inputs here are
+        // per-tick: forward clears it, driveJump() re-presses it.
+        setJumping(false);
     }
 
-    /** Movement control: hold still this tick — no forward input, no jump. */
+    /** Movement control: hold still this tick — no forward input, no jump, walk gait. */
     public void stopMoving() {
         this.zza = 0.0F;
         setJumping(false);
+        // Not for the debug sprinter (which never routes through here): a navigator that stops
+        // mid-sprint must not leave the ×1.3 modifier latched for its next plain walk.
+        if (!this.debugRunForward && isSprinting()) {
+            setSprinting(false);
+        }
+    }
+
+    /**
+     * Movement control: choose this tick's gait. Sprinting adds vanilla's ×1.3 speed modifier
+     * (picked up by {@link #driveForward}'s attribute read — call this first) and the sprint-jump
+     * boost in {@code jumpFromGround}. Guarded on change: {@code setSprinting} churns an attribute
+     * modifier.
+     */
+    public void driveSprint(boolean sprint) {
+        if (isSprinting() != sprint) {
+            setSprinting(sprint);
+        }
+    }
+
+    /**
+     * Movement control: press jump this tick. Call <em>after</em> {@link #driveForward}, which clears
+     * the held jump input. Effective because the navigator ticks inside {@link #serverAiStep()},
+     * before aiStep's ground-jump check.
+     */
+    public void driveJump() {
+        setJumping(true);
     }
 
     /** Snap body and head to face {@code heading} (degrees), so "forward" renders correctly. */
@@ -268,12 +433,29 @@ public class Person extends Avatar {
         if (this.personId != null) {
             output.store(TAG_PERSON_ID, UUIDUtil.CODEC, this.personId.value());
         }
+        output.store(TAG_INVENTORY, Inventories.CODEC, this.inventory);
     }
 
     @Override
     protected void readAdditionalSaveData(ValueInput input) {
         super.readAdditionalSaveData(input);
         input.read(TAG_PERSON_ID, UUIDUtil.CODEC).map(PersonId::of).ifPresent(this::setPersonId);
+        input.read(TAG_INVENTORY, Inventories.CODEC).ifPresent(this.inventory::copyFrom);
+    }
+
+    /**
+     * Drops the entire carried inventory (equipment included) as real items on death, then clears it.
+     * Nothing drops twice: {@code Avatar} is a plain {@code LivingEntity}, not a {@code Mob}, so it
+     * inherits {@code LivingEntity}'s empty {@code dropEquipment}/{@code dropCustomDeathLoot} — the
+     * gear-drop machinery lives in {@code Mob}.
+     */
+    @Override
+    protected void dropCustomDeathLoot(ServerLevel level, DamageSource damageSource, boolean recentlyHit) {
+        super.dropCustomDeathLoot(level, damageSource, recentlyHit);
+        for (Inventory.Entry entry : this.inventory.occupied()) {
+            spawnAtLocation(level, ItemStacks.toVanilla(entry.stack(), registryAccess()));
+        }
+        this.inventory.clear();
     }
 
     public Identifier getSkinTexture() {

@@ -5,12 +5,16 @@ import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.ArmorModelSet;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
@@ -34,6 +38,14 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
         this.wideModel = this.model;
         this.slimModel = new PlayerModel(ctx.bakeLayer(ModelLayers.PLAYER_SLIM), true);
         addLayer(new PlayerItemInHandLayer<>(this));
+        // Draw worn armor: the mirror equips it onto the entity's real equipment slots,
+        // extractRenderState pulls them into head/chest/legs/feetEquipment, and this layer renders
+        // them off the vanilla player-armor models — vanilla items bring their own textures.
+        addLayer(new HumanoidArmorLayer<>(
+                this,
+                ArmorModelSet.bake(ModelLayers.PLAYER_ARMOR, ctx.getModelSet(),
+                        (ModelPart part) -> new HumanoidModel<AvatarRenderState>(part)),
+                ctx.getEquipmentRenderer()));
     }
 
     @Override
