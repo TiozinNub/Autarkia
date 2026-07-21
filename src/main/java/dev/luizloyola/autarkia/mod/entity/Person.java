@@ -4,8 +4,10 @@ import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -54,14 +56,12 @@ public class Person extends Avatar {
 
     private static final String TAG_PERSON_ID = "PersonId";
 
-    /** Whether this load has projected the directory's appearance onto the synced fields yet. */
-    private boolean appearanceSynced;
+    /** Whether this load has projected the directory identity onto the synced fields yet. */
+    private boolean identityProjected;
 
     /**
-     * This entity's link to its full identity in the world-scoped {@link PersonDirectory} — a
-     * reference only, so the name and the rest outlive the entity. Server-side and not synced: the
-     * client needs only the entity to ask who this is. {@code null} until first assigned (see
-     * {@link #tick()}).
+     * This entity's link to its identity in the world-scoped {@link PersonDirectory} — only a
+     * reference, so the identity itself outlives the entity. {@code null} until first assigned.
      */
     private @Nullable PersonId personId;
 
@@ -97,24 +97,30 @@ public class Person extends Avatar {
     public void tick() {
         super.tick();
         if (this.level() instanceof ServerLevel serverLevel
-                && (this.personId == null || !this.appearanceSynced)) {
+                && (this.personId == null || !this.identityProjected)) {
             PersonDirectory directory = PersonDirectory.get(serverLevel.getServer());
             // Assign a persistent identity on first tick. Lazy (not in a constructor) because it
             // needs the running server; Avatar is not a Mob, so there is no finalizeSpawn hook.
             if (this.personId == null) {
                 this.personId = directory.createPerson().id();
             }
-            // Mirror the directory's appearance (skin, gender) onto the synced fields so clients
-            // render it. Once per load — the directory is the source of truth.
-            if (!this.appearanceSynced) {
-                directory.find(this.personId).ifPresent(identity -> applyAppearance(identity.appearance()));
-                this.appearanceSynced = true;
+            // Mirror the public appearance onto the synced fields, once per load — the directory is
+            // the source of truth.
+            if (!this.identityProjected) {
+                directory.find(this.personId).ifPresent(this::applyIdentity);
+                this.identityProjected = true;
             }
         }
     }
 
-    /** Push a person's external appearance onto the synced fields (server-side). */
-    private void applyAppearance(Appearance appearance) {
+    /**
+     * Push a person's public identity onto the synced fields (server-side). The name rides on the
+     * auto-synced custom name, always visible, so every client that sees this Person reads it.
+     */
+    private void applyIdentity(PersonIdentity identity) {
+        setCustomName(Component.literal(identity.name()));
+        setCustomNameVisible(true);
+        Appearance appearance = identity.appearance();
         setSkinTexture(Identifier.parse(appearance.skin()));
         this.entityData.set(DATA_GENDER, appearance.gender().name());
         this.entityData.set(DATA_SLIM, appearance.model() == ModelType.SLIM);
