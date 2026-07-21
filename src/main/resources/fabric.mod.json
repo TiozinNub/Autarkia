@@ -13,6 +13,9 @@
   "entrypoints": {
     "main": [
       "dev.luizloyola.autarkia.mod.AutarkiaMod"
+    ],
+    "client": [
+      "dev.luizloyola.autarkia.mod.client.AutarkiaClient"
     ]
   },
   "mixins": [

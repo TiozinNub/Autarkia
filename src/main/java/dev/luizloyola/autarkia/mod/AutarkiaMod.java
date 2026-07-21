@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod;
 
+import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,7 @@ public class AutarkiaMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        ModEntities.init();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
     }
 }
