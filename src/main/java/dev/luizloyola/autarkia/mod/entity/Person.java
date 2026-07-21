@@ -296,7 +296,7 @@ public class Person extends Avatar {
         if (!this.level().isClientSide()) {
             player.openMenu(new SimpleMenuProvider(
                     (syncId, playerInv, opener) ->
-                            new PersonInventoryMenu(syncId, playerInv, new PersonContainer(this)),
+                            new PersonInventoryMenu(syncId, playerInv, new PersonContainer(this), getId()),
                     getName()));
         }
         return InteractionResult.SUCCESS;
