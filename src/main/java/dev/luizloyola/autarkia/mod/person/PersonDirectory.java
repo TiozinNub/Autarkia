@@ -2,10 +2,13 @@ package dev.luizloyola.autarkia.mod.person;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.luizloyola.autarkia.core.person.Appearance;
+import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
+import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -16,6 +19,7 @@ import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.random.RandomGenerator;
 
 /**
  * The world-scoped, persisted store of every person's full identity — the {@code mod}-layer home
@@ -30,11 +34,25 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class PersonDirectory extends SavedData {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
 
-    /** One identity entry: {@code {id, name}}. */
+    /** Default external appearance for a new (or legacy, pre-appearance) person. */
+    private static final Appearance DEFAULT_APPEARANCE =
+            new Appearance(Gender.MALE, Person.DEFAULT_SKIN.toString());
+
+    private static final Codec<Gender> GENDER_CODEC = Codec.STRING.xmap(Gender::valueOf, Gender::name);
+
+    /** The external, synced tier: {@code {gender, skin}}. */
+    private static final Codec<Appearance> APPEARANCE_CODEC = RecordCodecBuilder.create(a -> a.group(
+            GENDER_CODEC.fieldOf("gender").forGetter(Appearance::gender),
+            Codec.STRING.fieldOf("skin").forGetter(Appearance::skin)
+    ).apply(a, Appearance::new));
+
+    /** One identity entry: {@code {id, name, appearance}}. Appearance is optional so entries
+     *  written before the external tier existed still load (they get {@link #DEFAULT_APPEARANCE}). */
     private static final Codec<PersonIdentity> ENTRY_CODEC = RecordCodecBuilder.create(entry -> entry.group(
             UUIDUtil.CODEC.fieldOf("id").forGetter(identity -> identity.id().value()),
-            Codec.STRING.fieldOf("name").forGetter(PersonIdentity::name)
-    ).apply(entry, (uuid, name) -> new PersonIdentity(PersonId.of(uuid), name)));
+            Codec.STRING.fieldOf("name").forGetter(PersonIdentity::name),
+            APPEARANCE_CODEC.optionalFieldOf("appearance", DEFAULT_APPEARANCE).forGetter(PersonIdentity::appearance)
+    ).apply(entry, (uuid, name, appearance) -> new PersonIdentity(PersonId.of(uuid), name, appearance)));
 
     private static final Codec<PersonDirectory> CODEC = RecordCodecBuilder.create(dir -> dir.group(
             ENTRY_CODEC.listOf().fieldOf("persons").forGetter(PersonDirectory::entries)
@@ -59,10 +77,12 @@ public final class PersonDirectory extends SavedData {
         return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
-    /** Registers a brand-new person with a generated name, marks the store dirty, returns it. */
+    /** Registers a brand-new person with a generated name + appearance, marks dirty, returns it. */
     public PersonIdentity createPerson() {
-        String name = PersonNames.random(ThreadLocalRandom.current());
-        PersonIdentity identity = registry.create(PersonId.random(), name);
+        RandomGenerator random = ThreadLocalRandom.current();
+        String name = PersonNames.random(random);
+        Appearance appearance = new Appearance(Gender.random(random), Person.DEFAULT_SKIN.toString());
+        PersonIdentity identity = registry.create(PersonId.random(), name, appearance);
         setDirty();
         return identity;
     }

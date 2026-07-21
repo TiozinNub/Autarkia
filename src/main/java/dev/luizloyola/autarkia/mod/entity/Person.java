@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.mod.entity;
 
+import dev.luizloyola.autarkia.core.person.Appearance;
+import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import net.minecraft.core.UUIDUtil;
@@ -35,7 +37,19 @@ public class Person extends Avatar {
     private static final EntityDataAccessor<String> DATA_SKIN =
             SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
 
+    /**
+     * External identity synced to clients for rendering (the always-on tier). Skin lives in
+     * {@link #DATA_SKIN}; gender here. Both are projected from the person's {@link Appearance} in
+     * the {@link PersonDirectory} — the directory is the source of truth, these are its client
+     * mirror. The full identity (name, …) is not synced.
+     */
+    private static final EntityDataAccessor<String> DATA_GENDER =
+            SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
+
     private static final String TAG_PERSON_ID = "PersonId";
+
+    /** Whether this load has projected the directory's appearance onto the synced fields yet. */
+    private boolean appearanceSynced;
 
     /**
      * This entity's link to its full identity in the world-scoped {@link PersonDirectory} — a
@@ -69,16 +83,33 @@ public class Person extends Avatar {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(DATA_SKIN, DEFAULT_SKIN.toString());
+        builder.define(DATA_GENDER, Gender.MALE.name());
     }
 
     @Override
     public void tick() {
         super.tick();
-        // Assign a persistent identity on first server tick. Lazy (not in a constructor) because it
-        // needs the running server; Avatar is not a Mob, so there is no finalizeSpawn hook.
-        if (this.personId == null && this.level() instanceof ServerLevel serverLevel) {
-            this.personId = PersonDirectory.get(serverLevel.getServer()).createPerson().id();
+        if (this.level() instanceof ServerLevel serverLevel
+                && (this.personId == null || !this.appearanceSynced)) {
+            PersonDirectory directory = PersonDirectory.get(serverLevel.getServer());
+            // Assign a persistent identity on first tick. Lazy (not in a constructor) because it
+            // needs the running server; Avatar is not a Mob, so there is no finalizeSpawn hook.
+            if (this.personId == null) {
+                this.personId = directory.createPerson().id();
+            }
+            // Mirror the directory's appearance (skin, gender) onto the synced fields so clients
+            // render it. Once per load — the directory is the source of truth.
+            if (!this.appearanceSynced) {
+                directory.find(this.personId).ifPresent(identity -> applyAppearance(identity.appearance()));
+                this.appearanceSynced = true;
+            }
         }
+    }
+
+    /** Push a person's external appearance onto the synced fields (server-side). */
+    private void applyAppearance(Appearance appearance) {
+        setSkinTexture(Identifier.parse(appearance.skin()));
+        this.entityData.set(DATA_GENDER, appearance.gender().name());
     }
 
     /** This person's directory handle, or {@code null} before it has been assigned (client, or the
@@ -107,6 +138,11 @@ public class Person extends Avatar {
 
     public void setSkinTexture(Identifier id) {
         this.entityData.set(DATA_SKIN, id.toString());
+    }
+
+    /** This person's synced gender (readable on both sides). Part of the external identity. */
+    public Gender getGender() {
+        return Gender.valueOf(this.entityData.get(DATA_GENDER));
     }
 
     /**

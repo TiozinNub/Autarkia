@@ -24,11 +24,12 @@ public final class PersonRegistry {
         return identity;
     }
 
-    public PersonIdentity create(PersonId id, String name) {
+    /** Registers a new person from an id + name + appearance, rejecting a duplicate id. */
+    public PersonIdentity create(PersonId id, String name, Appearance appearance) {
         if (byId.containsKey(id)) {
             throw new IllegalArgumentException("person already registered: " + id);
         }
-        return register(new PersonIdentity(id, name));
+        return register(new PersonIdentity(id, name, appearance));
     }
 
     public Optional<PersonIdentity> get(PersonId id) {

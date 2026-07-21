@@ -1,7 +1,8 @@
 package dev.luizloyola.autarkia.mod.command;
 
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -10,6 +11,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
@@ -72,9 +74,18 @@ public final class AutarkiaCommands {
                     .withStyle(ChatFormatting.GRAY), false);
             return;
         }
-        String name = PersonDirectory.get(source.getServer()).nameOf(id).orElse("<unknown>");
-        source.sendSuccess(() -> Component.literal(name)
-                .withStyle(ChatFormatting.AQUA)
-                .append(Component.literal("  " + id).withStyle(ChatFormatting.DARK_GRAY)), false);
+        PersonIdentity identity = PersonDirectory.get(source.getServer()).find(id).orElse(null);
+        if (identity == null) {
+            source.sendSuccess(() -> Component.literal(id + "  <unknown>").withStyle(ChatFormatting.GRAY), false);
+            return;
+        }
+        Appearance appearance = identity.appearance();
+        // Full tier (name) + external tier (gender, skin) + the stable id.
+        ChatFormatting genderColor = appearance.gender().choose(ChatFormatting.BLUE, ChatFormatting.LIGHT_PURPLE);
+        MutableComponent line = Component.literal(identity.name()).withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" " + appearance.gender()).withStyle(genderColor))
+                .append(Component.literal("  " + appearance.skin()).withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("  " + id).withStyle(ChatFormatting.DARK_GRAY));
+        source.sendSuccess(() -> line, false);
     }
 }
