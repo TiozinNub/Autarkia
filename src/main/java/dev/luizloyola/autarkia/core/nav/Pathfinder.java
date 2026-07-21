@@ -87,6 +87,7 @@ public final class Pathfinder {
     private final NavGrid grid;
     private final AgentProfile profile;
     private final int goalX;
+    private final int goalY;
     private final int goalZ;
 
     /** Per-cell search record, keyed by packed position in {@link #nodes}. */
@@ -107,6 +108,7 @@ public final class Pathfinder {
         this.grid = grid;
         this.profile = request.profile();
         this.goalX = request.goalX();
+        this.goalY = request.goalY();
         this.goalZ = request.goalZ();
     }
 
@@ -126,7 +128,7 @@ public final class Pathfinder {
         this.open.push(start, heuristic(request.startX(), request.startZ()));
 
         long best = start;
-        double bestH = heuristic(request.startX(), request.startZ());
+        double bestScore = partialScore(request.startX(), request.startY(), request.startZ());
         double bestG = 0.0;
 
         int expanded = 0;
@@ -141,10 +143,10 @@ public final class Pathfinder {
             if (current == goal) {
                 return reconstruct(current, true);
             }
-            double h = heuristic(unpackX(current), unpackZ(current));
-            if (h < bestH || (h == bestH && node.g < bestG)) {
+            double score = partialScore(unpackX(current), unpackY(current), unpackZ(current));
+            if (score < bestScore || (score == bestScore && node.g < bestG)) {
                 best = current;
-                bestH = h;
+                bestScore = score;
                 bestG = node.g;
             }
             if (++expanded >= request.maxNodes()) {
@@ -197,7 +199,10 @@ public final class Pathfinder {
             int lx = x + (gap + 1) * dx;
             int lz = z + (gap + 1) * dz;
             if (isStandable(lx, y, lz)) {
-                if (gap >= 2 && !isStandable(x - dx, y, z - dz)) return;
+                // No run-up requirement, deliberately (Luiz): the follower sprints from inside the
+                // takeoff cell and never backs up, so ground behind it changed which leaps were
+                // ALLOWED without changing how any was EXECUTED. Capability is purely geometric;
+                // if 3-gaps prove unreliable, fix the follower, not this check.
                 relax(current, node, pack(lx, y, lz), MoveType.LEAP, LEAP_COSTS[gap]);
                 return; // landed on the near edge of the far side; wider leaps from here are moot
             }
@@ -344,6 +349,20 @@ public final class Pathfinder {
         double dx = x - this.goalX;
         double dz = z - this.goalZ;
         return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /**
+     * How close a cell is to the goal <em>for choosing the partial-path endpoint</em> — full 3-D
+     * distance, unlike the (horizontal-only, admissible) search heuristic. With the
+     * horizontal metric, the ground at the base of an unreachable tower scored zero and every
+     * partial path marched the person to stand under the target; in 3-D a summit near the goal's
+     * height wins instead, so "as close as I could get" includes altitude.
+     */
+    private double partialScore(int x, int y, int z) {
+        double dx = x - this.goalX;
+        double dy = y - this.goalY;
+        double dz = z - this.goalZ;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     /** Walks the parent chain from {@code end} back to the start and emits it forward. */

@@ -180,11 +180,48 @@ class PathfinderTest {
     }
 
     @Test
-    void aWideGapNeedsTheRunUpCell() {
-        // Takeoff sits at the world edge: no aligned cell behind it to sprint from, so the
-        // 2-wide gap is unleapable.
-        Path path = find(AsciiWorld.of("1  1"), 0, 1, 0, 3, 1, 0);
+    void leapsATwoWideGapFromAStaircaseSummit() {
+        // The run-up cell behind a staircase summit is one step down, and must still count for a
+        // 2-gap: jumping up and sprinting across the takeoff carries enough speed.
+        Path path = find(AsciiWorld.of("1234  4"), 0, 1, 0, 6, 4, 0);
+        assertTrue(path.reachedGoal());
+        assertTrue(path.waypoints().contains(new Waypoint(6, 4, 0, MoveType.LEAP)),
+                "expected a summit leap onto (6,4), got " + path.waypoints());
+    }
+
+    @Test
+    void leapsAThreeWideGapFromAStaircaseSummit() {
+        Path path = find(AsciiWorld.of("1234   4"), 0, 1, 0, 7, 4, 0);
+        assertTrue(path.reachedGoal());
+        assertTrue(path.waypoints().contains(new Waypoint(7, 4, 0, MoveType.LEAP)));
+    }
+
+    @Test
+    void partialPathClimbsTowardAHighGoalInsteadOfStandingUnderIt() {
+        // The partial path ends high on the staircase (3-D closest), not at the tower's foot where
+        // the old horizontal-only metric scored zero.
+        Path path = find(AsciiWorld.of("123411119"), 0, 1, 0, 8, 9, 0);
         assertFalse(path.reachedGoal());
+        assertFalse(path.isEmpty());
+        assertEquals(4, path.last().y(), "should end atop the staircase: " + path.waypoints());
+    }
+
+    @Test
+    void leapsATwoWideGapFromAStandingStart() {
+        // No run-up cell at all (world edge behind the takeoff): a 2-gap still clears from a
+        // standing sprint-jump.
+        Path path = find(AsciiWorld.of("1  1"), 0, 1, 0, 3, 1, 0);
+        assertTrue(path.reachedGoal());
+        assertEquals(List.of(new Waypoint(3, 1, 0, MoveType.LEAP)), path.waypoints());
+    }
+
+    @Test
+    void leapsAThreeWideGapFromAStandingStart() {
+        // No ground behind the takeoff at all: capability is geometric, so this equals the
+        // has-a-block-behind case (the follower sprints from inside the takeoff either way).
+        Path path = find(AsciiWorld.of("1   1"), 0, 1, 0, 4, 1, 0);
+        assertTrue(path.reachedGoal());
+        assertEquals(List.of(new Waypoint(4, 1, 0, MoveType.LEAP)), path.waypoints());
     }
 
     @Test

@@ -105,6 +105,8 @@ public final class Navigator {
     private int index;
     private int stuckTicks;
     private int noMoveTicks;
+    /** Consecutive grounded FOLLOWING ticks — the leap press waits for a few (see tickFollowing). */
+    private int groundedTicks;
     private double lastTickX;
     private double lastTickZ;
     private int repathsLeft;
@@ -225,8 +227,22 @@ public final class Navigator {
     }
 
     private void tickFollowing() {
+        this.groundedTicks = this.person.onGround() ? this.groundedTicks + 1 : 0;
         skipPassedWaypoints();
         advancePassedPlanes(this.person.position());
+        // Landing beat: the first grounded ticks after any airborne phase, on ground bordering a
+        // drop, are braking ticks — input cut, friction kills the arrival momentum. Independent of
+        // waypoint bookkeeping: on chained leaps the skip/plane advance claims the landing mid-air,
+        // so a sprint landing skidded over the far lip of a 1-wide pillar. Continuous walking near
+        // edges never trips it.
+        if (this.groundedTicks >= 1 && this.groundedTicks <= 3 && this.grid != null) {
+            BlockPos feet = this.person.blockPosition();
+            if (NavGrids.isNearDeepDrop(this.grid, AgentProfile.PERSON.maxDrop(),
+                    feet.getX(), feet.getY(), feet.getZ())) {
+                this.person.stopMoving();
+                return;
+            }
+        }
         Waypoint waypoint = this.path.waypoints().get(this.index);
         boolean isLast = this.index == this.path.waypoints().size() - 1;
         Vec3 pos = this.person.position();
@@ -313,7 +329,10 @@ public final class Navigator {
         boolean overTarget = !this.person.onGround()
                 && (horizontalSq < 0.25 || dx * velocity.x + dz * velocity.z < 0.0);
         boolean hasNext = this.index + 1 < this.path.waypoints().size();
-        if (overTarget && hasNext) {
+        // A leap in flight is COMMITTED: it aims at its landing and nothing else — aim-next here
+        // air-curved chained leaps around corners, scraping (or missing) the landing block.
+        boolean committedFlight = waypoint.move() == MoveType.LEAP && !this.person.onGround();
+        if (overTarget && hasNext && !committedFlight) {
             Waypoint next = this.path.waypoints().get(this.index + 1);
             aimX = next.x() + 0.5 - pos.x;
             aimZ = next.z() + 0.5 - pos.z;
@@ -323,8 +342,9 @@ public final class Navigator {
         // a walk back.
         boolean coastToLanding = overTarget && !hasNext;
         // Minecraft yaw: 0 faces +Z (south) and increases clockwise, so facing a point is
-        // atan2(dz, dx) in degrees, offset by -90.
-        float heading = coastToLanding
+        // atan2(dz, dx) in degrees, offset by -90. A committed leap flight past its landing's
+        // center holds the takeoff heading (straight flight) instead of swinging around.
+        float heading = coastToLanding || (committedFlight && overTarget)
                 ? this.person.getYRot()
                 : (float) (Mth.atan2(aimZ, aimX) * Mth.RAD_TO_DEG) - 90.0F;
         // Gait before forward input: driveForward reads the speed attribute, which sprinting
@@ -344,9 +364,16 @@ public final class Navigator {
         } else if (waypoint.move() == MoveType.LEAP && this.person.onGround()) {
             // Leap: run (or sprint) at the gap and press jump right at the edge. The takeoff cell's
             // far rim sits at span−0.5 from the landing center, so pressing inside span−0.2 launches
-            // within a step of it and the arc clears the gap.
+            // within a step of it; the band FLOOR (span−1.2) confines the press to the takeoff side,
+            // where a plain <= check stayed true after touchdown and hopped her in place. A failed
+            // leap ending back inside the band re-presses — that is the retry.
+            // The grounded-ticks gate is the landing beat between CHAINED leaps: an overshot landing
+            // can already sit inside the next leap's band, and pressing there with leap momentum
+            // still live launches a wild hop. Three grounded ticks cost a running approach nothing.
             double press = leapSpan - 0.2;
-            if (horizontalSq <= press * press) {
+            double pressFloor = leapSpan - 1.2;
+            if (this.groundedTicks >= 3
+                    && horizontalSq <= press * press && horizontalSq > pressFloor * pressFloor) {
                 this.person.driveJump();
             }
         }
@@ -370,6 +397,12 @@ public final class Navigator {
         int limit = Math.min(this.index + SKIP_LOOKAHEAD, last);
         for (int j = limit; j > this.index; j--) {
             Waypoint w = this.path.waypoints().get(j);
+            // A LEAP landing can't be "passed through" mid-air: claiming it while flying over
+            // rewires the steering to the next waypoint and turns chained leaps into one long
+            // curved flight. It counts only once the feet are actually planted.
+            if (w.move() == MoveType.LEAP && !this.person.onGround()) {
+                continue;
+            }
             if (feet.getX() == w.x() && feet.getZ() == w.z() && verticalGap(y - w.y()) < 0.5) {
                 this.index = Math.min(j + 1, last);
                 this.stuckTicks = 0;
@@ -388,12 +421,23 @@ public final class Navigator {
     private void advancePassedPlanes(Vec3 pos) {
         while (this.index < this.path.waypoints().size() - 1) {
             Waypoint current = this.path.waypoints().get(this.index);
+            if (current.move() == MoveType.LEAP && !this.person.onGround()) {
+                return; // a leap landing is claimed on touchdown, never mid-flight (see skip)
+            }
             Waypoint next = this.path.waypoints().get(this.index + 1);
             double offX = pos.x - (current.x() + 0.5);
             double offZ = pos.z - (current.z() + 0.5);
+            double segX = next.x() - current.x();
+            double segZ = next.z() - current.z();
+            double segLen = Math.sqrt(segX * segX + segZ * segZ);
+            // Decompose the offset against the outgoing segment: FORWARD overshoot is the glide this
+            // advance exists for (up to 2.5); LATERAL drift means we are BESIDE the waypoint, and
+            // claiming it skips the sidestep that aligns for a cardinal jump. A single round radius
+            // conflated the two.
+            double forward = (offX * segX + offZ * segZ) / segLen;
+            double lateral = Math.abs(offX * segZ - offZ * segX) / segLen;
             if (verticalGap(pos.y - current.y()) >= 0.5
-                    || offX * offX + offZ * offZ > 4.0
-                    || offX * (next.x() - current.x()) + offZ * (next.z() - current.z()) <= 0.0) {
+                    || forward <= 0.0 || forward > 2.5 || lateral > 0.6) {
                 return;
             }
             this.index++;
