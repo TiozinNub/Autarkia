@@ -1,17 +1,21 @@
 package dev.luizloyola.autarkia.mod.client.render;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.player.PlayerModelType;
 
 /**
  * Renders a {@link Person} with the vanilla {@link PlayerModel}, using the entity's chosen
@@ -22,9 +26,24 @@ import net.minecraft.resources.Identifier;
  */
 @Environment(EnvType.CLIENT)
 public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderState, PlayerModel> {
+    private final PlayerModel wideModel;
+    private final PlayerModel slimModel;
+
     public PersonRenderer(EntityRendererProvider.Context ctx) {
         super(ctx, new PlayerModel(ctx.bakeLayer(ModelLayers.PLAYER), false), 0.5F);
+        this.wideModel = this.model;
+        this.slimModel = new PlayerModel(ctx.bakeLayer(ModelLayers.PLAYER_SLIM), true);
         addLayer(new PlayerItemInHandLayer<>(this));
+    }
+
+    @Override
+    public void submit(AvatarRenderState state, PoseStack poseStack, SubmitNodeCollector collector,
+                       CameraRenderState camera) {
+        // Per-Person wide/slim dispatch. The skin carries its own model type; submit() renders
+        // synchronously with this.model, so selecting it here is safe under the batched pipeline
+        // (unlike extractRenderState, whose writes would be overwritten before rendering).
+        this.model = state.skin.model() == PlayerModelType.SLIM ? this.slimModel : this.wideModel;
+        super.submit(state, poseStack, collector, camera);
     }
 
     @Override

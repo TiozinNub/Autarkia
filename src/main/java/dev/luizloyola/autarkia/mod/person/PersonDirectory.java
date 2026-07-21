@@ -4,10 +4,12 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
+import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
+import dev.luizloyola.autarkia.core.person.PersonSkins;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.Identifier;
@@ -34,16 +36,19 @@ import java.util.random.RandomGenerator;
 public final class PersonDirectory extends SavedData {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
 
-    /** Default external appearance for a new (or legacy, pre-appearance) person. */
+    /** Default external appearance for a legacy (pre-appearance) person. */
     private static final Appearance DEFAULT_APPEARANCE =
-            new Appearance(Gender.MALE, Person.DEFAULT_SKIN.toString());
+            new Appearance(Gender.MALE, Person.DEFAULT_SKIN.toString(), ModelType.WIDE);
 
     private static final Codec<Gender> GENDER_CODEC = Codec.STRING.xmap(Gender::valueOf, Gender::name);
+    private static final Codec<ModelType> MODEL_CODEC = Codec.STRING.xmap(ModelType::valueOf, ModelType::name);
 
-    /** The external, synced tier: {@code {gender, skin}}. */
+    /** The external, synced tier: {@code {gender, skin, model}}. {@code model} is optional so
+     *  entries written before it existed still load (they fall back to {@code WIDE}). */
     private static final Codec<Appearance> APPEARANCE_CODEC = RecordCodecBuilder.create(a -> a.group(
             GENDER_CODEC.fieldOf("gender").forGetter(Appearance::gender),
-            Codec.STRING.fieldOf("skin").forGetter(Appearance::skin)
+            Codec.STRING.fieldOf("skin").forGetter(Appearance::skin),
+            MODEL_CODEC.optionalFieldOf("model", ModelType.WIDE).forGetter(Appearance::model)
     ).apply(a, Appearance::new));
 
     /** One identity entry: {@code {id, name, appearance}}. Appearance is optional so entries
@@ -80,8 +85,13 @@ public final class PersonDirectory extends SavedData {
     /** Registers a brand-new person with a generated name + appearance, marks dirty, returns it. */
     public PersonIdentity createPerson() {
         RandomGenerator random = ThreadLocalRandom.current();
-        String name = PersonNames.random(random);
-        Appearance appearance = new Appearance(Gender.random(random), Person.DEFAULT_SKIN.toString());
+        Gender gender = Gender.random(random);
+        // Name and skin come from the pools for this gender; the model follows the skin's geometry
+        // (our male skins are wide, female slim — see PersonSkins).
+        String name = PersonNames.random(random, gender);
+        String skin = PersonSkins.random(random, gender);
+        ModelType model = gender.choose(ModelType.WIDE, ModelType.SLIM);
+        Appearance appearance = new Appearance(gender, skin, model);
         PersonIdentity identity = registry.create(PersonId.random(), name, appearance);
         setDirty();
         return identity;

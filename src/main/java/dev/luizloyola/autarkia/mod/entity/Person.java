@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.entity;
 
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
+import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import net.minecraft.core.UUIDUtil;
@@ -46,6 +47,11 @@ public class Person extends Avatar {
     private static final EntityDataAccessor<String> DATA_GENDER =
             SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
 
+    /** Whether this person renders with the slim (Alex) arm model rather than wide (Steve). Synced
+     *  for the renderer; projected from the person's {@link Appearance#model()}. */
+    private static final EntityDataAccessor<Boolean> DATA_SLIM =
+            SynchedEntityData.defineId(Person.class, EntityDataSerializers.BOOLEAN);
+
     private static final String TAG_PERSON_ID = "PersonId";
 
     /** Whether this load has projected the directory's appearance onto the synced fields yet. */
@@ -84,6 +90,7 @@ public class Person extends Avatar {
         super.defineSynchedData(builder);
         builder.define(DATA_SKIN, DEFAULT_SKIN.toString());
         builder.define(DATA_GENDER, Gender.MALE.name());
+        builder.define(DATA_SLIM, false);
     }
 
     @Override
@@ -110,6 +117,7 @@ public class Person extends Avatar {
     private void applyAppearance(Appearance appearance) {
         setSkinTexture(Identifier.parse(appearance.skin()));
         this.entityData.set(DATA_GENDER, appearance.gender().name());
+        this.entityData.set(DATA_SLIM, appearance.model() == ModelType.SLIM);
     }
 
     /** This person's directory handle, or {@code null} before it has been assigned (client, or the
@@ -143,6 +151,11 @@ public class Person extends Avatar {
     /** This person's synced gender (readable on both sides). Part of the external identity. */
     public Gender getGender() {
         return Gender.valueOf(this.entityData.get(DATA_GENDER));
+    }
+
+    /** Whether this person renders with the slim (Alex) arm model. Synced; used by the renderer. */
+    public boolean isSlim() {
+        return this.entityData.get(DATA_SLIM);
     }
 
     /**

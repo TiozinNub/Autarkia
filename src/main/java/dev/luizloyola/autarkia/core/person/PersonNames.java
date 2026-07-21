@@ -4,41 +4,60 @@ import java.util.List;
 import java.util.random.RandomGenerator;
 
 /**
- * Names for new persons, deterministic for a given {@link RandomGenerator} so assignment is
- * unit-testable. A placeholder starter set of common English names, separate from skin choice; only
- * the given name is used today.
+ * Generates names for new persons.
  *
- * <p>Sources: US SSA given names by long-run popularity (1880–2008); US Census surnames.
+ * <p>Deterministic for a given {@link RandomGenerator}, so name assignment is unit-testable.
+ * Given names are gendered (a new person draws from the pool for their {@link Gender}); surnames
+ * are a shared pool reserved for a future family/lineage system. Placeholder starter sets, kept
+ * separate from skin choice. Culture/biome variation comes later.
+ *
+ * <p>Sources: given names aggregated by long-run popularity from US SSA data (1880–2008), split by
+ * the recorded sex; surnames from the US Census most-common-surnames list.
  */
 public final class PersonNames {
     private PersonNames() {}
 
-    static final List<String> FIRST_NAMES = List.of(
-            "Aaron", "Adam", "Agnes", "Albert", "Alexander", "Alfred", "Alice", "Amanda",
-            "Amy", "Andrew", "Angela", "Ann", "Anna", "Annie", "Anthony", "Arthur",
-            "Ashley", "Barbara", "Benjamin", "Bertha", "Bessie", "Betty", "Billy", "Brandon",
-            "Brenda", "Brian", "Carl", "Carol", "Carolyn", "Carrie", "Catherine", "Charles",
-            "Charlie", "Christina", "Christine", "Christopher", "Clara", "Clarence", "Cynthia", "Daniel",
-            "David", "Deborah", "Debra", "Dennis", "Diane", "Donald", "Donna", "Doris",
-            "Dorothy", "Douglas", "Earl", "Edith", "Edna", "Edward", "Eleanor", "Elizabeth",
-            "Ella", "Ellen", "Elsie", "Emily", "Emma", "Eric", "Ernest", "Esther",
-            "Ethel", "Eugene", "Eva", "Evelyn", "Florence", "Frances", "Francis", "Frank",
-            "Fred", "Frederick", "Gary", "George", "Gerald", "Gertrude", "Gladys", "Gloria",
-            "Grace", "Gregory", "Harold", "Harry", "Hazel", "Heather", "Helen", "Henry",
-            "Herbert", "Howard", "Ida", "Irene", "Jack", "Jacob", "James", "Jane",
-            "Janet", "Jason", "Jean", "Jeffrey", "Jennifer", "Jerry", "Jesse", "Jessica",
-            "Jessie", "Joan", "Joe", "John", "Jonathan", "Jose", "Joseph", "Josephine",
-            "Joshua", "Joyce", "Judith", "Julia", "Julie", "Justin", "Karen", "Katherine",
-            "Kathleen", "Kathryn", "Kelly", "Kenneth", "Kevin", "Kimberly", "Larry", "Laura",
-            "Lawrence", "Lee", "Leonard", "Leslie", "Lillian", "Lillie", "Linda", "Lisa",
-            "Lois", "Louis", "Louise", "Mabel", "Margaret", "Maria", "Marie", "Marion",
-            "Mark", "Martha", "Mary", "Matthew", "Melissa", "Michael", "Michelle", "Mildred",
-            "Minnie", "Myrtle", "Nancy", "Nathan", "Nellie", "Nicholas", "Nicole", "Pamela",
-            "Patricia", "Patrick", "Paul", "Pearl", "Peter", "Rachel", "Ralph", "Raymond",
-            "Rebecca", "Richard", "Robert", "Roger", "Ronald", "Rose", "Roy", "Ruby",
-            "Russell", "Ruth", "Ryan", "Samantha", "Samuel", "Sandra", "Sara", "Sarah",
-            "Scott", "Sharon", "Shirley", "Stanley", "Stephanie", "Stephen", "Steven", "Susan",
-            "Terry", "Theresa", "Thomas", "Timothy", "Virginia", "Walter", "William", "Willie");
+    /** Common male given names, drawn by {@link #random(RandomGenerator, Gender)} for {@code MALE}. */
+    static final List<String> MALE_FIRST_NAMES = List.of(
+            "Aaron", "Adam", "Alan", "Albert", "Alex", "Alexander", "Alfred", "Allen",
+            "Andrew", "Anthony", "Arthur", "Austin", "Benjamin", "Bernard", "Billy", "Bobby",
+            "Brandon", "Brian", "Bruce", "Bryan", "Carl", "Charles", "Charlie", "Chester",
+            "Christian", "Christopher", "Clarence", "Clifford", "Clyde", "Curtis", "Dale", "Daniel",
+            "David", "Dennis", "Donald", "Douglas", "Earl", "Eddie", "Edgar", "Edward",
+            "Edwin", "Elmer", "Eric", "Ernest", "Eugene", "Floyd", "Francis", "Frank",
+            "Fred", "Frederick", "Gary", "George", "Gerald", "Glenn", "Gregory", "Harold",
+            "Harry", "Henry", "Herbert", "Herman", "Howard", "Jack", "Jacob", "James",
+            "Jason", "Jeffrey", "Jeremy", "Jerry", "Jesse", "Jim", "Jimmy", "Joe",
+            "John", "Johnny", "Jonathan", "Jose", "Joseph", "Joshua", "Juan", "Justin",
+            "Keith", "Kenneth", "Kevin", "Kyle", "Larry", "Lawrence", "Lee", "Leo",
+            "Leonard", "Leroy", "Lester", "Lewis", "Lloyd", "Louis", "Mark", "Martin",
+            "Marvin", "Matthew", "Melvin", "Michael", "Nathan", "Nicholas", "Norman", "Oscar",
+            "Patrick", "Paul", "Peter", "Philip", "Phillip", "Ralph", "Randy", "Ray",
+            "Raymond", "Richard", "Robert", "Roger", "Ronald", "Roy", "Russell", "Ryan",
+            "Sam", "Samuel", "Scott", "Sean", "Stanley", "Stephen", "Steven", "Terry",
+            "Theodore", "Thomas", "Timothy", "Tom", "Tyler", "Victor", "Vincent", "Walter",
+            "Wayne", "William", "Willie", "Zachary");
+
+    /** Common female given names, drawn by {@link #random(RandomGenerator, Gender)} for {@code FEMALE}. */
+    static final List<String> FEMALE_FIRST_NAMES = List.of(
+            "Agnes", "Alice", "Alma", "Amanda", "Amy", "Andrea", "Angela", "Ann",
+            "Anna", "Anne", "Annie", "Ashley", "Barbara", "Beatrice", "Bertha", "Bessie",
+            "Betty", "Beverly", "Bonnie", "Brenda", "Carol", "Carolyn", "Carrie", "Catherine",
+            "Charlotte", "Cheryl", "Christina", "Christine", "Clara", "Cora", "Cynthia", "Deborah",
+            "Debra", "Diane", "Donna", "Doris", "Dorothy", "Edith", "Edna", "Eleanor",
+            "Elizabeth", "Ella", "Ellen", "Elsie", "Emily", "Emma", "Esther", "Ethel",
+            "Eva", "Evelyn", "Florence", "Frances", "Gertrude", "Gladys", "Gloria", "Grace",
+            "Hannah", "Hattie", "Hazel", "Heather", "Helen", "Ida", "Irene", "Jacqueline",
+            "Jane", "Janet", "Janice", "Jean", "Jennie", "Jennifer", "Jessica", "Jessie",
+            "Joan", "Josephine", "Joyce", "Judith", "Judy", "Julia", "Julie", "Karen",
+            "Katherine", "Kathleen", "Kathryn", "Kelly", "Kimberly", "Laura", "Lauren", "Lena",
+            "Lillian", "Lillie", "Linda", "Lisa", "Lois", "Louise", "Lucille", "Lucy",
+            "Mabel", "Margaret", "Maria", "Marie", "Marilyn", "Marion", "Marjorie", "Martha",
+            "Mary", "Mattie", "Megan", "Melissa", "Michelle", "Mildred", "Minnie", "Myrtle",
+            "Nancy", "Nellie", "Nicole", "Norma", "Pamela", "Patricia", "Pauline", "Pearl",
+            "Phyllis", "Rachel", "Rebecca", "Rosa", "Rose", "Ruby", "Ruth", "Samantha",
+            "Sandra", "Sara", "Sarah", "Sharon", "Shirley", "Stephanie", "Susan", "Teresa",
+            "Thelma", "Theresa", "Victoria", "Virginia");
 
     /**
      * Common surnames. Reserved for when persons gain family/lineage names — see
@@ -66,8 +85,10 @@ public final class PersonNames {
             "Wagner", "Walker", "Wallace", "Ward", "Washington", "Watson", "Webb", "Wells",
             "West", "White", "Williams", "Wilson", "Wood", "Woods", "Wright", "Young");
 
-    public static String random(RandomGenerator random) {
-        return FIRST_NAMES.get(random.nextInt(FIRST_NAMES.size()));
+    /** A random given name appropriate to {@code gender}. */
+    public static String random(RandomGenerator random, Gender gender) {
+        List<String> pool = gender.choose(MALE_FIRST_NAMES, FEMALE_FIRST_NAMES);
+        return pool.get(random.nextInt(pool.size()));
     }
 
     /**

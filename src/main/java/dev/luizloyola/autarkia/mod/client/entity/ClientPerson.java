@@ -28,9 +28,12 @@ public class ClientPerson extends Person {
                 : new Person(type, level);
     }
 
-    /** Build a player skin pointing at this Person's chosen texture file. */
+    /** Build a player skin pointing at this Person's chosen texture file, with the arm model
+     *  (wide/slim) their appearance calls for. The renderer reads this model type back to pick the
+     *  matching baked model. */
     public PlayerSkin getSkin() {
         ClientAsset.Texture body = new ClientAsset.ResourceTexture(getSkinTexture());
-        return PlayerSkin.insecure(body, null, null, PlayerModelType.WIDE);
+        PlayerModelType model = isSlim() ? PlayerModelType.SLIM : PlayerModelType.WIDE;
+        return PlayerSkin.insecure(body, null, null, model);
     }
 }

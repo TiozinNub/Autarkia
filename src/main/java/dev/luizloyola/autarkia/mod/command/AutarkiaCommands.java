@@ -84,6 +84,7 @@ public final class AutarkiaCommands {
         ChatFormatting genderColor = appearance.gender().choose(ChatFormatting.BLUE, ChatFormatting.LIGHT_PURPLE);
         MutableComponent line = Component.literal(identity.name()).withStyle(ChatFormatting.AQUA)
                 .append(Component.literal(" " + appearance.gender()).withStyle(genderColor))
+                .append(Component.literal(" " + appearance.model()).withStyle(ChatFormatting.DARK_AQUA))
                 .append(Component.literal("  " + appearance.skin()).withStyle(ChatFormatting.GRAY))
                 .append(Component.literal("  " + id).withStyle(ChatFormatting.DARK_GRAY));
         source.sendSuccess(() -> line, false);
