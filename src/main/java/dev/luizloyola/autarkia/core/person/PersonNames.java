@@ -94,7 +94,7 @@ public final class PersonNames {
     /**
      * A random surname. Reserved for a future family-name system; unused for now.
      */
-    public static String randomSurname(RandomGenerator random) {
+    public static String  randomSurname(RandomGenerator random) {
         return SURNAMES.get(random.nextInt(SURNAMES.size()));
     }
 }

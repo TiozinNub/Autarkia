@@ -4,12 +4,16 @@ import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.client.render.PersonRenderer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
+import net.minecraft.client.renderer.entity.EntityRenderers;
 
 public class AutarkiaClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ClientPerson.install();
-        EntityRendererRegistry.register(ModEntities.PERSON, PersonRenderer::new);
+        // Vanilla EntityRenderers.register is package-private, but Fabric's transitive
+        // access-wideners module exposes it on every target (7.1.0 pre-26.1, 8.1.3 on
+        // 26.1+), so we can call it directly instead of the deprecated Fabric helper.
+        EntityRenderers.register(ModEntities.PERSON, PersonRenderer::new);
+        DebugWandGlow.install();
     }
 }
