@@ -33,12 +33,11 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     private static final int PERSON_SLOTS = Inventory.SIZE; // 41
     private static final int STORAGE_END = Inventory.ARMOR_START; // 36
 
-    // Coordinates match the background texture (measured from person_inventory.png). Person
-    // storage: 3 main rows at GRID_Y, then a hotbar row separated by the same 4px gap the vanilla
-    // inventory has.
+    // Coordinates measured from the background texture person_inventory.png. GRID_*/PINV_* are the
+    // top-left of each block's MAIN rows; the shared vanilla helper places the hotbar row 58px below
+    // (3 rows + the standard 4px gap).
     private static final int GRID_X = 8;
     private static final int GRID_Y = 84;
-    private static final int PERSON_HOTBAR_Y = 142;
     // Armor column (left); offhand tucked at the paper-doll's bottom-right, like the vanilla inventory.
     private static final int ARMOR_X = 8;
     private static final int ARMOR_Y = 8;
@@ -46,7 +45,6 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     private static final int OFFHAND_Y = 62;
     private static final int PINV_X = 8;
     private static final int PINV_MAIN_Y = 174;
-    private static final int PINV_HOTBAR_Y = 232;
 
     private final Container personContainer;
     /** The Person entity's network id, synced to the client so the screen can render its paper-doll. */
@@ -66,16 +64,10 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         this.personEntityId.set(entityId);
         addDataSlot(this.personEntityId);
 
-        // --- Person main storage: core 9..35, 3 rows ---
-        for (int row = 0; row < 3; row++) {
-            for (int col = 0; col < 9; col++) {
-                addSlot(new Slot(personContainer, 9 + row * 9 + col, GRID_X + col * 18, GRID_Y + row * 18));
-            }
-        }
-        // --- Person hotbar: core 0..8, bottom row, gap-separated like a player's ---
-        for (int col = 0; col < 9; col++) {
-            addSlot(new Slot(personContainer, col, GRID_X + col * 18, PERSON_HOTBAR_Y));
-        }
+        // Vanilla's own player-inventory layout: 3 main rows (container 9..35) at (GRID_X, GRID_Y),
+        // then the hotbar (container 0..8) 58px below. The same call the vanilla inventory uses, so
+        // slot order, container mapping and shift-click fill are identical to a real inventory.
+        addStandardInventorySlots(personContainer, GRID_X, GRID_Y);
         // --- Armor column: core 36..39 (HEAD..FEET), each gated to its piece ---
         addSlot(armorSlot(personContainer, armorIndex(ArmorType.HEAD), ARMOR_X, ARMOR_Y, EquipmentSlot.HEAD));
         addSlot(armorSlot(personContainer, armorIndex(ArmorType.CHEST), ARMOR_X, ARMOR_Y + 18, EquipmentSlot.CHEST));
@@ -84,15 +76,7 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         // --- Offhand: core 40 (accepts anything, like a player's offhand) ---
         addSlot(new Slot(personContainer, Inventory.OFFHAND_SLOT, OFFHAND_X, OFFHAND_Y));
 
-        // --- Player inventory: 27 main then 9 hotbar ---
-        for (int row = 0; row < 3; row++) {
-            for (int col = 0; col < 9; col++) {
-                addSlot(new Slot(playerInv, 9 + row * 9 + col, PINV_X + col * 18, PINV_MAIN_Y + row * 18));
-            }
-        }
-        for (int col = 0; col < 9; col++) {
-            addSlot(new Slot(playerInv, col, PINV_X + col * 18, PINV_HOTBAR_Y));
-        }
+        addStandardInventorySlots(playerInv, PINV_X, PINV_MAIN_Y);
     }
 
     /** The Person's entity network id (synced), for the screen's paper-doll lookup; {@code -1} if unknown. */

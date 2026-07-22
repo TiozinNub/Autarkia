@@ -28,8 +28,9 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
         super(menu, playerInv, title, PersonInventoryMenu.WIDTH, PersonInventoryMenu.HEIGHT);
         // "Inventory" label above the player's own grid (which starts at y=174).
         this.inventoryLabelY = this.imageHeight - 94;
-        // The Person's name in the empty panel beside the paper-doll (top-right of the top section).
-        this.titleLabelX = 78;
+        // The Person's name, past the right edge of the offhand slot (item x=77 + 16px cell ≈ 94)
+        // plus padding, so a long name doesn't clip into it.
+        this.titleLabelX = 98;
         this.titleLabelY = 12;
     }
 
