@@ -45,8 +45,9 @@ import java.util.Locale;
  * <p>{@code whois} prints a Person's identity (id + name), read straight from the server-side
  * {@link PersonDirectory}: the name is never synced to clients.
  *
- * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs tasks through
- * the executor — the machinery the arbiter will feed.
+ * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs the same work
+ * through the task machinery the arbiter feeds; {@code brain auto on | off} flips autonomy — ON by
+ * default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
  *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
  * links it to the entity before it enters the world; position mirrors {@code /summon}.
@@ -92,7 +93,13 @@ public final class AutarkiaCommands {
                                 .then(Commands.literal("status")
                                         .executes(ctx -> brainStatus(ctx.getSource())))
                                 .then(Commands.literal("cancel")
-                                        .executes(ctx -> brainCancel(ctx.getSource()))))
+                                        .executes(ctx -> brainCancel(ctx.getSource())))
+                                // The autonomy switch — spawns start ON.
+                                .then(Commands.literal("auto")
+                                        .then(Commands.literal("on")
+                                                .executes(ctx -> brainAuto(ctx.getSource(), true)))
+                                        .then(Commands.literal("off")
+                                                .executes(ctx -> brainAuto(ctx.getSource(), false)))))
                         .then(Commands.literal("inv")
                                 .then(Commands.literal("list")
                                         .executes(ctx -> invList(ctx.getSource())))
@@ -176,20 +183,22 @@ public final class AutarkiaCommands {
     private static int brainGoto(CommandSourceStack source, BlockPos pos) {
         Person person = nearest(source);
         if (person == null) return 0;
-        person.brain().run(new GoTo(pos.getX(), pos.getY(), pos.getZ()));
+        boolean autoDisabled = person.brain().run(new GoTo(pos.getX(), pos.getY(), pos.getZ()));
+        String suffix = autoDisabledSuffix(autoDisabled);
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
-                + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
+                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
-    /** Runs {@link SatisfyHunger} on the nearest Person — the first COMPOUND task: the machinery
-     *  the Eat instinct will trigger at ladder step 4. */
+    /** Runs {@link SatisfyHunger} on the nearest Person — the first COMPOUND task, and the
+     *  machinery the Eat instinct also drives (autonomously) via the arbiter. */
     private static int brainEat(CommandSourceStack source) {
         Person person = nearest(source);
         if (person == null) return 0;
-        person.brain().run(new SatisfyHunger());
+        boolean autoDisabled = person.brain().run(new SatisfyHunger());
+        String suffix = autoDisabledSuffix(autoDisabled);
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
-                + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
+                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
@@ -208,6 +217,23 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " task cancelled; "
                 + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
+    }
+
+    /** Flips the nearest Person's autonomy switch and echoes the new describe() line (now
+     *  reporting auto|manual up front). */
+    private static int brainAuto(CommandSourceStack source, boolean auto) {
+        Person person = nearest(source);
+        if (person == null) return 0;
+        person.brain().setAuto(auto);
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** The note appended to a manual {@code brain goto}/{@code brain eat} reply when that very
+     *  call is what took the wheel from the arbiter. */
+    private static String autoDisabledSuffix(boolean autoDisabled) {
+        return autoDisabled ? " (auto disabled — re-enable with /autarkia brain auto on)" : "";
     }
 
     /** Prints every non-empty slot of the nearest Person's inventory (storage + equipment). */
@@ -348,7 +374,7 @@ public final class AutarkiaCommands {
         String where = String.format(Locale.ROOT, "%.1f %.1f %.1f", spawnPos.x, spawnPos.y, spawnPos.z);
         source.sendSuccess(() -> Component.literal("Spawned ")
                 .append(Component.literal(identity.name()).withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (" + appearance.gender() + " " + appearance.model() + ") at " + where)
+                .append(Component.literal(" (" + appearance.gender() + ") at " + where)
                         .withStyle(ChatFormatting.GRAY)), true);
         return 1;
     }
