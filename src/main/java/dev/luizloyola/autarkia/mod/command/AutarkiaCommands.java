@@ -1,11 +1,13 @@
 package dev.luizloyola.autarkia.mod.command;
 
+import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.person.Appearance;
+import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -82,7 +84,22 @@ public final class AutarkiaCommands {
                                 .then(Commands.literal("equip")
                                         .then(Commands.argument("item", ItemArgument.item(registryAccess))
                                                 .executes(ctx -> invEquip(ctx.getSource(),
-                                                        ItemArgument.getItem(ctx, "item"))))))));
+                                                        ItemArgument.getItem(ctx, "item"))))))
+                        // "person", not "brain": these are body readouts (vitals live with the
+                        // entity).
+                        .then(Commands.literal("person")
+                                .then(Commands.literal("needs")
+                                        .executes(ctx -> personNeeds(ctx.getSource())))
+                                .then(Commands.literal("setfood")
+                                        .then(Commands.argument("food",
+                                                        IntegerArgumentType.integer(0, Needs.MAX_FOOD))
+                                                .executes(ctx -> personSetFood(ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "food"), 0.0F))
+                                                .then(Commands.argument("saturation",
+                                                                FloatArgumentType.floatArg(0.0F, Needs.MAX_FOOD))
+                                                        .executes(ctx -> personSetFood(ctx.getSource(),
+                                                                IntegerArgumentType.getInteger(ctx, "food"),
+                                                                FloatArgumentType.getFloat(ctx, "saturation")))))))));
     }
 
     private static int navGoto(CommandSourceStack source, BlockPos pos) {
@@ -211,6 +228,33 @@ public final class AutarkiaCommands {
         person.inventory().clear();
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " inventory cleared.")
                 .withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** Prints the nearest Person's need levels — the {@code needs().describe()} one-liner. */
+    private static int personNeeds(CommandSourceStack source) {
+        Person person = nearest(source);
+        if (person == null) return 0;
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.needs().describe()).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /**
+     * Sets the nearest Person's food level (0..20) and saturation (0.0 when omitted) and echoes
+     * the readout — the dev knob for exercising starvation and regen without waiting out the burn.
+     * Food is set before saturation, which clamps against it; exhaustion is zeroed so behaviour
+     * afterwards is deterministic.
+     */
+    private static int personSetFood(CommandSourceStack source, int food, float saturation) {
+        Person person = nearest(source);
+        if (person == null) return 0;
+        Needs needs = person.needs();
+        needs.setFoodLevel(food);
+        needs.setSaturation(saturation);
+        needs.setExhaustion(0.0F);
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + needs.describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 

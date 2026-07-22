@@ -7,6 +7,7 @@ import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
+import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
@@ -25,10 +26,16 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.entity.EntityAttachment;
+import net.minecraft.world.entity.EntityAttachments;
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
@@ -36,6 +43,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
@@ -84,6 +92,17 @@ public class Person extends Avatar {
     /** NBT key under which this entity persists its carried inventory (see {@link Inventories#CODEC}). */
     private static final String TAG_INVENTORY = "Inventory";
 
+    /**
+     * NBT keys for this entity's food state — vanilla {@code FoodData}'s exact four tags (names,
+     * types and load defaults verified against the 26.1.2 bytecode), so a Person's food reads
+     * familiarly in NBT tooling. Hunger dies with the body; durable memories are instead
+     * {@link PersonId}-keyed, per the brain design's storage section.
+     */
+    private static final String TAG_FOOD_LEVEL = "foodLevel";
+    private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
+    private static final String TAG_FOOD_SATURATION = "foodSaturationLevel";
+    private static final String TAG_FOOD_EXHAUSTION = "foodExhaustionLevel";
+
     /** Whether this load has projected the directory identity onto the synced fields yet. */
     private boolean identityProjected;
 
@@ -107,6 +126,22 @@ public class Person extends Avatar {
      * server-authoritative and not persisted across reloads.
      */
     private final Navigator navigator = new Navigator(this);
+
+    /**
+     * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
+     * brain organ: the entity owns and ticks its own metabolism, as vanilla's {@code FoodData}
+     * belongs to the player rather than to any AI, and the brain only ever <em>reads</em> it.
+     * Persisted in this entity's NBT (see {@link #TAG_FOOD_LEVEL}), ticked by {@link #tickNeeds()}.
+     */
+    private final Needs needs = new Needs();
+
+    /**
+     * Previous-tick position for the sprint-exhaustion odometer in {@link #tickNeeds()}, kept apart
+     * from the {@link Navigator}'s own stall-detection pair. Seeded on the first tick ({@code NaN})
+     * so a freshly loaded entity never bills the distance from the origin.
+     */
+    private double lastX = Double.NaN;
+    private double lastZ;
 
     /**
      * This person's carried inventory — 9 hotbar + 27 main + 4 armor + 1 offhand, exactly a player's
@@ -196,6 +231,9 @@ public class Person extends Avatar {
     protected void serverAiStep() {
         super.serverAiStep();
         syncEquipmentMirror();
+        // Metabolism runs every server tick no matter who owns the movement input below: food
+        // burns (and starvation bites) whether she is navigating, debug-sprinting, or idle.
+        tickNeeds();
         if (this.debugRunForward) {
             // getAttributeValue includes the sprint modifier applied by setSprinting, so this is
             // already the ×1.3 sprint speed; the 0.98 damping keeps it exact vs a player.
@@ -215,6 +253,79 @@ public class Person extends Avatar {
     /** This person's movement/navigation state machine. See {@link Navigator}. */
     public Navigator navigator() {
         return this.navigator;
+    }
+
+    /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */
+    public Needs needs() {
+        return this.needs;
+    }
+
+    /**
+     * One tick of metabolism, from {@link #serverAiStep()} — the body's counterpart of vanilla
+     * {@code FoodData.tick(ServerPlayer)}:
+     *
+     * <ol>
+     *   <li><b>Sprint exhaustion</b> — vanilla's 0.1/m on ground (walking is free), measured
+     *       against last tick's position. Swim exhaustion is skipped: Persons can't swim yet.</li>
+     *   <li><b>Regen/starvation inputs</b> — the {@code naturalRegeneration} gamerule (26.1 keeps it
+     *       on {@code ServerLevel}; the cast is safe, this only ticks from serverAiStep) and
+     *       hurt-ness, {@code isHurt()} being Player-only on 26.1.2: alive and below max health.</li>
+     *   <li><b>Effects</b> — core decides ({@link Needs.TickResult}), the body applies: a half-heart
+     *       on regen, a starvation hit on vanilla's 80-tick cadence, not difficulty-clamped because
+     *       population dynamics needs starvation to be a real cause of death.</li>
+     * </ol>
+     */
+    private void tickNeeds() {
+        boolean firstSample = Double.isNaN(this.lastX);
+        if (!firstSample && isSprinting() && onGround()) {
+            double dx = getX() - this.lastX;
+            double dz = getZ() - this.lastZ;
+            float meters = (float) Math.sqrt(dx * dx + dz * dz);
+            if (meters > 0.0F) {
+                this.needs.exhaust(Needs.EXHAUSTION_SPRINT_PER_METER * meters);
+            }
+        }
+        this.lastX = getX();
+        this.lastZ = getZ();
+        // Hunger/Saturation status effects, mirrored: vanilla's HungerMobEffect and
+        // SaturationMobEffect apply only to `instanceof Player` (26.1.2 bytecode), so on a Person
+        // they no-op. Same numbers and cadence: Hunger banks 0.005 exhaustion per level, Saturation
+        // feeds (level+1) food at the ×1.0 modifier.
+        MobEffectInstance hungerEffect = getEffect(MobEffects.HUNGER);
+        if (hungerEffect != null) {
+            this.needs.exhaust(0.005F * (hungerEffect.getAmplifier() + 1));
+        }
+        MobEffectInstance saturationEffect = getEffect(MobEffects.SATURATION);
+        if (saturationEffect != null) {
+            int nutrition = saturationEffect.getAmplifier() + 1;
+            this.needs.eat(nutrition, Needs.saturationByModifier(nutrition, 1.0F));
+        }
+        boolean naturalRegen =
+                ((ServerLevel) level()).getGameRules().get(GameRules.NATURAL_HEALTH_REGENERATION);
+        boolean isHurt = getHealth() > 0.0F && getHealth() < getMaxHealth();
+        Needs.TickResult result = this.needs.tick(naturalRegen, isHurt);
+        if (result.heal() > 0.0F) {
+            heal(result.heal());
+        }
+        if (result.starve()) {
+            // hurtServer, not the deprecated side-dispatching hurt(): only ever ticked from
+            // serverAiStep, so the level is always the server one (same cast as the Navigator).
+            hurtServer((ServerLevel) level(), damageSources().starve(), 1.0F);
+        }
+    }
+
+    /**
+     * Charges vanilla's jump exhaustion (0.2 sprinting, 0.05 plain) where vanilla hooks it:
+     * {@code ServerPlayer.jumpFromGround} wraps the physics with {@code causeFoodExhaustion}
+     * (bytecode-verified on 26.1.2). The physics call runs on both sides, so the guard keeps body
+     * state server-authoritative.
+     */
+    @Override
+    public void jumpFromGround() {
+        super.jumpFromGround();
+        if (!level().isClientSide()) {
+            this.needs.exhaust(isSprinting() ? Needs.EXHAUSTION_SPRINT_JUMP : Needs.EXHAUSTION_JUMP);
+        }
     }
 
     /** This person's carried inventory — the source of truth the brain (and commands) read/write. */
@@ -303,16 +414,18 @@ public class Person extends Avatar {
     }
 
     /**
-     * Wears down worn armor on taking damage, like a player: vanilla's {@code hurtArmor} is a no-op
-     * for a generic {@code LivingEntity}. {@link #doHurtEquipment} applies vanilla's own durability
-     * rules ({@code damageOnHurt}/{@code canBeHurtBy}); the two-way
-     * {@link #syncEquipmentMirror() mirror} carries the wear back into the inventory.
+     * Wears down worn armor on taking damage: vanilla's {@code hurtArmor} no-ops for a generic
+     * {@code LivingEntity}, so a Person's gear would never wear out. {@link #doHurtEquipment}
+     * applies vanilla's own durability rules, and the two-way {@link #syncEquipmentMirror() mirror}
+     * carries the wear back into the inventory. Also charges the damage type's food exhaustion, as
+     * vanilla's player does (verified on 26.1.2).
      */
     @Override
     protected void actuallyHurt(ServerLevel level, DamageSource source, float amount) {
         super.actuallyHurt(level, source, amount);
         doHurtEquipment(source, amount,
                 EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
+        this.needs.exhaust(source.getFoodExhaustion());
     }
 
     /**
@@ -356,10 +469,16 @@ public class Person extends Avatar {
     /**
      * Movement control: choose this tick's gait. Sprinting adds vanilla's ×1.3 speed modifier
      * (picked up by {@link #driveForward}'s attribute read — call this first) and the sprint-jump
-     * boost in {@code jumpFromGround}. Guarded on change: {@code setSprinting} churns an attribute
-     * modifier.
+     * boost. Guarded on change, since {@code setSprinting} churns an attribute modifier.
+     *
+     * <p>Enabling is subject to the vanilla food-6 gate ({@link Needs#canSprint()}); disabling is
+     * always allowed. A food&le;6 Person therefore cannot sprint, so 3-gap leap paths fail — the
+     * pathfinder doesn't know yet (deferred: hunger-aware {@code AgentProfile}).
      */
     public void driveSprint(boolean sprint) {
+        if (sprint && !this.needs.canSprint()) {
+            sprint = false;
+        }
         if (isSprinting() != sprint) {
             setSprinting(sprint);
         }
@@ -440,6 +559,10 @@ public class Person extends Avatar {
             output.store(TAG_PERSON_ID, UUIDUtil.CODEC, this.personId.value());
         }
         output.store(TAG_INVENTORY, Inventories.CODEC, this.inventory);
+        output.putInt(TAG_FOOD_LEVEL, this.needs.foodLevel());
+        output.putInt(TAG_FOOD_TICK_TIMER, this.needs.tickTimer());
+        output.putFloat(TAG_FOOD_SATURATION, this.needs.saturation());
+        output.putFloat(TAG_FOOD_EXHAUSTION, this.needs.exhaustion());
     }
 
     @Override
@@ -447,6 +570,12 @@ public class Person extends Avatar {
         super.readAdditionalSaveData(input);
         input.read(TAG_PERSON_ID, UUIDUtil.CODEC).map(PersonId::of).ifPresent(this::setPersonId);
         input.read(TAG_INVENTORY, Inventories.CODEC).ifPresent(this.inventory::copyFrom);
+        // Vanilla FoodData's own load defaults (full food, 5.0 saturation). Food level must load
+        // before saturation — saturation clamps against the current food level.
+        this.needs.setFoodLevel(input.getIntOr(TAG_FOOD_LEVEL, Needs.MAX_FOOD));
+        this.needs.setTickTimer(input.getIntOr(TAG_FOOD_TICK_TIMER, 0));
+        this.needs.setSaturation(input.getFloatOr(TAG_FOOD_SATURATION, 5.0F));
+        this.needs.setExhaustion(input.getFloatOr(TAG_FOOD_EXHAUSTION, 0.0F));
     }
 
     /**
@@ -511,5 +640,22 @@ public class Person extends Avatar {
     @Override
     public ResolvableProfile getProfile() {
         return Mannequin.DEFAULT_PROFILE;
+    }
+
+    /**
+     * Keeps the nametag anchored at standing eye height while dying. {@link Avatar}'s
+     * {@code Pose.DYING} box is a fixed 0.2×0.2, and vanilla derives the NAME_TAG attachment from
+     * box height, so a Person's always-on label ({@link #applyIdentity}) would drop to ~0.2 blocks
+     * above the ground. Only that attachment is overridden; the collapsed hitbox and every other
+     * pose are untouched.
+     */
+    @Override
+    public EntityDimensions getDefaultDimensions(Pose pose) {
+        EntityDimensions dimensions = super.getDefaultDimensions(pose);
+        if (pose == Pose.DYING) {
+            dimensions = dimensions.withAttachments(EntityAttachments.builder()
+                    .attach(EntityAttachment.NAME_TAG, 0.0F, dimensions.eyeHeight(), 0.0F));
+        }
+        return dimensions;
     }
 }
