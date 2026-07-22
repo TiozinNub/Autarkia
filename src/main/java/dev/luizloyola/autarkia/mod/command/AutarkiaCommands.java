@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.command;
 
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
@@ -10,6 +11,7 @@ import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
+import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -18,6 +20,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.commands.arguments.item.ItemArgument;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.BlockPos;
@@ -25,9 +28,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Locale;
@@ -40,6 +45,11 @@ import java.util.Locale;
  *
  * <p>{@code nav goto <pos> | stop | status} drives a Person's navigator, so locomotion is
  * exercisable from a headless dev server and by command blocks.
+ *
+ * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
+ * links it to the entity before it enters the world; position mirrors {@code /summon}.
+ * {@code /summon autarkia:person} is rejected with a chat error — the type stays summonable for
+ * compat, only the summon action is intercepted (see {@code SummonCommandMixin}).
  */
 public final class AutarkiaCommands {
     private AutarkiaCommands() {}
@@ -88,6 +98,24 @@ public final class AutarkiaCommands {
                         // "person", not "brain": these are body readouts (vitals live with the
                         // entity).
                         .then(Commands.literal("person")
+                                .then(Commands.literal("spawn")
+                                        .executes(ctx -> personSpawn(ctx.getSource(), null, null))
+                                        // Optional leading Vec3 position, then an optional name.
+                                        // The name is NON-greedy on purpose: given "10 -59 5" a
+                                        // one-word name consumes only "10" and leaves "-59 5"
+                                        // unparsed, so that branch loses to the fully-consuming
+                                        // Vec3 branch, while a bare "Bob" falls to the name.
+                                        // Multi-word names must be quoted.
+                                        .then(Commands.argument("pos", Vec3Argument.vec3())
+                                                .executes(ctx -> personSpawn(ctx.getSource(),
+                                                        Vec3Argument.getVec3(ctx, "pos"), null))
+                                                .then(Commands.argument("name", StringArgumentType.string())
+                                                        .executes(ctx -> personSpawn(ctx.getSource(),
+                                                                Vec3Argument.getVec3(ctx, "pos"),
+                                                                StringArgumentType.getString(ctx, "name")))))
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .executes(ctx -> personSpawn(ctx.getSource(), null,
+                                                        StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.literal("needs")
                                         .executes(ctx -> personNeeds(ctx.getSource())))
                                 .then(Commands.literal("setfood")
@@ -228,6 +256,46 @@ public final class AutarkiaCommands {
         person.inventory().clear();
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " inventory cleared.")
                 .withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /**
+     * Spawns a new Person at {@code pos} (or the source's position when {@code null}), facing south
+     * like {@code /summon}. The directory-first path ({@code /summon autarkia:person} is rejected —
+     * see {@code SummonCommandMixin}): the identity is registered and linked before the entity
+     * enters the world, so it keeps that identity instead of minting an anonymous one on its first
+     * tick. The entity is created before the directory is touched, so a null entity leaves no
+     * orphan entry.
+     */
+    private static int personSpawn(CommandSourceStack source, @Nullable Vec3 pos, @Nullable String name) {
+        String trimmed = name == null ? null : name.trim();
+        if (trimmed != null && trimmed.isEmpty()) {
+            source.sendFailure(Component.literal("Name must not be blank."));
+            return 0;
+        }
+        ServerLevel level = source.getLevel();
+        Person person = ModEntities.PERSON.create(level, EntitySpawnReason.COMMAND);
+        if (person == null) {
+            source.sendFailure(Component.literal("Could not create the Person entity."));
+            return 0;
+        }
+        PersonDirectory directory = PersonDirectory.get(source.getServer());
+        PersonIdentity identity = trimmed == null ? directory.createPerson() : directory.createPerson(trimmed);
+        Vec3 spawnPos = pos != null ? pos : source.getPosition();
+        // Yaw 0 = facing south, matching /summon (which keeps the entity's own default rotation);
+        // pitch pinned flat since a Person stands upright (pitch is render-only head tilt, see face()).
+        person.snapTo(spawnPos.x, spawnPos.y, spawnPos.z, 0.0F, 0.0F);
+        person.assignPerson(identity.id());
+        if (!level.addFreshEntity(person)) {
+            source.sendFailure(Component.literal("Could not add the Person to the world."));
+            return 0;
+        }
+        Appearance appearance = identity.appearance();
+        String where = String.format(Locale.ROOT, "%.1f %.1f %.1f", spawnPos.x, spawnPos.y, spawnPos.z);
+        source.sendSuccess(() -> Component.literal("Spawned ")
+                .append(Component.literal(identity.name()).withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" (" + appearance.gender() + " " + appearance.model() + ") at " + where)
+                        .withStyle(ChatFormatting.GRAY)), true);
         return 1;
     }
 

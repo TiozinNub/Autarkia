@@ -13,6 +13,10 @@ import net.minecraft.world.entity.MobCategory;
 public final class ModEntities {
     private ModEntities() {}
 
+    // The type stays fully summonable (canSummon() == true) so registry introspection and other
+    // compat paths see a normal entity; the /summon *action* is intercepted and rejected instead —
+    // see SummonCommandMixin. Persons are meant to be created via /autarkia person spawn, which
+    // registers a directory identity and links the entity to it before it enters the world.
     public static final EntityType<Person> PERSON = register("person",
             EntityType.Builder.of(Person::create, MobCategory.MISC)
                     .sized(0.6F, 1.8F)

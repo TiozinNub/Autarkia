@@ -535,6 +535,16 @@ public class Person extends Avatar {
         this.entityData.set(DATA_SLIM, appearance.model() == ModelType.SLIM);
     }
 
+    /**
+     * Links this freshly created entity to an identity the spawner already registered in the
+     * {@link PersonDirectory}, before it is added to the world — so {@link #tick()}'s lazy
+     * first-tick creation is skipped and this Person keeps that deliberate (named) identity instead
+     * of minting an anonymous random one. Server-side; the path behind {@code /autarkia person spawn}.
+     */
+    public void assignPerson(PersonId id) {
+        setPersonId(id);
+    }
+
     /** Sets this person's identity handle and mirrors it to the synced field, so clients can match
      *  the entity back to its {@link PersonId}. Server-side only — that is where the id originates. */
     private void setPersonId(PersonId id) {

@@ -86,13 +86,27 @@ public final class PersonDirectory extends SavedData {
     public PersonIdentity createPerson() {
         RandomGenerator random = ThreadLocalRandom.current();
         Gender gender = Gender.random(random);
-        // Name and skin come from the pools for this gender; the model follows the skin's geometry
-        // (our male skins are wide, female slim — see PersonSkins).
-        String name = PersonNames.random(random, gender);
+        return mint(gender, PersonNames.random(random, gender), random);
+    }
+
+    /**
+     * As {@link #createPerson()} but with a caller-supplied {@code name} — the deliberate spawn
+     * path ({@code /autarkia person spawn <name>}). The name is used verbatim; gender is
+     * <em>not</em> inferred from it, so "Alice" may be male.
+     */
+    public PersonIdentity createPerson(String name) {
+        RandomGenerator random = ThreadLocalRandom.current();
+        return mint(Gender.random(random), name, random);
+    }
+
+    /**
+     * Mints and registers one identity: the model follows the skin's geometry (our male skins are
+     * wide, female slim — see {@link PersonSkins}). Marks the directory dirty.
+     */
+    private PersonIdentity mint(Gender gender, String name, RandomGenerator random) {
         String skin = PersonSkins.random(random, gender);
         ModelType model = gender.choose(ModelType.WIDE, ModelType.SLIM);
-        Appearance appearance = new Appearance(gender, skin, model);
-        PersonIdentity identity = registry.create(PersonId.random(), name, appearance);
+        PersonIdentity identity = registry.create(PersonId.random(), name, new Appearance(gender, skin, model));
         setDirty();
         return identity;
     }
