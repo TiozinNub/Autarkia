@@ -374,11 +374,17 @@ public class Person extends Avatar {
         setJumping(true);
     }
 
-    /** Snap body and head to face {@code heading} (degrees), so "forward" renders correctly. */
+    /**
+     * Snap body and head to face {@code heading} (degrees), pitch pinned flat (0°) so the gaze stays
+     * at eye level rather than tilting at the ground — without the reset the head kept whatever
+     * downward pitch it spawned or loaded with. Pitch is render-only for a walking entity
+     * ({@code travel} steers by yaw alone), so leveling it never affects motion.
+     */
     private void face(float heading) {
         setYRot(heading);
         setYHeadRot(heading);
         this.yBodyRot = heading;
+        setXRot(0.0F);
     }
 
     /**
