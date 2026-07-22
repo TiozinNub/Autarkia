@@ -6,6 +6,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
+import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.person.Appearance;
@@ -86,6 +87,8 @@ public final class AutarkiaCommands {
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                                 .executes(ctx -> brainGoto(ctx.getSource(),
                                                         BlockPosArgument.getLoadedBlockPos(ctx, "pos")))))
+                                .then(Commands.literal("eat")
+                                        .executes(ctx -> brainEat(ctx.getSource())))
                                 .then(Commands.literal("status")
                                         .executes(ctx -> brainStatus(ctx.getSource())))
                                 .then(Commands.literal("cancel")
@@ -174,6 +177,17 @@ public final class AutarkiaCommands {
         Person person = nearest(source);
         if (person == null) return 0;
         person.brain().run(new GoTo(pos.getX(), pos.getY(), pos.getZ()));
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** Runs {@link SatisfyHunger} on the nearest Person — the first COMPOUND task: the machinery
+     *  the Eat instinct will trigger at ladder step 4. */
+    private static int brainEat(CommandSourceStack source) {
+        Person person = nearest(source);
+        if (person == null) return 0;
+        person.brain().run(new SatisfyHunger());
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;

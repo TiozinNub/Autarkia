@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.core.brain.task;
 
-import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
+import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.act.MoveState;
 
 /**
@@ -30,13 +30,13 @@ public final class GoTo implements PrimitiveTask {
     }
 
     @Override
-    public TaskStatus tick(ActuatorAccess actuators) {
+    public TaskStatus tick(BrainContext ctx) {
         if (!issued) {
             issued = true;
-            actuators.mover().moveTo(x, y, z);
+            ctx.actuators().mover().moveTo(x, y, z);
             return TaskStatus.RUNNING; // see class doc: issue, don't read
         }
-        MoveState state = actuators.mover().state();
+        MoveState state = ctx.actuators().mover().state();
         switch (state) {
             case MOVING:
                 return TaskStatus.RUNNING;
@@ -53,10 +53,10 @@ public final class GoTo implements PrimitiveTask {
     }
 
     @Override
-    public void cancel(ActuatorAccess actuators) {
+    public void cancel(BrainContext ctx) {
         // Idempotent because Mover.stop() absorbs the no-move case (see its doc) — safe before
         // the first tick, after arrival, or twice in a row.
-        actuators.mover().stop();
+        ctx.actuators().mover().stop();
     }
 
     @Override

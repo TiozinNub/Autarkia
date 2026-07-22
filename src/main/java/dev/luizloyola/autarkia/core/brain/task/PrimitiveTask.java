@@ -1,31 +1,35 @@
 package dev.luizloyola.autarkia.core.brain.task;
 
-import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
+import dev.luizloyola.autarkia.core.brain.BrainContext;
 
 /**
- * The executable leaf of the task machinery — a small state machine that makes one decision per
- * tick against the body's actuator ports, reports {@link TaskStatus}, and can be cancelled at
- * any moment. Compound tasks only ever decompose into them.
+ * The executable leaf of the task machinery: a small state machine making one decision per tick
+ * against the body's actuator ports, reporting {@link TaskStatus}, cancellable at any moment.
+ * Everything an NPC physically does bottoms out in one.
  *
- * <p>Ticked by the {@link TaskExecutor}, which the mod {@code BrainDriver} runs from
- * {@code serverAiStep} before the Navigator ticks, so actuator orders issued in a tick are acted
- * on that same tick. {@link ActuatorAccess} is passed into every call rather than held (see its
- * doc).
+ * <p>Ticked by the {@link TaskExecutor}, which {@code BrainDriver} runs from {@code serverAiStep}
+ * Before the Navigator — so actuator orders are acted on the same tick.
+ *
+ * <p>Calls take a {@link BrainContext} rather than bare actuators: a primitive ACTS through
+ * {@code ctx.actuators()} while {@link Method}s PERCEIVE through {@code ctx.percepts()}, one
+ * contract serving both. The context is passed per call, never held: a task owns intent, never the
+ * body.
  */
-public interface PrimitiveTask {
+public non-sealed interface PrimitiveTask extends Task {
     /**
      * One decision per tick. Called every tick until a terminal status is returned, and never
-     * after — the executor clears a finished task, so implementations need not defend against
-     * post-terminal ticks.
+     * after — the executor never ticks a finished task, so implementations need not defend
+     * against post-terminal ticks.
      */
-    TaskStatus tick(ActuatorAccess actuators);
+    TaskStatus tick(BrainContext ctx);
 
     /**
-     * Release every actuator this task owns (stop movement, ...) so the next task starts from a
-     * quiet body. Must be idempotent and safe in any state — before the first tick, mid-run,
-     * after cancel — because the executor cancels unconditionally when preempting or clearing.
+     * Release every actuator this task owns (stop movement, abort the bite, ...) so the next task
+     * starts from a quiet body. Must be idempotent and safe in any state — before the first tick,
+     * mid-run, after cancel — because the executor cancels unconditionally when preempting or
+     * clearing.
      */
-    void cancel(ActuatorAccess actuators);
+    void cancel(BrainContext ctx);
 
     /**
      * One-line summary for the debug readout — the "why is she doing that?" answer, surfaced by

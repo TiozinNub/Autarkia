@@ -1,0 +1,61 @@
+package dev.luizloyola.autarkia.core.brain.task;
+
+import dev.luizloyola.autarkia.core.brain.sense.FoodLookup;
+import dev.luizloyola.autarkia.core.brain.sense.Percepts;
+import dev.luizloyola.autarkia.core.inv.Inventory;
+import dev.luizloyola.autarkia.core.inv.ItemStack;
+import dev.luizloyola.autarkia.core.person.FoodValue;
+import dev.luizloyola.autarkia.core.person.Needs;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Test double for the {@link Percepts} bundle: a real {@link Inventory} and {@link Needs} —
+ * already pure and headless, so faking them would fake away the truth — plus a map-backed
+ * {@link FoodLookup} for compat's registry+recipe read. Nothing is cookable by default,
+ * mirroring compat finding no bettering recipe.
+ */
+final class FakePercepts implements Percepts {
+    final Inventory inventory = new Inventory();
+    final Needs needs = new Needs();
+    private final Map<String, FoodValue> foodById = new HashMap<>();
+    private final Map<String, FoodValue> cookedById = new HashMap<>();
+
+    /** Register item {@code id} as edible with the given value — the test's food registry. */
+    void food(String id, FoodValue value) {
+        foodById.put(id, value);
+    }
+
+    /** Register {@code id}'s strictly-better one-step cooked form — the test's recipe book. */
+    void cooked(String id, FoodValue cookedValue) {
+        cookedById.put(id, cookedValue);
+    }
+
+    @Override
+    public Inventory inventory() {
+        return inventory;
+    }
+
+    @Override
+    public Needs needs() {
+        return needs;
+    }
+
+    @Override
+    public FoodLookup foods() {
+        // An empty stack's id is "" and never registered, so it reads as inedible (and
+        // uncookable) for free.
+        return new FoodLookup() {
+            @Override
+            public Optional<FoodValue> of(ItemStack stack) {
+                return Optional.ofNullable(foodById.get(stack.id()));
+            }
+
+            @Override
+            public Optional<FoodValue> cookedForm(ItemStack stack) {
+                return Optional.ofNullable(cookedById.get(stack.id()));
+            }
+        };
+    }
+}

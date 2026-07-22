@@ -2,14 +2,17 @@ package dev.luizloyola.autarkia.core.brain.act;
 
 /**
  * The bundle of actuator ports a task ticks against — handed to {@code PrimitiveTask.tick}/
- * {@code cancel} by the executor each call rather than held by the task: a task owns intent, never
- * the body. Tasks stay trivially constructible in tests, and whoever ticks one decides which body
- * it drives.
+ * {@code cancel} by the executor each call rather than held: a task owns intent, never the body,
+ * and tasks stay constructible in tests with no wiring.
  *
- * <p>Assembled by the mod {@code BrainDriver} over the compat/mod actuator facades; one accessor
- * per actuator domain as the ladder climbs — {@code mover()} today, break/place/use hands later.
+ * <p>Assembled by the mod {@code BrainDriver} over the compat/mod actuator facades. One PORT per
+ * actuator domain, never one method per verb: each domain owns its own begin / state / stop
+ * lifecycle and this bundle only hands them out. Same shape as {@code Percepts}.
  */
 public interface ActuatorAccess {
     /** The legs — see {@link Mover}. */
     Mover mover();
+
+    /** The gullet — see {@link ItemConsumer}. */
+    ItemConsumer consumer();
 }

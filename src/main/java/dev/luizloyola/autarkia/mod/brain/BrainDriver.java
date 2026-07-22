@@ -1,30 +1,61 @@
 package dev.luizloyola.autarkia.mod.brain;
 
+import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
-import dev.luizloyola.autarkia.core.brain.task.PrimitiveTask;
+import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
+import dev.luizloyola.autarkia.core.brain.act.Mover;
+import dev.luizloyola.autarkia.core.brain.sense.Percepts;
+import dev.luizloyola.autarkia.core.brain.task.Task;
 import dev.luizloyola.autarkia.core.brain.task.TaskExecutor;
 import dev.luizloyola.autarkia.mod.entity.Person;
 
 /**
- * Per-{@link Person} brain host: mounts the core decision machinery on the entity and gives it
- * actuators to act through. Today that machinery is one {@link TaskExecutor}; percept assembly and
- * the arbiter arrive in later ladder steps. Only the mounting bracket and the Minecraft boundary —
- * everything hosted is pure core.
+ * Per-{@link Person} brain host: mounts the core decision machinery on the entity and gives it a
+ * {@link BrainContext} to think through — actuators ({@link PersonMover} legs,
+ * {@link PersonItemConsumer} mouth) and percepts ({@link PersonPercepts}). Today that machinery is
+ * one {@link TaskExecutor}; the arbiter arrives next ladder step. Only the mounting bracket —
+ * everything hosted is pure core, assembled once, the adapters being stateless views.
  *
- * <p>It only ever <em>reads</em> the body and never owns body state: the entity owns and ticks its
- * own metabolism ({@link Person#needs()}), so a paused or throttled brain still starves. Anything
- * of the body persists on the entity; the brain's working state (the running task) is transient
- * like the Navigator's — a reload just re-decides.
+ * <p>It only ever <em>reads</em> the body, through {@link Percepts}, and never owns body state: the
+ * entity owns and ticks its own metabolism ({@link Person#needs()}), so a paused or throttled brain
+ * still starves. Anything of the body persists on the entity; the brain's working state (the
+ * running task tree) is transient like the Navigator's — a reload just re-decides.
  */
 public final class BrainDriver {
     private final TaskExecutor executor = new TaskExecutor();
-    private final PersonMover mover;
-    /** The actuator bundle handed to every task tick; grows one port per new actuator facade. */
-    private final ActuatorAccess actuators;
+    /**
+     * The one context every task tick receives: the actuator bundle (grows one port per new
+     * actuator facade) plus the percept views. Both sides are the only Minecraft boundary the
+     * core machinery ever touches.
+     */
+    private final BrainContext context;
 
     public BrainDriver(Person person) {
-        this.mover = new PersonMover(person);
-        this.actuators = () -> this.mover;
+        Mover mover = new PersonMover(person);
+        ItemConsumer consumer = new PersonItemConsumer(person);
+        Percepts percepts = new PersonPercepts(person);
+        ActuatorAccess actuators = new ActuatorAccess() {
+            @Override
+            public Mover mover() {
+                return mover;
+            }
+
+            @Override
+            public ItemConsumer consumer() {
+                return consumer;
+            }
+        };
+        this.context = new BrainContext() {
+            @Override
+            public ActuatorAccess actuators() {
+                return actuators;
+            }
+
+            @Override
+            public Percepts percepts() {
+                return percepts;
+            }
+        };
     }
 
     /**
@@ -32,18 +63,18 @@ public final class BrainDriver {
      * task starts is {@link #run}.
      */
     public void tick() {
-        this.executor.tick(this.actuators);
+        this.executor.tick(this.context);
     }
 
-    /** Hands the executor a task to run, cancelling any current one first — the debug command's
-     *  entry point today, the arbiter's tomorrow. */
-    public void run(PrimitiveTask task) {
-        this.executor.run(task, this.actuators);
+    /** Hands the executor a task (primitive or compound) to run as the root, cancelling any
+     *  current one first — the debug commands' entry point today, the arbiter's tomorrow. */
+    public void run(Task task) {
+        this.executor.run(task, this.context);
     }
 
     /** Cancels the running task (releasing its actuators); safe to call when idle. */
     public void cancel() {
-        this.executor.cancel(this.actuators);
+        this.executor.cancel(this.context);
     }
 
     public boolean isBusy() {
