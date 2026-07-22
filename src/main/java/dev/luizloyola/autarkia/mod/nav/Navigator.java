@@ -46,6 +46,13 @@ public final class Navigator {
      * definition and needs full speed.
      */
     private static final float CAREFUL_THROTTLE = 0.45F;
+    /**
+     * Forward (air-control) input while airborne in a 2-block-gap leap. Full forward walks the arc
+     * onto the FAR rim of a 1-wide landing pillar, and in a chain each leap overshoots more until
+     * one misses; easing it lands them mid-pillar without touching takeoff speed. Leaps hold their
+     * heading in flight, so this costs no steering.
+     */
+    private static final float LEAP_AIR_THROTTLE = 0.4F;
     private static final double CAREFUL_RADIUS = 0.25;
     /** Final-waypoint radius when the goal cell borders a drop — see the radius selection. */
     private static final double CAREFUL_FINAL_RADIUS = 0.35;
@@ -105,8 +112,15 @@ public final class Navigator {
     private int index;
     private int stuckTicks;
     private int noMoveTicks;
-    /** Consecutive grounded FOLLOWING ticks — the leap press waits for a few (see tickFollowing). */
+    /** Consecutive grounded FOLLOWING ticks — bounds the landing-brake window (see tickFollowing). */
     private int groundedTicks;
+    /**
+     * The waypoint index a leap jump-press last fired for: exactly one press per takeoff. A chained
+     * span-3 leap grounds on the far rim of a 1-wide pillar for a tick or two, so the press must
+     * fire on the first grounded tick in the band; this guard stops it re-pressing in place on a
+     * wide landing. Reset on every new path.
+     */
+    private int lastLeapPressIndex = -1;
     private double lastTickX;
     private double lastTickZ;
     private int repathsLeft;
@@ -180,6 +194,7 @@ public final class Navigator {
         this.index = 0;
         this.stuckTicks = 0;
         this.noMoveTicks = 0;
+        this.lastLeapPressIndex = -1;
         this.state = State.PATHING;
         PathfinderService.Dispatched dispatched = OFF_THREAD
                 ? PathfinderService.request(level(), this.person.blockPosition(), this.goal)
@@ -230,19 +245,6 @@ public final class Navigator {
         this.groundedTicks = this.person.onGround() ? this.groundedTicks + 1 : 0;
         skipPassedWaypoints();
         advancePassedPlanes(this.person.position());
-        // Landing beat: the first grounded ticks after any airborne phase, on ground bordering a
-        // drop, are braking ticks — input cut, friction kills the arrival momentum. Independent of
-        // waypoint bookkeeping: on chained leaps the skip/plane advance claims the landing mid-air,
-        // so a sprint landing skidded over the far lip of a 1-wide pillar. Continuous walking near
-        // edges never trips it.
-        if (this.groundedTicks >= 1 && this.groundedTicks <= 3 && this.grid != null) {
-            BlockPos feet = this.person.blockPosition();
-            if (NavGrids.isNearDeepDrop(this.grid, AgentProfile.PERSON.maxDrop(),
-                    feet.getX(), feet.getY(), feet.getZ())) {
-                this.person.stopMoving();
-                return;
-            }
-        }
         Waypoint waypoint = this.path.waypoints().get(this.index);
         boolean isLast = this.index == this.path.waypoints().size() - 1;
         Vec3 pos = this.person.position();
@@ -250,6 +252,29 @@ public final class Navigator {
         double dz = waypoint.z() + 0.5 - pos.z;
         double horizontalSq = dx * dx + dz * dz;
         double dy = pos.y - waypoint.y();
+
+        // Landing beat: the first grounded ticks after any airborne phase, on ground that borders a
+        // drop, are braking ticks — input cut so friction kills the arrival momentum before it skids
+        // over the far lip of a 1-wide pillar. Continuous walking near edges never trips it.
+        //
+        // EXCEPTION — a leap chain: braking on a pillar that is the next leap's takeoff leaves a
+        // 1-block runway, far too little to rebuild the speed a span-3 (2-block-gap) leap needs, so
+        // the next leap falls short, strays and re-paths. The brake therefore stands down whenever a
+        // leap takes off from this cell: a leap already into its run-up (grounded, past its landing
+        // phase — the 1.44 mirrors leapLanding below), or one we just landed that hands off to
+        // another leap.
+        boolean leapTakeoff = waypoint.move() == MoveType.LEAP
+                && (horizontalSq > 1.44
+                        || (this.index + 1 < this.path.waypoints().size()
+                                && this.path.waypoints().get(this.index + 1).move() == MoveType.LEAP));
+        if (this.groundedTicks >= 1 && this.groundedTicks <= 3 && this.grid != null && !leapTakeoff) {
+            BlockPos feet = this.person.blockPosition();
+            if (NavGrids.isNearDeepDrop(this.grid, AgentProfile.PERSON.maxDrop(),
+                    feet.getX(), feet.getY(), feet.getZ())) {
+                this.person.stopMoving();
+                return;
+            }
+        }
 
         // Standing far from the current waypoint means we've left the path (see STRAY_HORIZONTAL),
         // and steering back would be walking blind, so plan fresh from here. Grounded-only —
@@ -348,13 +373,23 @@ public final class Navigator {
                 ? this.person.getYRot()
                 : (float) (Mth.atan2(aimZ, aimX) * Mth.RAD_TO_DEG) - 90.0F;
         // Gait before forward input: driveForward reads the speed attribute, which sprinting
-        // modifies. Only a 2+ leap approach/flight sprints (the run-up); everything else walks,
-        // slowly near a drop. A DROP into the final waypoint takes the careful speed even on safe
-        // ground: the glide through a 3-block fall is ~1.5 blocks at full walk, ~0.6 at 0.45.
+        // modifies. A 2+ gap (span-3+) leap approach/flight sprints — a walking jump falls ~0.4
+        // short and drops into the gap; everything else walks, slowly near a drop. (Sprint
+        // overshoots a 1-wide landing pillar, so chaining across those is marginal — see the
+        // flight-throttle trim below.) A DROP into the final waypoint takes the careful speed even
+        // on safe ground: the glide through a 3-block fall is ~1.5 blocks at full walk, ~0.6 at
+        // 0.45.
         boolean precisionFinal = isLast && waypoint.move() == MoveType.DROP;
         this.person.driveSprint(leapSpan >= 3.0 && !leapLanding);
+        // Air control eased mid-flight on a 2-gap leap (span 3) so the sprint arc lands mid-pillar
+        // instead of skidding onto the far rim (see LEAP_AIR_THROTTLE). A 3-gap leap (span 4) has
+        // no distance to spare and keeps full air control; ground ticks always drive at full 1.0.
+        boolean leapFlightTrim = committedFlight && leapSpan > 2.5 && leapSpan < 3.5;
         this.person.driveForward(heading,
-                coastToLanding ? 0.0F : careful || precisionFinal ? CAREFUL_THROTTLE : 1.0F);
+                coastToLanding ? 0.0F
+                        : careful || precisionFinal ? CAREFUL_THROTTLE
+                        : leapFlightTrim ? LEAP_AIR_THROTTLE
+                        : 1.0F);
         if (waypoint.move() == MoveType.JUMP && dy < -0.5
                 && horizontalSq < JUMP_RANGE * JUMP_RANGE && this.person.onGround()) {
             // A full block up needs a real jump (step height covers only 0.6); aiStep's ground check
@@ -365,16 +400,18 @@ public final class Navigator {
             // Leap: run (or sprint) at the gap and press jump right at the edge. The takeoff cell's
             // far rim sits at span−0.5 from the landing center, so pressing inside span−0.2 launches
             // within a step of it; the band FLOOR (span−1.2) confines the press to the takeoff side,
-            // where a plain <= check stayed true after touchdown and hopped her in place. A failed
-            // leap ending back inside the band re-presses — that is the retry.
-            // The grounded-ticks gate is the landing beat between CHAINED leaps: an overshot landing
-            // can already sit inside the next leap's band, and pressing there with leap momentum
-            // still live launches a wild hop. Three grounded ticks cost a running approach nothing.
+            // where a plain <= check stayed true after touchdown and hopped her in place.
+            // The once-per-index guard (lastLeapPressIndex) replaces an older "wait ≥3 grounded
+            // ticks" gate that never fired in a chain: each span-3 leap lands on the FAR rim of the
+            // 1-wide next takeoff, grounded for barely a tick, so she walked into the gap. Pressing
+            // on the first in-band grounded tick carries the momentum into the next leap; once per
+            // waypoint stops the in-place re-hop.
             double press = leapSpan - 0.2;
             double pressFloor = leapSpan - 1.2;
-            if (this.groundedTicks >= 3
-                    && horizontalSq <= press * press && horizontalSq > pressFloor * pressFloor) {
+            if (horizontalSq <= press * press && horizontalSq > pressFloor * pressFloor
+                    && this.index != this.lastLeapPressIndex) {
                 this.person.driveJump();
+                this.lastLeapPressIndex = this.index;
             }
         }
 
