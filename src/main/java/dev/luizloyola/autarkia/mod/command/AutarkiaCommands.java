@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
+import dev.luizloyola.autarkia.core.brain.task.GoTo;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.person.Appearance;
@@ -43,8 +44,8 @@ import java.util.Locale;
  * <p>{@code whois} prints a Person's identity (id + name), read straight from the server-side
  * {@link PersonDirectory}: the name is never synced to clients.
  *
- * <p>{@code nav goto <pos> | stop | status} drives a Person's navigator, so locomotion is
- * exercisable from a headless dev server and by command blocks.
+ * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs tasks through
+ * the executor — the machinery the arbiter will feed.
  *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
  * links it to the entity before it enters the world; position mirrors {@code /summon}.
@@ -78,6 +79,17 @@ public final class AutarkiaCommands {
                                         .executes(ctx -> navStop(ctx.getSource())))
                                 .then(Commands.literal("status")
                                         .executes(ctx -> navStatus(ctx.getSource()))))
+                        // nav (above) drives the legs directly — locomotion debug; brain runs
+                        // tasks through the executor, the machinery the arbiter will feed.
+                        .then(Commands.literal("brain")
+                                .then(Commands.literal("goto")
+                                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                                .executes(ctx -> brainGoto(ctx.getSource(),
+                                                        BlockPosArgument.getLoadedBlockPos(ctx, "pos")))))
+                                .then(Commands.literal("status")
+                                        .executes(ctx -> brainStatus(ctx.getSource())))
+                                .then(Commands.literal("cancel")
+                                        .executes(ctx -> brainCancel(ctx.getSource()))))
                         .then(Commands.literal("inv")
                                 .then(Commands.literal("list")
                                         .executes(ctx -> invList(ctx.getSource())))
@@ -96,7 +108,7 @@ public final class AutarkiaCommands {
                                                 .executes(ctx -> invEquip(ctx.getSource(),
                                                         ItemArgument.getItem(ctx, "item"))))))
                         // "person", not "brain": these are body readouts (vitals live with the
-                        // entity).
+                        // entity); the brain group above holds the decision machinery.
                         .then(Commands.literal("person")
                                 .then(Commands.literal("spawn")
                                         .executes(ctx -> personSpawn(ctx.getSource(), null, null))
@@ -153,6 +165,34 @@ public final class AutarkiaCommands {
         if (person == null) return 0;
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.navigator().describe()).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** Runs a {@link GoTo} task on the nearest Person through the brain's executor — same walk
+     *  as {@link #navGoto}, but through the task machinery, so the whole pipeline is exercised. */
+    private static int brainGoto(CommandSourceStack source, BlockPos pos) {
+        Person person = nearest(source);
+        if (person == null) return 0;
+        person.brain().run(new GoTo(pos.getX(), pos.getY(), pos.getZ()));
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    private static int brainStatus(CommandSourceStack source) {
+        Person person = nearest(source);
+        if (person == null) return 0;
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    private static int brainCancel(CommandSourceStack source) {
+        Person person = nearest(source);
+        if (person == null) return 0;
+        person.brain().cancel();
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + " task cancelled; "
+                + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 

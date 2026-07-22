@@ -10,6 +10,7 @@ import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
+import dev.luizloyola.autarkia.mod.brain.BrainDriver;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
 import dev.luizloyola.autarkia.mod.nav.Navigator;
@@ -126,6 +127,13 @@ public class Person extends Avatar {
     private final Navigator navigator = new Navigator(this);
 
     /**
+     * This person's brain host ({@link BrainDriver}) — a machine beside the {@link #navigator}: it
+     * runs the task executor and only ever <em>reads</em> the body. Transient — a running task is
+     * working state, not persisted; a reload just re-decides.
+     */
+    private final BrainDriver brain = new BrainDriver(this);
+
+    /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
      * brain organ: the entity owns and ticks its own metabolism, as vanilla's {@code FoodData}
      * belongs to the player rather than to any AI, and the brain only ever <em>reads</em> it.
@@ -232,6 +240,8 @@ public class Person extends Avatar {
         // Metabolism runs every server tick no matter who owns the movement input below: food
         // burns (and starvation bites) whether she is navigating, debug-sprinting, or idle.
         tickNeeds();
+        // The brain decides first, then the Navigator (below) executes locomotion the same tick.
+        this.brain.tick();
         if (this.debugRunForward) {
             // getAttributeValue includes the sprint modifier applied by setSprinting, so this is
             // already the ×1.3 sprint speed; the 0.98 damping keeps it exact vs a player.
@@ -251,6 +261,11 @@ public class Person extends Avatar {
     /** This person's movement/navigation state machine. See {@link Navigator}. */
     public Navigator navigator() {
         return this.navigator;
+    }
+
+    /** This person's brain host — the machine that runs tasks. See {@link BrainDriver}. */
+    public BrainDriver brain() {
+        return this.brain;
     }
 
     /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */
