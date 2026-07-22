@@ -2,7 +2,10 @@
   "required": true,
   "package": "dev.luizloyola.autarkia.mixin",
   "compatibilityLevel": "${java}",
-  "mixins": [],
+  "mixins": [
+    "NearestAttackableTargetGoalMixin",
+    "TargetGoalAccessor"
+  ],
   "injectors": {
     "defaultRequire": 1
   }
