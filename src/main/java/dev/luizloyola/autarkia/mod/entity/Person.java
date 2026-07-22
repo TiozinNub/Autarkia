@@ -29,8 +29,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Avatar;
-import net.minecraft.world.entity.EntityAttachment;
-import net.minecraft.world.entity.EntityAttachments;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -643,19 +641,14 @@ public class Person extends Avatar {
     }
 
     /**
-     * Keeps the nametag anchored at standing eye height while dying. {@link Avatar}'s
-     * {@code Pose.DYING} box is a fixed 0.2×0.2, and vanilla derives the NAME_TAG attachment from
-     * box height, so a Person's always-on label ({@link #applyIdentity}) would drop to ~0.2 blocks
-     * above the ground. Only that attachment is overridden; the collapsed hitbox and every other
-     * pose are untouched.
+     * Keeps a Person's size — and with it the nametag position, which vanilla derives from box
+     * height — unchanged through death, like a real player. {@link Avatar}'s {@code Pose.DYING}
+     * otherwise collapses to a fixed 0.2×0.2 box for the death animation; combined with a
+     * Person's always-on label ({@link #applyIdentity}) that dragged the nametag down to the
+     * ground the moment death started.
      */
     @Override
     public EntityDimensions getDefaultDimensions(Pose pose) {
-        EntityDimensions dimensions = super.getDefaultDimensions(pose);
-        if (pose == Pose.DYING) {
-            dimensions = dimensions.withAttachments(EntityAttachments.builder()
-                    .attach(EntityAttachment.NAME_TAG, 0.0F, dimensions.eyeHeight(), 0.0F));
-        }
-        return dimensions;
+        return pose == Pose.DYING ? super.getDefaultDimensions(Pose.STANDING) : super.getDefaultDimensions(pose);
     }
 }
