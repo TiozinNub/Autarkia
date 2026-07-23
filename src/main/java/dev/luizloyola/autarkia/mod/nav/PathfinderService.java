@@ -104,7 +104,7 @@ public final class PathfinderService {
     }
 
     private static PathRequest buildRequest(WorldSnapshot snapshot, BlockPos start, BlockPos goal) {
-        BlockPos grounded = groundGoal(snapshot, goal);
+        BlockPos grounded = groundGoal(snapshot, goal, AgentProfile.PERSON.canSwim());
         return PathRequest.of(start.getX(), start.getY(), start.getZ(),
                 grounded.getX(), grounded.getY(), grounded.getZ(), AgentProfile.PERSON);
     }
@@ -132,14 +132,21 @@ public final class PathfinderService {
     }
 
     /**
-     * Clicks and commands rarely name a standable cell (a block face, a spot mid-air): walk the
-     * goal down to the first cell with ground under it and room to stand. If none is found the
-     * original goal stands — the search then yields its best partial path toward it.
+     * Clicks and commands rarely name a standable cell (a block face, a spot mid-air): walks the
+     * goal down to the first cell with ground under it and room to stand. Finding none, the goal
+     * stands and the search yields its best partial toward it.
+     *
+     * <p>For a swimmer a goal over open water settles at the <em>surface</em> (first water cell
+     * with air above), not the lakebed: surface crossing cannot reach the bed.
      */
-    private static BlockPos groundGoal(WorldSnapshot snapshot, BlockPos goal) {
+    private static BlockPos groundGoal(WorldSnapshot snapshot, BlockPos goal, boolean canSwim) {
         int x = goal.getX();
         int z = goal.getZ();
         for (int y = goal.getY(); y > goal.getY() - GOAL_DROP_SCAN; y--) {
+            if (canSwim && snapshot.cell(x, y, z) == CellType.WATER
+                    && snapshot.cell(x, y + 1, z) == CellType.PASSABLE) {
+                return new BlockPos(x, y, z); // the water surface — a swimmer floats here
+            }
             CellType below = snapshot.cell(x, y - 1, z);
             if (below == CellType.GROUND
                     && snapshot.cell(x, y, z) == CellType.PASSABLE

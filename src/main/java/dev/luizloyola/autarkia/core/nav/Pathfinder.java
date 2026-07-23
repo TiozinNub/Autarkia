@@ -46,6 +46,14 @@ public final class Pathfinder {
      * grow, so the Euclidean heuristic stays admissible.
      */
     private static final double CAREFUL_COST_FACTOR = 2.2;
+    /**
+     * Cost of one cardinal cell of swimming — the swim-vs-detour dial. Well above a walk (1.0) and
+     * around the careful factor (2.2), so a dry route of comparable length wins and water is
+     * crossed only when swimming saves real distance; narrow water is <em>leapt</em> (2.4–5.0).
+     * Must stay ≥ {@link #WALK_COST} to keep the horizontal heuristic admissible: a swim move
+     * covers at most its cost in horizontal distance (diagonal √2 against a 2.5·√2 price).
+     */
+    private static final double SWIM_COST = 2.5;
 
     /** Neighbour probe order — fixed so the search is deterministic: N, S, W, E, then diagonals. */
     private static final int[][] CARDINALS = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
@@ -173,6 +181,101 @@ public final class Pathfinder {
         }
         for (int[] d : CARDINALS) {
             leapNeighbor(current, node, x, y, z, d[0], d[1]);
+        }
+        swimNeighbors(current, node, x, y, z);
+    }
+
+    /**
+     * Water moves, for a swimmer only ({@link AgentProfile#canSwim()}), surface crossing only: from
+     * a surface feet cell ({@link #isSurfaceSwim}) stroke across or climb out onto a bank,
+     * otherwise step off the shore into water. One method, so diving and surfacing have a home.
+     */
+    private void swimNeighbors(long current, Node node, int x, int y, int z) {
+        if (!this.profile.canSwim()) return;
+        if (isSurfaceSwim(x, y, z)) {
+            for (int[] d : CARDINALS) swimCross(current, node, x, y, z, d[0], d[1]);
+            for (int[] d : DIAGONALS) swimCrossDiagonal(current, node, x, y, z, d[0], d[1]);
+            for (int[] d : CARDINALS) swimExit(current, node, x, y, z, d[0], d[1]);
+        } else {
+            for (int[] d : CARDINALS) swimEnter(current, node, x, y, z, d[0], d[1]);
+        }
+    }
+
+    /**
+     * Whether feet-cell {@code (x,y,z)} is a floating spot at the water surface — the topmost water
+     * block of a column: feet in water, the {@code height-1} cells above air, so the head is above
+     * the waterline (occupiable, no drowning).
+     */
+    private boolean isSurfaceSwim(int x, int y, int z) {
+        if (this.grid.cell(x, y, z) != CellType.WATER) return false;
+        for (int i = 1; i < this.profile.height(); i++) {
+            if (this.grid.cell(x, y + i, z) != CellType.PASSABLE) return false;
+        }
+        return true;
+    }
+
+    /** One surface stroke to an adjacent water-surface cell at the same level (connected water is flat). */
+    private void swimCross(long current, Node node, int x, int y, int z, int dx, int dz) {
+        int nx = x + dx;
+        int nz = z + dz;
+        if (isSurfaceSwim(nx, y, nz)) {
+            relax(current, node, pack(nx, y, nz), MoveType.SWIM, SWIM_COST);
+        }
+    }
+
+    /**
+     * A diagonal surface stroke: both flanks must also be open water, so the body can't clip a
+     * corner block mid-stroke (the same corner-cut guard the on-land diagonal uses).
+     */
+    private void swimCrossDiagonal(long current, Node node, int x, int y, int z, int dx, int dz) {
+        int nx = x + dx;
+        int nz = z + dz;
+        if (isSurfaceSwim(nx, y, nz) && isSurfaceSwim(nx, y, z) && isSurfaceSwim(x, y, nz)) {
+            relax(current, node, pack(nx, y, nz), MoveType.SWIM, SWIM_COST * SQRT2);
+        }
+    }
+
+    /**
+     * Step off the shore into the neighbouring water column: onto a surface level with the bank, or
+     * up to {@code maxDrop} below it, since water negates the fall. The far column must be open at
+     * our level first. Tagged {@link MoveType#SWIM} — the feet land in water.
+     */
+    private void swimEnter(long current, Node node, int x, int y, int z, int dx, int dz) {
+        int nx = x + dx;
+        int nz = z + dz;
+        if (isSurfaceSwim(nx, y, nz)) { // water level with the bank: step straight in
+            relax(current, node, pack(nx, y, nz), MoveType.SWIM, SWIM_COST);
+            return;
+        }
+        if (!hasClearance(nx, y, nz)) return; // can't even move into the near column
+        int surface = y - 1;
+        int limit = y - this.profile.maxDrop();
+        while (surface >= limit && this.grid.cell(nx, surface, nz) == CellType.PASSABLE) {
+            surface--; // fall through the air above the water
+        }
+        if (surface >= limit && isSurfaceSwim(nx, surface, nz)) {
+            relax(current, node, pack(nx, surface, nz), MoveType.SWIM, SWIM_COST);
+        }
+    }
+
+    /**
+     * Climb out of the water onto solid ground: wade onto a beach at the same level, or pull up onto
+     * a bank up to {@code jumpHeight} above. Tagged as an ordinary {@link MoveType#WALK}/{@link
+     * MoveType#JUMP} land move (the destination is standable ground); the follower recognises it as
+     * the exit because it is still in the water when it gets there.
+     */
+    private void swimExit(long current, Node node, int x, int y, int z, int dx, int dz) {
+        int nx = x + dx;
+        int nz = z + dz;
+        if (isStandable(nx, y, nz)) {
+            relax(current, node, pack(nx, y, nz), MoveType.WALK, SWIM_COST);
+            return;
+        }
+        for (int up = 1; up <= this.profile.jumpHeight(); up++) {
+            if (isStandable(nx, y + up, nz)) {
+                relax(current, node, pack(nx, y + up, nz), MoveType.JUMP, SWIM_COST);
+                return;
+            }
         }
     }
 

@@ -256,6 +256,21 @@ public class Person extends Avatar {
             // when it has one, and holds the input at rest otherwise.
             this.navigator.tick();
         }
+        // Buoyancy last: it owns the vertical input while submerged, whatever drove the horizontal.
+        floatInWater();
+    }
+
+    /**
+     * Constant survival reflex: while any part of the body is in water, hold the swim-up input —
+     * float, never drown. Owned by the body rather than the {@link Navigator} so a Person who
+     * wandered in, was shoved in, or is idle floats exactly like one crossing on a path. Runs after
+     * the navigator so it wins the vertical input, and is effective same-tick because {@code aiStep}
+     * reads {@code this.jumping} right after {@code serverAiStep} (see {@link #driveJump}).
+     */
+    private void floatInWater() {
+        if (isInWater()) {
+            setJumping(true); // held-jump-in-water rises via aiStep's jumpInLiquid
+        }
     }
 
     /** This person's movement/navigation state machine. See {@link Navigator}. */
@@ -278,24 +293,29 @@ public class Person extends Avatar {
      * {@code FoodData.tick(ServerPlayer)}:
      *
      * <ol>
-     *   <li><b>Sprint exhaustion</b> — vanilla's 0.1/m on ground (walking is free), measured
-     *       against last tick's position. Swim exhaustion is skipped: Persons can't swim yet.</li>
-     *   <li><b>Regen/starvation inputs</b> — the {@code naturalRegeneration} gamerule (26.1 keeps it
-     *       on {@code ServerLevel}; the cast is safe, this only ticks from serverAiStep) and
-     *       hurt-ness, {@code isHurt()} being Player-only on 26.1.2: alive and below max health.</li>
-     *   <li><b>Effects</b> — core decides ({@link Needs.TickResult}), the body applies: a half-heart
-     *       on regen, a starvation hit on vanilla's 80-tick cadence, not difficulty-clamped because
-     *       population dynamics needs starvation to be a real cause of death.</li>
+     *   <li><b>Movement exhaustion</b> — 0.1/m sprinting on ground, 0.01/m swimming, walking free,
+     *       measured against last tick's position.</li>
+     *   <li><b>Regen/starvation inputs</b> — the {@code naturalRegeneration} gamerule and hurt-ness.
+     *       {@code isHurt()} is Player-only on 26.1.2, so its body is inlined here: alive and below
+     *       max health.</li>
+     *   <li><b>Effects</b> — core decides <em>what</em> happens ({@link Needs.TickResult}), the body
+     *       applies it: a half-heart heal, a starvation hit on vanilla's 80-tick cadence. Unlike
+     *       vanilla the starvation damage is not difficulty-clamped — starvation must be a real
+     *       cause of death.</li>
      * </ol>
      */
     private void tickNeeds() {
         boolean firstSample = Double.isNaN(this.lastX);
-        if (!firstSample && isSprinting() && onGround()) {
+        if (!firstSample) {
             double dx = getX() - this.lastX;
             double dz = getZ() - this.lastZ;
             float meters = (float) Math.sqrt(dx * dx + dz * dz);
             if (meters > 0.0F) {
-                this.needs.exhaust(Needs.EXHAUSTION_SPRINT_PER_METER * meters);
+                if (isInWater()) {
+                    this.needs.exhaust(Needs.EXHAUSTION_SWIM_PER_METER * meters);
+                } else if (isSprinting() && onGround()) {
+                    this.needs.exhaust(Needs.EXHAUSTION_SPRINT_PER_METER * meters);
+                }
             }
         }
         this.lastX = getX();

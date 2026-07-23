@@ -276,9 +276,12 @@ class PathfinderTest {
     }
 
     @Test
-    void willNotSwimInV1() {
+    void swimsAcrossWideWater() {
+        // The water counterpart of willNotCrossWideLava: too wide to leap, but a Person can swim it.
         Path path = find(AsciiWorld.of("11WWWW11"), 1, 1, 0, 6, 1, 0);
-        assertFalse(path.reachedGoal());
+        assertTrue(path.reachedGoal());
+        assertTrue(path.waypoints().stream().anyMatch(w -> w.move() == MoveType.SWIM),
+                "crosses by swimming: " + path.waypoints());
     }
 
     @Test

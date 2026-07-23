@@ -46,7 +46,6 @@ public final class Needs {
     public static final float EXHAUSTION_JUMP = 0.05F;
     public static final float EXHAUSTION_SPRINT_JUMP = 0.2F;
     public static final float EXHAUSTION_SPRINT_PER_METER = 0.1F;
-    /** Reserved: Persons can't swim yet. */
     public static final float EXHAUSTION_SWIM_PER_METER = 0.01F;
     /** Reserved: no attack behavior yet. */
     public static final float EXHAUSTION_ATTACK = 0.1F;

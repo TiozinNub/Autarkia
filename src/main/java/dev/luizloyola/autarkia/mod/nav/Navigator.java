@@ -81,6 +81,12 @@ public final class Navigator {
      */
     private static final double STRAY_HORIZONTAL = 5.0;
     private static final double STRAY_VERTICAL = 1.5;
+    /**
+     * Vertical slack for matching a body to a {@link MoveType#SWIM} waypoint. A floating body bobs
+     * around the surface cell, so a footed move's tight half-block band drops the waypoint out of
+     * range on the down-beat and stalls the advance. This band spans the whole bob.
+     */
+    private static final double SWIM_BAND = 1.5;
     /** Ticks without reaching the next waypoint (one cell away!) before declaring ourselves stuck. */
     private static final int STUCK_LIMIT = 60;
     /**
@@ -253,6 +259,14 @@ public final class Navigator {
         double horizontalSq = dx * dx + dz * dz;
         double dy = pos.y - waypoint.y();
 
+        // In the water, or about to step in (the last on-shore tick of an entry waypoint): swim
+        // physics takes over, skipping all the grounded edge logic below — which is also the
+        // careful-mode exemption for entering water.
+        if (this.person.isInWater() || waypoint.move() == MoveType.SWIM) {
+            tickSwim(waypoint, isLast, pos, dx, dz, horizontalSq, dy);
+            return;
+        }
+
         // Landing beat: the first grounded ticks after any airborne phase, on ground that borders a
         // drop, are braking ticks — input cut so friction kills the arrival momentum before it skids
         // over the far lip of a 1-wide pillar. Continuous walking near edges never trips it.
@@ -421,6 +435,56 @@ public final class Navigator {
     }
 
     /**
+     * One tick of swimming — entering water from a shore, crossing at the surface, or climbing out.
+     * This only <em>steers</em>; staying afloat is the body's constant reflex
+     * ({@link Person#floatInWater}). Because the body floats with its feet around the surface cell,
+     * a SWIM waypoint's arrival is horizontal, while a climb-out waypoint wants the feet planted and
+     * settled. Progress stays bounded by {@link #STUCK_LIMIT} and the no-move stall check, whose
+     * usual fast path is grounded-gated and so is repeated here.
+     */
+    private void tickSwim(Waypoint waypoint, boolean isLast, Vec3 pos,
+                          double dx, double dz, double horizontalSq, double dy) {
+        boolean landTarget = waypoint.move() != MoveType.SWIM; // a climb-out step onto solid ground
+        double radius = isLast ? FINAL_RADIUS : WAYPOINT_RADIUS;
+        double vertical = landTarget ? verticalGap(dy) : 0.0;
+        if (horizontalSq + vertical * vertical <= radius * radius
+                && (!landTarget || this.person.onGround())) {
+            if (isLast && landTarget && !isSettled()) {
+                this.person.stopMoving();
+                return;
+            }
+            advance(isLast);
+            return;
+        }
+
+        if (++this.stuckTicks > STUCK_LIMIT) {
+            retryOrFail();
+            return;
+        }
+        double movedSq = (pos.x - this.lastTickX) * (pos.x - this.lastTickX)
+                + (pos.z - this.lastTickZ) * (pos.z - this.lastTickZ);
+        this.lastTickX = pos.x;
+        this.lastTickZ = pos.z;
+        if (movedSq < NO_MOVE_EPSILON * NO_MOVE_EPSILON) {
+            if (++this.noMoveTicks > NO_MOVE_LIMIT) {
+                retryOrFail();
+                return;
+            }
+        } else {
+            this.noMoveTicks = 0;
+        }
+
+        // Plain walking input is exactly right: travel's water branch turns it into (slow)
+        // horizontal swimming.
+        float heading = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
+        this.person.driveForward(heading);
+
+        if (debugParticles && this.person.tickCount % 5 == 0) {
+            emitPathParticles();
+        }
+    }
+
+    /**
      * Claims every waypoint we are already past: standing in the cell of a <em>later</em> one
      * (overshot jump, knockback) continues from there. Safe by construction — we only skip to a
      * node we are standing on, so no skipped stretch can hide an obstacle, and A* never revisits a
@@ -440,7 +504,7 @@ public final class Navigator {
             if (w.move() == MoveType.LEAP && !this.person.onGround()) {
                 continue;
             }
-            if (feet.getX() == w.x() && feet.getZ() == w.z() && verticalGap(y - w.y()) < 0.5) {
+            if (feet.getX() == w.x() && feet.getZ() == w.z() && atWaypointHeight(y - w.y(), w.move())) {
                 this.index = Math.min(j + 1, last);
                 this.stuckTicks = 0;
                 return;
@@ -473,7 +537,7 @@ public final class Navigator {
             // conflated the two.
             double forward = (offX * segX + offZ * segZ) / segLen;
             double lateral = Math.abs(offX * segZ - offZ * segX) / segLen;
-            if (verticalGap(pos.y - current.y()) >= 0.5
+            if (!atWaypointHeight(pos.y - current.y(), current.move())
                     || forward <= 0.0 || forward > 2.5 || lateral > 0.6) {
                 return;
             }
@@ -497,6 +561,19 @@ public final class Navigator {
     private static double verticalGap(double dy) {
         if (dy < 0.0) return -dy;
         return Math.max(0.0, dy - 0.5);
+    }
+
+    /**
+     * Whether a body {@code dy} above a waypoint counts as "at its height" for claiming/advancing it.
+     * A footed move uses the tight standing band ({@link #verticalGap} &lt; 0.5); a {@link
+     * MoveType#SWIM} waypoint uses the wider {@link #SWIM_BAND} so the surface bob doesn't flicker it
+     * in and out of range.
+     */
+    private static boolean atWaypointHeight(double dy, MoveType move) {
+        if (move == MoveType.SWIM) {
+            return dy >= -SWIM_BAND && dy <= SWIM_BAND;
+        }
+        return verticalGap(dy) < 0.5;
     }
 
     /**

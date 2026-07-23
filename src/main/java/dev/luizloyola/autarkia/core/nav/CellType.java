@@ -16,6 +16,11 @@ public enum CellType {
     OBSTACLE,
     /** Harmful to touch or stand on: lava, fire, cactus, magma. Never entered, never a floor. */
     DANGER,
-    /** Unused by the v1 walker (treated as impassable), reserved for swimming. */
+    /**
+     * Swimmable liquid — one value for every water cell, surface or submerged. Impassable to a
+     * land-only agent ({@link AgentProfile#canSwim()} false: neither {@link #GROUND} nor
+     * {@link #PASSABLE}); a swimmer occupies it. The waterline is derived geometrically (water with
+     * air above), so these same cells serve underwater routing without a second value.
+     */
     WATER
 }
