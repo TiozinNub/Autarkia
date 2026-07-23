@@ -1,11 +1,14 @@
 package dev.luizloyola.autarkia.mod.nav;
 
+import dev.luizloyola.autarkia.compat.nav.WorldSnapshot;
 import dev.luizloyola.autarkia.core.nav.AgentProfile;
+import dev.luizloyola.autarkia.core.nav.CellNeed;
 import dev.luizloyola.autarkia.core.nav.Gait;
 import dev.luizloyola.autarkia.core.nav.MoveType;
 import dev.luizloyola.autarkia.core.nav.NavGrid;
 import dev.luizloyola.autarkia.core.nav.NavGrids;
 import dev.luizloyola.autarkia.core.nav.Path;
+import dev.luizloyola.autarkia.core.nav.PathIntegrity;
 import dev.luizloyola.autarkia.core.nav.Waypoint;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.concurrent.CancellationException;
@@ -106,6 +109,19 @@ public final class Navigator {
     private static final double NO_MOVE_EPSILON = 0.01;
     /** Re-path budget per {@link #pathTo} request: stuck or short-of-goal retries, then FAILED. */
     private static final int MAX_REPATHS = 3;
+    /**
+     * How many waypoints past the one just reached the integrity check re-validates, each time the
+     * follower steps onto a new node. Must exceed the farthest single-tick node skip
+     * ({@link #SKIP_LOOKAHEAD} can jump the index several nodes at once) so a skip never vaults the
+     * body past unvalidated cells.
+     */
+    private static final int INTEGRITY_LOOKAHEAD = 5;
+    /**
+     * Minimum FOLLOWING ticks between two <em>proactive</em> (terrain-changed) re-paths, so a
+     * flickering block (or a fresh plan that is itself invalid) can't re-plan every tick and peg
+     * a worker. A spacing dial, not a budget: proactive re-paths never run out.
+     */
+    private static final int PROACTIVE_REPATH_COOLDOWN = 20;
 
     /** Dev-phase visuals: END_ROD breadcrumbs on the remaining path, FLAME on the goal. */
     public static boolean debugParticles = true;
@@ -137,6 +153,14 @@ public final class Navigator {
     private double lastTickX;
     private double lastTickZ;
     private int repathsLeft;
+    /**
+     * Highest waypoint index whose look-ahead window the integrity check has already validated; it
+     * re-checks only when the follower advances onto a new node ({@code index} climbs past this).
+     * Reset to -1 on every new path so the first FOLLOWING tick validates the opening window.
+     */
+    private int integrityCheckedIndex = -1;
+    /** FOLLOWING ticks left before another proactive re-path may fire (see {@link #PROACTIVE_REPATH_COOLDOWN}). */
+    private int proactiveRepathCooldown;
     /**
      * Requested pace for the current order, set by {@link #pathTo(BlockPos, Gait)}: SPRINT (flee)
      * on open, safe stretches, STROLL (wander) throttled to {@link #STROLL_THROTTLE}. Terrain
@@ -182,6 +206,8 @@ public final class Navigator {
         this.path = null;
         this.grid = null;
         this.index = 0;
+        this.integrityCheckedIndex = -1;
+        this.proactiveRepathCooldown = 0;
         this.gait = Gait.WALK;
         this.state = State.IDLE;
         this.person.stopMoving();
@@ -227,6 +253,7 @@ public final class Navigator {
     private void requestPath() {
         this.path = null;
         this.index = 0;
+        this.integrityCheckedIndex = -1;
         this.stuckTicks = 0;
         this.noMoveTicks = 0;
         this.lastLeapPressIndex = -1;
@@ -280,6 +307,18 @@ public final class Navigator {
         this.groundedTicks = this.person.onGround() ? this.groundedTicks + 1 : 0;
         skipPassedWaypoints();
         advancePassedPlanes(this.person.position());
+        // Stepped onto a new node: re-read the completion-critical cells of the next few nodes and
+        // re-plan if the world no longer matches. Once per node, not per tick. The cooldown gates
+        // the fire rate, not the check.
+        if (this.proactiveRepathCooldown > 0) {
+            this.proactiveRepathCooldown--;
+        } else if (this.index > this.integrityCheckedIndex) {
+            this.integrityCheckedIndex = this.index;
+            if (pathChangedAhead()) {
+                proactiveRepath();
+                return;
+            }
+        }
         Waypoint waypoint = this.path.waypoints().get(this.index);
         boolean isLast = this.index == this.path.waypoints().size() - 1;
         Vec3 pos = this.person.position();
@@ -687,6 +726,48 @@ public final class Navigator {
             this.state = State.FAILED;
             this.person.stopMoving();
         }
+    }
+
+    /**
+     * Whether any completion-critical cell of the next {@link #INTEGRITY_LOOKAHEAD} waypoints no
+     * longer classifies the way the plan needs — terrain edited out from under the path (a floor
+     * mined away, a corridor walled off, a swim lane drained). Reads the live world, legal because
+     * we tick inside {@code serverAiStep}; unloaded cells are skipped and never force-loaded.
+     *
+     * <p>Watches the whole deck the feet cross on each level edge; drop and leap moves stay
+     * destination-only, their in-flight stumbles left to the reactive stuck/stray net. See
+     * {@link PathIntegrity}.
+     */
+    private boolean pathChangedAhead() {
+        if (this.path == null) {
+            return false;
+        }
+        ServerLevel level = level();
+        int last = this.path.waypoints().size() - 1;
+        int limit = Math.min(this.index + INTEGRITY_LOOKAHEAD, last);
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int i = this.index + 1; i <= limit; i++) {
+            Waypoint from = this.path.waypoints().get(i - 1);
+            Waypoint to = this.path.waypoints().get(i);
+            for (CellNeed need : PathIntegrity.edgeNeeds(from, to, AgentProfile.PERSON)) {
+                pos.set(need.x(), need.y(), need.z());
+                if (level.isLoaded(pos) && WorldSnapshot.classifyAt(level, pos) != need.required()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Re-plan because the world changed under the current path, not because we are stuck. Unlike
+     * {@link #retryOrFail} this does <em>not</em> spend the {@link #MAX_REPATHS} budget: it would
+     * let anyone editing a few blocks near the path drive a reachable goal to FAILED.
+     * {@link #PROACTIVE_REPATH_COOLDOWN} still bounds the rate.
+     */
+    private void proactiveRepath() {
+        this.proactiveRepathCooldown = PROACTIVE_REPATH_COOLDOWN;
+        requestPath();
     }
 
     private void emitPathParticles() {

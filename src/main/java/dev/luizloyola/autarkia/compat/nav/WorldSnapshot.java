@@ -68,6 +68,16 @@ public final class WorldSnapshot implements NavGrid {
         return new WorldSnapshot(min.getX(), minY, min.getZ(), sizeX, sizeY, sizeZ, cells);
     }
 
+    /**
+     * Classifies a single live cell with the exact rules {@link #capture} bakes into a snapshot —
+     * the seam the follower's path-integrity check reads through. Server thread only (a live block
+     * read), and the caller must confirm the chunk is loaded: this never triggers a load, so an
+     * unchecked call into an unloaded chunk would misread.
+     */
+    public static CellType classifyAt(Level level, BlockPos pos) {
+        return classify(level, pos);
+    }
+
     /** Collapses one blockstate to the navigation vocabulary. The order matters — see comments. */
     private static CellType classify(Level level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
