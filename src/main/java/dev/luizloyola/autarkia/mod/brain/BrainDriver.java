@@ -10,6 +10,8 @@ import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.task.Task;
+import dev.luizloyola.autarkia.core.log.Category;
+import dev.luizloyola.autarkia.core.log.PersonJournal;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.List;
 import java.util.Random;
@@ -28,11 +30,11 @@ import java.util.Random;
  * + running task tree) is transient like the Navigator's, and a reload just re-decides.
  */
 public final class BrainDriver {
+    private final Person person;
     private final Arbiter arbiter;
     /**
-     * The one context every task/instinct tick receives: the actuator bundle (grows one port per
-     * new actuator facade) plus the percept views. Both sides are the only Minecraft boundary the
-     * core machinery ever touches.
+     * The one context every task/instinct tick receives: actuators, percepts and the debug
+     * journal — the only Minecraft boundary the core machinery ever touches.
      */
     private final BrainContext context;
 
@@ -44,6 +46,7 @@ public final class BrainDriver {
     private boolean auto = true;
 
     public BrainDriver(Person person) {
+        this.person = person;
         Mover mover = new PersonMover(person);
         ItemConsumer consumer = new PersonItemConsumer(person);
         Percepts percepts = new PersonPercepts(person);
@@ -67,6 +70,11 @@ public final class BrainDriver {
             @Override
             public Percepts percepts() {
                 return percepts;
+            }
+
+            @Override
+            public PersonJournal journal() {
+                return person.journal(); // the entity owns the one cached view; the body/nav share it
             }
 
             @Override
@@ -131,6 +139,8 @@ public final class BrainDriver {
     /** Flips the autonomy switch — see {@link #auto}. */
     public void setAuto(boolean auto) {
         this.auto = auto;
+        // BRAIN log: the dev override is worth a line — it explains a gap where the arbiter went quiet.
+        this.person.journal().record(Category.BRAIN, "auto", auto ? "on" : "off");
     }
 
     /** The brain's one-line status, for the debug commands: which side is driving, then its report. */

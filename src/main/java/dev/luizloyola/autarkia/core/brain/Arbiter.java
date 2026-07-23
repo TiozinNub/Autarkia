@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.brain;
 import dev.luizloyola.autarkia.core.brain.instinct.Instinct;
 import dev.luizloyola.autarkia.core.brain.task.TaskExecutor;
 import dev.luizloyola.autarkia.core.brain.task.TaskStatus;
+import dev.luizloyola.autarkia.core.log.Category;
 import java.util.List;
 import java.util.Locale;
 
@@ -54,6 +55,8 @@ public final class Arbiter {
     private Instinct active;
     /** The active instinct's pressure as of the last arbitration — the source for {@link #costTolerance()}. */
     private double activePressure;
+    /** The last drive journalled, so a re-grant of the same drive does not spam the BRAIN log. */
+    private Instinct lastGranted;
 
     public Arbiter(List<Instinct> instincts) {
         this.instincts = List.copyOf(instincts);
@@ -114,6 +117,10 @@ public final class Arbiter {
         executor.tick(ctx);
         if (busyBefore && !executor.isBusy()) {
             if (active != null && executor.lastStatus().orElse(null) == TaskStatus.FAILED) {
+                // BRAIN log: failures only — an unsatisfiable drive is the signal, and every
+                // wander SUCCESS would be noise. The switch/take-over lines already mark what she
+                // started.
+                ctx.journal().record(Category.BRAIN, active.describe(), "failed");
                 cooldowns[indexOf(active)] = active.failCooldown();
             }
             active = null; // next tick's idle-grant re-arbitrates
@@ -160,6 +167,15 @@ public final class Arbiter {
     /** Install instinct {@code i}'s fresh root as the running task, recording it as active. */
     private void grant(int i, BrainContext ctx) {
         Instinct instinct = instincts.get(i);
+        // BRAIN log: only a genuine change of drive, not the incumbent re-granting itself after
+        // each SUCCESS — that would swamp the ring with wander re-rolls. A preempt is a switch
+        // that cut a still-running task off.
+        if (instinct != lastGranted) {
+            boolean preempt = executor.isBusy() && active != null && active != instinct;
+            ctx.journal().record(Category.BRAIN, instinct.describe(), String.format(Locale.ROOT,
+                    "%s (pressure %.2f)", preempt ? "preempt" : "take over", lastPressures[i]));
+            lastGranted = instinct;
+        }
         active = instinct;
         activePressure = lastPressures[i];
         executor.run(instinct.root(ctx), ctx); // run() cancels any incumbent first

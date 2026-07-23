@@ -11,12 +11,16 @@ import dev.luizloyola.autarkia.core.brain.task.GoTo;
 import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
+import dev.luizloyola.autarkia.core.log.Category;
+import dev.luizloyola.autarkia.core.log.Entry;
+import dev.luizloyola.autarkia.core.log.JournalService;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import dev.luizloyola.autarkia.mod.log.Journals;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
@@ -59,6 +63,9 @@ import java.util.stream.Stream;
  * through the task machinery the arbiter feeds; {@code brain auto on | off} flips autonomy — ON by
  * default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
  *
+ * <p>{@code log} reads the resolved Person's in-memory journal ring, all three subsystems
+ * interleaved or one filtered. The durable per-person file is separate.
+ *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
  * links it to the entity before it enters the world; a plain {@code /summon autarkia:person}
  * instead mints one on the entity's first server tick. Position mirrors {@code /summon}.
@@ -74,6 +81,9 @@ public final class AutarkiaCommands {
     private AutarkiaCommands() {}
 
     private static final double NEAREST_RADIUS = 32.0;
+
+    /** Default number of journal lines {@code /autarkia log} prints when no count is given. */
+    private static final int DEFAULT_LOG_COUNT = 30;
 
     /** The equipment slots a Person actually has (a player's set): both hands + the four armor pieces. */
     private static final java.util.Set<EquipmentSlot> PERSON_EQUIP_SLOTS = java.util.EnumSet.of(
@@ -130,6 +140,16 @@ public final class AutarkiaCommands {
                                                 .executes(ctx -> brainAuto(ctx.getSource(), true)))
                                         .then(Commands.literal("off")
                                                 .executes(ctx -> brainAuto(ctx.getSource(), false)))))
+                        // The per-person debug journal (see the log package). Top-level, not under a
+                        // subsystem group, because one Person's log interleaves brain + pathfind + body.
+                        .then(Commands.literal("log")
+                                .executes(ctx -> logDump(ctx.getSource(), null, DEFAULT_LOG_COUNT))
+                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> logDump(ctx.getSource(), null,
+                                                IntegerArgumentType.getInteger(ctx, "count"))))
+                                .then(logCategory("brain", Category.BRAIN))
+                                .then(logCategory("pathfind", Category.PATHFIND))
+                                .then(logCategory("body", Category.BODY)))
                         .then(Commands.literal("inv")
                                 .then(Commands.literal("list")
                                         .executes(ctx -> invList(ctx.getSource())))
@@ -252,6 +272,70 @@ public final class AutarkiaCommands {
      *  call is what took the wheel from the arbiter. */
     private static String autoDisabledSuffix(boolean autoDisabled) {
         return autoDisabled ? " (auto disabled — re-enable with /autarkia brain auto on)" : "";
+    }
+
+    /** A {@code log <category>} branch: dumps only that subsystem's lines (optionally a count). */
+    private static LiteralArgumentBuilder<CommandSourceStack> logCategory(String name, Category category) {
+        return Commands.literal(name)
+                .executes(ctx -> logDump(ctx.getSource(), category, DEFAULT_LOG_COUNT))
+                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                        .executes(ctx -> logDump(ctx.getSource(), category,
+                                IntegerArgumentType.getInteger(ctx, "count"))));
+    }
+
+    /**
+     * Prints the resolved Person's last {@code count} journal lines (newest last), optionally
+     * filtered to one {@link Category}. Reads the in-memory ring off the server-scoped
+     * {@link Journals} service — the ephemeral tier; the full archive is the per-person file.
+     */
+    private static int logDump(CommandSourceStack source, @Nullable Category category, int count) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        PersonId id = person.getPersonId();
+        if (id == null) {
+            source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            return 0;
+        }
+        JournalService journal = Journals.of(source.getServer());
+        List<Entry> all = journal.recent(id, Integer.MAX_VALUE); // the whole ring (bounded); tail below
+        List<Entry> matched = category == null ? all
+                : all.stream().filter(entry -> entry.category() == category).toList();
+        List<Entry> lines = matched.subList(Math.max(0, matched.size() - count), matched.size());
+        String name = person.getName().getString();
+        String scope = category == null ? "" : " (" + category.name().toLowerCase(Locale.ROOT) + ")";
+        if (lines.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(name + " has no" + scope + " log yet.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(name + " — last " + lines.size() + " lines" + scope)
+                .withStyle(ChatFormatting.AQUA), false);
+        for (Entry entry : lines) {
+            source.sendSuccess(() -> Component.literal(formatLine(name, entry))
+                    .withStyle(colorFor(entry.category())), false);
+        }
+        return lines.size();
+    }
+
+    /** One journal line, the {@code Bob - pathfind - target(…) - success N nodes} shape, tick-prefixed. */
+    private static String formatLine(String name, Entry entry) {
+        StringBuilder line = new StringBuilder()
+                .append('[').append(entry.tick()).append("] ")
+                .append(name).append(" - ").append(entry.category().name().toLowerCase(Locale.ROOT))
+                .append(" - ").append(entry.event());
+        if (!entry.detail().isEmpty()) {
+            line.append(" - ").append(entry.detail());
+        }
+        return line.toString();
+    }
+
+    /** Line colour per subsystem: body damage in red, movement in aqua, decisions in gold. */
+    private static ChatFormatting colorFor(Category category) {
+        return switch (category) {
+            case BODY -> ChatFormatting.RED;
+            case PATHFIND -> ChatFormatting.AQUA;
+            case BRAIN -> ChatFormatting.GOLD;
+        };
     }
 
     /** Prints every non-empty slot of the nearest Person's inventory (storage + equipment). */

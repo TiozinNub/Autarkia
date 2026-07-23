@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.brain;
 
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
+import dev.luizloyola.autarkia.core.log.PersonJournal;
 
 /**
  * Everything the task machinery is handed per call: the body's controls ({@link #actuators()}) and
@@ -17,6 +18,14 @@ public interface BrainContext {
 
     /** The brain's senses — what she can currently perceive of herself and the world. */
     Percepts percepts();
+
+    /**
+     * This person's debug journal — the per-person log view ({@link PersonJournal}) tasks and
+     * instincts narrate to. One-way, unlike {@link #actuators()} and {@link #percepts()}: recording
+     * has no effect on the simulation. Bound to this person's {@code PersonId}, so an
+     * offline-simulated person (with no entity at all) logs through the very same call.
+     */
+    PersonJournal journal();
 
     /**
      * The maximum method cost currently acceptable, in the walk-block currency methods price

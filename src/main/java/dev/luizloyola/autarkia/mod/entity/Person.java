@@ -4,6 +4,8 @@ import dev.luizloyola.autarkia.compat.inv.Inventories;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
+import dev.luizloyola.autarkia.core.log.Category;
+import dev.luizloyola.autarkia.core.log.PersonJournal;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
@@ -13,8 +15,10 @@ import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.BrainDriver;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
+import dev.luizloyola.autarkia.mod.log.Journals;
 import dev.luizloyola.autarkia.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
+import java.util.Locale;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
@@ -133,6 +137,13 @@ public class Person extends Avatar {
      * working state, not persisted; a reload just re-decides.
      */
     private final BrainDriver brain = new BrainDriver(this);
+
+    /**
+     * This person's debug journal view ({@link PersonJournal}) — the one handle the brain, the
+     * {@link #navigator} and the body all record through, resolved lazily and cached (see
+     * {@link #journal()}). Transient: the log lives in the server-scoped {@link Journals} service.
+     */
+    private @Nullable PersonJournal journal;
 
     /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
@@ -293,6 +304,31 @@ public class Person extends Avatar {
     /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */
     public Needs needs() {
         return this.needs;
+    }
+
+    /**
+     * This person's debug journal — the single {@code PersonId}-bound view onto the server's
+     * {@link Journals} service, resolved once and cached (the id, once assigned, never changes).
+     * Server-side only. It mints an id itself only in the rare case of being hit before this
+     * person's first tick, so the returned view is never {@code null}.
+     */
+    public PersonJournal journal() {
+        if (this.journal == null) {
+            ServerLevel level = (ServerLevel) level();
+            if (this.personId == null) {
+                setPersonId(PersonDirectory.get(level.getServer()).createPerson().id());
+            }
+            this.journal = Journals.of(level.getServer()).forPerson(this.personId);
+        }
+        return this.journal;
+    }
+
+    /**
+     * Formats a health/damage number for a log line: a whole value prints without a trailing
+     * {@code ".0"} ({@code "4"}, {@code "20"}), a half-heart keeps its fraction ({@code "4.5"}).
+     */
+    private static String num(float value) {
+        return value == Math.rint(value) ? Integer.toString((int) value) : Float.toString(value);
     }
 
     /**
@@ -458,10 +494,17 @@ public class Person extends Avatar {
      */
     @Override
     protected void actuallyHurt(ServerLevel level, DamageSource source, float amount) {
+        float healthBefore = getHealth();
         super.actuallyHurt(level, source, amount);
         doHurtEquipment(source, amount,
                 EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
         this.needs.exhaust(source.getFoodExhaustion());
+        // BODY log: the health actually lost (armor/absorption may have trimmed the raw amount) and
+        // the resulting health. actuallyHurt is past the invulnerability gate, so every call is a
+        // real hit.
+        journal().record(Category.BODY, "health", String.format(Locale.ROOT,
+                "took %s damage (%s) now %s/%s",
+                num(healthBefore - getHealth()), source.getMsgId(), num(getHealth()), num(getMaxHealth())));
     }
 
     /**

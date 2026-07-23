@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.nav;
 
 import dev.luizloyola.autarkia.compat.nav.WorldSnapshot;
+import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.core.nav.AgentProfile;
 import dev.luizloyola.autarkia.core.nav.CellNeed;
 import dev.luizloyola.autarkia.core.nav.Gait;
@@ -278,24 +279,31 @@ public final class Navigator {
         } catch (CompletionException | CancellationException e) {
             // Worker died or the server is stopping mid-request; either way there is no path.
             this.state = State.FAILED;
+            log("failed", "search aborted");
         }
     }
 
     private void acceptPath(Path result) {
         if (result.reachedGoal() && result.isEmpty()) {
             this.state = State.ARRIVED; // already standing on the goal
+            log("arrived", "already at " + this.goal.toShortString());
             return;
         }
         // A partial path that ends about where we stand is the search saying "no way through":
         // retrying from the same spot would just repeat it, so fail rather than loop.
         if (result.isEmpty() || (!result.reachedGoal() && endsWhereWeStand(result))) {
             this.state = State.FAILED;
+            log("failed", "no path to " + this.goal.toShortString());
             return;
         }
         this.path = result;
         this.index = 0;
         this.stuckTicks = 0;
         this.state = State.FOLLOWING;
+        // PATHFIND log: the "target(10,10,10) - success 10 nodes" line — waypoint count, marked
+        // partial when the route only reaches the nearest cell to an otherwise unreachable goal.
+        log("target(" + this.goal.toShortString() + ")", "success " + result.waypoints().size()
+                + " nodes" + (result.reachedGoal() ? "" : " (partial)"));
     }
 
     private boolean endsWhereWeStand(Path result) {
@@ -314,8 +322,9 @@ public final class Navigator {
             this.proactiveRepathCooldown--;
         } else if (this.index > this.integrityCheckedIndex) {
             this.integrityCheckedIndex = this.index;
-            if (pathChangedAhead()) {
-                proactiveRepath();
+            CellNeed changed = pathChangedAhead();
+            if (changed != null) {
+                proactiveRepath(changed);
                 return;
             }
         }
@@ -369,6 +378,7 @@ public final class Navigator {
         if (this.person.onGround()
                 && (horizontalSq > STRAY_HORIZONTAL * STRAY_HORIZONTAL
                         || dy > aboveTolerance || dy < -STRAY_VERTICAL)) {
+            log("stray", "at " + this.person.blockPosition().toShortString());
             retryOrFail();
             return;
         }
@@ -405,6 +415,7 @@ public final class Navigator {
         if (++this.stuckTicks > STUCK_LIMIT) {
             // One cell should never take this long: something the snapshot didn't know is in the
             // way (or we fell somewhere unplanned). Re-path from wherever we actually are.
+            log("stuck", "waypoint timeout at " + this.person.blockPosition().toShortString());
             retryOrFail();
             return;
         }
@@ -418,6 +429,7 @@ public final class Navigator {
         this.lastTickZ = pos.z;
         if (this.person.onGround() && movedSq < NO_MOVE_EPSILON * NO_MOVE_EPSILON) {
             if (++this.noMoveTicks > NO_MOVE_LIMIT) {
+                log("stuck", "not moving at " + this.person.blockPosition().toShortString());
                 retryOrFail();
                 return;
             }
@@ -708,6 +720,7 @@ public final class Navigator {
         }
         this.person.stopMoving();
         if (this.path.reachedGoal()) {
+            log("arrived", "at " + this.person.blockPosition().toShortString());
             this.path = null;
             this.state = State.ARRIVED;
         } else {
@@ -722,6 +735,7 @@ public final class Navigator {
         if (this.repathsLeft-- > 0) {
             requestPath();
         } else {
+            log("failed", "gave up after retries");
             this.path = null;
             this.state = State.FAILED;
             this.person.stopMoving();
@@ -729,18 +743,18 @@ public final class Navigator {
     }
 
     /**
-     * Whether any completion-critical cell of the next {@link #INTEGRITY_LOOKAHEAD} waypoints no
-     * longer classifies the way the plan needs — terrain edited out from under the path (a floor
-     * mined away, a corridor walled off, a swim lane drained). Reads the live world, legal because
-     * we tick inside {@code serverAiStep}; unloaded cells are skipped and never force-loaded.
+     * The first completion-critical cell of the next {@link #INTEGRITY_LOOKAHEAD} waypoints that no
+     * longer classifies the way the plan needs — a floor mined away, a corridor walled off, a swim
+     * lane drained — or {@code null} while the path holds. The {@link CellNeed} comes back rather
+     * than a flag so the re-path can log <em>why</em> ({@link #changeReason}).
      *
-     * <p>Watches the whole deck the feet cross on each level edge; drop and leap moves stay
-     * destination-only, their in-flight stumbles left to the reactive stuck/stray net. See
-     * {@link PathIntegrity}.
+     * <p>Reads the live world, legal inside {@code serverAiStep}; unloaded cells are skipped and
+     * the read must never force-load a chunk. Watches the whole deck the feet cross on each level
+     * edge; drops and leaps stay destination-only. See {@link PathIntegrity}.
      */
-    private boolean pathChangedAhead() {
+    private @Nullable CellNeed pathChangedAhead() {
         if (this.path == null) {
-            return false;
+            return null;
         }
         ServerLevel level = level();
         int last = this.path.waypoints().size() - 1;
@@ -752,11 +766,11 @@ public final class Navigator {
             for (CellNeed need : PathIntegrity.edgeNeeds(from, to, AgentProfile.PERSON)) {
                 pos.set(need.x(), need.y(), need.z());
                 if (level.isLoaded(pos) && WorldSnapshot.classifyAt(level, pos) != need.required()) {
-                    return true;
+                    return need;
                 }
             }
         }
-        return false;
+        return null;
     }
 
     /**
@@ -765,9 +779,23 @@ public final class Navigator {
      * let anyone editing a few blocks near the path drive a reachable goal to FAILED.
      * {@link #PROACTIVE_REPATH_COOLDOWN} still bounds the rate.
      */
-    private void proactiveRepath() {
+    private void proactiveRepath(CellNeed changed) {
+        // PATHFIND log: the "recalculate - missing floor 5, 10, 10" line — which cell stopped matching
+        // the plan, so a route that keeps re-planning has a visible cause.
+        log("recalculate", changeReason(changed));
         this.proactiveRepathCooldown = PROACTIVE_REPATH_COOLDOWN;
         requestPath();
+    }
+
+    /** A human phrase for a completion-critical cell that no longer matches the plan. */
+    private static String changeReason(CellNeed need) {
+        String phrase = switch (need.required()) {
+            case GROUND -> "missing floor";
+            case PASSABLE -> "blocked";
+            case WATER -> "drained";
+            default -> "changed";
+        };
+        return phrase + " at " + need.x() + ", " + need.y() + ", " + need.z();
     }
 
     private void emitPathParticles() {
@@ -782,6 +810,11 @@ public final class Navigator {
                     this.goal.getX() + 0.5, this.goal.getY() + 0.5, this.goal.getZ() + 0.5,
                     2, 0.0, 0.0, 0.0, 0.0);
         }
+    }
+
+    /** Record a PATHFIND line to this person's debug journal (see {@link Person#journal()}). */
+    private void log(String event, String detail) {
+        this.person.journal().record(Category.PATHFIND, event, detail);
     }
 
     private ServerLevel level() {

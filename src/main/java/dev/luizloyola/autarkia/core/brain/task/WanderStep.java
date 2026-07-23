@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.brain.task;
 
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.core.nav.Gait;
 import java.util.List;
 import java.util.random.RandomGenerator;
@@ -81,9 +82,12 @@ public final class WanderStep implements CompoundTask {
                 dx = random.nextInt(2 * radius + 1) - radius;
                 dz = random.nextInt(2 * radius + 1) - radius;
             } while (dx == 0 && dz == 0);
-            return List.of(
-                    new GoTo(here.x() + dx, here.y(), here.z() + dz, Gait.STROLL),
-                    new Idle(pause));
+            int tx = here.x() + dx;
+            int ty = here.y();
+            int tz = here.z() + dz;
+            // Written as she commits; the pathfind line for the same cell follows.
+            ctx.journal().record(Category.BRAIN, "wander (" + tx + ", " + ty + ", " + tz + ")", "start");
+            return List.of(new GoTo(tx, ty, tz, Gait.STROLL), new Idle(pause));
         }
 
         @Override
