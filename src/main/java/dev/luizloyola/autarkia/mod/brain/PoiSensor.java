@@ -25,6 +25,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class PoiSensor {
     private final Person person;
+    private @Nullable KnowledgeData data;
     private @Nullable PoiSensorCore core;
     private @Nullable LevelProbe probe;
 
@@ -36,13 +37,17 @@ public final class PoiSensor {
     public void tick() {
         ServerLevel level = (ServerLevel) this.person.level();
         if (this.core == null) {
+            this.data = KnowledgeData.get(level.getServer());
             this.core = new PoiSensorCore(
-                    Knowledges.of(level.getServer()).forPerson(this.person.getPersonId()));
+                    this.data.registry().forPerson(this.person.getPersonId()));
             this.probe = new LevelProbe(this.person);
         }
         BlockPos feet = this.person.blockPosition();
         List<SenseEvent> events = this.core.tick(
                 new Pos(feet.getX(), feet.getY(), feet.getZ()), level.getGameTime(), this.probe);
+        // Unconditional: setDirty is a boolean flag, and knowledge mutates silently (refreshes
+        // don't surface as events) — cheaper to always flag than to track what changed.
+        this.data.setDirty();
         for (SenseEvent event : events) {
             this.person.journal().record(Category.SENSE, verb(event.type()), describe(event));
             KnowledgeViewer.onEvent(level.getServer(), this.person.getPersonId(),
