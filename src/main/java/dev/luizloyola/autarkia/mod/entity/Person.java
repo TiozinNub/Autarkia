@@ -264,6 +264,19 @@ public class Person extends Avatar {
         super.tick();
     }
 
+    /**
+     * Both-sides tick step. {@code updateSwingTime()} is the clock behind the visible arm-swing
+     * animation, and in vanilla it is driven only from {@code Player.aiStep} (verified against
+     * the 26.1.2 bytecode — neither {@code LivingEntity} nor {@code Mob} advances it). An
+     * {@link Avatar} is not a Player, so without this the working arm's swing broadcast sets
+     * {@code swinging} on every client and then animates nothing — frozen at frame zero.
+     */
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        this.updateSwingTime();
+    }
+
     @Override
     protected void serverAiStep() {
         super.serverAiStep();

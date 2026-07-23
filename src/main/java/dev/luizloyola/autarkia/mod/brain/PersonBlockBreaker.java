@@ -28,8 +28,6 @@ public final class PersonBlockBreaker implements BlockBreaker {
     private static final double REACH = 4.5;
     /** Vanilla's per-block exhaustion for breaking (verified against the player mining path). */
     private static final float EXHAUSTION_PER_BLOCK = 0.005F;
-    /** Ticks between arm swings while breaking — matches the visible cadence of a mining player. */
-    private static final int SWING_INTERVAL = 6;
 
     private final Person person;
 
@@ -41,7 +39,6 @@ public final class PersonBlockBreaker implements BlockBreaker {
     private float progress;
     /** Last crack stage broadcast (0–9), or -1 when none is showing. */
     private int sentStage = -1;
-    private int swingTimer;
 
     public PersonBlockBreaker(Person person) {
         this.person = person;
@@ -59,7 +56,6 @@ public final class PersonBlockBreaker implements BlockBreaker {
         this.target = pos;
         this.begunOn = blockState;
         this.progress = 0.0F;
-        this.swingTimer = 0;
         this.state = BreakState.BREAKING;
         return true;
     }
@@ -82,9 +78,10 @@ public final class PersonBlockBreaker implements BlockBreaker {
         }
         faceTarget();
         progress += perTick(now, hardness);
-        if (swingTimer++ % SWING_INTERVAL == 0) {
-            person.swing(InteractionHand.MAIN_HAND);
-        }
+        // Every tick, like a mining player (continueDestroyBlock does this): swing()'s own
+        // guard restarts the animation at half duration — the player arm's mining cadence, owned by
+        // vanilla — and only broadcasts on an actual restart, so this does not spam packets.
+        person.swing(InteractionHand.MAIN_HAND);
         if (progress >= 1.0F) {
             clearCrack();
             // The harvest check vanilla's player path applies before dropping: stone punched
