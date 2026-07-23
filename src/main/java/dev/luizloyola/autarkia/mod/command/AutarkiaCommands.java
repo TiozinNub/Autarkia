@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
 import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
@@ -20,6 +21,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
@@ -28,16 +30,23 @@ import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * Developer/admin commands for inspecting Autarkia state.
@@ -53,6 +62,11 @@ import java.util.Locale;
  * links it to the entity before it enters the world; position mirrors {@code /summon}.
  * {@code /summon autarkia:person} is rejected with a chat error — the type stays summonable for
  * compat, only the summon action is intercepted (see {@code SummonCommandMixin}).
+ *
+ * <p>Every person-scoped subcommand resolves through {@link #resolve}: the source's pin, else the
+ * nearest. {@code select} pins by name or short-id, or by what a player is looking at; {@code list}
+ * enumerates the loaded Persons, since names are not unique. Pins live in {@link PersonSelection} —
+ * in memory, per source, gone on restart.
  */
 public final class AutarkiaCommands {
     private AutarkiaCommands() {}
@@ -67,6 +81,20 @@ public final class AutarkiaCommands {
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(Commands.literal("autarkia")
+                        // Pin the Person that this source's later commands target. "clear"/"show" are
+                        // literals, so they win over a Person literally named clear/show — pin those by id.
+                        .then(Commands.literal("select")
+                                .executes(ctx -> selectHere(ctx.getSource()))
+                                .then(Commands.literal("clear")
+                                        .executes(ctx -> selectClear(ctx.getSource())))
+                                .then(Commands.literal("show")
+                                        .executes(ctx -> selectShow(ctx.getSource())))
+                                .then(Commands.argument("person", StringArgumentType.string())
+                                        .suggests(PERSON_SUGGESTIONS)
+                                        .executes(ctx -> selectByToken(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "person")))))
+                        .then(Commands.literal("list")
+                                .executes(ctx -> listPersons(ctx.getSource())))
                         .then(Commands.literal("whois")
                                 .executes(ctx -> whoisNearest(ctx.getSource()))
                                 .then(Commands.argument("targets", EntityArgument.entities())
@@ -153,7 +181,7 @@ public final class AutarkiaCommands {
     }
 
     private static int navGoto(CommandSourceStack source, BlockPos pos) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         person.navigateTo(Vec3.atBottomCenterOf(pos));
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " -> "
@@ -162,7 +190,7 @@ public final class AutarkiaCommands {
     }
 
     private static int navStop(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         person.navigator().stop();
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " stopped.")
@@ -171,7 +199,7 @@ public final class AutarkiaCommands {
     }
 
     private static int navStatus(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.navigator().describe()).withStyle(ChatFormatting.AQUA), false);
@@ -181,7 +209,7 @@ public final class AutarkiaCommands {
     /** Runs a {@link GoTo} task on the nearest Person through the brain's executor — same walk
      *  as {@link #navGoto}, but through the task machinery, so the whole pipeline is exercised. */
     private static int brainGoto(CommandSourceStack source, BlockPos pos) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new GoTo(pos.getX(), pos.getY(), pos.getZ()));
         String suffix = autoDisabledSuffix(autoDisabled);
@@ -193,7 +221,7 @@ public final class AutarkiaCommands {
     /** Runs {@link SatisfyHunger} on the nearest Person — the first COMPOUND task, and the
      *  machinery the Eat instinct also drives (autonomously) via the arbiter. */
     private static int brainEat(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new SatisfyHunger());
         String suffix = autoDisabledSuffix(autoDisabled);
@@ -203,7 +231,7 @@ public final class AutarkiaCommands {
     }
 
     private static int brainStatus(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
@@ -211,7 +239,7 @@ public final class AutarkiaCommands {
     }
 
     private static int brainCancel(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         person.brain().cancel();
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " task cancelled; "
@@ -222,7 +250,7 @@ public final class AutarkiaCommands {
     /** Flips the nearest Person's autonomy switch and echoes the new describe() line (now
      *  reporting auto|manual up front). */
     private static int brainAuto(CommandSourceStack source, boolean auto) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         person.brain().setAuto(auto);
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
@@ -238,7 +266,7 @@ public final class AutarkiaCommands {
 
     /** Prints every non-empty slot of the nearest Person's inventory (storage + equipment). */
     private static int invList(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         List<Inventory.Entry> occupied = person.inventory().occupied();
         if (occupied.isEmpty()) {
@@ -258,7 +286,7 @@ public final class AutarkiaCommands {
     /** Adds {@code count} of the given item to the nearest Person, reporting anything that didn't fit. */
     private static int invGive(CommandSourceStack source, ItemInput input, int count)
             throws CommandSyntaxException {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         // A count-1 template never trips the item argument's stack-size guard; the real count is set
         // in the core layer, which splits it across slots at the item's own cap. Components (from any
@@ -279,7 +307,7 @@ public final class AutarkiaCommands {
      * {@code nav goto} is for walking.
      */
     private static int invEquip(CommandSourceStack source, ItemInput input) throws CommandSyntaxException {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         // The template resolves the kind + its natural slot only; the piece actually equipped is
         // pulled from storage below, so its own components (enchants, damage, …) are preserved.
@@ -331,7 +359,7 @@ public final class AutarkiaCommands {
     }
 
     private static int invClear(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         person.inventory().clear();
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " inventory cleared.")
@@ -381,7 +409,7 @@ public final class AutarkiaCommands {
 
     /** Prints the nearest Person's need levels — the {@code needs().describe()} one-liner. */
     private static int personNeeds(CommandSourceStack source) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.needs().describe()).withStyle(ChatFormatting.AQUA), false);
@@ -395,7 +423,7 @@ public final class AutarkiaCommands {
      * afterwards is deterministic.
      */
     private static int personSetFood(CommandSourceStack source, int food, float saturation) {
-        Person person = nearest(source);
+        Person person = resolve(source);
         if (person == null) return 0;
         Needs needs = person.needs();
         needs.setFoodLevel(food);
@@ -430,10 +458,199 @@ public final class AutarkiaCommands {
         return nearest;
     }
 
+    /**
+     * The target for a person-scoped command: the source's pinned Person, else the nearest
+     * ({@link #nearest}). A pin that no longer resolves to a loaded entity is a hard failure, never
+     * a silent fall-through. Returns {@code null} having reported the reason.
+     */
+    private static @Nullable Person resolve(CommandSourceStack source) {
+        Optional<PersonId> pin = PersonSelection.pinned(source);
+        if (pin.isEmpty()) return nearest(source);
+        PersonId id = pin.get();
+        Person live = findLoaded(source.getServer(), id);
+        if (live == null) {
+            source.sendFailure(Component.literal("Selected " + label(source.getServer(), id)
+                    + " isn't loaded — /autarkia select clear, or select someone else."));
+        }
+        return live;
+    }
+
+    /** Suggests every loaded Person's name (quoted when it has spaces) and short id, so {@code select}
+     *  tab-completes to something that actually resolves. */
+    private static final SuggestionProvider<CommandSourceStack> PERSON_SUGGESTIONS = (ctx, builder) -> {
+        MinecraftServer server = ctx.getSource().getServer();
+        PersonDirectory directory = PersonDirectory.get(server);
+        Stream<String> tokens = loadedPersons(server).stream().flatMap(person -> {
+            PersonId id = person.getPersonId();
+            if (id == null) return Stream.empty();
+            String shortId = shortId(id);
+            return directory.nameOf(id)
+                    .map(name -> Stream.of(name.contains(" ") ? '"' + name + '"' : name, shortId))
+                    .orElseGet(() -> Stream.of(shortId));
+        });
+        return SharedSuggestionProvider.suggest(tokens, builder);
+    };
+
+    /** Pins the Person named (or short-id-prefixed) by {@code rawToken}. */
+    private static int selectByToken(CommandSourceStack source, String rawToken) {
+        String token = rawToken.trim();
+        MinecraftServer server = source.getServer();
+        PersonDirectory directory = PersonDirectory.get(server);
+        Vec3 origin = source.getPosition();
+        List<Person> loaded = loadedPersons(server);
+
+        // An id (or short-id prefix) is an unambiguous handle, so it's tried first; only if nothing
+        // matches by id do we fall back to a case-insensitive name match (names aren't unique).
+        String lower = token.toLowerCase(Locale.ROOT);
+        List<Person> matches = loaded.stream()
+                .filter(p -> p.getPersonId() != null
+                        && p.getPersonId().toString().toLowerCase(Locale.ROOT).startsWith(lower))
+                .toList();
+        if (matches.isEmpty()) {
+            matches = loaded.stream()
+                    .filter(p -> p.getPersonId() != null
+                            && directory.nameOf(p.getPersonId()).map(n -> n.equalsIgnoreCase(token)).orElse(false))
+                    .toList();
+        }
+        if (matches.isEmpty()) {
+            source.sendFailure(Component.literal(
+                    "No loaded Person matches '" + token + "' — try /autarkia list."));
+            return 0;
+        }
+        int count = matches.size();
+        Person chosen = matches.stream()
+                .min((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
+                .orElseThrow();
+        PersonId id = chosen.getPersonId();
+        PersonSelection.pin(source, id);
+        source.sendSuccess(() -> Component.literal("Selected " + label(server, id)
+                + (count > 1 ? " (nearest of " + count + " matches)" : "")).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** No-argument {@code select}: a player pins the Person under their crosshair; the console (or any
+     *  non-player source) pins the nearest one. */
+    private static int selectHere(CommandSourceStack source) {
+        boolean fromPlayer = source.getEntity() instanceof ServerPlayer;
+        Person target = source.getEntity() instanceof ServerPlayer player ? lookedAt(player) : nearest(source);
+        if (target == null) {
+            if (fromPlayer) {
+                source.sendFailure(Component.literal("You're not looking at a Person (within "
+                        + (int) NEAREST_RADIUS + " blocks)."));
+            }
+            // the console branch already reported via nearest()
+            return 0;
+        }
+        PersonId id = target.getPersonId();
+        if (id == null) {
+            source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            return 0;
+        }
+        PersonSelection.pin(source, id);
+        source.sendSuccess(() -> Component.literal("Selected " + label(source.getServer(), id))
+                .withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    private static int selectClear(CommandSourceStack source) {
+        if (PersonSelection.clear(source)) {
+            source.sendSuccess(() -> Component.literal("Selection cleared — commands use the nearest Person again.")
+                    .withStyle(ChatFormatting.AQUA), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("No Person was selected.").withStyle(ChatFormatting.GRAY), false);
+        return 0;
+    }
+
+    private static int selectShow(CommandSourceStack source) {
+        Optional<PersonId> pin = PersonSelection.pinned(source);
+        if (pin.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No selection — commands use the nearest Person.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        PersonId id = pin.get();
+        boolean loaded = findLoaded(source.getServer(), id) != null;
+        source.sendSuccess(() -> Component.literal("Selected: " + label(source.getServer(), id)
+                + (loaded ? "" : " (not loaded)")).withStyle(loaded ? ChatFormatting.AQUA : ChatFormatting.GRAY), false);
+        return loaded ? 1 : 0;
+    }
+
+    /** Lists the loaded Persons, nearest first: a {@code ✓} on the pinned one, then name, short id,
+     *  dimension, and distance. This is how you find out what to {@code select}. */
+    private static int listPersons(CommandSourceStack source) {
+        MinecraftServer server = source.getServer();
+        PersonDirectory directory = PersonDirectory.get(server);
+        Vec3 origin = source.getPosition();
+        List<Person> loaded = loadedPersons(server);
+        if (loaded.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No Persons are loaded.").withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        Optional<PersonId> pin = PersonSelection.pinned(source);
+        loaded.stream()
+                .sorted((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
+                .forEach(person -> {
+                    PersonId id = person.getPersonId();
+                    boolean isPinned = id != null && pin.map(id::equals).orElse(false);
+                    String name = id == null ? "<spawning>" : directory.nameOf(id).orElse("<unknown>");
+                    String dimension = person.level().dimension().identifier().getPath();
+                    double distance = Math.sqrt(person.distanceToSqr(origin));
+                    String line = String.format(Locale.ROOT, "%s%s  %s  %s  %.1fm",
+                            isPinned ? "✓ " : "  ", name, id == null ? "-" : shortId(id), dimension, distance);
+                    source.sendSuccess(() -> Component.literal(line)
+                            .withStyle(isPinned ? ChatFormatting.AQUA : ChatFormatting.GRAY), false);
+                });
+        return loaded.size();
+    }
+
+    /** The Person a player's crosshair is on, within {@link #NEAREST_RADIUS}, or {@code null}. */
+    private static @Nullable Person lookedAt(ServerPlayer player) {
+        Vec3 eye = player.getEyePosition();
+        Vec3 far = eye.add(player.getViewVector(1.0F).scale(NEAREST_RADIUS));
+        AABB search = player.getBoundingBox().expandTowards(player.getViewVector(1.0F).scale(NEAREST_RADIUS)).inflate(1.0);
+        EntityHitResult hit = ProjectileUtil.getEntityHitResult(
+                player, eye, far, search, e -> e instanceof Person, NEAREST_RADIUS * NEAREST_RADIUS);
+        return hit != null && hit.getEntity() instanceof Person person ? person : null;
+    }
+
+    /** Every live Person across every dimension. {@code getEntities} still hands back a Person killed
+     *  moments ago (it lingers through its death animation before being swept), so {@code isAlive}
+     *  is filtered on, or {@code list} and the resolver would act on a corpse. */
+    private static List<Person> loadedPersons(MinecraftServer server) {
+        List<Person> out = new ArrayList<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            out.addAll(level.getEntities(ModEntities.PERSON, Person::isAlive));
+        }
+        return out;
+    }
+
+    /** The live Person with this id, searching every dimension, or {@code null} if none is loaded.
+     *  A dead/dying Person (not yet swept) does not count — see {@link #loadedPersons}. */
+    private static @Nullable Person findLoaded(MinecraftServer server, PersonId id) {
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Person person : level.getEntities(ModEntities.PERSON, p -> p.isAlive() && id.equals(p.getPersonId()))) {
+                return person;
+            }
+        }
+        return null;
+    }
+
+    /** The person's name if the directory knows it, else the short id — a stable label for messages. */
+    private static String label(MinecraftServer server, PersonId id) {
+        return PersonDirectory.get(server).nameOf(id).orElse(shortId(id));
+    }
+
+    /** The first 8 characters of an id — enough to eyeball and to prefix-match in {@code select}. */
+    private static String shortId(PersonId id) {
+        String text = id.toString();
+        return text.substring(0, Math.min(8, text.length()));
+    }
+
     private static int whoisNearest(CommandSourceStack source) {
-        Person nearest = nearest(source);
-        if (nearest == null) return 0;
-        report(source, nearest);
+        Person target = resolve(source);
+        if (target == null) return 0;
+        report(source, target);
         return 1;
     }
 
