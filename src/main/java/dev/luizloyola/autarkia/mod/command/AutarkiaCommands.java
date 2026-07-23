@@ -329,12 +329,14 @@ public final class AutarkiaCommands {
         return line.toString();
     }
 
-    /** Line colour per subsystem: body damage in red, movement in aqua, decisions in gold. */
+    /** Line colour per subsystem: body damage in red, movement in aqua, decisions in gold,
+     *  perception in green. */
     private static ChatFormatting colorFor(Category category) {
         return switch (category) {
             case BODY -> ChatFormatting.RED;
             case PATHFIND -> ChatFormatting.AQUA;
             case BRAIN -> ChatFormatting.GOLD;
+            case SENSE -> ChatFormatting.GREEN;
         };
     }
 

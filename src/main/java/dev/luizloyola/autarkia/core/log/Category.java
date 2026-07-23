@@ -10,6 +10,7 @@ package dev.luizloyola.autarkia.core.log;
  *   <li>{@link #PATHFIND} — routes requested, accepted ({@code success N nodes}), failed,
  *       recalculated, strayed off.</li>
  *   <li>{@link #BODY} — damage taken (source + new health), starvation, death, eating.</li>
+ *   <li>{@link #SENSE} — a POI noticed into or forgotten from the knowledge store.</li>
  * </ul>
  *
  * <p>Later layers add their own: the enum, not the emitter, decides the column, so an entry-free
@@ -18,5 +19,6 @@ package dev.luizloyola.autarkia.core.log;
 public enum Category {
     BRAIN,
     PATHFIND,
-    BODY
+    BODY,
+    SENSE
 }

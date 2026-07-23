@@ -13,6 +13,7 @@ import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.BrainDriver;
+import dev.luizloyola.autarkia.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
 import dev.luizloyola.autarkia.mod.log.Journals;
@@ -146,6 +147,13 @@ public class Person extends Avatar {
     private @Nullable PersonJournal journal;
 
     /**
+     * This person's passive POI perception ({@link PoiSensor}, "notice as you go"): it records what
+     * she moves past into her {@link PersonId}-keyed knowledge, the memory the brain reads instead
+     * of ever scanning the world. Transient, but the knowledge it writes outlives the entity.
+     */
+    private final PoiSensor poiSensor = new PoiSensor(this);
+
+    /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
      * brain organ: the entity owns and ticks its own metabolism, as vanilla's {@code FoodData}
      * belongs to the player rather than to any AI, and the brain only ever <em>reads</em> it.
@@ -258,6 +266,9 @@ public class Person extends Avatar {
         // Metabolism runs every server tick no matter who owns the movement input below: food
         // burns (and starvation bites) whether she is navigating, debug-sprinting, or idle.
         tickNeeds();
+        // Perception before decision: the sensor notices what she moved past and writes it into
+        // her knowledge; the brain (below) reads memory, never the world.
+        this.poiSensor.tick();
         // The brain decides first, then the Navigator (below) executes locomotion the same tick.
         this.brain.tick();
         if (this.debugRunForward) {
@@ -299,6 +310,11 @@ public class Person extends Avatar {
     /** This person's brain host — the machine that runs tasks. See {@link BrainDriver}. */
     public BrainDriver brain() {
         return this.brain;
+    }
+
+    /** This person's passive POI perception — the machine that fills her knowledge. See {@link PoiSensor}. */
+    public PoiSensor poiSensor() {
+        return this.poiSensor;
     }
 
     /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */
