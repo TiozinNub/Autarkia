@@ -794,9 +794,9 @@ public class Person extends Avatar {
     }
 
     /**
-     * Client-only: forces a glowing outline regardless of any real (synced) glow. Driven each tick
-     * by the debug selection highlight ({@code mod.client.DebugGlow}), colour-cycled black↔magenta
-     * via {@link #getTeamColor()}. Never set server-side, so never persisted or synced.
+     * Client-only: forces a glowing outline regardless of any real (synced) glow, driven each tick by
+     * the debug selection highlight ({@code mod.client.DebugGlow}) and coloured black via
+     * {@link #getTeamColor()}. Never set server-side, so nothing is persisted or synced.
      */
     private boolean forcedGlow;
 
@@ -816,17 +816,13 @@ public class Person extends Avatar {
     }
 
     /**
-     * Colours the {@link #forcedGlow debug} outline, flashing black↔magenta once a second. The
-     * render pipeline reads the outline colour from here. Wall-clock timed, not game time, so it
-     * keeps animating in the frozen-time test world; otherwise the vanilla team colour stands.
+     * Colours the {@link #forcedGlow debug} outline black — the render pipeline reads the outline
+     * colour from this. Only matters on the client while force-glowing (never set server-side);
+     * otherwise the vanilla team colour stands.
      */
     @Override
     public int getTeamColor() {
-        if (!this.forcedGlow) {
-            return super.getTeamColor();
-        }
-        // 0x000000 = black, 0xFF00FF = magenta.
-        return System.currentTimeMillis() / 1000L % 2L == 0L ? 0x000000 : 0xFF00FF;
+        return this.forcedGlow ? 0x000000 : super.getTeamColor();  
     }
 
     /**

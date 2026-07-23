@@ -10,11 +10,11 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.entity.Entity;
 
 /**
- * Client-only debug aid: the selected {@link Person} renders with a flashing outline
- * (black↔magenta once a second — see {@link Person#getTeamColor()}). The selection is the player's
- * server-side pin, mirrored by {@link DebugGlowClient}, so the outline follows the debug wand and
- * {@code /autarkia select} alike, whatever the player holds. Purely local: it sets the transient
- * {@link Person#setForcedGlow} flag, which the entity ORs into {@code isCurrentlyGlowing()}.
+ * Client-only debug aid: the selected {@link Person} renders with a black glowing outline (see
+ * {@link Person#getTeamColor()}). The selection is the player's server-side pin mirrored by
+ * {@link DebugGlowClient}, so the outline follows the debug wand and {@code /autarkia select} alike,
+ * whatever the player is holding. Purely local — it sets {@link Person#setForcedGlow}, which the
+ * entity ORs into {@code isCurrentlyGlowing()}.
  */
 @Environment(EnvType.CLIENT)
 public final class DebugGlow {
