@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.compat.inv;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
+import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponents;
@@ -63,6 +64,21 @@ public final class ItemStacks {
         if (item == null) return null;
         Equippable equippable = new net.minecraft.world.item.ItemStack(item).get(DataComponents.EQUIPPABLE);
         return equippable == null ? null : equippable.slot();
+    }
+
+    /**
+     * A core template stack from a command's {@code item} argument (count 1 — the real count is set
+     * in the core layer). The 26.1 {@code createItemStack} takes just a count; older targets also
+     * take a {@code validate} flag. Components from any {…} the command carried ride along via
+     * {@link #toCore}.
+     */
+    public static ItemStack templateOf(ItemInput input, HolderLookup.Provider registries)
+            throws CommandSyntaxException {
+        //? if >=26.1 {
+        return toCore(input.createItemStack(1), registries);
+        //?} else {
+        /*return toCore(input.createItemStack(1, true), registries);
+        *///?}
     }
 
     /** The stack cap the game assigns item {@code id} — used to re-derive a loaded stack's cap. */

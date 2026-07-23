@@ -292,7 +292,7 @@ public final class AutarkiaCommands {
         // in the core layer, which splits it across slots at the item's own cap. Components (from any
         // {…} the command carried) ride along via toCore.
         dev.luizloyola.autarkia.core.inv.ItemStack template =
-                ItemStacks.toCore(input.createItemStack(1), source.registryAccess());
+                ItemStacks.templateOf(input, source.registryAccess());
         dev.luizloyola.autarkia.core.inv.ItemStack remainder = person.inventory().add(template.withCount(count));
         int placed = count - remainder.count();
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " +" + placed + " "
@@ -312,7 +312,7 @@ public final class AutarkiaCommands {
         // The template resolves the kind + its natural slot only; the piece actually equipped is
         // pulled from storage below, so its own components (enchants, damage, …) are preserved.
         dev.luizloyola.autarkia.core.inv.ItemStack want =
-                ItemStacks.toCore(input.createItemStack(1), source.registryAccess());
+                ItemStacks.templateOf(input, source.registryAccess());
         EquipmentSlot slot = ItemStacks.equipmentSlotOf(want);
         if (slot == null) {
             source.sendFailure(Component.literal(want.id() + " is not equippable."));

@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.person;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.luizloyola.autarkia.compat.SavedDatas;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
@@ -64,7 +65,7 @@ public final class PersonDirectory extends SavedData {
     ).apply(dir, PersonDirectory::fromEntries));
 
     public static final SavedDataType<PersonDirectory> TYPE =
-            new SavedDataType<>(ID, PersonDirectory::new, CODEC, DataFixTypes.LEVEL);
+            SavedDatas.type(ID, PersonDirectory::new, CODEC, DataFixTypes.LEVEL);
 
     private final PersonRegistry registry;
 

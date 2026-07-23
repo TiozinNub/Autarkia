@@ -7,6 +7,7 @@ import net.minecraft.client.entity.ClientAvatarEntity;
 import net.minecraft.client.entity.ClientAvatarState;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.ClientAsset;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.parrot.Parrot;
@@ -74,5 +75,12 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
     @Override
     public boolean showExtraEars() {
         return false;
+    }
+
+    /** The below-name line (a scoreboard score) under the nametag; a Person shows none.
+     *  {@code ClientAvatarEntity} declares this only on MC ≤ 1.21.x — 26.1 dropped it, so here it is
+     *  harmless dead code, hence no {@code @Override}. Vanilla reads {@code null} as "nothing". */
+    public Component belowNameDisplay() {
+        return null;
     }
 }

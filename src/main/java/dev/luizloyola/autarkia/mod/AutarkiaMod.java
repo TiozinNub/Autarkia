@@ -2,11 +2,15 @@ package dev.luizloyola.autarkia.mod;
 
 import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
+import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;
 import dev.luizloyola.autarkia.mod.item.ModComponents;
 import dev.luizloyola.autarkia.mod.item.ModItems;
 import dev.luizloyola.autarkia.mod.nav.PathfinderService;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +28,25 @@ public class AutarkiaMod implements ModInitializer {
         ModMenus.init();
         AutarkiaCommands.register();
         PathfinderService.init();
+        registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
+    }
+
+    /**
+     * Right-click a Person with an empty main hand to open its inventory. A Fabric
+     * {@code UseEntityCallback} (fires before the entity's own interact and before any held item's
+     * use) rather than a vanilla {@code Entity#interact} override, whose signature drifts across MC
+     * versions — this keeps the entity class free of version-specific code. Returning {@code PASS}
+     * for any other case lets vanilla proceed, so e.g. the debug wand still selects the Person.
+     */
+    private static void registerInteraction() {
+        UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (entity instanceof Person person
+                    && hand == InteractionHand.MAIN_HAND
+                    && player.getItemInHand(hand).isEmpty()) {
+                return person.openInventory(player);
+            }
+            return InteractionResult.PASS;
+        });
     }
 }

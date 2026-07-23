@@ -81,7 +81,11 @@ public final class CookedForms {
             if (!(holder.value() instanceof AbstractCookingRecipe cooking)) continue;
             if (!COOKING_TYPES.contains(cooking.getType())) continue;
             if (!cooking.input().test(raw)) continue;
+            //? if >=26.1 {
             net.minecraft.world.item.ItemStack cooked = cooking.assemble(new SingleRecipeInput(raw));
+            //?} else {
+            /*net.minecraft.world.item.ItemStack cooked = cooking.assemble(new SingleRecipeInput(raw), registries);
+            *///?}
             FoodProperties cookedFood = cooked.get(DataComponents.FOOD);
             if (cookedFood == null || cookedFood.nutrition() <= rawFood.nutrition()) continue;
             if (best == null || cookedFood.nutrition() > best.nutrition()) {

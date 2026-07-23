@@ -23,7 +23,6 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.damagesource.DamageSource;
@@ -424,19 +423,15 @@ public class Person extends Avatar {
     }
 
     /**
-     * Right-click opens this Person's inventory as a container screen (all 41 slots, take/put),
-     * backed by a live {@link PersonContainer} over the core inventory, so edits write through to
-     * the source of truth. Server-authoritative; the client predicts success so the arm swings.
-     * Main hand only.
+     * Opens this Person's inventory as a container screen (all 41 slots) for {@code player}, backed
+     * by a live {@link PersonContainer} over the core inventory. Server-authoritative; the client
+     * predicts success so the arm swings.
+     *
+     * <p>Driven from a Fabric {@code UseEntityCallback} rather than a vanilla {@code interact}
+     * override, whose signature drifts across versions — a plain method keeps this {@code mod} class
+     * version-neutral. The callback does the empty-hand/main-hand gating.
      */
-    @Override
-    public InteractionResult interact(Player player, InteractionHand hand, Vec3 hitPos) {
-        // A held item takes precedence — vanilla calls entity.interact() before the item's
-        // interactLivingEntity, so we must step aside (PASS) to let e.g. the debug wand
-        // select/command the Person.
-        if (hand != InteractionHand.MAIN_HAND || !player.getItemInHand(hand).isEmpty()) {
-            return super.interact(player, hand, hitPos);
-        }
+    public InteractionResult openInventory(Player player) {
         if (!this.level().isClientSide()) {
             player.openMenu(new SimpleMenuProvider(
                     (syncId, playerInv, opener) ->
@@ -677,10 +672,10 @@ public class Person extends Avatar {
     }
 
     /**
-     * Required by {@link Avatar}. Unused for rendering — the visible skin comes from
-     * {@link #getSkinTexture()} via the renderer, not from this profile.
+     * Supplies the game-profile {@link Avatar} exposes on 26.1. Unused for rendering — the visible
+     * skin comes from {@link #getSkinTexture()} via the renderer, not from this profile. No
+     * {@code @Override}: pre-26.1 {@code Avatar} has no such method, where this is harmless dead code.
      */
-    @Override
     public ResolvableProfile getProfile() {
         return Mannequin.DEFAULT_PROFILE;
     }

@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.client;
 
+import dev.luizloyola.autarkia.compat.client.inv.PersonInventoryScreen;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
-import dev.luizloyola.autarkia.mod.client.inv.PersonInventoryScreen;
 import dev.luizloyola.autarkia.mod.client.render.PersonRenderer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;

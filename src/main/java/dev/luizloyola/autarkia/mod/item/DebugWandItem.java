@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.item;
 
+import dev.luizloyola.autarkia.compat.Players;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -41,7 +42,7 @@ public class DebugWandItem extends Item {
         }
         PersonId selected = context.getItemInHand().get(ModComponents.SELECTED_PERSON);
         if (selected == null) {
-            player.sendOverlayMessage(Component.translatable("item.autarkia.debug_wand.no_selection"));
+            Players.overlay(player, Component.translatable("item.autarkia.debug_wand.no_selection"));
             return InteractionResult.SUCCESS;
         }
         // Resolve the selection to a loaded entity: scan every loaded Person for the bound id. Fine
@@ -50,13 +51,13 @@ public class DebugWandItem extends Item {
                 .getEntities(ModEntities.PERSON, p -> selected.equals(p.getPersonId()))
                 .stream().findFirst().orElse(null);
         if (person == null) {
-            player.sendOverlayMessage(Component.translatable("item.autarkia.debug_wand.not_loaded"));
+            Players.overlay(player, Component.translatable("item.autarkia.debug_wand.not_loaded"));
             return InteractionResult.SUCCESS;
         }
         // Stand on top of the clicked face.
         Vec3 target = Vec3.atBottomCenterOf(context.getClickedPos().relative(context.getClickedFace()));
         person.navigateTo(target);
-        player.sendOverlayMessage(Component.translatable("item.autarkia.debug_wand.moving",
+        Players.overlay(player, Component.translatable("item.autarkia.debug_wand.moving",
                 person.getName(), (int) target.x, (int) target.y, (int) target.z));
         return InteractionResult.SUCCESS;
     }
@@ -72,7 +73,7 @@ public class DebugWandItem extends Item {
         if (player.isSecondaryUseActive()) {
             if (!player.level().isClientSide()) {
                 boolean walking = person.toggleDebugWalk(player.getYRot());
-                player.sendOverlayMessage(Component.translatable(
+                Players.overlay(player, Component.translatable(
                         walking ? "item.autarkia.debug_wand.walk_on"
                                 : "item.autarkia.debug_wand.walk_off",
                         person.getName()));
@@ -84,14 +85,14 @@ public class DebugWandItem extends Item {
         if (!player.level().isClientSide()) {
             PersonId id = person.getPersonId();
             if (id == null) {
-                player.sendOverlayMessage(
+                Players.overlay(player,
                         Component.translatable("item.autarkia.debug_wand.no_identity"));
             } else {
                 // Write to the real held stack, not the `stack` parameter: in creative,
                 // Player.interactOn swaps in a throwaway copy under instabuild, so mutating the
                 // parameter is silently lost. getItemInHand returns the actual inventory stack.
                 player.getItemInHand(hand).set(ModComponents.SELECTED_PERSON, id);
-                player.sendOverlayMessage(
+                Players.overlay(player,
                         Component.translatable("item.autarkia.debug_wand.selected", person.getName()));
             }
         }
