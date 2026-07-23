@@ -6,124 +6,132 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.autarkia.core.brain.act.MoveState;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import java.util.Random;
 import java.util.random.RandomGenerator;
 import org.junit.jupiter.api.Test;
 
 /**
- * Pins {@link WanderStep}: the roll stays inside the radius, never picks a zero offset, keeps the
- * pause in {@code [40, 119]}, reads the CURRENT position at decompose time (lazy — not at
- * construction), and is fully determined by the seed. Driven through the real {@link TaskExecutor}
- * so the compound expands exactly as it will in the field; the target is read off the
- * {@link FakeMover}'s recorded {@code moveTo} and the pause is counted as the {@link Idle} run
- * length.
+ * Pins {@link WanderStep} — walk chance ({@link WanderStep#WALK_CHANCE}), {@link Gait#STROLL}
+ * inside the radius with a never-zero offset, the pause range, the lazy position read at decompose
+ * time, determinism — through the real {@link TaskExecutor}: targets are read off the
+ * {@link FakeMover}, pauses counted as busy {@link Idle} ticks.
+ *
+ * <p>The draw order (walk-roll, then pause, then target) is class contract here — reordering the
+ * draws changes which seeds walk.
  */
 class WanderStepTest {
 
     private static final int RADIUS = 8;
 
-    private final FakeContext ctx = new FakeContext();
-    private final TaskExecutor executor = new TaskExecutor();
+    private record Beat(boolean walked, Pos target, Gait gait, int pause) {}
 
-    /** Expands the step one tick (issuing the GoTo) and returns the mover's recorded target. */
-    private Pos runToTarget(WanderStep step) {
-        executor.run(step, ctx);
-        executor.tick(ctx); // expand WanderStep -> Roam.decompose -> GoTo issues moveTo
-        return new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
-    }
-
-    /** Drives the already-issued GoTo to SUCCESS, then counts the Idle's RUNNING ticks (the pause). */
-    private int drainPause() {
-        ctx.mover.setState(MoveState.ARRIVED);
-        executor.tick(ctx); // GoTo observes ARRIVED -> SUCCESS -> sequence advances to Idle
-        int pause = 0;
+    /**
+     * Runs one full WanderStep off the shared stream in a fresh context/executor; the counted busy
+     * Idle ticks are the uniform pause measure for both beat shapes.
+     */
+    private static Beat runBeat(RandomGenerator random, Pos start) {
+        FakeContext ctx = new FakeContext();
+        ctx.percepts.position = start;
+        TaskExecutor executor = new TaskExecutor();
+        executor.run(new WanderStep(random, RADIUS), ctx);
+        executor.tick(ctx); // expand; ticks the first primitive (GoTo issue, or Idle's first tick)
+        boolean walked = ctx.mover.moveToCalls > 0;
+        Pos target = new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
+        int pause = walked ? 0 : 1; // an idle-only beat's expansion tick already ran Idle once
+        if (walked) {
+            ctx.mover.setState(MoveState.ARRIVED);
+            executor.tick(ctx); // GoTo observes ARRIVED -> SUCCESS; Idle is pending
+        }
         while (executor.isBusy()) {
             executor.tick(ctx);
             if (executor.isBusy()) {
-                pause++; // this tick was a RUNNING Idle tick; the final SUCCESS tick goes idle
+                pause++; // busy-after ticks are RUNNING Idle ticks; the SUCCESS tick goes idle
             }
         }
-        return pause;
+        return new Beat(walked, target, ctx.mover.lastGait, pause);
     }
 
     @Test
-    void targetStaysWithinRadiusAndNeverZeroOffsetAndFlatY() {
+    void mostBeatsIdleAndWalkingBeatsMatchTheTunedChance() {
         RandomGenerator random = new Random(1234);
-        for (int i = 0; i < 200; i++) { // many rolls off one stream — exercises the whole box
-            FakeContext local = new FakeContext();
-            local.percepts.position = new Pos(0, 64, 0);
-            TaskExecutor exec = new TaskExecutor();
-            exec.run(new WanderStep(random, RADIUS), local);
-            exec.tick(local);
-            int dx = local.mover.lastX;
-            int dz = local.mover.lastZ;
+        int walks = 0;
+        for (int i = 0; i < 200; i++) {
+            if (runBeat(random, new Pos(0, 64, 0)).walked()) {
+                walks++;
+            }
+        }
+        // Deterministic per seed, so this cannot flake; the loose band states the INTENT (a
+        // WALK_CHANCE retune outside ~[0.22, 0.38] should trip it and force a conscious look).
+        assertTrue(walks >= 45 && walks <= 75,
+                "expected roughly WALK_CHANCE=" + WanderStep.WALK_CHANCE + " of 200, got " + walks);
+        assertTrue(walks > 0, "walking beats must occur");
+    }
+
+    @Test
+    void walkingBeatsStrollWithinTheRadiusNeverZeroOffsetFlatY() {
+        RandomGenerator random = new Random(1234);
+        int seen = 0;
+        for (int i = 0; i < 200 && seen < 30; i++) {
+            Beat beat = runBeat(random, new Pos(0, 64, 0));
+            if (!beat.walked()) {
+                continue;
+            }
+            seen++;
+            int dx = beat.target().x();
+            int dz = beat.target().z();
             assertTrue(Math.abs(dx) <= RADIUS && Math.abs(dz) <= RADIUS,
                     "offset (" + dx + ", " + dz + ") must be within +/-" + RADIUS);
-            assertFalse(dx == 0 && dz == 0, "a wander step always goes somewhere");
-            assertEquals(64, local.mover.lastY, "y is unchanged — she walks the ground");
+            assertFalse(dx == 0 && dz == 0, "a walking beat always goes somewhere");
+            assertEquals(64, beat.target().y(), "y is unchanged — she walks the ground");
+            assertEquals(Gait.STROLL, beat.gait(), "wandering ambles; it does not march");
         }
+        assertTrue(seen >= 30, "stream must produce enough walking beats to pin");
     }
 
     @Test
-    void pauseIsInFortyToOneNineteen() {
+    void pausesRunTheTunedRangeForBothShapes() {
         RandomGenerator random = new Random(99);
-        for (int i = 0; i < 50; i++) {
-            FakeContext local = new FakeContext();
-            TaskExecutor exec = new TaskExecutor();
-            exec.run(new WanderStep(random, RADIUS), local);
-            exec.tick(local); // GoTo issues
-            local.mover.setState(MoveState.ARRIVED);
-            exec.tick(local); // GoTo SUCCESS -> Idle pending
-            int pause = 0;
-            while (exec.isBusy()) {
-                exec.tick(local);
-                if (exec.isBusy()) {
-                    pause++;
-                }
-            }
-            assertTrue(pause >= 40 && pause <= 119, "pause was " + pause);
+        boolean sawIdleOnly = false;
+        boolean sawWalking = false;
+        for (int i = 0; i < 40; i++) {
+            Beat beat = runBeat(random, new Pos(0, 64, 0));
+            sawIdleOnly |= !beat.walked();
+            sawWalking |= beat.walked();
+            assertTrue(beat.pause() >= WanderStep.IDLE_MIN
+                            && beat.pause() < WanderStep.IDLE_MIN + WanderStep.IDLE_RANGE,
+                    "pause was " + beat.pause());
         }
+        assertTrue(sawIdleOnly && sawWalking, "both beat shapes must occur in 40 draws");
     }
 
     @Test
     void targetIsOffsetFromTheCurrentPositionNotTheConstructionOne() {
-        WanderStep step = new WanderStep(new Random(7), RADIUS);
-        ctx.percepts.position = new Pos(0, 64, 0);
-        executor.run(step, ctx); // installed while at spawn...
-        ctx.percepts.position = new Pos(100, 70, 200); // ...but she walked before it expanded
-        executor.tick(ctx);
-        int dx = ctx.mover.lastX - 100;
-        int dz = ctx.mover.lastZ - 200;
-        assertEquals(70, ctx.mover.lastY, "offset from the CURRENT cell");
-        assertTrue(Math.abs(dx) <= RADIUS && Math.abs(dz) <= RADIUS,
-                "offset from (100,70,200), not (0,64,0)");
+        RandomGenerator random = new Random(7);
+        for (int i = 0; i < 200; i++) {
+            Beat beat = runBeat(random, new Pos(100, 70, 200));
+            if (!beat.walked()) {
+                continue;
+            }
+            assertEquals(70, beat.target().y(), "offset from the CURRENT cell");
+            assertTrue(Math.abs(beat.target().x() - 100) <= RADIUS
+                            && Math.abs(beat.target().z() - 200) <= RADIUS,
+                    "offset from (100,70,200)");
+            return;
+        }
+        throw new AssertionError("stream produced no walking beat to pin");
     }
 
-    /** Same seed, same stream: identical target and identical pause — reproducible per Person. */
+    /** Same seed, same stream: identical shapes, targets, and pauses — reproducible per Person. */
     @Test
     void deterministicPerSeed() {
-        Pos targetA;
-        int pauseA;
-        {
-            targetA = runToTarget(new WanderStep(new Random(42), RADIUS));
-            pauseA = drainPause();
+        RandomGenerator a = new Random(42);
+        RandomGenerator b = new Random(42);
+        for (int i = 0; i < 10; i++) {
+            Beat beatA = runBeat(a, new Pos(0, 64, 0));
+            Beat beatB = runBeat(b, new Pos(0, 64, 0));
+            assertEquals(beatA, beatB, "same seed -> same beat #" + i);
         }
-        FakeContext ctx2 = new FakeContext();
-        TaskExecutor exec2 = new TaskExecutor();
-        exec2.run(new WanderStep(new Random(42), RADIUS), ctx2);
-        exec2.tick(ctx2);
-        Pos targetB = new Pos(ctx2.mover.lastX, ctx2.mover.lastY, ctx2.mover.lastZ);
-        ctx2.mover.setState(MoveState.ARRIVED);
-        exec2.tick(ctx2);
-        int pauseB = 0;
-        while (exec2.isBusy()) {
-            exec2.tick(ctx2);
-            if (exec2.isBusy()) {
-                pauseB++;
-            }
-        }
-        assertEquals(targetA, targetB, "same seed -> same target");
-        assertEquals(pauseA, pauseB, "same seed -> same pause");
     }
 
     @Test

@@ -6,6 +6,7 @@ import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
 import dev.luizloyola.autarkia.core.brain.instinct.EatInstinct;
+import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.task.Task;
@@ -14,17 +15,17 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Per-{@link Person} brain host: mounts the core decision machinery on the entity and gives it a
- * {@link BrainContext} to think through — actuators ({@link PersonMover} legs,
- * {@link PersonItemConsumer} mouth) and percepts ({@link PersonPercepts}). Arbiter-first since
- * ladder step 4: it hosts an {@link Arbiter} (Eat + Wander today) rather than a bare
- * {@link dev.luizloyola.autarkia.core.brain.task.TaskExecutor}. Only the mounting bracket —
- * everything hosted is pure core, assembled once, the adapters being stateless views.
+ * Per-{@link Person} brain host: mounts the pure core decision machinery on the entity and hands it
+ * a {@link BrainContext} — actuators to act with ({@link PersonMover} legs,
+ * {@link PersonItemConsumer} mouth) and {@link PersonPercepts} to sense with. Arbiter-first: an
+ * {@link Arbiter} of instincts decides on its own rather than waiting on debug commands. A mounting
+ * bracket only, assembled once — the adapters are stateless views over the entity.
  *
- * <p>It only ever <em>reads</em> the body, through {@link Percepts}, and never owns body state: the
- * entity owns and ticks its own metabolism ({@link Person#needs()}), so a paused or throttled brain
- * still starves. Anything of the body persists on the entity; the brain's working state (arbiter +
- * running task tree) is transient like the Navigator's — a reload just re-decides.
+ * <p>It only ever <em>reads</em> the body (through {@link Percepts}) and never owns body state: the
+ * entity owns and ticks its own metabolism ({@link Person#needs()}), the way vanilla's
+ * {@code FoodData} belongs to the player and not to any AI, so a paused brain still starves. That
+ * decides what lives where — body state persists on the entity; the brain's working state (arbiter
+ * + running task tree) is transient like the Navigator's, and a reload just re-decides.
  */
 public final class BrainDriver {
     private final Arbiter arbiter;
@@ -76,10 +77,14 @@ public final class BrainDriver {
                 return auto ? arbiter.costTolerance() : Double.POSITIVE_INFINITY;
             }
         };
-        // RandomSource is not a java.util.random.RandomGenerator, so it seeds a fresh
-        // java.util.Random once at construction — per-entity, not shared, not reproducible.
+        // RandomSource isn't a java.util.random.RandomGenerator, so it can't reach the instincts
+        // directly; it seeds this one once at construction instead. Both random-driven instincts
+        // (Flee's scatter, Wander's roam) draw from it — one stream per brain, never shared.
         Random random = new Random(person.getRandom().nextLong());
-        this.arbiter = new Arbiter(List.of(new EatInstinct(), new WanderInstinct(random)));
+        // Flee is first on purpose: the arbiter breaks pressure ties in list order, so an exact
+        // flee/eat tie must resolve to fleeing.
+        this.arbiter = new Arbiter(List.of(
+                new FleeInstinct(random), new EatInstinct(), new WanderInstinct(random)));
     }
 
     /**

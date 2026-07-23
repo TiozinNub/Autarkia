@@ -38,19 +38,31 @@ class AutonomousLoopTest {
         // --- Phase 1: sated -> wander cycles ----------------------------------------------------
         assertEquals(20, ctx.percepts.needs.foodLevel(), "a fresh body spawns fed -> no eat pressure");
 
-        arbiter.tick(ctx); // idle -> Wander (0.15) out-bids Eat (0.0); its GoTo issues a move
-        assertEquals(1, ctx.mover.moveToCalls, "sated, she wanders");
+        arbiter.tick(ctx); // idle -> Wander (0.15) out-bids Eat (0.0)
         assertTrue(arbiter.describe().contains("wander 0.15 (active)"), arbiter.describe());
 
-        ctx.mover.setState(MoveState.ARRIVED); 
+        // Most wander beats are idle-only (WALK_CHANCE) — tick through the standing-around until
+        // the stream produces the first stroll. Seeded, so this is deterministic, never flaky.
         int guard = 0;
+        while (ctx.mover.moveToCalls == 0 && guard++ < 10_000) {
+            arbiter.tick(ctx);
+        }
+        assertEquals(1, ctx.mover.moveToCalls, "sated, she eventually strolls somewhere");
+
+        ctx.mover.setState(MoveState.ARRIVED); 
+        guard = 0;
         while (arbiter.executor().isBusy() && guard++ < 1000) {
             arbiter.tick(ctx); // GoTo SUCCESS, then the Idle pause counts down
         }
-        assertFalse(arbiter.executor().isBusy(), "the first wander leg finished (walk then pause)");
+        assertFalse(arbiter.executor().isBusy(), "the first walking beat finished (stroll then pause)");
 
-        arbiter.tick(ctx); // boundary re-grant -> a new wander root -> a fresh GoTo
-        assertEquals(2, ctx.mover.moveToCalls, "wander re-grants itself — a fresh leg, the living loop");
+        // The living loop: re-granted beats keep coming until another one strolls.
+        guard = 0;
+        while (ctx.mover.moveToCalls == 1 && guard++ < 10_000) {
+            arbiter.tick(ctx);
+        }
+        assertEquals(2, ctx.mover.moveToCalls, "wander re-grants itself — fresh legs keep coming");
+        ctx.mover.setState(MoveState.MOVING); // hold this leg in flight for the preemption below
 
         // --- Phase 2: hunger preempts the wander ------------------------------------------------
         ctx.percepts.food("minecraft:bread", BREAD);
@@ -69,7 +81,7 @@ class AutonomousLoopTest {
         // --- Phase 3: she eats until sated, then wander resumes ---------------------------------
         int begins = ctx.consumer.beginCalls;
         guard = 0;
-        while (ctx.mover.moveToCalls == 2 && guard++ < 2000) {
+        while (ctx.mover.moveToCalls == 2 && guard++ < 10_000) {
             arbiter.tick(ctx);
             if (ctx.consumer.beginCalls > begins) { // a fresh bite started -> the body feeds
                 begins = ctx.consumer.beginCalls;

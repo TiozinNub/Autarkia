@@ -5,13 +5,18 @@ import dev.luizloyola.autarkia.compat.inv.FoodValues;
 import dev.luizloyola.autarkia.core.brain.sense.FoodLookup;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.brain.sense.Threat;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.FoodValue;
 import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.monster.Monster;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@link Percepts} <em>adapter</em>: what a {@link Person}'s brain can sense, as version-neutral
@@ -21,12 +26,23 @@ import net.minecraft.core.BlockPos;
  * registry and server access — item knowledge on demand, never a snapshot.
  */
 public final class PersonPercepts implements Percepts {
+    /**
+     * Threat-percept budget window, in ticks. {@link #threats()} is an AABB entity query rather
+     * than a field read, so its result is held this long and re-run only when stale.
+     */
+    private static final int CACHE_TICKS = 5;
+
     private final Person person;
     /**
      * Food knowledge as a lens over live game data — vanilla and modded foods alike: values from
      * the item registry ({@link FoodValues}), cooked forms from the recipe data ({@link CookedForms}).
      */
     private final FoodLookup foods;
+
+    /** {@code person.tickCount} at which {@link #threatsCache} was last filled (see {@link #CACHE_TICKS}). */
+    private int threatsQueriedAt;
+    /** Last threat scan, reused within the budget window; {@code null} until the first query. */
+    private @Nullable List<Threat> threatsCache;
 
     public PersonPercepts(Person person) {
         this.person = person;
@@ -68,5 +84,37 @@ public final class PersonPercepts implements Percepts {
     public Pos position() {
         BlockPos pos = this.person.blockPosition();
         return new Pos(pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    /**
+     * Nearby hostiles as version-neutral {@link Threat}s — what the Flee instinct reads. Budgeted:
+     * the scan runs at most once per {@link #CACHE_TICKS} ticks (the brain and every instinct may
+     * ask each tick) and the same immutable list is returned in between. A hostile is any
+     * {@link Monster} in a 16×8×16-inflated box, matching what the aggro slice attacks; broader
+     * categories (the {@code Enemy} marker) cannot be asked of {@code getEntitiesOfClass} and
+     * aren't worth a Mob-wide scan plus filter yet.
+     */
+    @Override
+    public List<Threat> threats() {
+        int now = this.person.tickCount;
+        if (this.threatsCache != null && now - this.threatsQueriedAt < CACHE_TICKS) {
+            return this.threatsCache;
+        }
+        List<Monster> mobs = this.person.level().getEntitiesOfClass(
+                Monster.class, this.person.getBoundingBox().inflate(16.0, 8.0, 16.0));
+        List<Threat> threats = new ArrayList<>(mobs.size());
+        for (Monster mob : mobs) {
+            if (!mob.isAlive()) {
+                continue;
+            }
+            BlockPos at = mob.blockPosition();
+            threats.add(new Threat(
+                    new Pos(at.getX(), at.getY(), at.getZ()),
+                    mob.distanceTo(this.person),
+                    mob.getTarget() == this.person));
+        }
+        this.threatsQueriedAt = now;
+        this.threatsCache = List.copyOf(threats);
+        return this.threatsCache;
     }
 }

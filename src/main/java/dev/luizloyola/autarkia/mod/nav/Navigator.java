@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.nav;
 
 import dev.luizloyola.autarkia.core.nav.AgentProfile;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import dev.luizloyola.autarkia.core.nav.MoveType;
 import dev.luizloyola.autarkia.core.nav.NavGrid;
 import dev.luizloyola.autarkia.core.nav.NavGrids;
@@ -46,6 +47,12 @@ public final class Navigator {
      * definition and needs full speed.
      */
     private static final float CAREFUL_THROTTLE = 0.45F;
+    /**
+     * Forward input for a {@link Gait#STROLL} on open ground: ~55% walk speed (≈2.4 b/s). Above the
+     * careful throttle by design — careful is a SAFETY slowdown and keeps precedence via its earlier
+     * branch. LEAP legs are exempt (the run-up needs full speed).
+     */
+    private static final float STROLL_THROTTLE = 0.55F;
     /**
      * Forward (air-control) input while airborne in a 2-block-gap leap. Full forward walks the arc
      * onto the FAR rim of a 1-wide landing pillar, and in a chain each leap overshoots more until
@@ -130,6 +137,17 @@ public final class Navigator {
     private double lastTickX;
     private double lastTickZ;
     private int repathsLeft;
+    /**
+     * Requested pace for the current order, set by {@link #pathTo(BlockPos, Gait)}: SPRINT (flee)
+     * on open, safe stretches, STROLL (wander) throttled to {@link #STROLL_THROTTLE}. Terrain
+     * overrides mood both ways — careful mode beats SPRINT at cliff edges and narrow landings, and
+     * a LEAP leg ignores STROLL because the gap needs its run-up.
+     *
+     * <p>Two intended consequences of SPRINT: the food&le;6 gate in {@link Person#driveSprint}
+     * degrades an exhausted flee to a walk, and every sprinting metre banks exhaustion in
+     * {@code tickNeeds}. Reset to WALK in {@link #stop()}.
+     */
+    private Gait gait = Gait.WALK;
     private @Nullable CompletableFuture<Path> pending;
 
     public Navigator(Person person) {
@@ -138,7 +156,17 @@ public final class Navigator {
 
     /** Begin navigating toward {@code goal}, replacing any navigation already in progress. */
     public void pathTo(BlockPos goal) {
-        stop();
+        pathTo(goal, Gait.WALK);
+    }
+
+    /**
+     * As {@link #pathTo(BlockPos)}, with the requested pace (see {@link #gait}). Pathing and
+     * following are otherwise identical — on flat, safe ground the only per-tick difference is the
+     * sprint flag or the forward throttle.
+     */
+    public void pathTo(BlockPos goal, Gait gait) {
+        stop(); // resets this.gait, so set it after
+        this.gait = gait;
         this.goal = goal;
         this.repathsLeft = MAX_REPATHS;
         requestPath();
@@ -154,6 +182,7 @@ public final class Navigator {
         this.path = null;
         this.grid = null;
         this.index = 0;
+        this.gait = Gait.WALK;
         this.state = State.IDLE;
         this.person.stopMoving();
     }
@@ -394,15 +423,25 @@ public final class Navigator {
         // on safe ground: the glide through a 3-block fall is ~1.5 blocks at full walk, ~0.6 at
         // 0.45.
         boolean precisionFinal = isLast && waypoint.move() == MoveType.DROP;
-        this.person.driveSprint(leapSpan >= 3.0 && !leapLanding);
+        // Sprint when a 2+ gap leap needs the takeoff speed, or (when fleeing) on any open safe
+        // stretch. careful and precisionFinal (both computed just above) still veto it, so a flee
+        // never sprints off a ledge. See the gait field.
+        this.person.driveSprint(
+                (this.gait == Gait.SPRINT && !careful && !precisionFinal)
+                        || (leapSpan >= 3.0 && !leapLanding));
         // Air control eased mid-flight on a 2-gap leap (span 3) so the sprint arc lands mid-pillar
         // instead of skidding onto the far rim (see LEAP_AIR_THROTTLE). A 3-gap leap (span 4) has
         // no distance to spare and keeps full air control; ground ticks always drive at full 1.0.
         boolean leapFlightTrim = committedFlight && leapSpan > 2.5 && leapSpan < 3.5;
+        // STROLL eases the open-ground walk to its amble — but never a LEAP leg (approach and
+        // flight need the full run-up), and the careful throttle (0.45, below the stroll's 0.55)
+        // still takes precedence via its earlier branch.
+        boolean stroll = this.gait == Gait.STROLL && waypoint.move() != MoveType.LEAP;
         this.person.driveForward(heading,
                 coastToLanding ? 0.0F
                         : careful || precisionFinal ? CAREFUL_THROTTLE
                         : leapFlightTrim ? LEAP_AIR_THROTTLE
+                        : stroll ? STROLL_THROTTLE
                         : 1.0F);
         if (waypoint.move() == MoveType.JUMP && dy < -0.5
                 && horizontalSq < JUMP_RANGE * JUMP_RANGE && this.person.onGround()) {

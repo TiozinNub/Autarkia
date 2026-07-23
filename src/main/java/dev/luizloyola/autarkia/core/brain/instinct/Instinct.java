@@ -31,4 +31,20 @@ public interface Instinct {
 
     /** One-word drive name for the debug readout — {@code "eat"}, {@code "wander"}. */
     String describe();
+
+    /**
+     * Ticks this instinct sits out after its root FAILED. Most drives use the default; an
+     * emergency drive (Flee) overrides it small — a cornered Person must retry immediately, not
+     * stand still being eaten.
+     */
+    default int failCooldown() {
+        return DEFAULT_FAIL_COOLDOWN;
+    }
+
+    /**
+     * The default {@link #failCooldown()} — anti fail-spin: a drive that cannot currently be
+     * satisfied (no food anywhere) must not monopolize the wheel re-failing every tick while lower
+     * drives starve. A fixed cooldown gives the runner-up a turn.
+     */
+    int DEFAULT_FAIL_COOLDOWN = 100;
 }

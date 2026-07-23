@@ -3,11 +3,13 @@ package dev.luizloyola.autarkia.core.brain.task;
 import dev.luizloyola.autarkia.core.brain.sense.FoodLookup;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.brain.sense.Threat;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.FoodValue;
 import dev.luizloyola.autarkia.core.person.Needs;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -22,6 +24,7 @@ final class FakePercepts implements Percepts {
     final Needs needs = new Needs();
     /** Her feet cell; the default is a surface stance so wander targets are sane. */
     Pos position = new Pos(0, 64, 0);
+    List<Threat> threats = List.of();
     private final Map<String, FoodValue> foodById = new HashMap<>();
     private final Map<String, FoodValue> cookedById = new HashMap<>();
 
@@ -48,6 +51,11 @@ final class FakePercepts implements Percepts {
     @Override
     public Pos position() {
         return position;
+    }
+
+    @Override
+    public List<Threat> threats() {
+        return threats;
     }
 
     @Override

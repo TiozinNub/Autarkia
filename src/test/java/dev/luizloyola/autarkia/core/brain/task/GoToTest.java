@@ -1,8 +1,11 @@
 package dev.luizloyola.autarkia.core.brain.task;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.autarkia.core.brain.act.MoveState;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -93,5 +96,28 @@ class GoToTest {
     @Test
     void describeReadsAsGotoWithTheGoalCell() {
         assertEquals("goto (12, -60, 8)", new GoTo(12, -60, 8).describe());
+    }
+
+    // --- urgency -----------------------------------------------------------------------------
+
+    @Test
+    void theGaitConstructorThreadsThePaceThroughToTheMover() {
+        GoTo task = new GoTo(1, 2, 3, Gait.SPRINT);
+        task.tick(ctx);
+        assertEquals(Gait.SPRINT, mover.lastGait, "the 4-arg ctor's gait reaches the mover");
+    }
+
+    @Test
+    void thePlainConstructorThreadsWalkThroughToTheMover() {
+        GoTo task = new GoTo(1, 2, 3);
+        task.tick(ctx);
+        assertEquals(Gait.WALK, mover.lastGait, "the 3-arg ctor is an ordinary walk");
+    }
+
+    @Test
+    void describeAppendsNonWalkGaits() {
+        assertEquals("goto (12, -60, 8) (sprint)", new GoTo(12, -60, 8, Gait.SPRINT).describe());
+        assertEquals("goto (12, -60, 8) (stroll)", new GoTo(12, -60, 8, Gait.STROLL).describe());
+        assertEquals("goto (12, -60, 8)", new GoTo(12, -60, 8, Gait.WALK).describe());
     }
 }

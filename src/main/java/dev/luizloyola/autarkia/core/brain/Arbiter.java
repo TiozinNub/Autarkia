@@ -17,8 +17,9 @@ import java.util.Locale;
  *
  * <h2>Per-tick arbitration ({@link #tick})</h2>
  * <ol>
- *   <li>Pressures are read once. An instinct on {@link #FAIL_COOLDOWN} after a FAILED root is
- *       INELIGIBLE this tick, and its cooldown then ticks down by one.</li>
+ *   <li>Pressures are read once. An instinct sitting out the ticks its own
+ *       {@link Instinct#failCooldown()} set after a FAILED root is INELIGIBLE, and its cooldown
+ *       then ticks down by one.</li>
  *   <li>Top eligible bidder by EFFECTIVE pressure — the incumbent gets a {@link #STICKINESS}
  *       bonus, and ties go to the earlier instinct in the constructor list.</li>
  *   <li><b>Executor idle</b> → grant the top bidder; re-granting the incumbent after a SUCCESS is
@@ -40,13 +41,6 @@ public final class Arbiter {
 
     /** Minimum RAW pressure to preempt mid-flight; below it a challenger waits for the boundary. */
     public static final double PREEMPT = 0.6;
-
-    /**
-     * Ticks an instinct sits out after its root FAILED — anti fail-spin, so a drive that cannot
-     * currently be satisfied does not monopolize the wheel re-failing every tick while lower drives
-     * starve. The escalation flag (layer 3) will supersede it.
-     */
-    public static final int FAIL_COOLDOWN = 100;
 
     private final List<Instinct> instincts;
     private final TaskExecutor executor = new TaskExecutor();
@@ -120,7 +114,7 @@ public final class Arbiter {
         executor.tick(ctx);
         if (busyBefore && !executor.isBusy()) {
             if (active != null && executor.lastStatus().orElse(null) == TaskStatus.FAILED) {
-                cooldowns[indexOf(active)] = FAIL_COOLDOWN;
+                cooldowns[indexOf(active)] = active.failCooldown();
             }
             active = null; // next tick's idle-grant re-arbitrates
         }

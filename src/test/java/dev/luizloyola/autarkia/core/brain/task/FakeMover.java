@@ -2,14 +2,16 @@ package dev.luizloyola.autarkia.core.brain.task;
 
 import dev.luizloyola.autarkia.core.brain.act.MoveState;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * Test double for the {@link Mover} port: logs every call (events, counters, last coords) and
- * scripts the state it reports. Deliberately DUMB — {@code moveTo} never flips state to MOVING;
- * only {@link #setState} and {@link #stop} (port contract: back to IDLE) do, so a pre-set ARRIVED
- * survives the issuing call and proves GoTo's first tick issues without reading.
+ * Test double for the {@link Mover} port. Deliberately DUMB about state — {@code moveTo} does not
+ * flip it to MOVING, so a pre-set ARRIVED survives the issuing call: that is what makes the GoTo
+ * first-tick test meaningful. Records the gait of the latest order ({@link #lastGait}), which the
+ * 3-arg {@link Mover#moveTo(int, int, int)} always threads through as {@link Gait#WALK}.
  */
 final class FakeMover implements Mover {
     /** Ordered call log, e.g. {@code "moveTo(1, 2, 3)"}, {@code "stop"} — for sequencing asserts. */
@@ -19,6 +21,7 @@ final class FakeMover implements Mover {
     int lastX;
     int lastY;
     int lastZ;
+    Gait lastGait;
     private MoveState state = MoveState.IDLE;
 
     void setState(MoveState state) {
@@ -26,12 +29,14 @@ final class FakeMover implements Mover {
     }
 
     @Override
-    public void moveTo(int x, int y, int z) {
+    public void moveTo(int x, int y, int z, Gait gait) {
         moveToCalls++;
         lastX = x;
         lastY = y;
         lastZ = z;
-        events.add("moveTo(" + x + ", " + y + ", " + z + ")");
+        lastGait = gait;
+        events.add("moveTo(" + x + ", " + y + ", " + z
+                + (gait == Gait.WALK ? "" : ", " + gait.name().toLowerCase(Locale.ROOT)) + ")");
     }
 
     @Override

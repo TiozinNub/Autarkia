@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.core.brain.act.MoveState;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.nav.Navigator;
 import net.minecraft.core.BlockPos;
@@ -21,13 +22,27 @@ public final class PersonMover implements Mover {
     }
 
     /**
-     * Begin navigating to the cell at {@code (x, y, z)}, replacing any move in progress. Routed
-     * through {@link Person#navigateTo(Vec3)} rather than {@code navigator().pathTo} because
-     * navigateTo also cancels the debug jump-sprinter, which contends for the forward input.
+     * Begin navigating to the cell at {@code (x, y, z)}, replacing any move in progress. The two
+     * gait branches route DIFFERENTLY on purpose:
+     *
+     * <ul>
+     *   <li><b>{@link Gait#WALK}</b> (the {@link Mover#moveTo(int, int, int)} default) goes through
+     *       {@link Person#navigateTo(Vec3)}, which cancels the debug jump-sprinter — it and the
+     *       navigator both own the forward input.
+     *   <li><b>{@link Gait#SPRINT} / {@link Gait#STROLL}</b> go straight to
+     *       {@link Navigator#pathTo(BlockPos, Gait)} and so do <em>not</em> cancel it: accepted
+     *       asymmetry, since a paced move issued while that toy holds the legs waits for it
+     *       to be switched off.
+     * </ul>
      */
     @Override
-    public void moveTo(int x, int y, int z) {
-        this.person.navigateTo(Vec3.atBottomCenterOf(new BlockPos(x, y, z)));
+    public void moveTo(int x, int y, int z, Gait gait) {
+        BlockPos cell = new BlockPos(x, y, z);
+        if (gait == Gait.WALK) {
+            this.person.navigateTo(Vec3.atBottomCenterOf(cell));
+        } else {
+            this.person.navigator().pathTo(cell, gait);
+        }
     }
 
     /**

@@ -8,10 +8,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.autarkia.core.brain.Arbiter;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.ToleranceCurve;
+import dev.luizloyola.autarkia.core.brain.act.ConsumeState;
+import dev.luizloyola.autarkia.core.brain.act.MoveState;
+import dev.luizloyola.autarkia.core.brain.instinct.EatInstinct;
+import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.Instinct;
+import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
+import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.brain.sense.Threat;
+import dev.luizloyola.autarkia.core.inv.ItemStack;
+import dev.luizloyola.autarkia.core.person.FoodValue;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.function.Supplier;
+import java.util.random.RandomGenerator;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -19,8 +30,9 @@ import org.junit.jupiter.api.Test;
  * fresh root per grant): idle-grant of the top bidder, {@link Arbiter#STICKINESS} holding the
  * incumbent against a marginal challenger but not a decisive one, the {@link Arbiter#PREEMPT} floor
  * (mild challengers wait for the task boundary, strong ones cancel mid-task), fresh-root re-grant
- * after SUCCESS, {@link Arbiter#FAIL_COOLDOWN} after a FAILED root, and the manual-task and cost
- * tolerance paths.
+ * after SUCCESS, {@link Instinct#failCooldown()} after a FAILED root, the manual-task and cost
+ * tolerance paths, and two scenes from the real instincts: a threat preempting mid-chew, and Flee
+ * chaining re-aimed legs.
  */
 class ArbiterTest {
 
@@ -59,12 +71,17 @@ class ArbiterTest {
         }
     }
 
-    /** An instinct with a settable pressure and a root FACTORY — every grant records a fresh root. */
+    /**
+     * An instinct with settable pressure and a root FACTORY — every grant records a fresh root.
+     * {@link #failCooldownOverride} pins an emergency drive's shortened cooldown per test (see
+     * {@link FleeInstinct#FAIL_COOLDOWN}).
+     */
     private static final class FakeInstinct implements Instinct {
         final String name;
         double pressure;
         private final Supplier<Task> factory;
         final List<Task> grantedRoots = new ArrayList<>();
+        int failCooldownOverride = Instinct.DEFAULT_FAIL_COOLDOWN;
 
         FakeInstinct(String name, double pressure, Supplier<Task> factory) {
             this.name = name;
@@ -85,8 +102,48 @@ class ArbiterTest {
         }
 
         @Override
+        public int failCooldown() {
+            return failCooldownOverride;
+        }
+
+        @Override
         public String describe() {
             return name;
+        }
+    }
+
+    /**
+     * A real {@link FleeInstinct} with grant recording spliced on: instance freshness
+     * ({@link #grantedRoots}) cannot be observed from outside the arbiter/executor otherwise.
+     */
+    private static final class SpyingFlee implements Instinct {
+        private final FleeInstinct real;
+        final List<Task> grantedRoots = new ArrayList<>();
+
+        SpyingFlee(RandomGenerator random) {
+            this.real = new FleeInstinct(random);
+        }
+
+        @Override
+        public double pressure(BrainContext ctx) {
+            return real.pressure(ctx);
+        }
+
+        @Override
+        public Task root(BrainContext ctx) {
+            Task t = real.root(ctx);
+            grantedRoots.add(t);
+            return t;
+        }
+
+        @Override
+        public int failCooldown() {
+            return real.failCooldown();
+        }
+
+        @Override
+        public String describe() {
+            return real.describe();
         }
     }
 
@@ -212,16 +269,16 @@ class ArbiterTest {
     // --- fail cooldown ---------------------------------------------------------------------------
 
     @Test
-    void failedRootPutsTheInstinctOnCooldownForExactlyFailCooldownTicks() {
+    void failedRootPutsTheInstinctOnCooldownForExactlyItsOwnFailCooldownTicks() {
         FakeInstinct a = new FakeInstinct("a", 1.0, failsImmediately("aRoot"));
         FakeInstinct b = new FakeInstinct("b", 0.5, forever("bRoot"));
         Arbiter arbiter = new Arbiter(List.of(a, b));
 
-        arbiter.tick(ctx); // t1: A granted, fails -> cooldown 100, active cleared
+        arbiter.tick(ctx); // t1: A granted, fails -> cooldown 100 (the DEFAULT), active cleared
         assertEquals(1, a.grantedRoots.size());
 
-        // t2..t101 (exactly FAIL_COOLDOWN ticks): A sits out; B takes over and keeps running.
-        for (int t = 2; t <= 1 + Arbiter.FAIL_COOLDOWN; t++) {
+        // t2..t101 (exactly DEFAULT_FAIL_COOLDOWN ticks): A sits out; B takes over and keeps running.
+        for (int t = 2; t <= 1 + Instinct.DEFAULT_FAIL_COOLDOWN; t++) {
             arbiter.tick(ctx);
             assertEquals(1, a.grantedRoots.size(), "A still cooling at tick " + t);
         }
@@ -230,8 +287,34 @@ class ArbiterTest {
         assertEquals(0, running.cancels, "B ran undisturbed through A's cooldown");
 
         arbiter.tick(ctx); // t102: A eligible again -> its 1.0 preempts B
-        assertEquals(2, a.grantedRoots.size(), "A re-bids the tick AFTER exactly FAIL_COOLDOWN ticks");
+        assertEquals(2, a.grantedRoots.size(), "A re-bids the tick AFTER exactly DEFAULT_FAIL_COOLDOWN ticks");
         assertEquals(1, running.cancels, "and preempts the runner-up");
+    }
+
+    /**
+     * The emergency-drive shape (e.g. {@link FleeInstinct#FAIL_COOLDOWN}): the arbiter reads
+     * {@code active.failCooldown()}, never a fixed constant of its own.
+     */
+    @Test
+    void anInstinctOverridingFailCooldownSitsOutOnlyItsOwnShorterCooldown() {
+        FakeInstinct a = new FakeInstinct("a", 1.0, failsImmediately("aRoot"));
+        a.failCooldownOverride = 10;
+        FakeInstinct b = new FakeInstinct("b", 0.5, forever("bRoot"));
+        Arbiter arbiter = new Arbiter(List.of(a, b));
+
+        arbiter.tick(ctx); // t1: A granted, fails -> cooldown 10 (its own override), active cleared
+        assertEquals(1, a.grantedRoots.size());
+
+        // t2..t11 (exactly its own 10-tick cooldown): A sits out; B takes over.
+        for (int t = 2; t <= 1 + a.failCooldownOverride; t++) {
+            arbiter.tick(ctx);
+            assertEquals(1, a.grantedRoots.size(), "A still cooling at tick " + t);
+        }
+        assertEquals(1, b.grantedRoots.size(), "the runner-up took over while A cooled");
+
+        arbiter.tick(ctx); // t12: A eligible again -> back bidding after exactly its own failCooldown
+        assertEquals(2, a.grantedRoots.size(),
+                "A re-bids after exactly its own failCooldown (10), far short of the 100 default");
     }
 
     // --- manual task under an all-cooling / empty arbiter ----------------------------------------
@@ -279,5 +362,77 @@ class ArbiterTest {
         arbiter.tick(ctx); // A fails -> cooldown 100; B not yet granted (idle at end of this tick)
         assertTrue(arbiter.describe().startsWith("a 1.00 (cooldown 100t)\nb 0.50"),
                 "the cooling instinct is tagged with its remaining ticks:\n" + arbiter.describe());
+    }
+
+    // --- Flee: real-instinct scenes -----------------------------------------------------------
+
+    /**
+     * The scene the emergency drive exists for: mid-bite, a threat closes in hard enough to blow
+     * past both {@link Arbiter#STICKINESS} and {@link Arbiter#PREEMPT}, so Flee cuts the chew off
+     * (the incumbent {@code ConsumeItem}'s cancel aborts the consumer) and takes the legs. Once the
+     * threat clears, the running leg still finishes (Eat's pressure here sits under PREEMPT), and
+     * the runner-up resumes only at the next boundary.
+     */
+    @Test
+    void aCloseThreatPreemptsAMidChewEatThenClearsAndTheRunnerUpResumesAtTheNextBoundary() {
+        Arbiter arbiter = new Arbiter(List.of(
+                new EatInstinct(), new WanderInstinct(new Random(13)), new FleeInstinct(new Random(17))));
+
+        // Peckish (below PREEMPT) with bread in hand -> Eat outbids idle Wander and starts a bite.
+        ctx.percepts.food("minecraft:bread", new FoodValue(5, 6.0F, false));
+        ctx.percepts.inventory.set(0, ItemStack.of("minecraft:bread", 10, 64));
+        ctx.percepts.needs.setFoodLevel(12); // hunger 1 - 12/20 = 0.4 -- PECKISH, under PREEMPT (0.6)
+
+        arbiter.tick(ctx); // t1: Eat (0.4) beats Wander (0.15) and no-threat Flee (0.0); begins a bite
+        assertEquals(1, ctx.consumer.beginCalls);
+        assertTrue(arbiter.describe().contains("eat") && arbiter.describe().contains("(active)"), arbiter.describe());
+        ctx.consumer.setState(ConsumeState.CONSUMING); // mid-chew, scripted like the body would report it
+
+        // A threat close enough to push Flee to 0.9 -- well past PREEMPT and past Eat's 0.4.
+        ctx.percepts.threats = List.of(new Threat(new Pos(5, 64, 0), 5.2, false)); // (16-5.2)/12 = 0.9
+
+        arbiter.tick(ctx); // t2: Flee preempts mid-chew
+        assertEquals(1, ctx.consumer.abortCalls, "the chew was cancelled -- ConsumeItem.cancel aborts it");
+        assertTrue(arbiter.describe().contains("flee") && arbiter.describe().contains("(active)"), arbiter.describe());
+        assertEquals(1, ctx.mover.moveToCalls, "FleeStep's GoTo takes the legs");
+        assertEquals(dev.luizloyola.autarkia.core.nav.Gait.SPRINT, ctx.mover.lastGait,
+                "the flee leg sprints");
+
+        ctx.percepts.threats = List.of();
+        ctx.mover.setState(MoveState.ARRIVED);
+        arbiter.tick(ctx); // t3: GoTo SUCCEEDS -> the leg (FleeStep, no Idle) ends -> boundary
+        assertFalse(arbiter.executor().isBusy(),
+                "the leg finished this tick, but nothing is re-granted until the NEXT boundary");
+
+        arbiter.tick(ctx); // t4: idle -> Eat (0.4) again tops Wander (0.15), with Flee now at 0.0
+        assertEquals(2, ctx.consumer.beginCalls, "eat resumes at the next boundary");
+        assertTrue(arbiter.describe().contains("eat") && arbiter.describe().contains("(active)"), arbiter.describe());
+    }
+
+    /**
+     * With nothing to out-bid it, {@link FleeInstinct} wins every re-arbitration, and each leg's
+     * re-grant builds a FRESH {@code FleeStep} (never a cached tree) aimed at the threat's position
+     * NOW — so a threat crossing sides between legs flips the next leg's target.
+     */
+    @Test
+    void fleeChainsFreshReaimedLegsAsTheThreatMovesWhilePressureStaysHigh() {
+        SpyingFlee flee = new SpyingFlee(new Random(11));
+        Arbiter arbiter = new Arbiter(List.of(flee));
+        ctx.percepts.position = new Pos(0, 64, 0);
+        ctx.percepts.threats = List.of(new Threat(new Pos(5, 64, 0), 5.0, false)); // east -> she runs west
+
+        arbiter.tick(ctx); // t1: grant leg #1; its GoTo issues, aimed west
+        assertEquals(1, flee.grantedRoots.size());
+        assertTrue(ctx.mover.lastX < 0, "leg 1 runs west, away from the eastern threat");
+
+        ctx.mover.setState(MoveState.ARRIVED); 
+        ctx.percepts.threats = List.of(new Threat(new Pos(-5, 64, 0), 5.0, false)); // now west of her
+        arbiter.tick(ctx); // t2: GoTo #1 SUCCEEDS -> boundary; re-grant is still next tick, not this one
+        assertEquals(1, flee.grantedRoots.size(), "re-grant happens on the NEXT tick, not the boundary tick itself");
+
+        arbiter.tick(ctx); // t3: idle -> a FRESH FleeStep, re-aimed at the CURRENT (now western) threat
+        assertEquals(2, flee.grantedRoots.size());
+        assertNotSame(flee.grantedRoots.get(0), flee.grantedRoots.get(1), "a fresh root each grant");
+        assertTrue(ctx.mover.lastX > 0, "leg 2 re-aims east, away from the now-western threat");
     }
 }

@@ -2,22 +2,34 @@ package dev.luizloyola.autarkia.core.brain.task;
 
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import java.util.List;
 import java.util.random.RandomGenerator;
 
 /**
- * One leg of a wander: roll a nearby cell, walk there, pause. A {@link CompoundTask} with a single
+ * One beat of a wander: mostly stand, sometimes amble nearby. A {@link CompoundTask} with a single
  * always-applicable, cost-{@code 0} method, so the roll happens at DECOMPOSE time against fresh
  * percepts — offset from where she actually stands when the executor reaches this node.
  *
- * <p>The roll: {@code (dx, dz)} each uniform in {@code [-radius, radius]}, re-rolled while both are
- * zero (a step always goes somewhere); {@code y} unchanged; a pause of {@code 40 + [0, 80)} ticks.
- * Decomposes to {@code [GoTo(target), Idle(pause)]}.
+ * <p>The roll (draw order is part of the test contract: walk-roll, pause, target): with probability
+ * {@link #WALK_CHANCE}, {@code (dx, dz)} each uniform in {@code [-radius, radius]}, re-rolled while
+ * Both are zero, {@code y} unchanged, decomposing to {@code [GoTo(target, STROLL), Idle(pause)]};
+ * otherwise JUST {@code [Idle(pause)]}. Pauses run {@code IDLE_MIN + [0, IDLE_RANGE)} either way.
+ *
+ * <p>Tuned down deliberately (Luiz: "wandering too often"): idling is the default, walking the
+ * exception, and the walk is a {@link Gait#STROLL}.
  *
  * <p>Failure self-heals: an unreachable roll FAILS the {@link GoTo}, the method and the step; the
  * arbiter re-grants and a fresh {@link WanderStep} rolls again. The grant loop is the retry.
  */
 public final class WanderStep implements CompoundTask {
+    /** Fraction of wander beats that actually go anywhere; the rest just stand. */
+    public static final double WALK_CHANCE = 0.3;
+    /** Minimum pause per beat, ticks (5 s) — unhurried by construction. */
+    public static final int IDLE_MIN = 100;
+    /** Random extra pause, ticks ({@code [0, 200)} on top of the minimum — up to 15 s total). */
+    public static final int IDLE_RANGE = 200;
+
     private final RandomGenerator random;
     private final int radius;
     private final List<Method> methods;
@@ -43,10 +55,11 @@ public final class WanderStep implements CompoundTask {
         return "wander step";
     }
 
+    /** The one way to wander: mostly stand about; occasionally stroll somewhere nearby. */
     private final class Roam implements Method {
         @Override
         public boolean applicable(BrainContext ctx) {
-            return true; // there is always somewhere to drift to
+            return true; // there is always somewhere to drift to — or nowhere, which is also fine
         }
 
         @Override
@@ -56,6 +69,11 @@ public final class WanderStep implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
+            boolean walks = random.nextDouble() < WALK_CHANCE;
+            int pause = IDLE_MIN + random.nextInt(IDLE_RANGE);
+            if (!walks) {
+                return List.of(new Idle(pause));
+            }
             Pos here = ctx.percepts().position();
             int dx;
             int dz;
@@ -63,8 +81,9 @@ public final class WanderStep implements CompoundTask {
                 dx = random.nextInt(2 * radius + 1) - radius;
                 dz = random.nextInt(2 * radius + 1) - radius;
             } while (dx == 0 && dz == 0);
-            int pause = 40 + random.nextInt(80);
-            return List.of(new GoTo(here.x() + dx, here.y(), here.z() + dz), new Idle(pause));
+            return List.of(
+                    new GoTo(here.x() + dx, here.y(), here.z() + dz, Gait.STROLL),
+                    new Idle(pause));
         }
 
         @Override

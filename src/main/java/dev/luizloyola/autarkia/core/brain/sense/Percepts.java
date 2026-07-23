@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.brain.sense;
 
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.person.Needs;
+import java.util.List;
 
 /**
  * The perception bundle — the sense half of {@link dev.luizloyola.autarkia.core.brain.BrainContext},
@@ -35,4 +36,12 @@ public interface Percepts {
      * never from a stale spawn point.
      */
     Pos position();
+
+    /**
+     * Nearby hostiles, from the mod's budgeted entity queries around her. Nearest-first is not
+     * guaranteed: a consumer that cares about ordering must compute it from
+     * {@link Threat#distance()}. An empty list means no danger in range — the only signal
+     * {@code FleeInstinct} needs.
+     */
+    List<Threat> threats();
 }
