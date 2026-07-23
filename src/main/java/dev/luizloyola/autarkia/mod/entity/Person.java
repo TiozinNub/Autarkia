@@ -214,12 +214,14 @@ public class Person extends Avatar {
 
     @Override
     public void tick() {
-        super.tick();
+        // Resolve identity before super.tick(), which runs serverAiStep (brain + navigator): a
+        // Person summoned with a plain /summon has none, and would tick its AI once with a null
+        // personId — a latent trap for the PersonId-keyed knowledge the brain grows. Lazy rather
+        // than a constructor because it needs the running server; Avatar is not a Mob, so there is
+        // no finalizeSpawn hook.
         if (this.level() instanceof ServerLevel serverLevel
                 && (this.personId == null || !this.identityProjected)) {
             PersonDirectory directory = PersonDirectory.get(serverLevel.getServer());
-            // Assign a persistent identity on first tick. Lazy (not in a constructor) because it
-            // needs the running server; Avatar is not a Mob, so there is no finalizeSpawn hook.
             if (this.personId == null) {
                 setPersonId(directory.createPerson().id());
             }
@@ -230,6 +232,7 @@ public class Person extends Avatar {
                 this.identityProjected = true;
             }
         }
+        super.tick();
     }
 
     @Override

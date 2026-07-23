@@ -59,9 +59,8 @@ import java.util.stream.Stream;
  * default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
  *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
- * links it to the entity before it enters the world; position mirrors {@code /summon}.
- * {@code /summon autarkia:person} is rejected with a chat error — the type stays summonable for
- * compat, only the summon action is intercepted (see {@code SummonCommandMixin}).
+ * links it to the entity before it enters the world; a plain {@code /summon autarkia:person}
+ * instead mints one on the entity's first server tick. Position mirrors {@code /summon}.
  *
  * <p>Every person-scoped subcommand resolves through {@link #resolve}: the source's pin, else the
  * nearest. {@code select} pins by name or short-id, or by what a player is looking at; {@code list}
@@ -369,11 +368,10 @@ public final class AutarkiaCommands {
 
     /**
      * Spawns a new Person at {@code pos} (or the source's position when {@code null}), facing south
-     * like {@code /summon}. The directory-first path ({@code /summon autarkia:person} is rejected —
-     * see {@code SummonCommandMixin}): the identity is registered and linked before the entity
-     * enters the world, so it keeps that identity instead of minting an anonymous one on its first
-     * tick. The entity is created before the directory is touched, so a null entity leaves no
-     * orphan entry.
+     * like {@code /summon}. Directory-first: the identity — {@code name} if given, else generated —
+     * is registered and linked to the entity before it enters the world, where a plain
+     * {@code /summon} mints one a tick later in {@link Person#tick()}. The entity is created before
+     * the directory is touched, so a null entity leaves no orphan entry.
      */
     private static int personSpawn(CommandSourceStack source, @Nullable Vec3 pos, @Nullable String name) {
         String trimmed = name == null ? null : name.trim();
