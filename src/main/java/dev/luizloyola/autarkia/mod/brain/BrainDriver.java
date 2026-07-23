@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.brain;
 import dev.luizloyola.autarkia.core.brain.Arbiter;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
+import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
 import dev.luizloyola.autarkia.core.brain.instinct.EatInstinct;
@@ -59,6 +60,13 @@ public final class BrainDriver {
             @Override
             public ItemConsumer consumer() {
                 return consumer;
+            }
+
+            @Override
+            public BlockBreaker breaker() {
+                // Owned and ticked by the body (crack/drops/exhaustion advance with the
+                // entity); the driver only lends it out as a port.
+                return person.blockBreaker();
             }
         };
         this.context = new BrainContext() {

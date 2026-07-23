@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.brain.task;
 
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
+import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
@@ -16,6 +17,7 @@ import dev.luizloyola.autarkia.core.person.PersonId;
 final class FakeContext implements BrainContext {
     final FakeMover mover = new FakeMover();
     final FakeConsumer consumer = new FakeConsumer();
+    final FakeBreaker breaker = new FakeBreaker();
     final FakePercepts percepts = new FakePercepts();
     /**
      * A real (in-memory) journal on a fixed-tick clock, so a narrating task records somewhere
@@ -37,6 +39,11 @@ final class FakeContext implements BrainContext {
         @Override
         public ItemConsumer consumer() {
             return consumer;
+        }
+
+        @Override
+        public BlockBreaker breaker() {
+            return breaker;
         }
     };
 

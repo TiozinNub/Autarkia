@@ -13,6 +13,7 @@ import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.BrainDriver;
+import dev.luizloyola.autarkia.mod.brain.PersonBlockBreaker;
 import dev.luizloyola.autarkia.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
@@ -154,6 +155,13 @@ public class Person extends Avatar {
     private final PoiSensor poiSensor = new PoiSensor(this);
 
     /**
+     * This person's working arm ({@link PersonBlockBreaker}) — ticked here so the crack animation,
+     * drops and exhaustion advance with the body; the brain drives it as an actuator port.
+     * Transient — an interrupted break just heals its crack.
+     */
+    private final PersonBlockBreaker blockBreaker = new PersonBlockBreaker(this);
+
+    /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
      * brain organ: the entity owns and ticks its own metabolism, as vanilla's {@code FoodData}
      * belongs to the player rather than to any AI, and the brain only ever <em>reads</em> it.
@@ -271,6 +279,9 @@ public class Person extends Avatar {
         this.poiSensor.tick();
         // The brain decides first, then the Navigator (below) executes locomotion the same tick.
         this.brain.tick();
+        // The working arm advances after the brain, so a break begun this tick gains its first
+        // progress this tick — same-tick actuation, like the navigator below.
+        this.blockBreaker.tick();
         if (this.debugRunForward) {
             // getAttributeValue includes the sprint modifier applied by setSprinting, so this is
             // already the ×1.3 sprint speed; the 0.98 damping keeps it exact vs a player.
@@ -315,6 +326,11 @@ public class Person extends Avatar {
     /** This person's passive POI perception — the machine that fills her knowledge. See {@link PoiSensor}. */
     public PoiSensor poiSensor() {
         return this.poiSensor;
+    }
+
+    /** This person's working arm — the break machinery the brain drives as a port. See {@link PersonBlockBreaker}. */
+    public PersonBlockBreaker blockBreaker() {
+        return this.blockBreaker;
     }
 
     /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */

@@ -10,6 +10,7 @@ import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.autarkia.core.brain.task.BreakBlock;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
 import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
@@ -137,6 +138,10 @@ public final class AutarkiaCommands {
                                                         BlockPosArgument.getLoadedBlockPos(ctx, "pos")))))
                                 .then(Commands.literal("eat")
                                         .executes(ctx -> brainEat(ctx.getSource())))
+                                .then(Commands.literal("break")
+                                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                                .executes(ctx -> brainBreak(ctx.getSource(),
+                                                        BlockPosArgument.getLoadedBlockPos(ctx, "pos")))))
                                 .then(Commands.literal("status")
                                         .executes(ctx -> brainStatus(ctx.getSource())))
                                 .then(Commands.literal("cancel")
@@ -256,6 +261,18 @@ public final class AutarkiaCommands {
         Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new GoTo(pos.getX(), pos.getY(), pos.getZ()));
+        String suffix = autoDisabledSuffix(autoDisabled);
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** Runs a {@link BreakBlock} on the resolved Person — the working arm's debug leaf (slice-2
+     *  ladder step 1): reach-checked, vanilla break time for the held stack, real drops. */
+    private static int brainBreak(CommandSourceStack source, BlockPos pos) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        boolean autoDisabled = person.brain().run(new BreakBlock(pos.getX(), pos.getY(), pos.getZ()));
         String suffix = autoDisabledSuffix(autoDisabled);
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
