@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.command;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
@@ -61,6 +62,8 @@ import java.util.stream.Stream;
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
  * links it to the entity before it enters the world; a plain {@code /summon autarkia:person}
  * instead mints one on the entity's first server tick. Position mirrors {@code /summon}.
+ * {@code person spawn nobrain} is that same path with autonomy off: an inert body for exercising
+ * one feature at a time.
  *
  * <p>Every person-scoped subcommand resolves through {@link #resolve}: the source's pin, else the
  * nearest. {@code select} pins by name or short-id, or by what a player is looking at; {@code list}
@@ -147,24 +150,12 @@ public final class AutarkiaCommands {
                         // "person", not "brain": these are body readouts (vitals live with the
                         // entity); the brain group above holds the decision machinery.
                         .then(Commands.literal("person")
-                                .then(Commands.literal("spawn")
-                                        .executes(ctx -> personSpawn(ctx.getSource(), null, null))
-                                        // Optional leading Vec3 position, then an optional name.
-                                        // The name is NON-greedy on purpose: given "10 -59 5" a
-                                        // one-word name consumes only "10" and leaves "-59 5"
-                                        // unparsed, so that branch loses to the fully-consuming
-                                        // Vec3 branch, while a bare "Bob" falls to the name.
-                                        // Multi-word names must be quoted.
-                                        .then(Commands.argument("pos", Vec3Argument.vec3())
-                                                .executes(ctx -> personSpawn(ctx.getSource(),
-                                                        Vec3Argument.getVec3(ctx, "pos"), null))
-                                                .then(Commands.argument("name", StringArgumentType.string())
-                                                        .executes(ctx -> personSpawn(ctx.getSource(),
-                                                                Vec3Argument.getVec3(ctx, "pos"),
-                                                                StringArgumentType.getString(ctx, "name")))))
-                                        .then(Commands.argument("name", StringArgumentType.string())
-                                                .executes(ctx -> personSpawn(ctx.getSource(), null,
-                                                        StringArgumentType.getString(ctx, "name")))))
+                                // "spawn" makes an autonomous Person; "nobrain" makes one with
+                                // autonomy off, for testing one feature at a time. Both take the same
+                                // [<pos>] [name] leaves (see spawnLeaves) and differ only in the brain
+                                // flag; "nobrain" is a literal, so quote it to use it as a name.
+                                .then(spawnLeaves(Commands.literal("spawn"), true)
+                                        .then(spawnLeaves(Commands.literal("nobrain"), false)))
                                 .then(Commands.literal("needs")
                                         .executes(ctx -> personNeeds(ctx.getSource())))
                                 .then(Commands.literal("setfood")
@@ -367,13 +358,44 @@ public final class AutarkiaCommands {
     }
 
     /**
+     * Attaches the optional {@code [<pos>] [name]} leaves to a spawn literal, so {@code spawn} and
+     * its {@code nobrain} child share one argument shape and differ only in the brain flag they hand
+     * {@link #personSpawn}.
+     *
+     * <p>Position mirrors {@code /summon}'s {@code <pos>}. The name is a NON-greedy string on
+     * purpose: against coords like {@code 10 -59 5} a one-word name consumes only {@code 10} and
+     * leaves {@code -59 5} unparsed, so that branch loses to the Vec3 one, while a bare {@code Bob}
+     * falls to the name. Multi-word names must be quoted; a greedy name would swallow the line.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> spawnLeaves(
+            LiteralArgumentBuilder<CommandSourceStack> node, boolean autonomous) {
+        return node
+                .executes(ctx -> personSpawn(ctx.getSource(), null, null, autonomous))
+                .then(Commands.argument("pos", Vec3Argument.vec3())
+                        .executes(ctx -> personSpawn(ctx.getSource(),
+                                Vec3Argument.getVec3(ctx, "pos"), null, autonomous))
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .executes(ctx -> personSpawn(ctx.getSource(),
+                                        Vec3Argument.getVec3(ctx, "pos"),
+                                        StringArgumentType.getString(ctx, "name"), autonomous))))
+                .then(Commands.argument("name", StringArgumentType.string())
+                        .executes(ctx -> personSpawn(ctx.getSource(), null,
+                                StringArgumentType.getString(ctx, "name"), autonomous)));
+    }
+
+    /**
      * Spawns a new Person at {@code pos} (or the source's position when {@code null}), facing south
      * like {@code /summon}. Directory-first: the identity — {@code name} if given, else generated —
      * is registered and linked to the entity before it enters the world, where a plain
      * {@code /summon} mints one a tick later in {@link Person#tick()}. The entity is created before
      * the directory is touched, so a null entity leaves no orphan entry.
+     *
+     * <p>{@code autonomous} is the arbiter switch every Person spawns with ON;
+     * {@code person spawn nobrain} passes {@code false} before the first tick — an inert body,
+     * still drivable via {@code /autarkia brain}.
      */
-    private static int personSpawn(CommandSourceStack source, @Nullable Vec3 pos, @Nullable String name) {
+    private static int personSpawn(CommandSourceStack source, @Nullable Vec3 pos, @Nullable String name,
+                                   boolean autonomous) {
         String trimmed = name == null ? null : name.trim();
         if (trimmed != null && trimmed.isEmpty()) {
             source.sendFailure(Component.literal("Name must not be blank."));
@@ -392,15 +414,21 @@ public final class AutarkiaCommands {
         // pitch pinned flat since a Person stands upright (pitch is render-only head tilt, see face()).
         person.snapTo(spawnPos.x, spawnPos.y, spawnPos.z, 0.0F, 0.0F);
         person.assignPerson(identity.id());
+        // "no brain": drop the arbiter into manual mode before the entity's first serverAiStep, so
+        // it spawns inert.
+        if (!autonomous) {
+            person.brain().setAuto(false);
+        }
         if (!level.addFreshEntity(person)) {
             source.sendFailure(Component.literal("Could not add the Person to the world."));
             return 0;
         }
         Appearance appearance = identity.appearance();
         String where = String.format(Locale.ROOT, "%.1f %.1f %.1f", spawnPos.x, spawnPos.y, spawnPos.z);
+        String brainNote = autonomous ? "" : " — brain off (/autarkia brain auto on to enable)";
         source.sendSuccess(() -> Component.literal("Spawned ")
                 .append(Component.literal(identity.name()).withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (" + appearance.gender() + ") at " + where)
+                .append(Component.literal(" (" + appearance.gender() + ") at " + where + brainNote)
                         .withStyle(ChatFormatting.GRAY)), true);
         return 1;
     }
