@@ -44,9 +44,20 @@ public final class PoiSensor {
         List<SenseEvent> events = this.core.tick(
                 new Pos(feet.getX(), feet.getY(), feet.getZ()), level.getGameTime(), this.probe);
         for (SenseEvent event : events) {
-            this.person.journal().record(Category.SENSE,
-                    event.type() == SenseEvent.Type.NOTED ? "noticed" : "forgot", describe(event));
+            this.person.journal().record(Category.SENSE, verb(event.type()), describe(event));
+            KnowledgeViewer.onEvent(level.getServer(), this.person.getPersonId(),
+                    this.person.getName().getString(), event);
         }
+    }
+
+    /** The journal's event column, one word per outcome. */
+    private static String verb(SenseEvent.Type type) {
+        return switch (type) {
+            case NOTED -> "noticed";
+            case FORGOT -> "forgot";
+            case OVERLOOKED -> "overlooked";
+            case DISMISSED -> "dismissed";
+        };
     }
 
     /** Transient claim count — the debug command's "how full is her dismissal index" line. */
@@ -54,8 +65,9 @@ public final class PoiSensor {
         return this.core == null ? 0 : this.core.claimCount();
     }
 
-    /** One journal-line description: {@code TREE (10, 64, 8) 4 logs} / {@code WATER … partial}. */
-    private static String describe(SenseEvent event) {
+    /** One line description, shared with the viewer chat:
+     *  {@code TREE (10, 64, 8) 4 logs} / {@code WATER … partial}. */
+    static String describe(SenseEvent event) {
         StringBuilder line = new StringBuilder(event.kind().name())
                 .append(" (").append(event.anchor().x()).append(", ").append(event.anchor().y())
                 .append(", ").append(event.anchor().z()).append(")");

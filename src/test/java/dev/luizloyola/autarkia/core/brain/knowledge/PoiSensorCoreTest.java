@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.brain.knowledge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
@@ -112,7 +113,9 @@ class PoiSensorCoreTest {
         }
         List<SenseEvent> events = tickUntilQuiet(probe, new Pos(0, 64, 0));
 
-        assertTrue(events.isEmpty());
+        assertTrue(events.stream().allMatch(e -> e.type() == SenseEvent.Type.OVERLOOKED),
+                "every canopy hypothesis died at the ray — and each left a debug event");
+        assertFalse(events.isEmpty(), "the declines are narrated, not silent");
         assertEquals(0, knowledge.size(), "no ray, no belief — the evidence gate");
         assertEquals(0, sensor.claimCount(), "and no claims either: worth a look if she gets closer");
     }

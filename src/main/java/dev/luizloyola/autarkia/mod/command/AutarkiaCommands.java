@@ -7,6 +7,9 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
+import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
+import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
+import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
 import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
@@ -18,6 +21,8 @@ import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
+import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
+import dev.luizloyola.autarkia.mod.brain.Knowledges;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.log.Journals;
@@ -149,7 +154,17 @@ public final class AutarkiaCommands {
                                                 IntegerArgumentType.getInteger(ctx, "count"))))
                                 .then(logCategory("brain", Category.BRAIN))
                                 .then(logCategory("pathfind", Category.PATHFIND))
-                                .then(logCategory("body", Category.BODY)))
+                                .then(logCategory("body", Category.BODY))
+                                .then(logCategory("sense", Category.SENSE)))
+                        // What the resolved Person REMEMBERS (the knowledge store) — beliefs, not
+                        // world state; "view" renders those beliefs as particles + discovery chat.
+                        .then(Commands.literal("knowledge")
+                                .executes(ctx -> knowledgeList(ctx.getSource()))
+                                .then(Commands.literal("view")
+                                        .then(Commands.literal("on")
+                                                .executes(ctx -> knowledgeView(ctx.getSource(), true)))
+                                        .then(Commands.literal("off")
+                                                .executes(ctx -> knowledgeView(ctx.getSource(), false)))))
                         .then(Commands.literal("inv")
                                 .then(Commands.literal("list")
                                         .executes(ctx -> invList(ctx.getSource())))
@@ -327,6 +342,95 @@ public final class AutarkiaCommands {
             line.append(" - ").append(entry.detail());
         }
         return line.toString();
+    }
+
+    /**
+     * Prints everything the resolved Person remembers — the knowledge store's debug view.
+     * Beliefs, not world state: a listed grove may already be chopped (that is the staleness
+     * the store is designed around), and "claimed blocks" is the transient dismissal index.
+     */
+    private static int knowledgeList(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        PersonId id = person.getPersonId();
+        if (id == null) {
+            source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            return 0;
+        }
+        PersonKnowledge knowledge = Knowledges.of(source.getServer()).forPerson(id);
+        String name = person.getName().getString();
+        if (knowledge.size() == 0) {
+            source.sendSuccess(() -> Component.literal(name + " remembers no POIs yet.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        long now = source.getServer().overworld().getGameTime();
+        source.sendSuccess(() -> Component.literal(name + " — " + knowledge.size()
+                        + " remembered POI(s), " + person.poiSensor().claimCount() + " claimed blocks")
+                .withStyle(ChatFormatting.AQUA), false);
+        for (PoiKind kind : PoiKind.values()) {
+            for (PoiMemory memory : knowledge.all(kind)) {
+                String line = formatPoi(person, memory, now);
+                source.sendSuccess(() -> Component.literal(line)
+                        .withStyle(ChatFormatting.GREEN), false);
+            }
+        }
+        return knowledge.size();
+    }
+
+    /** One belief line: {@code TREE (10, 64, 8) - 14 blocks away, 4 logs, seen 32s ago, partial}. */
+    private static String formatPoi(Person person, PoiMemory memory, long now) {
+        double distance = Math.sqrt(person.distanceToSqr(
+                memory.anchor().x() + 0.5, memory.anchor().y() + 0.5, memory.anchor().z() + 0.5));
+        long ageSeconds = memory.age(now) / 20;
+        String age = ageSeconds < 2 ? "just now"
+                : ageSeconds < 120 ? ageSeconds + "s ago"
+                : (ageSeconds / 60) + "m ago";
+        StringBuilder line = new StringBuilder(memory.kind().name())
+                .append(" (").append(memory.anchor().x()).append(", ").append(memory.anchor().y())
+                .append(", ").append(memory.anchor().z()).append(") - ")
+                .append(Math.round(distance)).append(" blocks away, ")
+                .append(memory.units()).append(memory.kind() == PoiKind.TREE ? " logs" : " cells")
+                .append(", seen ").append(age);
+        if (memory.partial()) {
+            line.append(", partial");
+        }
+        return line.toString();
+    }
+
+    /**
+     * Toggles the POI viewer for the resolved Person: particles on every remembered anchor +
+     * bounds corner, and discovery chat routed to the toggling player (which is why "on" needs
+     * a player source; "off" works from anywhere).
+     */
+    private static int knowledgeView(CommandSourceStack source, boolean on) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        PersonId id = person.getPersonId();
+        if (id == null) {
+            source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            return 0;
+        }
+        String name = person.getName().getString();
+        if (on) {
+            ServerPlayer player = source.getPlayer();
+            if (player == null) {
+                source.sendFailure(Component.literal(
+                        "knowledge view on needs a player — the discovery chat goes to you."));
+                return 0;
+            }
+            KnowledgeViewer.watch(source.getServer(), id, player.getUUID());
+            source.sendSuccess(() -> Component.literal("Viewing " + name
+                            + "'s knowledge — particles mark beliefs (ghosts included), discoveries land in your chat.")
+                    .withStyle(ChatFormatting.GREEN), false);
+        } else {
+            boolean was = KnowledgeViewer.unwatch(source.getServer(), id);
+            source.sendSuccess(() -> Component.literal(was
+                            ? "Stopped viewing " + name + "'s knowledge."
+                            : name + " wasn't being viewed.")
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
+        return 1;
     }
 
     /** Line colour per subsystem: body damage in red, movement in aqua, decisions in gold,

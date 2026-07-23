@@ -45,6 +45,8 @@ public final class PoiSensorCore {
     private final CrescentSampler sampler = new CrescentSampler();
     private final Deque<Column> pending = new ArrayDeque<>();
     private RegionGrowth active;
+    /** The surface cell that seeded {@link #active} — reported on a DISMISSED outcome. */
+    private Pos activeSeed;
 
     public PoiSensorCore(PersonKnowledge knowledge) {
         this.knowledge = knowledge;
@@ -120,9 +122,11 @@ public final class PoiSensorCore {
         }
         reads += RAY_COST;
         if (!probe.visibleFromEyes(surface)) {
+            events.add(SenseEvent.overlooked(rule.kind(), surface));
             return reads;
         }
         active = new RegionGrowth(rule, surface, kind);
+        activeSeed = surface;
         return reads;
     }
 
@@ -133,6 +137,7 @@ public final class PoiSensorCore {
             events.add(SenseEvent.noted(memory));
         } else {
             claims.claimNegative(region.kind(), region.blocks());
+            events.add(SenseEvent.dismissed(region.kind(), activeSeed));
         }
     }
 
