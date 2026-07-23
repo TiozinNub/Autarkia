@@ -124,6 +124,14 @@ public final class PersonDirectory extends SavedData {
         return registry.size();
     }
 
+    /**
+     * Every registered identity — loaded or not. Enough to reach an offline person's debug journal,
+     * which is {@code PersonId}-keyed and outlives the entity.
+     */
+    public List<PersonIdentity> all() {
+        return entries();
+    }
+
     private List<PersonIdentity> entries() {
         return List.copyOf(registry.all());
     }

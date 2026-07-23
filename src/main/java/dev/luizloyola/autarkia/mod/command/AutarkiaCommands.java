@@ -68,8 +68,10 @@ import java.util.stream.Stream;
  * through the task machinery the arbiter feeds; {@code brain auto on | off} flips autonomy — ON by
  * default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
  *
- * <p>{@code log} reads the resolved Person's in-memory journal ring, all three subsystems
- * interleaved or one filtered. The durable per-person file is separate.
+ * <p>{@code log} reads the resolved Person's in-memory journal ring, all subsystems or one;
+ * {@code log for <name|id>} reaches any person by directory lookup, including one whose entity is
+ * unloaded (the ring is {@code PersonId}-keyed and outlives the entity). The durable per-person
+ * file is separate.
  *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
  * links it to the entity before it enters the world; a plain {@code /summon autarkia:person}
@@ -78,9 +80,9 @@ import java.util.stream.Stream;
  * one feature at a time.
  *
  * <p>Every person-scoped subcommand resolves through {@link #resolve}: the source's pin, else the
- * nearest. {@code select} pins by name or short-id, or by what a player is looking at; {@code list}
- * enumerates the loaded Persons, since names are not unique. Pins live in {@link PersonSelection} —
- * in memory, per source, gone on restart.
+ * nearest. {@code select} pins by name or short-id, or by what a player is looking at, unpinning
+ * when they look at nobody; {@code list} enumerates the loaded Persons, since names are not unique.
+ * Pins live in {@link PersonSelection} — in memory, per source, gone on restart.
  */
 public final class AutarkiaCommands {
     private AutarkiaCommands() {}
@@ -155,7 +157,24 @@ public final class AutarkiaCommands {
                                 .then(logCategory("brain", Category.BRAIN))
                                 .then(logCategory("pathfind", Category.PATHFIND))
                                 .then(logCategory("body", Category.BODY))
-                                .then(logCategory("sense", Category.SENSE)))
+                                .then(logCategory("sense", Category.SENSE))
+                                // "for <name|id>" reaches any person by directory lookup — including one
+                                // whose entity is unloaded (the ring is PersonId-keyed and outlives the
+                                // entity), which the loaded-only nearest/pinned resolve() cannot.
+                                .then(Commands.literal("for")
+                                        .then(Commands.argument("person", StringArgumentType.string())
+                                                .suggests(ALL_PERSON_SUGGESTIONS)
+                                                .executes(ctx -> logFor(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "person"),
+                                                        null, DEFAULT_LOG_COUNT))
+                                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> logFor(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "person"),
+                                                                null, IntegerArgumentType.getInteger(ctx, "count"))))
+                                                .then(logForCategory("brain", Category.BRAIN))
+                                                .then(logForCategory("pathfind", Category.PATHFIND))
+                                                .then(logForCategory("body", Category.BODY))
+                                                .then(logForCategory("sense", Category.SENSE)))))
                         // What the resolved Person REMEMBERS (the knowledge store) — beliefs, not
                         // world state; "view" renders those beliefs as particles + discovery chat.
                         .then(Commands.literal("knowledge")
@@ -298,10 +317,21 @@ public final class AutarkiaCommands {
                                 IntegerArgumentType.getInteger(ctx, "count"))));
     }
 
+    /** As {@link #logCategory}, but under {@code log for <person>} — targets that resolved token. */
+    private static LiteralArgumentBuilder<CommandSourceStack> logForCategory(String name, Category category) {
+        return Commands.literal(name)
+                .executes(ctx -> logFor(ctx.getSource(),
+                        StringArgumentType.getString(ctx, "person"), category, DEFAULT_LOG_COUNT))
+                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                        .executes(ctx -> logFor(ctx.getSource(),
+                                StringArgumentType.getString(ctx, "person"), category,
+                                IntegerArgumentType.getInteger(ctx, "count"))));
+    }
+
     /**
-     * Prints the resolved Person's last {@code count} journal lines (newest last), optionally
-     * filtered to one {@link Category}. Reads the in-memory ring off the server-scoped
-     * {@link Journals} service — the ephemeral tier; the full archive is the per-person file.
+     * Dumps the journal of the {@link #resolve resolved} (pinned or nearest, and so necessarily
+     * <em>loaded</em>) Person — the common case. {@code log for <name|id>} ({@link #logFor}) is the
+     * variant that reaches an unloaded one.
      */
     private static int logDump(CommandSourceStack source, @Nullable Category category, int count) {
         Person person = resolve(source);
@@ -311,25 +341,79 @@ public final class AutarkiaCommands {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        JournalService journal = Journals.of(source.getServer());
-        List<Entry> all = journal.recent(id, Integer.MAX_VALUE); // the whole ring (bounded); tail below
+        return dumpJournal(source, id, person.getName().getString(), true, category, count);
+    }
+
+    /**
+     * Dumps the journal of the person {@code token} names, resolved against the whole
+     * {@link PersonDirectory} ({@link #resolveDirectory}): the ring is {@code PersonId}-keyed, so an
+     * unloaded or never-spawned person still has one. Tagged {@code (not loaded)} when none is live.
+     */
+    private static int logFor(CommandSourceStack source, String token, @Nullable Category category, int count) {
+        PersonId id = resolveDirectory(source, token);
+        if (id == null) return 0;
+        MinecraftServer server = source.getServer();
+        String name = PersonDirectory.get(server).nameOf(id).orElse(shortId(id));
+        boolean loaded = findLoaded(server, id) != null;
+        return dumpJournal(source, id, name, loaded, category, count);
+    }
+
+    /**
+     * The shared journal readout: the last {@code count} lines for {@code id} (newest last),
+     * optionally filtered to one {@link Category}, read from the in-memory ring off the server-scoped
+     * {@link Journals} service — the ephemeral tier; the full archive is the per-person file.
+     */
+    private static int dumpJournal(CommandSourceStack source, PersonId id, String name, boolean loaded,
+                                   @Nullable Category category, int count) {
+        List<Entry> all = Journals.of(source.getServer()).recent(id, Integer.MAX_VALUE); // whole ring; tail below
         List<Entry> matched = category == null ? all
                 : all.stream().filter(entry -> entry.category() == category).toList();
         List<Entry> lines = matched.subList(Math.max(0, matched.size() - count), matched.size());
-        String name = person.getName().getString();
         String scope = category == null ? "" : " (" + category.name().toLowerCase(Locale.ROOT) + ")";
+        String tag = loaded ? "" : " (not loaded)";
         if (lines.isEmpty()) {
-            source.sendSuccess(() -> Component.literal(name + " has no" + scope + " log yet.")
+            source.sendSuccess(() -> Component.literal(name + " has no" + scope + " log yet" + tag + ".")
                     .withStyle(ChatFormatting.GRAY), false);
             return 0;
         }
-        source.sendSuccess(() -> Component.literal(name + " — last " + lines.size() + " lines" + scope)
+        source.sendSuccess(() -> Component.literal(name + " — last " + lines.size() + " lines" + scope + tag)
                 .withStyle(ChatFormatting.AQUA), false);
         for (Entry entry : lines) {
             source.sendSuccess(() -> Component.literal(formatLine(name, entry))
                     .withStyle(colorFor(entry.category())), false);
         }
         return lines.size();
+    }
+
+    /**
+     * Resolves a {@code name|id} token against the whole directory (loaded or not) to one
+     * {@link PersonId}, or {@code null} having reported why: an id or short-id prefix first, then a
+     * case-insensitive name. An ambiguous name fails hard, listing the candidates' short-ids —
+     * there is no "nearest" to break the tie for an unloaded person.
+     */
+    private static @Nullable PersonId resolveDirectory(CommandSourceStack source, String rawToken) {
+        String token = rawToken.trim();
+        String lower = token.toLowerCase(Locale.ROOT);
+        List<PersonIdentity> all = PersonDirectory.get(source.getServer()).all();
+        List<PersonIdentity> matches = all.stream()
+                .filter(identity -> identity.id().toString().toLowerCase(Locale.ROOT).startsWith(lower))
+                .toList();
+        if (matches.isEmpty()) {
+            matches = all.stream().filter(identity -> identity.name().equalsIgnoreCase(token)).toList();
+        }
+        if (matches.isEmpty()) {
+            source.sendFailure(Component.literal(
+                    "No person matches '" + token + "' — try a name or id from /autarkia list."));
+            return null;
+        }
+        if (matches.size() > 1) {
+            String ids = matches.stream().map(identity -> shortId(identity.id()))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            source.sendFailure(Component.literal(matches.size() + " persons named '" + token
+                    + "' — pick one by id: " + ids));
+            return null;
+        }
+        return matches.get(0).id();
     }
 
     /** One journal line, the {@code Bob - pathfind - target(…) - success N nodes} shape, tick-prefixed. */
@@ -707,6 +791,16 @@ public final class AutarkiaCommands {
         return SharedSuggestionProvider.suggest(tokens, builder);
     };
 
+    /** Suggests every registered person's name + short id (loaded or not) for {@code log for},
+     *  which (unlike {@code select}) can reach an unloaded person's journal. */
+    private static final SuggestionProvider<CommandSourceStack> ALL_PERSON_SUGGESTIONS = (ctx, builder) -> {
+        Stream<String> tokens = PersonDirectory.get(ctx.getSource().getServer()).all().stream()
+                .flatMap(identity -> Stream.of(
+                        identity.name().contains(" ") ? '"' + identity.name() + '"' : identity.name(),
+                        shortId(identity.id())));
+        return SharedSuggestionProvider.suggest(tokens, builder);
+    };
+
     /** Pins the Person named (or short-id-prefixed) by {@code rawToken}. */
     private static int selectByToken(CommandSourceStack source, String rawToken) {
         String token = rawToken.trim();
@@ -744,15 +838,15 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** No-argument {@code select}: a player pins the Person under their crosshair; the console (or any
-     *  non-player source) pins the nearest one. */
+    /** No-argument {@code select}: a player pins the Person under their crosshair, or unpins when
+     *  looking at nobody; the console (or any non-player source) pins the nearest one. */
     private static int selectHere(CommandSourceStack source) {
         boolean fromPlayer = source.getEntity() instanceof ServerPlayer;
         Person target = source.getEntity() instanceof ServerPlayer player ? lookedAt(player) : nearest(source);
         if (target == null) {
             if (fromPlayer) {
-                source.sendFailure(Component.literal("You're not looking at a Person (within "
-                        + (int) NEAREST_RADIUS + " blocks)."));
+                // Looking at nobody clears any current pin — the same as `select clear`.
+                return selectClear(source);
             }
             // the console branch already reported via nearest()
             return 0;
