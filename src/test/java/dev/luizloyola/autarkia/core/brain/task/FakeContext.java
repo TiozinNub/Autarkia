@@ -14,6 +14,11 @@ final class FakeContext implements BrainContext {
     final FakeMover mover = new FakeMover();
     final FakeConsumer consumer = new FakeConsumer();
     final FakePercepts percepts = new FakePercepts();
+    /**
+     * The cost ceiling the executor gates methods by (raw food is priced out at 60, admitted at
+     * ∞). Defaults to ∞, so tests predating cost tolerance see every applicable method.
+     */
+    double costTolerance = Double.POSITIVE_INFINITY;
     private final ActuatorAccess actuators = new ActuatorAccess() {
         @Override
         public Mover mover() {
@@ -34,5 +39,10 @@ final class FakeContext implements BrainContext {
     @Override
     public Percepts percepts() {
         return percepts;
+    }
+
+    @Override
+    public double costTolerance() {
+        return costTolerance;
     }
 }

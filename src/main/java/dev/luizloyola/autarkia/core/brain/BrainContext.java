@@ -17,4 +17,13 @@ public interface BrainContext {
 
     /** The brain's senses — what she can currently perceive of herself and the world. */
     Percepts percepts();
+
+    /**
+     * The maximum method cost currently acceptable, in the walk-block currency methods price
+     * themselves in — the executor treats any applicable method costing more than this as if it
+     * were inapplicable. Set by the arbiter from the active instinct's pressure through
+     * {@link ToleranceCurve}. {@link Double#POSITIVE_INFINITY} means unbounded: the STARVING
+     * plateau, and how manual/debug driving runs.
+     */
+    double costTolerance();
 }

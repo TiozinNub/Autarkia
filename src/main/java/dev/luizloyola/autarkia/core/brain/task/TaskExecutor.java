@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.brain.task;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Runs one task tree at a time — the execution slot of the task layer, a recursive-HTN walker.
@@ -116,6 +117,15 @@ public final class TaskExecutor {
     }
 
     /**
+     * The status the last ROOT to run finished with — empty until any root has reached a terminal,
+     * and unchanged by {@link #cancel}. The arbiter reads it right after {@link #tick}: a FAILED
+     * root puts its instinct on the fail-cooldown, a SUCCESS just re-arbitrates.
+     */
+    public Optional<TaskStatus> lastStatus() {
+        return Optional.ofNullable(lastStatus);
+    }
+
+    /**
      * The debug readout: while busy, the expansion path — each frame's compound and chosen method,
      * then the current node, e.g. {@code "running: satisfy hunger > eat from inventory > consume
      * slot 14"}; idle, {@code "idle (last: <root> -> <status>)"} or plain {@code "idle"}.
@@ -186,15 +196,21 @@ public final class TaskExecutor {
     }
 
     /**
-     * Select the cheapest applicable not-yet-tried method of {@code frame} and expand it (cursor
-     * reset to its first subtask). Applicability and cost are read NOW, against the given context
-     * — never cached from an earlier selection. Ties go to the earlier list entry (strict
-     * less-than), keeping selection deterministic. Returns {@code false} when no method is left.
+     * Select the cheapest applicable not-yet-tried method of {@code frame} whose cost fits the
+     * current {@link BrainContext#costTolerance()} and expand it (cursor reset). Applicability and
+     * cost are read NOW, never cached; ties go to the earlier list entry, keeping selection
+     * deterministic.
+     *
+     * <p><b>The tolerance gate.</b> A method costing more than the tolerance is skipped as if
+     * inapplicable and not marked tried, since a higher tolerance later could pick it; everything
+     * priced out fails the compound. A raw potato ({@code EatLastResort}, priced 80) waits while
+     * merely hungry (tolerance 60) and is eaten while starving (tolerance ∞).
      */
     private boolean choose(Frame frame, BrainContext ctx) {
         Method best = null;
         int bestIndex = -1;
         double bestCost = 0.0;
+        double tolerance = ctx.costTolerance();
         for (int i = 0; i < frame.methods.size(); i++) {
             if (frame.tried[i]) {
                 continue;
@@ -204,6 +220,9 @@ public final class TaskExecutor {
                 continue;
             }
             double cost = method.estimateCost(ctx);
+            if (cost > tolerance) {
+                continue; // priced out of the current tolerance — inapplicable in effect
+            }
             if (best == null || cost < bestCost) {
                 best = method;
                 bestIndex = i;

@@ -4,12 +4,14 @@ import dev.luizloyola.autarkia.compat.inv.CookedForms;
 import dev.luizloyola.autarkia.compat.inv.FoodValues;
 import dev.luizloyola.autarkia.core.brain.sense.FoodLookup;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
+import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.FoodValue;
 import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.Optional;
+import net.minecraft.core.BlockPos;
 
 /**
  * The {@link Percepts} <em>adapter</em>: what a {@link Person}'s brain can sense, as version-neutral
@@ -59,5 +61,12 @@ public final class PersonPercepts implements Percepts {
     @Override
     public FoodLookup foods() {
         return this.foods;
+    }
+
+    /** Where the body actually stands, in whole blocks. */
+    @Override
+    public Pos position() {
+        BlockPos pos = this.person.blockPosition();
+        return new Pos(pos.getX(), pos.getY(), pos.getZ());
     }
 }

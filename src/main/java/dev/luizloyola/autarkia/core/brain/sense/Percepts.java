@@ -28,4 +28,11 @@ public interface Percepts {
 
     /** What is edible and what eating it does — see {@link FoodLookup}. */
     FoodLookup foods();
+
+    /**
+     * Where the body stands right now — her feet cell, in whole blocks (the pathfinder/Navigator
+     * grid), read LIVE: {@code WanderStep} offsets each roam target from where she actually is,
+     * never from a stale spawn point.
+     */
+    Pos position();
 }

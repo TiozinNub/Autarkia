@@ -11,12 +11,10 @@ import dev.luizloyola.autarkia.core.person.FoodValue;
 import org.junit.jupiter.api.Test;
 
 /**
- * The {@link SatisfyHunger} / {@link EatFromInventory} pair end to end on the full executor: lazy
- * expansion picks the slot at execution time, the offhand counts as carried food, the full
- * describe path, and the no-food root failure that never touches the consumer. The slot policy's
- * own tiers (least waste, raw-aversion, the STARVING gate) are pinned in
- * {@link EatFromInventoryTest}; each test sets a hungry body, since the policy refuses to eat at a
- * full bar.
+ * End-to-end tests for the {@link SatisfyHunger} / {@link EatReadyFood} pair on the full
+ * executor. The slot policy's tiers and the cost-tolerance gate are pinned in
+ * {@link EatReadyFoodTest} / {@link EatLastResortTest}; here every test sets a hungry body,
+ * since the policy refuses to eat at a full bar.
  */
 class SatisfyHungerTest {
 
@@ -76,7 +74,7 @@ class SatisfyHungerTest {
         ctx.consumer.setState(ConsumeState.CONSUMING);
         executor.tick(ctx); // mid-chew
         assertTrue(executor.isBusy());
-        assertEquals("running: satisfy hunger > eat from inventory > consume slot 5",
+        assertEquals("running: satisfy hunger > eat ready food > consume slot 5",
                 executor.describe(), "the full expansion path, printable mid-bite");
         ctx.consumer.setState(ConsumeState.FINISHED);
         executor.tick(ctx); // SUCCESS bubbles: primitive -> method -> compound -> root
@@ -108,6 +106,7 @@ class SatisfyHungerTest {
     @Test
     void describesReadAsTheDesignDocNamesThem() {
         assertEquals("satisfy hunger", new SatisfyHunger().describe());
-        assertEquals("eat from inventory", new EatFromInventory().describe());
+        assertEquals("eat ready food", new EatReadyFood().describe());
+        assertEquals("eat last resort", new EatLastResort().describe());
     }
 }
