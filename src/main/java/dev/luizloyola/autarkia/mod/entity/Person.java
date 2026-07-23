@@ -23,6 +23,7 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.damagesource.DamageSource;
@@ -37,6 +38,7 @@ import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -238,6 +240,9 @@ public class Person extends Avatar {
     @Override
     protected void serverAiStep() {
         super.serverAiStep();
+        // Gather any dropped items we're standing over — before the mirror runs, so a caught item
+        // that lands in the selected hotbar slot is held (and rendered) this same tick.
+        pickUpNearbyItems((ServerLevel) level());
         syncEquipmentMirror();
         // Metabolism runs every server tick no matter who owns the movement input below: food
         // burns (and starvation bites) whether she is navigating, debug-sprinting, or idle.
@@ -632,6 +637,53 @@ public class Person extends Avatar {
             spawnAtLocation(level, ItemStacks.toVanilla(entry.stack(), registryAccess()));
         }
         this.inventory.clear();
+    }
+
+    /**
+     * Collects nearby dropped items into the carried inventory — a Person gathers loot by walking
+     * over it, exactly as a player does. Deliberately <b>not</b> gated on the {@code mobGriefing}
+     * gamerule: picking things up is intended behaviour, not the incidental griefing that gate guards
+     * against.
+     *
+     * <p>The scan mirrors vanilla's {@code Mob} looting reach — a one-block horizontal box around the
+     * body — skipping empty stacks and any still within their pickup delay, so fresh death drops and
+     * a player's Q-tossed item aren't snatched instantly. Whatever <em>fits</em> is removed from the
+     * ground stack and flies in on every client ({@link #take}); a full inventory leaves the item
+     * lying. Items {@code target}ed at a player aren't special-cased — {@code ItemEntity} exposes no
+     * accessor for it, and vanilla's own mob looting ignores it the same way.
+     */
+    private void pickUpNearbyItems(ServerLevel level) {
+        if (!isAlive()) {
+            return;
+        }
+        for (ItemEntity itemEntity :
+                level.getEntitiesOfClass(ItemEntity.class, getBoundingBox().inflate(1.0, 0.0, 1.0))) {
+            if (itemEntity.isRemoved() || itemEntity.hasPickUpDelay()) {
+                continue;
+            }
+            ItemStack ground = itemEntity.getItem();
+            if (ground.isEmpty()) {
+                continue;
+            }
+            int before = ground.getCount();
+            dev.luizloyola.autarkia.core.inv.ItemStack leftover =
+                    this.inventory.add(ItemStacks.toCore(ground, registryAccess()));
+            int taken = before - leftover.count();
+            if (taken <= 0) {
+                continue; // inventory full — leave it on the ground
+            }
+            take(itemEntity, taken);   // the caught portion flies to this Person on every client
+            onItemPickup(itemEntity);  // advancement hook, if a player had thrown it
+            playSound(SoundEvents.ITEM_PICKUP, 0.2F,
+                    ((this.random.nextFloat() - this.random.nextFloat()) * 0.7F + 1.0F) * 2.0F);
+            if (leftover.isEmpty()) {
+                itemEntity.discard();
+            } else {
+                // A fresh stack (new identity) so SynchedEntityData re-broadcasts the reduced ground
+                // count — shrinking the existing stack in place would not mark the data watcher dirty.
+                itemEntity.setItem(ground.copyWithCount(leftover.count()));
+            }
+        }
     }
 
     public Identifier getSkinTexture() {
