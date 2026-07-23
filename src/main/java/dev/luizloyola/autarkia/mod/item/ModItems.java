@@ -14,10 +14,10 @@ public final class ModItems {
     private ModItems() {}
 
     /**
-     * Debug wand — a tool for probing NPCs during development. Its client model points at
-     * {@code minecraft:item/stick}, with a forced glint so it stands out. Right-clicking a
-     * {@code Person} selects it (see {@link DebugWandItem}), binding the selection to the stack's
-     * {@link ModComponents#SELECTED_PERSON}.
+     * Debug wand — a development tool for probing NPCs. A vanilla stick model
+     * ({@code minecraft:item/stick}) with a forced enchantment glint so it stands out in the
+     * inventory. Right-clicking a {@code Person} selects it (see {@link DebugWandItem}); the
+     * selection is per-player in {@code PersonSelection}, not on the stack.
      */
     public static final Item DEBUG_WAND = register("debug_wand",
             props -> new DebugWandItem(props.component(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)));

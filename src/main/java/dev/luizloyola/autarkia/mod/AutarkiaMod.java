@@ -4,11 +4,11 @@ import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;
-import dev.luizloyola.autarkia.mod.item.ModComponents;
 import dev.luizloyola.autarkia.mod.item.ModItems;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.log.Journals;
 import dev.luizloyola.autarkia.mod.nav.PathfinderService;
+import dev.luizloyola.autarkia.mod.net.DebugGlowSync;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.minecraft.world.InteractionHand;
@@ -25,10 +25,10 @@ public class AutarkiaMod implements ModInitializer {
     @Override
     public void onInitialize() {
         ModEntities.init();
-        ModComponents.init();
         ModItems.init();
         ModMenus.init();
         AutarkiaCommands.register();
+        DebugGlowSync.install();
         PathfinderService.init();
         Journals.init();
         KnowledgeViewer.init();

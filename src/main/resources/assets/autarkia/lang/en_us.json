@@ -3,7 +3,6 @@
   "item.autarkia.debug_wand": "Debug Wand",
   "item.autarkia.debug_wand.selected": "Selected %s",
   "item.autarkia.debug_wand.no_identity": "That person has no identity yet",
-  "item.autarkia.debug_wand.bound": "Bound: %s",
   "item.autarkia.debug_wand.walk_on": "%s walking forward",
   "item.autarkia.debug_wand.walk_off": "%s stopped",
   "item.autarkia.debug_wand.no_selection": "No person selected — right-click one first",
