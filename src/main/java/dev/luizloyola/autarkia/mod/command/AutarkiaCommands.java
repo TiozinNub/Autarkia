@@ -69,8 +69,8 @@ import java.util.stream.Stream;
  * {@link PersonDirectory}: the name is never synced to clients.
  *
  * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs the same work
- * through the task machinery the arbiter feeds; {@code brain auto on | off} flips autonomy — ON by
- * default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
+ * through the task machinery the arbiter feeds; {@code brain auto true | false} flips autonomy — ON
+ * by default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
  *
  * <p>{@code log} reads the resolved Person's in-memory journal ring, all subsystems or one;
  * {@code log for <name|id>} reaches any person by directory lookup, including one whose entity is
@@ -159,9 +159,9 @@ public final class AutarkiaCommands {
                                         .executes(ctx -> brainCancel(ctx.getSource())))
                                 // The autonomy switch — spawns start ON.
                                 .then(Commands.literal("auto")
-                                        .then(Commands.literal("on")
+                                        .then(Commands.literal("true")
                                                 .executes(ctx -> brainAuto(ctx.getSource(), true)))
-                                        .then(Commands.literal("off")
+                                        .then(Commands.literal("false")
                                                 .executes(ctx -> brainAuto(ctx.getSource(), false)))))
                         // The per-person debug journal (see the log package). Top-level, not under a
                         // subsystem group, because one Person's log interleaves brain + pathfind + body.
@@ -197,9 +197,9 @@ public final class AutarkiaCommands {
                         .then(Commands.literal("knowledge")
                                 .executes(ctx -> knowledgeList(ctx.getSource()))
                                 .then(Commands.literal("view")
-                                        .then(Commands.literal("on")
+                                        .then(Commands.literal("true")
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), true)))
-                                        .then(Commands.literal("off")
+                                        .then(Commands.literal("false")
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), false)))))
                         // The personal board (layer 3's degenerate v1): posted/claimed/cooling.
                         .then(Commands.literal("board")
@@ -405,7 +405,7 @@ public final class AutarkiaCommands {
     /** The note appended to a manual {@code brain goto}/{@code brain eat} reply when that very
      *  call is what took the wheel from the arbiter. */
     private static String autoDisabledSuffix(boolean autoDisabled) {
-        return autoDisabled ? " (auto disabled — re-enable with /autarkia brain auto on)" : "";
+        return autoDisabled ? " (auto disabled — re-enable with /autarkia brain auto true)" : "";
     }
 
     /** A {@code log <category>} branch: dumps only that subsystem's lines (optionally a count). */
@@ -584,8 +584,8 @@ public final class AutarkiaCommands {
 
     /**
      * Toggles the POI viewer for the resolved Person: particles on every remembered anchor +
-     * bounds corner, and discovery chat routed to the toggling player (which is why "on" needs
-     * a player source; "off" works from anywhere).
+     * bounds corner, and discovery chat routed to the toggling player (which is why "true" needs
+     * a player source; "false" works from anywhere).
      */
     private static int knowledgeView(CommandSourceStack source, boolean on) {
         Person person = resolve(source);
@@ -600,7 +600,7 @@ public final class AutarkiaCommands {
             ServerPlayer player = source.getPlayer();
             if (player == null) {
                 source.sendFailure(Component.literal(
-                        "knowledge view on needs a player — the discovery chat goes to you."));
+                        "knowledge view true needs a player — the discovery chat goes to you."));
                 return 0;
             }
             KnowledgeViewer.watch(source.getServer(), id, player.getUUID());
@@ -758,14 +758,14 @@ public final class AutarkiaCommands {
 
     /**
      * Spawns a new Person at {@code pos} (or the source's position when {@code null}), facing south
-     * like {@code /summon}. Directory-first: the identity — {@code name} if given, else generated —
-     * is registered and linked to the entity before it enters the world, where a plain
-     * {@code /summon} mints one a tick later in {@link Person#tick()}. The entity is created before
-     * the directory is touched, so a null entity leaves no orphan entry.
+     * (yaw 0) like {@code /summon}. Directory-first: an identity — {@code name} if given, else
+     * generated — is registered in the {@link PersonDirectory} and linked to the entity before it
+     * enters the world. The entity is created before the directory is touched, so the common failure
+     * (a null entity) leaves no orphan entry.
      *
-     * <p>{@code autonomous} is the arbiter switch every Person spawns with ON;
-     * {@code person spawn nobrain} passes {@code false} before the first tick — an inert body,
-     * still drivable via {@code /autarkia brain}.
+     * <p>{@code autonomous} is the arbiter switch every Person spawns with ON; {@code person spawn
+     * nobrain} passes {@code false} before the first tick, leaving an inert body still drivable via
+     * {@code /autarkia brain}.
      */
     private static int personSpawn(CommandSourceStack source, @Nullable Vec3 pos, @Nullable String name,
                                    boolean autonomous) {
@@ -798,7 +798,7 @@ public final class AutarkiaCommands {
         }
         Appearance appearance = identity.appearance();
         String where = String.format(Locale.ROOT, "%.1f %.1f %.1f", spawnPos.x, spawnPos.y, spawnPos.z);
-        String brainNote = autonomous ? "" : " — brain off (/autarkia brain auto on to enable)";
+        String brainNote = autonomous ? "" : " — brain off (/autarkia brain auto true to enable)";
         source.sendSuccess(() -> Component.literal("Spawned ")
                 .append(Component.literal(identity.name()).withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" (" + appearance.gender() + ") at " + where + brainNote)
