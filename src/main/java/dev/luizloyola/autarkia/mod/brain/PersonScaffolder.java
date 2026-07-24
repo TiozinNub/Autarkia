@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.brain;
 import dev.luizloyola.autarkia.core.brain.act.ScaffoldState;
 import dev.luizloyola.autarkia.core.brain.act.Scaffolder;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -72,6 +73,7 @@ public final class PersonScaffolder implements Scaffolder {
         this.itemId = itemId;
         this.ticks = 0;
         this.state = ScaffoldState.RISING;
+        log("step up", "from " + feet.toShortString());
         return true;
     }
 
@@ -90,6 +92,7 @@ public final class PersonScaffolder implements Scaffolder {
                     || !level.getBlockState(base).canBeReplaced()
                     || person.inventory().count(itemId) <= 0) {
                 state = ScaffoldState.FAILED;
+                log("step failed", "mid-air, cell or item gone at " + base.toShortString());
                 return;
             }
             BlockState blockState = blockItem.getBlock().defaultBlockState();
@@ -101,11 +104,13 @@ public final class PersonScaffolder implements Scaffolder {
             person.inventory().remove(itemId, 1);
             placed.push(new Pos(base.getX(), base.getY(), base.getZ()));
             state = ScaffoldState.RISEN;
+            log("placed", itemId + " at " + base.toShortString());
             return;
         }
         if (++ticks > STEP_TIMEOUT_TICKS) {
             person.setJumping(false);
             state = ScaffoldState.FAILED; 
+            log("step failed", "never cleared block height above " + base.toShortString());
         }
     }
 
@@ -120,6 +125,10 @@ public final class PersonScaffolder implements Scaffolder {
         double horizontal = Math.hypot(center.x - eye.x, center.z - eye.z);
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal));
         person.setXRot(pitch);
+    }
+
+    private void log(String event, String detail) {
+        person.journal().record(Category.BODY, "scaffold " + event, detail);
     }
 
     @Override
