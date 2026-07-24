@@ -17,6 +17,14 @@ import dev.luizloyola.autarkia.core.brain.BrainContext;
  */
 public non-sealed interface PrimitiveTask extends Task {
     /**
+     * The one-liner for a FAILED ending, surfaced into the journal by the executor. The default names
+     * the task; a primitive with distinguishable endings overrides with the actual one.
+     */
+    default String failureDetail() {
+        return describe() + " failed";
+    }
+
+    /**
      * One decision per tick. Called every tick until a terminal status is returned, and never
      * after — the executor never ticks a finished task, so implementations need not defend
      * against post-terminal ticks.

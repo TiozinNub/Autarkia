@@ -130,7 +130,7 @@ public final class TaskExecutor {
         if (status == TaskStatus.SUCCESS) {
             succeedCurrent(ctx);
         } else if (status == TaskStatus.FAILED) {
-            noteFailure(leaf.describe() + " failed");
+            noteFailure(leaf.failureDetail());
             failCurrent(ctx);
         }
     }

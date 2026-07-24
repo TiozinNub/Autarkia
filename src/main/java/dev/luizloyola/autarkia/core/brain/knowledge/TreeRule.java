@@ -11,9 +11,10 @@ import java.util.Optional;
  * trunks it contains. Touching canopies fuse deliberately, and the growth caps turn a
  * mega-forest into several partial groves.
  *
- * <p>Accepts iff the mass holds <b>≥ 1 log and ≥ 1 sunlit leaf</b> — a leaf sitting at its own
- * column's surface. A roofed-over or cave structure never validates, and a bare log pile is a
- * woodpile. Anchor = the lowest log, nearest the seed among ties. Units = log count.
+ * <p>Accepts iff the mass holds <b>≥ 1 GROUNDED log, ≥ 1 log and ≥ 1 sunlit leaf</b> — grounded
+ * means standing on a non-tree block. A roofed-over or cave structure never validates, a bare
+ * log pile is a woodpile, and FLOATING WOOD IS NOT A TREE. Anchor = the lowest grounded log,
+ * nearest the seed among ties. Units = log count.
  */
 public final class TreeRule implements GrowthRule {
     public static final TreeRule INSTANCE = new TreeRule();
@@ -34,19 +35,26 @@ public final class TreeRule implements GrowthRule {
     @Override
     public Optional<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seed, BlockProbe probe) {
         List<Pos> logs = new ArrayList<>();
+        List<Pos> grounded = new ArrayList<>();
         boolean sunlit = false;
         for (Map.Entry<Pos, BlockKind> entry : blocks.entrySet()) {
             if (entry.getValue() == BlockKind.LOG) {
-                logs.add(entry.getKey());
+                Pos log = entry.getKey();
+                logs.add(log);
+                Pos below = new Pos(log.x(), log.y() - 1, log.z());
+                if (blocks.get(below) != BlockKind.LOG
+                        && probe.at(below.x(), below.y(), below.z()) == BlockKind.OTHER) {
+                    grounded.add(log); // stands on a non-tree block: a stump candidate
+                }
             } else if (!sunlit && entry.getValue() == BlockKind.LEAVES) {
                 Pos leaf = entry.getKey();
                 sunlit = leaf.y() >= probe.surfaceY(leaf.x(), leaf.z());
             }
         }
-        if (logs.isEmpty() || !sunlit) {
-            return Optional.empty();
+        if (grounded.isEmpty() || !sunlit) {
+            return Optional.empty(); // floating wood, woodpiles, roofed growths: not trees
         }
-        return Optional.of(new Evaluation(anchorOf(logs, seed), logs.size()));
+        return Optional.of(new Evaluation(anchorOf(grounded, seed), logs.size()));
     }
 
     /** The lowest log; among equally low ones, the horizontally nearest to the seed. */

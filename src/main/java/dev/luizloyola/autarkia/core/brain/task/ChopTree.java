@@ -62,6 +62,9 @@ public final class ChopTree implements PrimitiveTask {
     private final List<Pos> deferred = new ArrayList<>();
     private final Set<Pos> triedStranded = new HashSet<>();
 
+    /** The plain one-liner for a FAILED ending — what {@link #failureDetail()} reports. */
+    private String ending;
+
     private Pos target;
     private boolean walked;
     private boolean walkIssued;
@@ -98,6 +101,13 @@ public final class ChopTree implements PrimitiveTask {
     public void cancel(BrainContext ctx) {
         ctx.actuators().breaker().abort();
         ctx.actuators().mover().stop();
+    }
+
+    @Override
+    public String failureDetail() {
+        Pos a = memory.anchor();
+        return "chop TREE (" + a.x() + ", " + a.y() + ", " + a.z() + "): "
+                + (ending != null ? ending : "failed");
     }
 
     @Override
@@ -138,6 +148,7 @@ public final class ChopTree implements PrimitiveTask {
             phase = Phase.SCAN;
             return TaskStatus.RUNNING;
         }
+        ending = "could not reach the tree";
         ctx.journal().record(Category.BRAIN, "chop", "could not reach the tree");
         return TaskStatus.FAILED; // memory kept: the tree is (as far as she knows) real
     }
@@ -159,19 +170,10 @@ public final class ChopTree implements PrimitiveTask {
         List<TreeSurvey.Tree> trees = TreeSurvey.survey(scan.result().blocks(), probe);
         tree = TreeSurvey.nearest(trees, memory.anchor()).orElse(null);
         if (tree == null) {
-            // No grounded trunk anywhere: a floating remnant. Take what we can reach — all its
-            // logs as branches of a virtual trunk; no stump, no mount, no replant.
-            List<Pos> logs = new ArrayList<>();
-            for (var entry : scan.result().blocks().entrySet()) {
-                if (entry.getValue() == BlockKind.LOG) {
-                    logs.add(entry.getKey());
-                }
-            }
-            if (logs.isEmpty()) {
-                return ghost(ctx);
-            }
-            logs.sort(java.util.Comparator.comparingInt(Pos::y));
-            tree = new TreeSurvey.Tree(List.of(), List.of(), logs);
+            // No grounded trunk in the blob: whatever stands here is not a tree anymore.
+            // Same ending as a bare ghost; perception won't re-remember floating wood either
+            // (TreeRule requires a grounded log), so this heals legacy memories on first visit.
+            return ghost(ctx);
         }
         ctx.journal().record(Category.BRAIN, "chop",
                 "felling (" + tree.logCount() + " logs, " + tree.branches().size() + " branches)");
@@ -450,6 +452,7 @@ public final class ChopTree implements PrimitiveTask {
             ctx.knowledge().forget(PoiKind.TREE, memory.anchor());
             return TaskStatus.SUCCESS;
         }
+        ending = "nothing reachable to fell";
         ctx.journal().record(Category.BRAIN, "chop", "nothing reachable to fell");
         return TaskStatus.FAILED; // real tree, kept in memory; retry pacing is the caller's job
     }
@@ -457,6 +460,7 @@ public final class ChopTree implements PrimitiveTask {
     private TaskStatus ghost(BrainContext ctx) {
         Pos a = memory.anchor();
         ctx.knowledge().forget(PoiKind.TREE, a);
+        ending = "no tree here anymore — forgot it";
         ctx.journal().record(Category.BRAIN, "chop",
                 "grove gone — forgot TREE (" + a.x() + ", " + a.y() + ", " + a.z() + ")");
         return TaskStatus.FAILED;

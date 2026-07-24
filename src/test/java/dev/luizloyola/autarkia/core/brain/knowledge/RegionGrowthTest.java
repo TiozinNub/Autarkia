@@ -62,6 +62,20 @@ class RegionGrowthTest {
     }
 
     @Test
+    void floatingWoodIsNotATree() {
+        FakeProbe probe = new FakeProbe();
+        probe.set(5, 66, 5, BlockKind.LOG);   // hovering: air beneath
+        probe.set(5, 67, 5, BlockKind.LOG);
+        probe.set(5, 68, 5, BlockKind.LEAVES); // sunlit leaf and all — still not a tree
+        GrownRegion region = grow(
+                new RegionGrowth(TreeRule.INSTANCE, new Pos(5, 68, 5), BlockKind.LEAVES),
+                probe, 10_000);
+
+        assertFalse(region.accepted(),
+                "no grounded log in the blob: a chopped-out remnant is scenery, never a memory");
+    }
+
+    @Test
     void aWoodpileIsNotATree() {
         FakeProbe probe = new FakeProbe();
         for (int y = 64; y <= 66; y++) {
