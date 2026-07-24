@@ -49,6 +49,7 @@ public final class PersonBlockPlacer implements BlockPlacer {
         if (person.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > REACH * REACH) {
             return false;
         }
+        person.faceBlock(pos); 
         level.setBlockAndUpdate(pos, state);
         SoundType sound = state.getSoundType();
         level.playSound(null, pos, sound.getPlaceSound(), SoundSource.BLOCKS,

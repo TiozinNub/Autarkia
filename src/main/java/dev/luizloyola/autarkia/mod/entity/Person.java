@@ -23,6 +23,7 @@ import dev.luizloyola.autarkia.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.Locale;
 import java.util.UUID;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -645,6 +646,29 @@ public class Person extends Avatar {
         setYHeadRot(heading);
         this.yBodyRot = heading;
         setXRot(0.0F);
+    }
+
+    /**
+     * Turn the gaze onto the centre of {@code cell} — head, eyes, and, unless the cell is straight
+     * underfoot, body. The one shared answer to "look at that block" for every arm actuator
+     * (breaker, placer, scaffolder), so none re-derives the trig. A cell in her own column,
+     * underfoot or overhead, has no meaningful bearing (horizontal distance ~0), so the travel yaw
+     * is kept and only the pitch tilts.
+     */
+    public void faceBlock(BlockPos cell) {
+        Vec3 center = Vec3.atCenterOf(cell);
+        Vec3 eye = getEyePosition();
+        double dx = center.x - eye.x;
+        double dy = center.y - eye.y;
+        double dz = center.z - eye.z;
+        setXRot((float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))));
+        BlockPos self = blockPosition();
+        if (cell.getX() != self.getX() || cell.getZ() != self.getZ()) {
+            float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
+            setYRot(yaw);
+            setYHeadRot(yaw);
+            this.yBodyRot = yaw;
+        }
     }
 
     /**

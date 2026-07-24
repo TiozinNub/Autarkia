@@ -79,7 +79,7 @@ public final class PersonBlockBreaker implements BlockBreaker {
             fail();
             return;
         }
-        faceTarget();
+        person.faceBlock(target); 
         progress += perTick(now, hardness);
         // Every tick, like a mining player (continueDestroyBlock does this): swing()'s own
         // guard restarts the animation at half duration — the player arm's mining cadence, owned by
@@ -131,21 +131,6 @@ public final class PersonBlockBreaker implements BlockBreaker {
 
     private boolean inReach(BlockPos pos) {
         return person.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) <= REACH * REACH;
-    }
-
-    /** Head, eyes, and body toward the block being worked. */
-    private void faceTarget() {
-        Vec3 center = Vec3.atCenterOf(target);
-        Vec3 eye = person.getEyePosition();
-        double dx = center.x - eye.x;
-        double dy = center.y - eye.y;
-        double dz = center.z - eye.z;
-        float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
-        float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
-        person.setYRot(yaw);
-        person.yBodyRot = yaw;
-        person.setYHeadRot(yaw);
-        person.setXRot(pitch);
     }
 
     private void fail() {
