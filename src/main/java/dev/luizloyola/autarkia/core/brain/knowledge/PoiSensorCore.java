@@ -105,8 +105,12 @@ public final class PoiSensorCore {
             BlockKind kind = probe.at(surface.x(), surface.y(), surface.z());
             reads++;
             if (kind == exact.expected()) {
-                if (exact.anchor() != null) {
-                    knowledge.refresh(exact.kind(), exact.anchor(), now);
+                if (exact.anchor() != null
+                        && !knowledge.refresh(exact.kind(), exact.anchor(), now)) {
+                    // Orphaned claims: the memory is gone (a task forgot it, or eviction) but
+                    // the claim survived and would mask the region forever. Drop them so a later
+                    // sweep re-discovers whatever stands here now.
+                    claims.dropRegion(exact.kind(), exact.anchor());
                 }
             } else {
                 invalidate(surface, exact, events);

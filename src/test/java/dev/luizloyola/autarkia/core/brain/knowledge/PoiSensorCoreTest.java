@@ -121,6 +121,25 @@ class PoiSensorCoreTest {
     }
 
     @Test
+    void aTaskSideForgetDoesNotLeaveHerBlindToTheRegrownTree() {
+        FakeProbe probe = new FakeProbe();
+        probe.placeOak(8, 0);
+        tickUntilQuiet(probe, new Pos(0, 64, 0));
+        // A task (ChopTree's ghost path, an eviction) forgets the memory without the sensor's
+        // claims hearing — a regrown sapling then stayed invisible behind the orphaned claims.
+        knowledge.forget(PoiKind.TREE, new Pos(8, 64, 0));
+
+        // The return pass: the first orphaned column drops the region's claims, which un-masks
+        // the rest of the canopy for the very same sweep — re-discovery is immediate.
+        tickUntilQuiet(probe, new Pos(200, 64, 0));
+        List<SenseEvent> events = tickUntilQuiet(probe, new Pos(0, 64, 0));
+
+        assertEquals(1, knowledge.size(), "the tree is believed in again");
+        assertTrue(events.stream().anyMatch(e -> e.type() == SenseEvent.Type.NOTED),
+                "re-discovered as a fresh grove, not masked forever");
+    }
+
+    @Test
     void aPondIsNotedAsWater() {
         FakeProbe probe = new FakeProbe();
         for (int x = 6; x <= 10; x++) {
