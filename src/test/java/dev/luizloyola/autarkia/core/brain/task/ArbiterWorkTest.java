@@ -203,6 +203,16 @@ class ArbiterWorkTest {
     }
 
     @Test
+    void tiesGoToTheDrives() {
+        wander.pressure = 0.35; // the item's bid
+        board.offered = new StubItem(0.35, 50);
+        ticks(3);
+
+        assertEquals(0, board.claims, "the body outranks the day job on a tie");
+        assertTrue(wander.rootsBuilt > 0);
+    }
+
+    @Test
     void workToleranceIsPolicyNotDesperation() {
         board.offered = new StubItem(0.35, 50);
         ticks(2);

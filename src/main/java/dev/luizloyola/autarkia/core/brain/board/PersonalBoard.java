@@ -33,6 +33,9 @@ public final class PersonalBoard implements WorkSource {
     private boolean claimed;
     private int cooldown;
     private int clock;
+    /** Cadence beats seen — beat one is a warm-up: without it a newborn's first claim fires into
+     *  an empty knowledge store and burns a 600t cooldown on nothing. */
+    private int beats;
 
     public PersonalBoard(ItemSpec spec, int target, double priority, int offset) {
         this.spec = spec;
@@ -48,6 +51,9 @@ public final class PersonalBoard implements WorkSource {
         }
         if ((++clock + offset) % CHECK_INTERVAL != 0) {
             return;
+        }
+        if (++beats == 1) {
+            return; // the warm-up beat: perception gets a full cadence before demand exists
         }
         boolean stocked = ctx.percepts().inventory().count(spec.matcher()) >= target;
         if (open == null && cooldown <= 0 && !stocked) {

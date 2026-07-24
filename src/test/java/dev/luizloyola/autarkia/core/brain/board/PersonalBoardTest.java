@@ -24,16 +24,17 @@ class PersonalBoardTest {
     }
 
     @Test
-    void postsOnItsCadenceWhenShort() {
-        ticks(PersonalBoard.CHECK_INTERVAL - 1);
-        assertTrue(board.bestAvailable(ctx).isEmpty(), "not before the beat");
-        ticks(1);
+    void postsOnItsSecondBeatWhenShort() {
+        ticks(PersonalBoard.CHECK_INTERVAL);
+        assertTrue(board.bestAvailable(ctx).isEmpty(),
+                "beat one is the warm-up: she looks before she wants");
+        ticks(PersonalBoard.CHECK_INTERVAL);
         assertTrue(board.bestAvailable(ctx).isPresent(), "short on logs -> posted");
     }
 
     @Test
     void withdrawsAnUnclaimedItemThatBecameMoot() {
-        ticks(PersonalBoard.CHECK_INTERVAL);
+        ticks(PersonalBoard.CHECK_INTERVAL * 2);
         assertTrue(board.bestAvailable(ctx).isPresent());
         ctx.inventory().add(ItemStack.of("minecraft:oak_log", 16, 64));
         ticks(PersonalBoard.CHECK_INTERVAL);
@@ -42,7 +43,7 @@ class PersonalBoardTest {
 
     @Test
     void claimHidesTheItemAndCompletionClosesIt() {
-        ticks(PersonalBoard.CHECK_INTERVAL);
+        ticks(PersonalBoard.CHECK_INTERVAL * 2);
         WorkItem item = board.bestAvailable(ctx).orElseThrow();
         board.claimed(item, ctx);
         assertTrue(board.bestAvailable(ctx).isEmpty(), "claimed items are not on offer");
@@ -54,7 +55,7 @@ class PersonalBoardTest {
 
     @Test
     void failurePacesTheRetry() {
-        ticks(PersonalBoard.CHECK_INTERVAL);
+        ticks(PersonalBoard.CHECK_INTERVAL * 2);
         WorkItem item = board.bestAvailable(ctx).orElseThrow();
         board.claimed(item, ctx);
         board.failed(item, ctx);
