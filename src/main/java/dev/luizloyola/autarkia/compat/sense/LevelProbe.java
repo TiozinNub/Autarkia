@@ -8,6 +8,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
@@ -34,7 +35,14 @@ public final class LevelProbe implements BlockProbe {
             return Integer.MIN_VALUE;
         }
         // getHeight returns the first FREE y above the top motion-blocking block.
-        return this.level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z) - 1;
+        int top = this.level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z) - 1;
+        // Snow layers ride the heightmap and mask whatever carries them — a snow-capped canopy
+        // would read OTHER and its tree never be hypothesized.
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, top, z);
+        while (top > this.level.getMinY() && this.level.getBlockState(pos).is(Blocks.SNOW)) {
+            pos.setY(--top);
+        }
+        return top;
     }
 
     @Override
@@ -76,15 +84,19 @@ public final class LevelProbe implements BlockProbe {
         int steps = (int) Math.ceil(from.distanceTo(to) * 2.0);
         for (int i = 1; i < steps; i++) {
             BlockPos cell = BlockPos.containing(from.lerp(to, i / (double) steps));
-            if (cell.equals(targetPos)) {
+            if (cell.equals(targetPos) || !this.level.isLoaded(cell)) {
                 continue;
             }
-            switch (at(cell.getX(), cell.getY(), cell.getZ())) {
-                case AIR, LEAVES, WATER -> {
-                }
-                default -> {
-                    return false;
-                }
+            // The ray needs FINER transparency than the BlockKind vocabulary: grass blades,
+            // flowers, ferns (anything without a collision shape) are see-through (a meadow
+            // must not blind her; caught live on real worldgen), as are leaves and water.
+            BlockState state = this.level.getBlockState(cell);
+            boolean transparent = state.isAir()
+                    || state.is(BlockTags.LEAVES)
+                    || state.getFluidState().is(FluidTags.WATER)
+                    || state.getCollisionShape(this.level, cell).isEmpty();
+            if (!transparent) {
+                return false;
             }
         }
         return true;

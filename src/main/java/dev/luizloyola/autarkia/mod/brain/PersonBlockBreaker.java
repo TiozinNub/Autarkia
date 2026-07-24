@@ -86,8 +86,14 @@ public final class PersonBlockBreaker implements BlockBreaker {
             clearCrack();
             // The harvest check vanilla's player path applies before dropping: stone punched
             // bare-handed breaks, slowly, but yields nothing.
-            boolean drops = !now.requiresCorrectToolForDrops()
-                    || person.getMainHandItem().isCorrectToolForDrops(now);
+            ItemStack held = person.getMainHandItem();
+            boolean drops = !now.requiresCorrectToolForDrops() || held.isCorrectToolForDrops(now);
+            // Vanilla tool wear (Item.mineBlock): one durability per broken block of any
+            // hardness. Damaging the VANILLA held stack is deliberate — the two-way equipment
+            // mirror pulls the change back into the carried inventory, the source of truth.
+            if (!held.isEmpty() && hardness > 0.0F) {
+                held.hurtAndBreak(1, person, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
+            }
             level.destroyBlock(target, drops, person);
             person.needs().exhaust(EXHAUSTION_PER_BLOCK);
             state = BreakState.FINISHED;
