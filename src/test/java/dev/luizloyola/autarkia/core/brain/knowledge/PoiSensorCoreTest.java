@@ -140,6 +140,33 @@ class PoiSensorCoreTest {
     }
 
     @Test
+    void aBlockedRayRetriesInPlaceOnceTheOccluderClears() {
+        FakeProbe probe = new FakeProbe();
+        probe.placeOak(8, 0);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                probe.hide(new Pos(8 + dx, 68, dz)); // a wall between them, for now
+            }
+        }
+        tickUntilQuiet(probe, new Pos(0, 64, 0));
+        assertEquals(0, knowledge.size(), "overlooked — the tree-behind-tree blindness");
+
+        // The occluder clears (the front tree gets chopped) while she stays right HERE — no
+        // crescent will ever re-emit these columns. The booked retry must do it.
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                probe.reveal(new Pos(8 + dx, 68, dz));
+            }
+        }
+        List<SenseEvent> events = new ArrayList<>();
+        for (int i = 0; i < PoiSensorCore.RAY_RETRY_DELAY_TICKS + 40; i++) {
+            events.addAll(sensor.tick(new Pos(0, 64, 0), now++, probe));
+        }
+        assertEquals(1, knowledge.size(), "the retry found it without her moving an inch");
+        assertTrue(events.stream().anyMatch(e -> e.type() == SenseEvent.Type.NOTED));
+    }
+
+    @Test
     void aPondIsNotedAsWater() {
         FakeProbe probe = new FakeProbe();
         for (int x = 6; x <= 10; x++) {

@@ -39,6 +39,15 @@ public final class PoiSensorCore {
     public static final int QUEUE_CAP = 512;
     /** Flat wallet charge for one confirm-ray (a ~R-block voxel walk). Tuning knob. */
     public static final int RAY_COST = 8;
+    /**
+     * A ray-blocked hypothesis retries after this many ticks, by when she or the occluder has
+     * moved and the geometry differs. Without it a column consumed by one failed ray stays
+     * invisible for as long as she remains in sense range — tree-behind-tree blindness.
+     */
+    public static final int RAY_RETRY_DELAY_TICKS = 60;
+    /** Retries per stay-in-range; re-entering range starts a fresh cycle. MAX × DELAY (~30s)
+     *  outlives the commonest occluder — the tree she is felling. */
+    public static final int RAY_RETRY_MAX = 10;
 
     private final PersonKnowledge knowledge;
     private final ClaimIndex claims = new ClaimIndex();
@@ -47,6 +56,8 @@ public final class PoiSensorCore {
     private RegionGrowth active;
     /** The surface cell that seeded {@link #active} — reported on a DISMISSED outcome. */
     private Pos activeSeed;
+    /** Ray-blocked columns awaiting another look: when each is due, and its attempt count. */
+    private final java.util.Map<Column, long[]> rayRetries = new java.util.HashMap<>();
 
     public PoiSensorCore(PersonKnowledge knowledge) {
         this.knowledge = knowledge;
@@ -55,10 +66,19 @@ public final class PoiSensorCore {
     /** One perception tick — the beliefs noted or forgotten, empty on the common quiet tick. */
     public List<SenseEvent> tick(Pos feet, long now, BlockProbe probe) {
         for (Column column : sampler.advance(feet)) {
+            rayRetries.remove(column); // freshly re-entered range: a fresh retry cycle
             if (pending.size() >= QUEUE_CAP) {
                 pending.pollFirst();
             }
             pending.addLast(column);
+        }
+        // Due retries jump the queue: near her and already half-investigated. A spent entry
+        // (attempts at cap) stays PARKED — it blocks a fresh cycle until she re-enters range.
+        for (var entry : rayRetries.entrySet()) {
+            if (entry.getValue()[0] <= now) {
+                pending.addFirst(entry.getKey());
+                entry.getValue()[0] = Long.MAX_VALUE; // rescheduled only if the ray fails again
+            }
         }
         List<SenseEvent> events = new ArrayList<>();
         int reads = 0;
@@ -127,8 +147,15 @@ public final class PoiSensorCore {
         reads += RAY_COST;
         if (!probe.visibleFromEyes(surface)) {
             events.add(SenseEvent.overlooked(rule.kind(), surface));
+            // The geometry will differ once she (or the occluder) moves.
+            long[] retry = rayRetries.computeIfAbsent(column, c -> new long[]{0, 0});
+            if (retry[1] < RAY_RETRY_MAX) {
+                retry[0] = now + RAY_RETRY_DELAY_TICKS;
+                retry[1]++;
+            }
             return reads;
         }
+        rayRetries.remove(column);
         active = new RegionGrowth(rule, surface, kind);
         activeSeed = surface;
         return reads;

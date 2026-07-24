@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.core.brain.Arbiter;
+import dev.luizloyola.autarkia.core.brain.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
 import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
@@ -36,6 +37,12 @@ import net.minecraft.server.level.ServerLevel;
 public final class BrainDriver {
     private final Person person;
     private final Arbiter arbiter;
+    /**
+     * This person's personal claim board (layer 3, degenerate group-of-one) — ticked here on
+     * the brain cadence and handed to the arbiter as its {@code WorkSource}. Transient: the
+     * standing stock project re-derives its items from the pack.
+     */
+    private final PersonalBoard board = new PersonalBoard();
     /**
      * The one context every task/instinct tick receives: actuators, percepts and the debug
      * journal — the only Minecraft boundary the core machinery ever touches.
@@ -122,7 +129,7 @@ public final class BrainDriver {
         // Flee is first on purpose: the arbiter breaks pressure ties in list order, so an exact
         // flee/eat tie must resolve to fleeing.
         this.arbiter = new Arbiter(List.of(
-                new FleeInstinct(random), new EatInstinct(), new WanderInstinct(random)));
+                new FleeInstinct(random), new EatInstinct(), new WanderInstinct(random)), board);
     }
 
     /**
@@ -131,6 +138,9 @@ public final class BrainDriver {
      * a dev-issued task isn't second-guessed mid-flight.
      */
     public void tick() {
+        // The board heartbeat runs regardless of the autonomy switch (posting is cheap and
+        // harmless in manual mode; the arbiter only CONSUMES offers when it is deciding).
+        this.board.tick(this.person.level().getGameTime(), this.person.inventory());
         if (this.auto) {
             this.arbiter.tick(this.context);
         } else {
@@ -180,6 +190,11 @@ public final class BrainDriver {
             this.knowledge = Knowledges.of(level.getServer()).forPerson(this.person.getPersonId());
         }
         return this.knowledge;
+    }
+
+    /** This person's personal board — the /autarkia board readout. */
+    public PersonalBoard board() {
+        return this.board;
     }
 
     /** The brain's one-line status, for the debug commands: which side is driving, then its report. */

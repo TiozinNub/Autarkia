@@ -64,6 +64,10 @@ public final class FakeProbe implements BlockProbe {
         hidden.add(target);
     }
 
+    public void reveal(Pos target) {
+        hidden.remove(target);
+    }
+
     @Override
     public int surfaceY(int x, int z) {
         reads++;
