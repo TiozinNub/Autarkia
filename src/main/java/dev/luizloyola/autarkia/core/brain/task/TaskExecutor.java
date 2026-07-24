@@ -44,6 +44,14 @@ public final class TaskExecutor {
     public static final int MAX_DEPTH = 8;
 
     /**
+     * Safety cap on an {@link AchieveTask}'s selection rounds within one activation — a
+     * backstop against pathological zero-progress cycles (a method that "succeeds" without
+     * moving the world toward the goal), far above any real errand (a 16-log stock is
+     * 3–5 rounds). Hitting it fails the compound like any other dead end.
+     */
+    public static final int ACHIEVE_ROUNDS_CAP = 32;
+
+    /**
      * One expanded compound on the path: the chosen method, its subtask sequence and cursor, and
      * which methods this visit has already burned. {@code methods()} is captured once per visit
      * so the tried-marks index a stable list; a later re-visit (the parent re-expanding) starts a
@@ -57,6 +65,8 @@ public final class TaskExecutor {
         int methodIndex;
         List<Task> subtasks;
         int index; // invariant between ticks: < subtasks.size() (exhausted frames pop eagerly)
+        /** Achieve-frames only: selection rounds burned this activation (see ACHIEVE_ROUNDS_CAP). */
+        int rounds;
 
         Frame(CompoundTask compound) {
             this.compound = compound;
@@ -106,7 +116,7 @@ public final class TaskExecutor {
         }
         TaskStatus status = leaf.tick(ctx);
         if (status == TaskStatus.SUCCESS) {
-            succeedCurrent();
+            succeedCurrent(ctx);
         } else if (status == TaskStatus.FAILED) {
             failCurrent(ctx);
         }
@@ -177,17 +187,21 @@ public final class TaskExecutor {
                 return primitive;
             }
             CompoundTask compound = (CompoundTask) node;
+            if (compound instanceof AchieveTask achieve && achieve.satisfied(ctx)) {
+                succeedCurrent(ctx); // the condition already holds — achieved without a frame
+                continue;
+            }
             if (stack.size() >= MAX_DEPTH) {
                 failCurrent(ctx); // the branch fails, as a method failure in the parent — no exception
                 continue;
             }
             Frame frame = new Frame(compound);
-            if (!choose(frame, ctx)) {
+            if (!chooseRound(frame, ctx)) {
                 failCurrent(ctx); // no applicable method at all
                 continue;
             }
             if (frame.subtasks.isEmpty()) {
-                succeedCurrent(); // trivial success: the goal already holds, the compound is done
+                succeedCurrent(ctx); // trivial success: the goal already holds, the compound is done
                 continue;
             }
             stack.add(frame);
@@ -241,10 +255,13 @@ public final class TaskExecutor {
 
     /**
      * The node at the current position finished with SUCCESS: advance the parent frame's
-     * sequence; a sequence exhausted means that compound SUCCEEDS, which advances its parent, and
-     * so on — the success cascade. Reaching past the root records the terminal outcome.
+     * sequence; a sequence exhausted means a DO-compound succeeds (cascading to its parent),
+     * while an ACHIEVE-compound checks its condition — satisfied cascades the same way,
+     * unsatisfied starts a fresh selection round in the same frame (tried-marks reset, methods
+     * re-scored against the changed world, depth unchanged) until the rounds cap or method
+     * exhaustion fails it like any dead end. Reaching past the root records the terminal outcome.
      */
-    private void succeedCurrent() {
+    private void succeedCurrent(BrainContext ctx) {
         while (true) {
             if (stack.isEmpty()) {
                 record(TaskStatus.SUCCESS);
@@ -255,8 +272,46 @@ public final class TaskExecutor {
             if (top.index < top.subtasks.size()) {
                 return;
             }
+            if (top.compound instanceof AchieveTask achieve) {
+                if (achieve.satisfied(ctx)) {
+                    stack.remove(stack.size() - 1); // achieved -> success cascades to the parent
+                    continue;
+                }
+                if (++top.rounds >= ACHIEVE_ROUNDS_CAP) {
+                    stack.remove(stack.size() - 1);
+                    failCurrent(ctx); // the zero-progress backstop: fails like any dead end
+                    return;
+                }
+                java.util.Arrays.fill(top.tried, false); // fresh round: every method eligible again
+                if (chooseRound(top, ctx)) {
+                    return;
+                }
+                stack.remove(stack.size() - 1);
+                failCurrent(ctx); // nothing applicable or affordable is left -> the goal is out of reach
+                return;
+            }
             stack.remove(stack.size() - 1); // sequence exhausted -> the compound itself succeeded
         }
+    }
+
+    /**
+     * {@link #choose}, with the achieve refinement: an empty decompose cannot make an UNSATISFIED
+     * condition true (the executor checks {@code satisfied()} itself — a method claiming trivial
+     * success here is just making no progress), so for achieve-frames such picks are burned and
+     * selection continues. Do-frames pass through untouched — their empty decompose is trivial
+     * success, per the {@link Method} contract.
+     */
+    private boolean chooseRound(Frame frame, BrainContext ctx) {
+        if (!(frame.compound instanceof AchieveTask)) {
+            return choose(frame, ctx);
+        }
+        while (choose(frame, ctx)) {
+            if (!frame.subtasks.isEmpty()) {
+                return true;
+            }
+            frame.tried[frame.methodIndex] = true;
+        }
+        return false;
     }
 
     /**
@@ -273,10 +328,10 @@ public final class TaskExecutor {
             }
             Frame parent = stack.get(stack.size() - 1);
             parent.tried[parent.methodIndex] = true; // the chosen method died with its subtask
-            if (choose(parent, ctx)) {
+            if (chooseRound(parent, ctx)) {
                 if (parent.subtasks.isEmpty()) {
                     stack.remove(stack.size() - 1);
-                    succeedCurrent(); // the replacement trivially succeeds -> so does the compound
+                    succeedCurrent(ctx); // the replacement trivially succeeds -> so does the compound
                 }
                 return;
             }

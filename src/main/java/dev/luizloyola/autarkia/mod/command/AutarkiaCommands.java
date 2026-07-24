@@ -13,9 +13,11 @@ import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.autarkia.core.brain.task.BreakBlock;
 import dev.luizloyola.autarkia.core.brain.task.ChopNearestTree;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
+import dev.luizloyola.autarkia.core.brain.task.ObtainItem;
 import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
+import dev.luizloyola.autarkia.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.core.log.Entry;
 import dev.luizloyola.autarkia.core.log.JournalService;
@@ -145,6 +147,12 @@ public final class AutarkiaCommands {
                                                         BlockPosArgument.getLoadedBlockPos(ctx, "pos")))))
                                 .then(Commands.literal("chop")
                                         .executes(ctx -> brainChop(ctx.getSource())))
+                                .then(Commands.literal("obtain")
+                                        .then(Commands.literal("logs")
+                                                .executes(ctx -> brainObtain(ctx.getSource(), 16))
+                                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> brainObtain(ctx.getSource(),
+                                                                IntegerArgumentType.getInteger(ctx, "count"))))))
                                 .then(Commands.literal("status")
                                         .executes(ctx -> brainStatus(ctx.getSource())))
                                 .then(Commands.literal("cancel")
@@ -276,6 +284,18 @@ public final class AutarkiaCommands {
         Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new BreakBlock(pos.getX(), pos.getY(), pos.getZ()));
+        String suffix = autoDisabledSuffix(autoDisabled);
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** Runs {@link ObtainItem} (logs × count): rounds of scavenge-or-chop until the pack holds the
+     *  quota, run to completion in one invocation. */
+    private static int brainObtain(CommandSourceStack source, int count) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        boolean autoDisabled = person.brain().run(new ObtainItem(ItemSpec.LOGS, count));
         String suffix = autoDisabledSuffix(autoDisabled);
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);

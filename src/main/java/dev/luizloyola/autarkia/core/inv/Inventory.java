@@ -132,6 +132,15 @@ public final class Inventory {
         return total;
     }
 
+    /** Total count across every slot of items matching the predicate — the {@link ItemSpec} read. */
+    public int count(java.util.function.Predicate<String> idMatch) {
+        int total = 0;
+        for (ItemStack stack : slots) {
+            if (!stack.isEmpty() && idMatch.test(stack.id())) total += stack.count();
+        }
+        return total;
+    }
+
     public boolean contains(String id, int atLeast) {
         return count(id) >= atLeast;
     }
