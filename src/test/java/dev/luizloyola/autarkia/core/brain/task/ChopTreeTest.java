@@ -162,6 +162,77 @@ class ChopTreeTest {
     }
 
     @Test
+    void clearsTheObstructingLeafThenFellsTheLog() {
+        placeOakAndStandBy();
+        Pos blocked = new Pos(10, 65, 10);
+        Pos leafInTheWay = new Pos(9, 65, 9); // squarely on the arm's line from (8,64,8)
+        ctx.percepts.blocks.set(leafInTheWay.x(), leafInTheWay.y(), leafInTheWay.z(),
+                dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LEAVES);
+        ctx.breaker.refuse.add(blocked); // the arm refuses while the leaf stands
+
+        ChopTree task = new ChopTree(memory, false);
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < 300 && status == TaskStatus.RUNNING; i++) {
+            status = task.tick(ctx);
+            if (ctx.breaker.state == BreakState.BREAKING) {
+                Pos t = ctx.breaker.target;
+                ctx.percepts.blocks.clear(t.x(), t.y(), t.z());
+                ctx.breaker.state = BreakState.FINISHED;
+                if (t.equals(leafInTheWay)) {
+                    ctx.breaker.refuse.remove(blocked); // sightline restored
+                }
+            }
+        }
+
+        assertEquals(TaskStatus.SUCCESS, status);
+        int leafAt = ctx.breaker.targets.indexOf(leafInTheWay);
+        int logAt = ctx.breaker.targets.indexOf(blocked);
+        assertTrue(leafAt >= 0 && leafAt < logAt,
+                "she cleared her own sightline, then felled the log behind it");
+    }
+
+    @Test
+    void pillarsUpForTheHighLogsAndUnbuildsOnTheWayDown() {
+        placeOakAndStandBy();
+        // A taller trunk: two extra logs above the standard four.
+        ctx.percepts.blocks.set(10, 68, 10, dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+        ctx.percepts.blocks.set(10, 69, 10, dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+        ctx.percepts.inventory.add(dev.luizloyola.autarkia.core.inv.ItemStack.of(
+                "minecraft:oak_log", 4, 64)); // her scaffolding material
+        Pos high = new Pos(10, 69, 10);
+        ctx.breaker.refuse.add(high); // out of reach until she has climbed twice
+
+        ChopTree task = new ChopTree(memory, false);
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < 400 && status == TaskStatus.RUNNING; i++) {
+            status = task.tick(ctx);
+            if (ctx.scaffolder.state == dev.luizloyola.autarkia.core.brain.act.ScaffoldState.RISING) {
+                // Play the body: land one block higher on a block from the pack.
+                Pos feet = ctx.percepts.position;
+                ctx.percepts.blocks.set(feet.x(), feet.y(), feet.z(),
+                        dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+                ctx.percepts.position = new Pos(feet.x(), feet.y() + 1, feet.z());
+                ctx.scaffolder.state = dev.luizloyola.autarkia.core.brain.act.ScaffoldState.RISEN;
+                if (ctx.scaffolder.ups >= 2) {
+                    ctx.breaker.refuse.remove(high); // high enough now
+                }
+            }
+            if (ctx.breaker.state == BreakState.BREAKING) {
+                Pos t = ctx.breaker.target;
+                ctx.percepts.blocks.clear(t.x(), t.y(), t.z());
+                ctx.breaker.state = BreakState.FINISHED;
+            }
+        }
+
+        assertEquals(TaskStatus.SUCCESS, status);
+        assertTrue(ctx.scaffolder.ups >= 2, "she climbed for the high log");
+        assertEquals("minecraft:oak_log", ctx.scaffolder.lastItem, "pillared on her own logs");
+        Pos firstStep = new Pos(8, 64, 8); // where she stood when the first step went down
+        assertTrue(ctx.breaker.targets.contains(firstStep),
+                "the pillar was un-built on the way down — no towers left behind");
+    }
+
+    @Test
     void anUnreachableTreeFailsButStaysRemembered() {
         placeOakAndStandBy();
         ctx.breaker.refuseBegin = true; // every swing out of reach, forever

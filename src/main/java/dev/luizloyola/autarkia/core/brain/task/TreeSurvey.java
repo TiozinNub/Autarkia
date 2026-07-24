@@ -89,7 +89,12 @@ public final class TreeSurvey {
             }
         }
         for (Tree tree : trees) {
-            tree.branches().sort(Comparator.comparingInt(Pos::y));
+            // Outermost-first (then higher-first): felling a chain from its tip inward never
+            // orphans wood — the never-orphan rule for branches.
+            Pos center = centroid(tree.base());
+            tree.branches().sort(Comparator
+                    .comparingLong((Pos p) -> horizontalDistSq(p, center)).reversed()
+                    .thenComparing(Comparator.comparingInt(Pos::y).reversed()));
         }
         return trees;
     }

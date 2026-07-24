@@ -10,6 +10,7 @@ import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
 import dev.luizloyola.autarkia.core.brain.act.BlockPlacer;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
+import dev.luizloyola.autarkia.core.brain.act.Scaffolder;
 import dev.luizloyola.autarkia.core.brain.instinct.EatInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
@@ -106,6 +107,11 @@ public final class BrainDriver {
             @Override
             public BlockPlacer placer() {
                 return placer; // one-shot port: stateless view, driver-owned like the consumer
+            }
+
+            @Override
+            public Scaffolder scaffolder() {
+                return person.scaffolder(); // body-owned and body-ticked, like the breaker
             }
         };
         this.context = new BrainContext() {

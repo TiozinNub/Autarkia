@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
 import dev.luizloyola.autarkia.core.brain.act.BreakState;
+import dev.luizloyola.autarkia.compat.sense.LevelProbe;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.BlockPos;
@@ -49,8 +50,9 @@ public final class PersonBlockBreaker implements BlockBreaker {
         BlockPos pos = new BlockPos(cell.x(), cell.y(), cell.z());
         Level level = person.level();
         BlockState blockState = level.getBlockState(pos);
-        if (blockState.isAir() || blockState.getDestroySpeed(level, pos) < 0 || !inReach(pos)) {
-            return false;
+        if (blockState.isAir() || blockState.getDestroySpeed(level, pos) < 0 || !inReach(pos)
+                || !LevelProbe.armPathClear(level, person.getEyePosition(), pos)) {
+            return false; // includes a blocked arm path: no breaking logs through the canopy
         }
         clearCrack();
         this.target = pos;
@@ -67,8 +69,9 @@ public final class PersonBlockBreaker implements BlockBreaker {
         }
         Level level = person.level();
         BlockState now = level.getBlockState(target);
-        if (now.getBlock() != begunOn.getBlock() || !inReach(target)) {
-            fail();
+        if (now.getBlock() != begunOn.getBlock() || !inReach(target)
+                || !LevelProbe.armPathClear(level, person.getEyePosition(), target)) {
+            fail(); // moved, block swapped, or something grew between arm and block
             return;
         }
         float hardness = now.getDestroySpeed(level, target);

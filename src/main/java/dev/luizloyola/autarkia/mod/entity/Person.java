@@ -14,6 +14,7 @@ import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.BrainDriver;
 import dev.luizloyola.autarkia.mod.brain.PersonBlockBreaker;
+import dev.luizloyola.autarkia.mod.brain.PersonScaffolder;
 import dev.luizloyola.autarkia.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
@@ -163,6 +164,12 @@ public class Person extends Avatar {
     private final PersonBlockBreaker blockBreaker = new PersonBlockBreaker(this);
 
     /**
+     * This person's climbing legs ({@link PersonScaffolder}) — the nerd-pole machine, ticked here so
+     * jump/place timing advances with the body; the brain asks for steps through the actuator port.
+     */
+    private final PersonScaffolder scaffolder = new PersonScaffolder(this);
+
+    /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
      * brain organ: the entity owns and ticks its own metabolism, as vanilla's {@code FoodData}
      * belongs to the player rather than to any AI, and the brain only ever <em>reads</em> it.
@@ -296,6 +303,7 @@ public class Person extends Avatar {
         // The working arm advances after the brain, so a break begun this tick gains its first
         // progress this tick — same-tick actuation, like the navigator below.
         this.blockBreaker.tick();
+        this.scaffolder.tick();
         if (this.debugRunForward) {
             // getAttributeValue includes the sprint modifier applied by setSprinting, so this is
             // already the ×1.3 sprint speed; the 0.98 damping keeps it exact vs a player.
@@ -345,6 +353,11 @@ public class Person extends Avatar {
     /** This person's working arm — the break machinery the brain drives as a port. See {@link PersonBlockBreaker}. */
     public PersonBlockBreaker blockBreaker() {
         return this.blockBreaker;
+    }
+
+    /** This person's climbing legs — the nerd-pole machinery. See {@link PersonScaffolder}. */
+    public PersonScaffolder scaffolder() {
+        return this.scaffolder;
     }
 
     /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */

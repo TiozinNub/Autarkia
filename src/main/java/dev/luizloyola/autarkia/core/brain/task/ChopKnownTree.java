@@ -46,7 +46,25 @@ public final class ChopKnownTree implements Method {
         return "chop known tree";
     }
 
+    /** The nearest remembered tree that is not currently avoided (unworkable-lately marks). */
     private static Optional<PoiMemory> nearest(BrainContext ctx) {
-        return ctx.knowledge().nearest(PoiKind.TREE, ctx.percepts().position());
+        var here = ctx.percepts().position();
+        long now = ctx.percepts().time();
+        PoiMemory best = null;
+        long bestDist = Long.MAX_VALUE;
+        for (PoiMemory m : ctx.knowledge().all(PoiKind.TREE)) {
+            if (ctx.knowledge().isAvoided(PoiKind.TREE, m.anchor(), now)) {
+                continue;
+            }
+            long dx = m.anchor().x() - here.x();
+            long dy = m.anchor().y() - here.y();
+            long dz = m.anchor().z() - here.z();
+            long d = dx * dx + dy * dy + dz * dz;
+            if (d < bestDist) {
+                bestDist = d;
+                best = m;
+            }
+        }
+        return Optional.ofNullable(best);
     }
 }

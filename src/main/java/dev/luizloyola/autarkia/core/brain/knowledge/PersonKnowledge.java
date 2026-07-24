@@ -4,6 +4,7 @@ import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -27,6 +28,12 @@ public final class PersonKnowledge {
     public static final int MAX_PER_KIND = 64;
 
     private final Map<PoiKind, Map<Pos, PoiMemory>> byKind = new EnumMap<>(PoiKind.class);
+    /**
+     * TRANSIENT avoid-marks: anchors that are true but not worth retrying right now (an
+     * unworkable tree). Never serialized (a fresh boot retries clean), and consulted only by
+     * method selection; the memory itself stays.
+     */
+    private final Map<PoiKind, Map<Pos, Long>> avoidedUntil = new EnumMap<>(PoiKind.class);
 
     /**
      * Records a belief: merges into an existing same-kind entry within merge radius (the new
@@ -98,6 +105,18 @@ public final class PersonKnowledge {
         return entries == null
                 ? Collections.emptyList()
                 : Collections.unmodifiableCollection(entries.values());
+    }
+
+    /** Marks an anchor as not-worth-retrying until the given game time. Transient. */
+    public void avoid(PoiKind kind, Pos anchor, long untilTick) {
+        avoidedUntil.computeIfAbsent(kind, k -> new HashMap<>()).put(anchor, untilTick);
+    }
+
+    /** Whether the anchor is currently avoided — consult with the same clock memories carry. */
+    public boolean isAvoided(PoiKind kind, Pos anchor, long now) {
+        Map<Pos, Long> marks = avoidedUntil.get(kind);
+        Long until = marks == null ? null : marks.get(anchor);
+        return until != null && until > now;
     }
 
     /** Total remembered entries across kinds. */

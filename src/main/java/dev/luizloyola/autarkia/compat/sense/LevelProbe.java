@@ -71,6 +71,27 @@ public final class LevelProbe implements BlockProbe {
     }
 
     /**
+     * Whether the ARM has a clear path from {@code from} to the target — stricter than seeing:
+     * anything with a collision shape blocks a swing, INCLUDING leaves (eyes see through a canopy;
+     * arms do not — caught live: a log broken through the leaves above it). Plants and water do not
+     * impede an arm.
+     */
+    public static boolean armPathClear(Level level, Vec3 from, BlockPos target) {
+        Vec3 to = Vec3.atCenterOf(target);
+        int steps = (int) Math.ceil(from.distanceTo(to) * 2.0);
+        for (int i = 1; i < steps; i++) {
+            BlockPos cell = BlockPos.containing(from.lerp(to, i / (double) steps));
+            if (cell.equals(target) || !level.isLoaded(cell)) {
+                continue;
+            }
+            if (!level.getBlockState(cell).getCollisionShape(level, cell).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * A sampled march from the eyes to the target's center at half-block strides, transparent
      * through air, leaves and water (a tree's own canopy must not hide its trunk). Not exact voxel
      * traversal (a ray squeezing past a corner may miss the corner block), but it gates
