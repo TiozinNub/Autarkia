@@ -3,7 +3,6 @@ package dev.luizloyola.autarkia.core.brain;
 import dev.luizloyola.autarkia.core.brain.board.WorkItem;
 import dev.luizloyola.autarkia.core.brain.board.WorkSource;
 import dev.luizloyola.autarkia.core.brain.instinct.Instinct;
-import dev.luizloyola.autarkia.core.brain.task.ObtainItem;
 import dev.luizloyola.autarkia.core.brain.task.TaskExecutor;
 import dev.luizloyola.autarkia.core.brain.task.TaskStatus;
 import dev.luizloyola.autarkia.core.log.Category;
@@ -11,53 +10,40 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The always-on "what am I doing right now" component (brain design doc): every tick it weighs TWO
- * SPECIES OF DEMAND on one 0..1 scale — each {@link Instinct}'s live pressure (a drive: stateless
- * want, fresh root per grant, nothing to resume) and the claimed work item's priority (a
- * commitment: a specific owed thing with a lifecycle) — and keeps its one {@link TaskExecutor}
- * running the winner. {@link #STICKINESS} and {@link #PREEMPT} apply to both alike; only the
- * lifecycle differs (the work-loop design's table):
+ * The always-on "what am I doing right now" component (brain design doc): every tick it reads each
+ * {@link Instinct}'s pressure, picks the winner, and keeps its one {@link TaskExecutor} running
+ * that winner's task tree. It also publishes the cost tolerance the executor gates methods by
+ * ({@link #costTolerance()}), taken from the active drive's pressure through
+ * {@link ToleranceCurve}. The executor is the arbiter's — {@link #executor()} is the mod driver's
+ * manual entry point — and {@code active} names the instinct whose root is running ({@code null}
+ * for idle or a manually-installed task).
  *
- * <ul>
- *   <li><b>Preempted drive</b> → cancelled; a re-rolled root is its resume.</li>
- *   <li><b>Preempted commitment</b> → SUSPENDED: the tree is dropped, the claim kept, and it
- *       resumes as a fresh {@code ObtainItem} root — re-validation for free, since the
- *       achieve-goal re-reads the pack.</li>
- *   <li><b>Commitments never preempt mid-task</b>: a standing priority sits below
- *       {@link #PREEMPT}, so work waits for the task boundary.</li>
- *   <li><b>Boundaries report to the board</b>: SUCCESS → {@code complete}, FAILED → {@code fail}
- *       (unclaim; the board's cooldown paces the retry). Ties go to drives.</li>
- * </ul>
- *
- * <p>Tolerance follows the species: a drive's is desperation ({@link ToleranceCurve} of its
- * pressure), a commitment's a fixed budget from its priority ({@link #workTolerance} — decision:
- * Luiz, "decouples the wants from the needs"). Between {@link #active} and
- * {@link #runningCommitment} exactly one (or neither) names what the executor is running;
- * {@link #executor()} is the mod driver's manual entry point.
+ * <h2>Per-tick arbitration ({@link #tick})</h2>
+ * <ol>
+ *   <li>Pressures are read once. An instinct sitting out the ticks its own
+ *       {@link Instinct#failCooldown()} set after a FAILED root is INELIGIBLE, and its cooldown
+ *       then ticks down by one.</li>
+ *   <li>Top eligible bidder by EFFECTIVE pressure — the incumbent gets a {@link #STICKINESS}
+ *       bonus, and ties go to the earlier instinct in the constructor list.</li>
+ *   <li><b>Executor idle</b> → grant the top bidder; re-granting the incumbent after a SUCCESS is
+ *       the continuous-behavior loop, {@code root()} called anew each time.</li>
+ *   <li><b>Executor busy</b> → switch only if the top bidder is not the incumbent, beats it on
+ *       effective pressure, and has RAW pressure at least {@link #PREEMPT}; below that it
+ *       waits for the task boundary. Switching cancels the incumbent's task.</li>
+ *   <li>The executor ticks once. On a boundary (busy before, idle after) a FAILED root sets its
+ *       instinct's {@link #FAIL_COOLDOWN}, and {@code active} clears so the next tick's idle-grant
+ *       re-arbitrates from scratch.</li>
+ * </ol>
+ * With no instincts, or none eligible, the executor still ticks — a manually-installed task must
+ * keep running even under an all-cooling arbiter.
  */
 public final class Arbiter {
 
-    /**
-     * Incumbency bonus added to the active demand's bid when comparing — the hysteresis that
-     * stops 51/49 dithering. Commitment is the norm: "fixed until satisfied or overridden".
-     */
+    /** Incumbency bonus on the active instinct's bid — the hysteresis that stops 51/49 dithering. */
     public static final double STICKINESS = 0.1;
 
-    /**
-     * Minimum RAW pressure a challenger needs to preempt a running task mid-flight. Below it, a
-     * higher bidder still waits for the current task to finish; at or above it, an urgent drive
-     * (a hungry-enough Eat, an imminent-threat Flee) cuts in immediately — suspending a running
-     * commitment rather than killing it.
-     */
+    /** Minimum RAW pressure to preempt mid-flight; below it a challenger waits for the boundary. */
     public static final double PREEMPT = 0.6;
-
-    /**
-     * The commitment cost budget: {@code BASE + PER_PRIORITY × priority} walk-blocks. Flat by
-     * design — no desperation plateau, no unbounded spend: the standing stock item (0.35) gets
-     * ~75, a real errand's budget. Tuning knobs; the future config file maps onto them.
-     */
-    public static final double WORK_TOLERANCE_BASE = 40.0;
-    public static final double WORK_TOLERANCE_PER_PRIORITY = 100.0;
 
     private final List<Instinct> instincts;
     private final WorkSource work;
@@ -68,20 +54,20 @@ public final class Arbiter {
     /** Last tick's pressures, cached for the ctx-less {@link #describe()}. */
     private final double[] lastPressures;
 
-    /** The instinct whose root is currently running, or {@code null} (idle, commitment, manual). */
+    /** The instinct whose root is currently running, or {@code null} (idle, or a manual task). */
     private Instinct active;
-    /** The active instinct's pressure as of the last arbitration — the tolerance source. */
+    /** Currently OWED — kept through suspensions: a preempt cancels the errand's tree, not the claim. */
+    private WorkItem claimedItem;
+    /** Whether the executor's current root belongs to {@link #claimedItem} (vs a drive's). */
+    private boolean workRunning;
+    /** The active instinct's pressure as of the last arbitration — the source for {@link #costTolerance()}. */
     private double activePressure;
-    /** The claimed work item — running or suspended; {@code null} when none is owed. */
-    private WorkItem commitment;
-    /** Whether the executor's current root is the commitment's (false + non-null = suspended). */
-    private boolean runningCommitment;
-    /** The last drive whose grant was journalled — spam guard; see {@link #grant}. */
+    /** The last drive journalled, so a re-grant of the same drive does not spam the BRAIN log. */
     private Instinct lastGranted;
 
-    /** A drives-only arbiter — the slice-1 shape; tests and any workless host use this. */
+    /** An arbiter with no work source — drives only (tests, minimal rigs). */
     public Arbiter(List<Instinct> instincts) {
-        this(instincts, null);
+        this(instincts, WorkSource.NONE);
     }
 
     public Arbiter(List<Instinct> instincts, WorkSource work) {
@@ -105,7 +91,7 @@ public final class Arbiter {
             lastPressures[i] = instincts.get(i).pressure(ctx);
         }
 
-        // 2. Top eligible drive by effective pressure (incumbent gets STICKINESS; ties -> earlier).
+        // 2. Top eligible bidder by effective pressure (incumbent gets STICKINESS; ties -> earlier).
         int activeIndex = indexOf(active);
         int topIndex = -1;
         double topEffective = Double.NEGATIVE_INFINITY;
@@ -120,44 +106,41 @@ public final class Arbiter {
             }
         }
 
-        // 2b. The commitment's bid: the held item's priority (sticky while running), or the
-        //     board's best offer. Strictly-greater below: ties go to drives — the body first.
-        double commitEffective = Double.NEGATIVE_INFINITY;
-        WorkItem offer = null;
-        if (work != null) {
-            if (commitment != null) {
-                commitEffective = commitment.priority() + (runningCommitment ? STICKINESS : 0.0);
-            } else {
-                offer = work.bestAvailable().orElse(null);
-                if (offer != null) {
-                    commitEffective = offer.priority();
-                }
-            }
-        }
+        // 2b. The commitment bid: the item already owed, else the board's best offer — one more
+        //     bidder on the same 0..1 scale (fixed board priority, not body pressure).
+        WorkItem candidate = claimedItem != null
+                ? claimedItem
+                : work.bestAvailable(ctx).orElse(null);
+        double workEffective = candidate == null
+                ? Double.NEGATIVE_INFINITY
+                : candidate.priority() + (workRunning ? STICKINESS : 0.0);
 
-        // 3 & 4. Grant when idle; conditional preempt when busy.
+        // 3 & 4. Work never preempts mid-flight; a drive cuts a running errand only past the
+        // PREEMPT bar, and the claim survives the cut.
         if (!executor.isBusy()) {
-            if (commitEffective > topEffective && (commitment != null || offer != null)) {
-                grantCommitment(offer, ctx);
+            if (candidate != null && workEffective > topEffective) {
+                grantWork(candidate, ctx);
             } else if (topIndex >= 0) {
                 grant(topIndex, ctx);
             }
-        } else if (runningCommitment) {
-            // A drive may cut into running work (urgent only), which suspends, never kills.
-            if (topIndex >= 0 && topEffective > commitEffective && lastPressures[topIndex] >= PREEMPT) {
-                suspendCommitment(ctx, instincts.get(topIndex).describe(), lastPressures[topIndex]);
-                grant(topIndex, ctx);
+        } else if (workRunning) {
+            if (topIndex >= 0 && lastPressures[topIndex] >= PREEMPT && topEffective > workEffective) {
+                ctx.journal().record(Category.PROJECT, claimedItem.describe(), String.format(Locale.ROOT,
+                        "suspended (by %s %.2f)",
+                        instincts.get(topIndex).describe(), lastPressures[topIndex]));
+                workRunning = false;
+                grant(topIndex, ctx); // run() cancels the errand's tree; the claim is KEPT
             }
         } else if (topIndex >= 0 && topIndex != activeIndex) {
             double activeEffective = activeIndex >= 0
                     ? lastPressures[activeIndex] + STICKINESS
-                    : Double.NEGATIVE_INFINITY; // a manual task yields to any bidder that preempts
+                    : Double.NEGATIVE_INFINITY; // a manual task (no active instinct) yields to any real bidder... but only if it preempts
             if (topEffective > activeEffective && lastPressures[topIndex] >= PREEMPT) {
                 grant(topIndex, ctx);
             }
         }
 
-        // Keep the tolerance source current for an incumbent drive that kept running.
+        // Keep the tolerance source current for an incumbent that kept running (wasn't re-granted).
         if (active != null) {
             activePressure = lastPressures[indexOf(active)];
         }
@@ -166,22 +149,23 @@ public final class Arbiter {
         boolean busyBefore = executor.isBusy();
         executor.tick(ctx);
         if (busyBefore && !executor.isBusy()) {
-            TaskStatus last = executor.lastStatus().orElse(null);
-            if (runningCommitment) {
-                if (last == TaskStatus.FAILED) {
-                    // PROJECT log: the goal is out of reach right now — unclaim; the board's
-                    // cooldown paces the retry (and is where the escalation flag will hang).
-                    ctx.journal().record(Category.PROJECT, commitment.describe(),
-                            "failed — unclaimed (board cooldown)");
-                    work.fail(commitment);
+            if (workRunning) {
+                // The errand reached a terminal: report to the board either way. Failure pacing
+                // is the ITEM's (board cooldown), never an instinct cooldown.
+                if (executor.lastStatus().orElse(null) == TaskStatus.FAILED) {
+                    ctx.journal().record(Category.PROJECT, claimedItem.describe(), "failed");
+                    work.failed(claimedItem, ctx);
                 } else {
-                    ctx.journal().record(Category.PROJECT, commitment.describe(), "completed");
-                    work.complete(commitment);
+                    ctx.journal().record(Category.PROJECT, claimedItem.describe(),
+                            "completed (" + claimedItem.progress(ctx) + ")");
+                    work.completed(claimedItem, ctx);
                 }
-                commitment = null;
-                runningCommitment = false;
-            } else if (active != null && last == TaskStatus.FAILED) {
-                // BRAIN log: only failures — the interesting signal.
+                claimedItem = null;
+                workRunning = false;
+            } else if (active != null && executor.lastStatus().orElse(null) == TaskStatus.FAILED) {
+                // BRAIN log: failures only — an unsatisfiable drive is the signal, and every
+                // wander SUCCESS would be noise. The switch/take-over lines already mark what she
+                // started.
                 ctx.journal().record(Category.BRAIN, active.describe(), "failed");
                 cooldowns[indexOf(active)] = active.failCooldown();
             }
@@ -190,21 +174,16 @@ public final class Arbiter {
     }
 
     /**
-     * The current cost ceiling for method selection: a running commitment spends its fixed
-     * {@link #workTolerance budget}; a drive spends {@link ToleranceCurve} of its pressure;
-     * nothing active means unbounded (idle re-arbitrates next tick; manual driving answers to
-     * no pressure).
+     * The cost ceiling for method selection: {@link ToleranceCurve} of the active drive's pressure,
+     * {@link Double#POSITIVE_INFINITY} when nothing is active.
      */
     public double costTolerance() {
-        if (runningCommitment) {
-            return workTolerance(commitment.priority());
+        if (workRunning && claimedItem != null) {
+            // Decoupled from the needs' desperation curve on purpose: a job is worth a fixed
+            // effort, set by policy — see WorkToleranceCurve.
+            return WorkToleranceCurve.tolerance(claimedItem.priority());
         }
         return active == null ? Double.POSITIVE_INFINITY : ToleranceCurve.tolerance(activePressure);
-    }
-
-    /** The flat commitment budget for a work priority — see {@link #WORK_TOLERANCE_BASE}. */
-    public static double workTolerance(double priority) {
-        return WORK_TOLERANCE_BASE + WORK_TOLERANCE_PER_PRIORITY * priority;
     }
 
     /** The executor the arbiter drives — the mod driver's manual-mode entry point and status source. */
@@ -213,9 +192,9 @@ public final class Arbiter {
     }
 
     /**
-     * One line per instinct (name, pressure, active/cooldown tags), then the commitment line
-     * when one is owed — {@code work: acquire logs x16 (active|suspended)} — then the
-     * executor's own describe. The brain's "why is she doing that?" answer, ctx-less.
+     * One line per instinct — name, last-tick pressure to 2dp, and a tag: {@code (active)} for the
+     * running drive, {@code (cooldown Nt)} for one sitting out — then the executor's own describe.
+     * The brain's "why is she doing that?" answer, ctx-less so a command can print it any time.
      */
     public String describe() {
         StringBuilder sb = new StringBuilder();
@@ -230,9 +209,9 @@ public final class Arbiter {
             }
             sb.append('\n');
         }
-        if (commitment != null) {
-            sb.append("work: ").append(commitment.describe())
-                    .append(runningCommitment ? " (active)" : " (suspended)").append('\n');
+        if (claimedItem != null) {
+            sb.append("work: ").append(claimedItem.describe())
+                    .append(workRunning ? " (active)" : " (suspended)").append('\n');
         }
         sb.append(executor.describe());
         return sb.toString();
@@ -240,11 +219,29 @@ public final class Arbiter {
 
     // --- internals -------------------------------------------------------------------------------
 
+    /** Engage (claim) or resume the work item: a fresh root either way — resume re-decomposes
+     *  against the changed world, and achieve-goals count prior progress automatically. */
+    private void grantWork(WorkItem item, BrainContext ctx) {
+        if (claimedItem != item) {
+            claimedItem = item;
+            work.claimed(item, ctx);
+            ctx.journal().record(Category.PROJECT, item.describe(), String.format(Locale.ROOT,
+                    "claimed (priority %.2f)", item.priority()));
+        } else {
+            ctx.journal().record(Category.PROJECT, item.describe(),
+                    "resumed (" + item.progress(ctx) + ")");
+        }
+        active = null;
+        workRunning = true;
+        executor.run(item.root(), ctx);
+    }
+
     /** Install instinct {@code i}'s fresh root as the running task, recording it as active. */
     private void grant(int i, BrainContext ctx) {
         Instinct instinct = instincts.get(i);
-        // BRAIN log: journal only a genuine change of drive — not the incumbent re-granting
-        // itself after each SUCCESS (that would swamp the ring with wander re-rolls).
+        // BRAIN log: only a genuine change of drive, not the incumbent re-granting itself after
+        // each SUCCESS — that would swamp the ring with wander re-rolls. A preempt is a switch
+        // that cut a still-running task off.
         if (instinct != lastGranted) {
             boolean preempt = executor.isBusy() && active != null && active != instinct;
             ctx.journal().record(Category.BRAIN, instinct.describe(), String.format(Locale.ROOT,
@@ -254,34 +251,6 @@ public final class Arbiter {
         active = instinct;
         activePressure = lastPressures[i];
         executor.run(instinct.root(ctx), ctx); // run() cancels any incumbent first
-    }
-
-    /**
-     * Take (or resume) the commitment: a fresh claim journals its lifecycle head; a resume just
-     * says so. Either way the root is a FRESH {@code ObtainItem} — the achieve-goal re-reads
-     * the world, so logs gathered before an interruption count and the remainder re-plans.
-     */
-    private void grantCommitment(WorkItem offer, BrainContext ctx) {
-        if (commitment == null) {
-            commitment = offer;
-            work.claim(offer);
-            ctx.journal().record(Category.PROJECT, offer.describe(),
-                    String.format(Locale.ROOT, "claimed (priority %.2f)", offer.priority()));
-            ctx.journal().record(Category.PROJECT, offer.describe(), "started");
-        } else {
-            ctx.journal().record(Category.PROJECT, commitment.describe(), "resumed");
-        }
-        runningCommitment = true;
-        active = null;
-        lastGranted = null; // the next drive grant is a genuine change again — journal it
-        executor.run(new ObtainItem(commitment.spec(), commitment.count()), ctx);
-    }
-
-    /** The claim survives; only the task tree dies (the follow-up {@link #grant} cancels it). */
-    private void suspendCommitment(BrainContext ctx, String byWhom, double pressure) {
-        ctx.journal().record(Category.PROJECT, commitment.describe(),
-                String.format(Locale.ROOT, "suspended (by %s %.2f)", byWhom, pressure));
-        runningCommitment = false;
     }
 
     private int indexOf(Instinct instinct) {

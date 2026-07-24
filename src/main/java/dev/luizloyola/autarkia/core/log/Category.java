@@ -6,17 +6,16 @@ package dev.luizloyola.autarkia.core.log;
  * command and the file sink filter and colour without parsing.
  *
  * <ul>
- *   <li>{@link #BRAIN} — arbiter decisions, task trees, autonomy flipping.</li>
- *   <li>{@link #PATHFIND} — routes requested, accepted ({@code success N nodes}), failed,
- *       recalculated, strayed off.</li>
- *   <li>{@link #BODY} — damage taken (source + new health), starvation, death, eating.</li>
+ *   <li>{@link #BRAIN} — the winning instinct, a task tree starting or finishing, autonomy.</li>
+ *   <li>{@link #PATHFIND} — a route requested, accepted or failed, a recalculate, a stray.</li>
+ *   <li>{@link #BODY} — damage (source + new health), starvation, death, eating.</li>
  *   <li>{@link #SENSE} — a POI noticed into or forgotten from the knowledge store.</li>
- *   <li>{@link #PROJECT} — an item claimed, started, suspended (and by what), resumed, completed,
- *       failed-and-unclaimed.</li>
+ *   <li>{@link #PROJECT} — the board (posted / closed / cooldown) and the arbiter's commitments
+ *       (claimed / started / suspended / resumed / completed / failed).</li>
  * </ul>
  *
- * <p>The enum, not the emitter, decides the column: an entry-free layer 3/4 logs through the same
- * service by {@code PersonId}.
+ * <p>The enum, not the emitter's location, decides the column: an entity-free layer 3/4 logs
+ * through the same service against its {@code PersonId}.
  */
 public enum Category {
     BRAIN,

@@ -191,11 +191,7 @@ public final class AutarkiaCommands {
                                                 .then(logForCategory("brain", Category.BRAIN))
                                                 .then(logForCategory("pathfind", Category.PATHFIND))
                                                 .then(logForCategory("body", Category.BODY))
-                                                .then(logForCategory("sense", Category.SENSE))
-                                                .then(logForCategory("project", Category.PROJECT)))))
-                        // Layer 3's readout: the personal board's standing project + item state.
-                        .then(Commands.literal("board")
-                                .executes(ctx -> boardShow(ctx.getSource())))
+                                                .then(logForCategory("sense", Category.SENSE)))))
                         // What the resolved Person REMEMBERS (the knowledge store) — beliefs, not
                         // world state; "view" renders those beliefs as particles + discovery chat.
                         .then(Commands.literal("knowledge")
@@ -205,6 +201,9 @@ public final class AutarkiaCommands {
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), true)))
                                         .then(Commands.literal("off")
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), false)))))
+                        // The personal board (layer 3's degenerate v1): posted/claimed/cooling.
+                        .then(Commands.literal("board")
+                                .executes(ctx -> boardShow(ctx.getSource())))
                         .then(Commands.literal("inv")
                                 .then(Commands.literal("list")
                                         .executes(ctx -> invList(ctx.getSource())))
@@ -295,12 +294,12 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** Prints the resolved Person's personal board — the layer-3 readout beside the brain's. */
+    /** Prints the resolved Person's personal board — the work-demand side of the brain. */
     private static int boardShow(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " — "
-                + person.brain().board().describe()).withStyle(ChatFormatting.LIGHT_PURPLE), false);
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + " board: "
+                + person.brain().describeBoard()).withStyle(ChatFormatting.LIGHT_PURPLE), false);
         return 1;
     }
 

@@ -1,92 +1,145 @@
 package dev.luizloyola.autarkia.core.brain.board;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.luizloyola.autarkia.core.inv.Inventory;
+import dev.luizloyola.autarkia.core.brain.BrainContext;
+import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
+import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
+import dev.luizloyola.autarkia.core.brain.sense.Percepts;
+import dev.luizloyola.autarkia.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import org.junit.jupiter.api.Test;
 
-/** The standing stock project's lifecycle: cadence, predicate, claim, completion, cooldown. */
+/** The placeholder demand generator: cadence posting, withdrawal, completion, retry pacing. */
 class PersonalBoardTest {
 
-    private final PersonalBoard board = new PersonalBoard();
-    private final Inventory inventory = new Inventory();
+    private final BoardContext ctx = new BoardContext();
+    private final PersonalBoard board = new PersonalBoard(ItemSpec.LOGS, 16, 0.35, 0);
 
-    private void stock(int logs) {
-        inventory.add(ItemStack.of("minecraft:oak_log", logs, 64));
-    }
-
-    /** First tick is the warm-up grace (look before wanting); the board acts from the second on. */
-    private void prime() {
-        board.tick(0, inventory);
+    private void ticks(int n) {
+        for (int i = 0; i < n; i++) {
+            board.tick(ctx);
+        }
     }
 
     @Test
-    void theFirstTickIsAGraceNotAWant() {
-        board.tick(0, inventory); // understocked, but she has not looked at the world yet
-        assertTrue(board.bestAvailable().isEmpty(), "no cold-claim race on tick one");
+    void postsOnItsCadenceWhenShort() {
+        ticks(PersonalBoard.CHECK_INTERVAL - 1);
+        assertTrue(board.bestAvailable(ctx).isEmpty(), "not before the beat");
+        ticks(1);
+        assertTrue(board.bestAvailable(ctx).isPresent(), "short on logs -> posted");
     }
 
     @Test
-    void postsWhenUnderstockedAndOnlyOnTheCadence() {
-        prime();
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS, inventory);
-        WorkItem item = board.bestAvailable().orElseThrow();
-        assertEquals(PersonalBoard.STOCK_TARGET, item.count());
-        assertEquals(PersonalBoard.STOCK_PRIORITY, item.priority());
-
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS + 50, inventory); // between checks: no churn
-        assertEquals(item, board.bestAvailable().orElseThrow());
+    void withdrawsAnUnclaimedItemThatBecameMoot() {
+        ticks(PersonalBoard.CHECK_INTERVAL);
+        assertTrue(board.bestAvailable(ctx).isPresent());
+        ctx.inventory().add(ItemStack.of("minecraft:oak_log", 16, 64));
+        ticks(PersonalBoard.CHECK_INTERVAL);
+        assertTrue(board.bestAvailable(ctx).isEmpty(), "stocked by luck -> withdrawn");
     }
 
     @Test
-    void staysQuietWhenStocked() {
-        stock(PersonalBoard.STOCK_TARGET);
-        prime();
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS, inventory);
-        assertTrue(board.bestAvailable().isEmpty());
+    void claimHidesTheItemAndCompletionClosesIt() {
+        ticks(PersonalBoard.CHECK_INTERVAL);
+        WorkItem item = board.bestAvailable(ctx).orElseThrow();
+        board.claimed(item, ctx);
+        assertTrue(board.bestAvailable(ctx).isEmpty(), "claimed items are not on offer");
+        ctx.inventory().add(ItemStack.of("minecraft:oak_log", 16, 64));
+        board.completed(item, ctx);
+        ticks(PersonalBoard.CHECK_INTERVAL);
+        assertTrue(board.bestAvailable(ctx).isEmpty(), "stocked -> nothing re-posted");
     }
 
     @Test
-    void anUnclaimedItemRetiresWhenTheWantClosesByOtherMeans() {
-        prime();
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS, inventory);
-        assertTrue(board.bestAvailable().isPresent());
-        stock(PersonalBoard.STOCK_TARGET); // a gift, a pickup — the pack filled itself
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS * 2, inventory);
-        assertTrue(board.bestAvailable().isEmpty());
+    void failurePacesTheRetry() {
+        ticks(PersonalBoard.CHECK_INTERVAL);
+        WorkItem item = board.bestAvailable(ctx).orElseThrow();
+        board.claimed(item, ctx);
+        board.failed(item, ctx);
+        ticks(PersonalBoard.FAIL_COOLDOWN - PersonalBoard.CHECK_INTERVAL);
+        assertFalse(board.bestAvailable(ctx).isPresent(), "cooling: the want waits");
+        ticks(PersonalBoard.FAIL_COOLDOWN);
+        assertTrue(board.bestAvailable(ctx).isPresent(), "cooldown over -> posted again");
     }
 
-    @Test
-    void claimHidesTheItemAndCompletionReopensTheWantLater() {
-        prime();
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS, inventory);
-        WorkItem first = board.bestAvailable().orElseThrow();
-        board.claim(first);
-        assertTrue(board.bestAvailable().isEmpty(), "claimed = off the offer");
+    /** A minimal context for the board: real inventory + journal, nothing else consulted. */
+    private static final class BoardContext implements BrainContext {
+        private final dev.luizloyola.autarkia.core.inv.Inventory inventory =
+                new dev.luizloyola.autarkia.core.inv.Inventory();
+        private final dev.luizloyola.autarkia.core.log.JournalService journal =
+                new dev.luizloyola.autarkia.core.log.JournalService(() -> 0L);
+        private final dev.luizloyola.autarkia.core.log.PersonJournal view =
+                journal.forPerson(dev.luizloyola.autarkia.core.person.PersonId.random());
+        dev.luizloyola.autarkia.core.inv.Inventory inventory() {
+            return inventory;
+        }
 
-        board.complete(first);
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS * 2, inventory); // pack still empty: want reopens
-        WorkItem second = board.bestAvailable().orElseThrow();
-        assertNotEquals(first.id(), second.id(), "a fresh posting, not the ghost of the old one");
-    }
+        @Override
+        public ActuatorAccess actuators() {
+            throw new UnsupportedOperationException("the board never acts");
+        }
 
-    @Test
-    void failureCoolsTheWantDown() {
-        prime();
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS, inventory);
-        WorkItem item = board.bestAvailable().orElseThrow();
-        board.claim(item);
-        board.fail(item);
+        @Override
+        public Percepts percepts() {
+            // The board reads exactly one sense: what the pack holds.
+            return new Percepts() {
+                @Override
+                public dev.luizloyola.autarkia.core.inv.Inventory inventory() {
+                    return inventory;
+                }
 
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS * 2, inventory);
-        assertTrue(board.bestAvailable().isEmpty(), "cooling down — the retry is paced");
+                @Override
+                public dev.luizloyola.autarkia.core.person.Needs needs() {
+                    throw new UnsupportedOperationException();
+                }
 
-        board.tick(PersonalBoard.CHECK_INTERVAL_TICKS + PersonalBoard.FAIL_COOLDOWN_TICKS
-                + PersonalBoard.CHECK_INTERVAL_TICKS, inventory);
-        assertFalse(board.bestAvailable().isEmpty(), "cooldown over — wanted again");
+                @Override
+                public dev.luizloyola.autarkia.core.brain.sense.FoodLookup foods() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public dev.luizloyola.autarkia.core.brain.sense.Pos position() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public java.util.List<dev.luizloyola.autarkia.core.brain.sense.Threat> threats() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public dev.luizloyola.autarkia.core.brain.knowledge.BlockProbe blocks() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public java.util.List<dev.luizloyola.autarkia.core.brain.sense.Drop> drops() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public long time() {
+                    return 0L;
+                }
+            };
+        }
+
+        @Override
+        public dev.luizloyola.autarkia.core.log.PersonJournal journal() {
+            return view;
+        }
+
+        @Override
+        public PersonKnowledge knowledge() {
+            throw new UnsupportedOperationException("the board never reads memories");
+        }
+
+        @Override
+        public double costTolerance() {
+            return Double.POSITIVE_INFINITY;
+        }
     }
 }

@@ -1,24 +1,44 @@
 package dev.luizloyola.autarkia.core.brain.board;
 
+import dev.luizloyola.autarkia.core.brain.BrainContext;
 import java.util.Optional;
 
 /**
- * The board's face toward one person's arbiter: what work is on offer, and the three lifecycle
- * reports. For a loner this is her {@link PersonalBoard}; when groups arrive the same four calls
- * front the shared claim board, with claim scoring, contention and timed release BEHIND this seam.
+ * The board's face toward the arbiter — the second demand source beside the instinct list. The
+ * arbiter asks what work is on offer and reports how the engagement ended; everything else stays
+ * behind this seam, where slice 3's shared board will plug in. The mod layer may wrap a source to
+ * observe transitions.
  */
 public interface WorkSource {
-    /** The best unclaimed, off-cooldown item on offer right now, if any. */
-    Optional<WorkItem> bestAvailable();
+    /** A source with nothing to offer, ever — the no-board arbiter for tests and manual rigs. */
+    WorkSource NONE = new WorkSource() {
+        @Override
+        public Optional<WorkItem> bestAvailable(BrainContext ctx) {
+            return Optional.empty();
+        }
 
-    /** The arbiter took the item — it is no longer on offer to anyone else. */
-    void claim(WorkItem item);
+        @Override
+        public void claimed(WorkItem item, BrainContext ctx) {
+        }
 
-    /** The item's goal was achieved; the board retires it (and re-posts later if the
-     *  underlying want re-opens). */
-    void complete(WorkItem item);
+        @Override
+        public void completed(WorkItem item, BrainContext ctx) {
+        }
 
-    /** The item's goal is currently out of reach (the root FAILED); the board unclaims it and
-     *  cools it down so the retry is paced, not a spin. */
-    void fail(WorkItem item);
+        @Override
+        public void failed(WorkItem item, BrainContext ctx) {
+        }
+    };
+
+    /** The best unclaimed item currently on offer, if any. */
+    Optional<WorkItem> bestAvailable(BrainContext ctx);
+
+    /** The arbiter took the item — it is owed until completed, failed, or released. */
+    void claimed(WorkItem item, BrainContext ctx);
+
+    /** The item's root SUCCEEDED — the goal held; the board closes the item. */
+    void completed(WorkItem item, BrainContext ctx);
+
+    /** The item's root FAILED — the board unclaims it and paces the retry. */
+    void failed(WorkItem item, BrainContext ctx);
 }

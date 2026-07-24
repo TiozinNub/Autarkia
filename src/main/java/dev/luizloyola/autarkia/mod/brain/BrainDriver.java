@@ -1,8 +1,10 @@
 package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.core.brain.Arbiter;
-import dev.luizloyola.autarkia.core.brain.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
+import dev.luizloyola.autarkia.core.brain.board.PersonalBoard;
+import dev.luizloyola.autarkia.core.brain.board.WorkItem;
+import dev.luizloyola.autarkia.core.brain.board.WorkSource;
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
 import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
 import dev.luizloyola.autarkia.core.brain.act.BlockPlacer;
@@ -14,12 +16,17 @@ import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.task.Task;
+import dev.luizloyola.autarkia.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 
 /**
  * Per-{@link Person} brain host: mounts the pure core decision machinery on the entity and hands it
@@ -37,12 +44,6 @@ import net.minecraft.server.level.ServerLevel;
 public final class BrainDriver {
     private final Person person;
     private final Arbiter arbiter;
-    /**
-     * This person's personal claim board (layer 3, degenerate group-of-one) — ticked here on
-     * the brain cadence and handed to the arbiter as its {@code WorkSource}. Transient: the
-     * standing stock project re-derives its items from the pack.
-     */
-    private final PersonalBoard board = new PersonalBoard();
     /**
      * The one context every task/instinct tick receives: actuators, percepts and the debug
      * journal — the only Minecraft boundary the core machinery ever touches.
@@ -64,8 +65,22 @@ public final class BrainDriver {
      */
     private PersonKnowledge knowledge;
 
+    /**
+     * This person's personal board (layer 3's degenerate v1): the hardcoded keep-16-logs
+     * stock rule every fresh spawn wants — the placeholder demand generator, retired when the
+     * first real project (the axe) posts its own bill of materials. Transient: items
+     * regenerate from the inventory predicate.
+     */
+    private final PersonalBoard board;
+
+    /** The placeholder stock rule: keep this many logs, at this standing priority. */
+    private static final int STOCK_LOGS = 16;
+    private static final double STOCK_PRIORITY = 0.35;
+
     public BrainDriver(Person person) {
         this.person = person;
+        // Offset the board cadence by entity id so a settlement doesn't re-plan in lockstep.
+        this.board = new PersonalBoard(ItemSpec.LOGS, STOCK_LOGS, STOCK_PRIORITY, person.getId());
         Mover mover = new PersonMover(person);
         ItemConsumer consumer = new PersonItemConsumer(person);
         BlockPlacer placer = new PersonBlockPlacer(person);
@@ -126,10 +141,44 @@ public final class BrainDriver {
         // directly; it seeds this one once at construction instead. Both random-driven instincts
         // (Flee's scatter, Wander's roam) draw from it — one stream per brain, never shared.
         Random random = new Random(person.getRandom().nextLong());
+        // The board reaches the arbiter through a celebrating wrapper: a completed errand gets a
+        // beat in the world (decision: Luiz) before the core board hears of it. sendParticles
+        // broadcasts to every tracking client; no custom networking.
+        WorkSource celebrating = new WorkSource() {
+            @Override
+            public Optional<WorkItem> bestAvailable(BrainContext c) {
+                return board.bestAvailable(c);
+            }
+
+            @Override
+            public void claimed(WorkItem item, BrainContext c) {
+                board.claimed(item, c);
+            }
+
+            @Override
+            public void completed(WorkItem item, BrainContext c) {
+                celebrate();
+                board.completed(item, c);
+            }
+
+            @Override
+            public void failed(WorkItem item, BrainContext c) {
+                board.failed(item, c);
+            }
+        };
         // Flee is first on purpose: the arbiter breaks pressure ties in list order, so an exact
         // flee/eat tie must resolve to fleeing.
         this.arbiter = new Arbiter(List.of(
-                new FleeInstinct(random), new EatInstinct(), new WanderInstinct(random)), board);
+                new FleeInstinct(random), new EatInstinct(), new WanderInstinct(random)),
+                celebrating);
+    }
+
+    private void celebrate() {
+        ServerLevel level = (ServerLevel) person.level();
+        level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
+                person.getX(), person.getY() + 1.4, person.getZ(), 12, 0.4, 0.5, 0.4, 0.0);
+        level.playSound(null, person.blockPosition(), SoundEvents.VILLAGER_YES,
+                SoundSource.NEUTRAL, 1.0F, 1.0F);
     }
 
     /**
@@ -138,9 +187,9 @@ public final class BrainDriver {
      * a dev-issued task isn't second-guessed mid-flight.
      */
     public void tick() {
-        // The board heartbeat runs regardless of the autonomy switch (posting is cheap and
-        // harmless in manual mode; the arbiter only CONSUMES offers when it is deciding).
-        this.board.tick(this.person.level().getGameTime(), this.person.inventory());
+        // The board thinks on its own slow cadence regardless of who is driving — posting and
+        // withdrawing are demand bookkeeping, not action; only the arbiter CLAIMS.
+        this.board.tick(this.context);
         if (this.auto) {
             this.arbiter.tick(this.context);
         } else {
@@ -192,9 +241,9 @@ public final class BrainDriver {
         return this.knowledge;
     }
 
-    /** This person's personal board — the /autarkia board readout. */
-    public PersonalBoard board() {
-        return this.board;
+    /** The personal board's status line — see {@link PersonalBoard#describe}. */
+    public String describeBoard() {
+        return this.board.describe(this.context);
     }
 
     /** The brain's one-line status, for the debug commands: which side is driving, then its report. */

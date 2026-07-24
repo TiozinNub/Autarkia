@@ -1,99 +1,123 @@
 package dev.luizloyola.autarkia.core.brain.board;
 
-import dev.luizloyola.autarkia.core.inv.Inventory;
+import dev.luizloyola.autarkia.core.brain.BrainContext;
+import dev.luizloyola.autarkia.core.brain.task.ObtainItem;
+import dev.luizloyola.autarkia.core.brain.task.Task;
 import dev.luizloyola.autarkia.core.inv.ItemSpec;
-import java.util.Locale;
+import dev.luizloyola.autarkia.core.log.Category;
 import java.util.Optional;
 
 /**
- * The degenerate personal board: one person carrying one hardcoded standing project,
- * {@code KeepStocked(logs, 16)} (decision: Luiz — every fresh spawn wants a wood stock, and it is
- * easy to see working). Explicitly disposable — real demand is derived, and the wooden-axe goal
- * retires this generator with nothing downstream changing.
+ * Layer 3's first, degenerate incarnation: a personal board with one hardcoded stock
+ * rule — keep {@code target} of {@code spec} in the pack (decision: Luiz — universal, visible, a
+ * natural stress test). Real demand is DERIVED, a project computing a bill of materials and
+ * posting this same item shape; the first real project retires this generator. Pure core.
  *
- * <p>Every {@link #CHECK_INTERVAL_TICKS} the stock predicate re-reads the pack: the inventory IS
- * the progress record, so completion detection and re-posting need no other state. A failed item
- * cools for {@link #FAIL_COOLDOWN_TICKS} (5× an instinct's — errands retry lazily, reflexes fast).
- * Transient: items regenerate from the predicate, so there is nothing worth persisting yet.
+ * <p>Re-evaluated every {@link #CHECK_INTERVAL} ticks, offset per person so a settlement does not
+ * think in lockstep. Posts when short and idle, withdraws an unclaimed item gone moot, and paces a
+ * failure with {@link #FAIL_COOLDOWN} — five times an instinct's, and the pause is not dead time:
+ * wandering fills the knowledge the retry needs.
  */
 public final class PersonalBoard implements WorkSource {
-    /** How often the standing project re-checks its predicate. Tuning knob. */
-    public static final int CHECK_INTERVAL_TICKS = 100;
-    /** How long a failed item stays off the offer. Tuning knob. */
-    public static final int FAIL_COOLDOWN_TICKS = 600;
-    /** The placeholder project: keep this many logs in the pack... */
-    public static final int STOCK_TARGET = 16;
-    /** ...at this priority — beats idling (0.15+stickiness), holds through peckish (0.30),
-     *  yields to hungry (0.60). See the work-loop design's behavior table. */
-    public static final double STOCK_PRIORITY = 0.35;
+    /** Ticks between board re-evaluations. Tuning knob. */
+    public static final int CHECK_INTERVAL = 100;
+    /** Ticks a failed item sits out before re-posting. Tuning knob. */
+    public static final int FAIL_COOLDOWN = 600;
 
-    private final ItemSpec spec = ItemSpec.LOGS;
+    private final ItemSpec spec;
+    private final int target;
+    private final double priority;
+    private final int offset;
 
     private WorkItem open;
     private boolean claimed;
-    private long nextCheck;
-    private long cooldownUntil;
-    private long now;
-    private int posted;
+    private int cooldown;
+    private int clock;
 
-    /** One board heartbeat — cheap except every {@link #CHECK_INTERVAL_TICKS}th call. */
-    public void tick(long now, Inventory inventory) {
-        this.now = now;
-        if (nextCheck == 0) {
-            // Warm-up grace: one full cadence before the first want, so a fresh spawn looks at
-            // the world before claiming work in it. Posting on tick one raced the eyes and failed
-            // the errand into a pointless cooldown.
-            nextCheck = now + CHECK_INTERVAL_TICKS;
+    public PersonalBoard(ItemSpec spec, int target, double priority, int offset) {
+        this.spec = spec;
+        this.target = target;
+        this.priority = priority;
+        this.offset = offset;
+    }
+
+    /** One board tick — cheap except on its cadence beats. */
+    public void tick(BrainContext ctx) {
+        if (cooldown > 0) {
+            cooldown--;
+        }
+        if ((++clock + offset) % CHECK_INTERVAL != 0) {
             return;
         }
-        if (now < nextCheck) {
-            return;
-        }
-        nextCheck = now + CHECK_INTERVAL_TICKS;
-        boolean stocked = inventory.count(spec.matcher()) >= STOCK_TARGET;
-        if (open == null && !stocked && now >= cooldownUntil) {
-            open = new WorkItem("stock-" + (++posted), spec, STOCK_TARGET, STOCK_PRIORITY);
+        boolean stocked = ctx.percepts().inventory().count(spec.matcher()) >= target;
+        if (open == null && cooldown <= 0 && !stocked) {
+            open = new StockItem();
+            ctx.journal().record(Category.PROJECT, open.describe(), "posted");
         } else if (open != null && !claimed && stocked) {
-            open = null; // the want closed by other means while the item sat unclaimed
+            // The want evaporated before anyone worked it (a lucky scavenge, a dev give).
+            ctx.journal().record(Category.PROJECT, open.describe(), "withdrawn (already stocked)");
+            open = null;
         }
     }
 
-    @Override
-    public Optional<WorkItem> bestAvailable() {
-        return claimed ? Optional.empty() : Optional.ofNullable(open);
+    /** The board's line for the debug command: what is posted, claimed, cooling, or quiet. */
+    public String describe(BrainContext ctx) {
+        if (open != null) {
+            return open.describe() + (claimed ? " — claimed" : " — posted")
+                    + ", " + open.progress(ctx);
+        }
+        if (cooldown > 0) {
+            return "idle (retry cooldown " + cooldown + "t)";
+        }
+        return "idle";
     }
 
     @Override
-    public void claim(WorkItem item) {
+    public Optional<WorkItem> bestAvailable(BrainContext ctx) {
+        return open != null && !claimed ? Optional.of(open) : Optional.empty();
+    }
+
+    @Override
+    public void claimed(WorkItem item, BrainContext ctx) {
         claimed = true;
     }
 
     @Override
-    public void complete(WorkItem item) {
+    public void completed(WorkItem item, BrainContext ctx) {
+        ctx.journal().record(Category.PROJECT, item.describe(), "closed (" + item.progress(ctx) + ")");
         open = null;
         claimed = false;
     }
 
     @Override
-    public void fail(WorkItem item) {
+    public void failed(WorkItem item, BrainContext ctx) {
+        ctx.journal().record(Category.PROJECT, item.describe(),
+                "unclaimed, retry cooldown (" + FAIL_COOLDOWN + "t)");
         open = null;
         claimed = false;
-        cooldownUntil = now + FAIL_COOLDOWN_TICKS;
+        cooldown = FAIL_COOLDOWN;
     }
 
-    /** The {@code /autarkia board} readout. */
-    public String describe() {
-        StringBuilder text = new StringBuilder("board: keep ")
-                .append(STOCK_TARGET).append(' ').append(spec.name())
-                .append(String.format(Locale.ROOT, " (priority %.2f)", STOCK_PRIORITY))
-                .append(" — ");
-        if (open == null) {
-            text.append(now < cooldownUntil
-                    ? "cooling down (" + (cooldownUntil - now) + "t left)"
-                    : "no open item");
-        } else {
-            text.append(open.describe()).append(claimed ? " [claimed]" : " [on offer]");
+    /** The one item this placeholder generator knows how to post. */
+    private final class StockItem implements WorkItem {
+        @Override
+        public double priority() {
+            return priority;
         }
-        return text.toString();
+
+        @Override
+        public Task root() {
+            return new ObtainItem(spec, target);
+        }
+
+        @Override
+        public String describe() {
+            return "acquire " + spec.name() + " x" + target;
+        }
+
+        @Override
+        public String progress(BrainContext ctx) {
+            return ctx.percepts().inventory().count(spec.matcher()) + "/" + target + " held";
+        }
     }
 }
