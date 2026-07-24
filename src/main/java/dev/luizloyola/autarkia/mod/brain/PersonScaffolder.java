@@ -17,6 +17,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -79,6 +80,7 @@ public final class PersonScaffolder implements Scaffolder {
         if (state != ScaffoldState.RISING) {
             return;
         }
+        faceBase(); 
         person.setJumping(true); // held-space semantics: aiStep jumps her when grounded
         if (person.getY() >= base.getY() + 1.0) {
             person.setJumping(false);
@@ -105,6 +107,19 @@ public final class PersonScaffolder implements Scaffolder {
             person.setJumping(false);
             state = ScaffoldState.FAILED; 
         }
+    }
+
+    /**
+     * Tilt the head and eyes down onto {@link #base}. The placement is straight underfoot, so the
+     * yaw toward it is degenerate: keep her travel yaw and only pitch down.
+     */
+    private void faceBase() {
+        Vec3 center = Vec3.atCenterOf(base);
+        Vec3 eye = person.getEyePosition();
+        double dy = center.y - eye.y;
+        double horizontal = Math.hypot(center.x - eye.x, center.z - eye.z);
+        float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal));
+        person.setXRot(pitch);
     }
 
     @Override
