@@ -186,6 +186,34 @@ class ArbiterTest {
         assertEquals(0, b.grantedRoots.size());
     }
 
+    @Test
+    void zeroPressureIsNotABid() {
+        FakeInstinct flee = new FakeInstinct("flee", 0.0, forever("scatter"));
+        FakeInstinct wander = new FakeInstinct("wander", 0.0, forever("roam"));
+        Arbiter arbiter = new Arbiter(List.of(flee, wander));
+        for (int i = 0; i < 20; i++) {
+            arbiter.tick(ctx);
+        }
+        assertTrue(flee.grantedRoots.isEmpty(), "an all-zero field grants nobody by list order");
+        assertTrue(wander.grantedRoots.isEmpty());
+        assertFalse(arbiter.executor().isBusy(), "wanting nothing means idling, not busywork");
+    }
+
+    @Test
+    void aCoolingWanderLeavesHerStandingNotScatterFleeing() {
+        // Live-caught: wander fails, cools down, and zero-pressure flee won the all-zero tie by
+        // list order — a sprint at nothing, clean out of the loaded world.
+        FakeInstinct flee = new FakeInstinct("flee", 0.0, forever("scatter"));
+        FakeInstinct wander = new FakeInstinct("wander", 0.15,
+                () -> new Step("roam", 1, TaskStatus.FAILED));
+        Arbiter arbiter = new Arbiter(List.of(flee, wander));
+        for (int i = 0; i < 40; i++) {
+            arbiter.tick(ctx); // grant, fail, and then the whole cooldown stretch
+        }
+        assertTrue(flee.grantedRoots.isEmpty(),
+                "flee at 0.00 never inherits the wheel — she stands out the cooldown");
+    }
+
     // --- stickiness ------------------------------------------------------------------------------
 
     @Test

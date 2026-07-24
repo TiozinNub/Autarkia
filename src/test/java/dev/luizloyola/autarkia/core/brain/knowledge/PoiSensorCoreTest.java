@@ -140,6 +140,56 @@ class PoiSensorCoreTest {
     }
 
     @Test
+    void aTallerRebuildOnAForgottenFootprintIsRediscovered() {
+        FakeProbe probe = new FakeProbe();
+        probe.placeOak(8, 0);
+        tickUntilQuiet(probe, new Pos(0, 64, 0));
+        knowledge.forget(PoiKind.TREE, new Pos(8, 64, 0)); // the chop's memory write
+
+        // Taller on the same footprint: Every column's new surface sits strictly above its old
+        // claims (5 logs, canopy at y 69–70 over the old 67–68), so only the taller-rebuild arm
+        // sees this tree — the shape the old "benign interior" skip hid forever.
+        probe.removeOak(8, 0);
+        for (int y = 64; y <= 68; y++) {
+            probe.set(8, y, 0, BlockKind.LOG);
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                probe.set(8 + dx, 69, dz, BlockKind.LEAVES);
+                probe.set(8 + dx, 70, dz, BlockKind.LEAVES);
+            }
+        }
+
+        tickUntilQuiet(probe, new Pos(200, 64, 0));
+        List<SenseEvent> events = tickUntilQuiet(probe, new Pos(0, 64, 0));
+
+        assertTrue(events.stream().anyMatch(e -> e.type() == SenseEvent.Type.NOTED),
+                "the taller rebuild reads as a fresh hypothesis, not region interior");
+        assertEquals(1, knowledge.size());
+        assertEquals(5, knowledge.all(PoiKind.TREE).iterator().next().units(),
+                "the new belief counts the new tree's five logs");
+    }
+
+    @Test
+    void aRememberedTreeGrowingTallerUpdatesTheBelief() {
+        FakeProbe probe = new FakeProbe();
+        probe.placeOak(8, 0);
+        tickUntilQuiet(probe, new Pos(0, 64, 0));
+
+        // No forget this time — the belief is alive, but the tree outgrows its own claims
+        // (vanilla growth on a remembered grove). The re-scan merges by anchor radius.
+        probe.set(8, 68, 0, BlockKind.LOG);
+        probe.set(8, 69, 0, BlockKind.LEAVES);
+
+        tickUntilQuiet(probe, new Pos(200, 64, 0));
+        tickUntilQuiet(probe, new Pos(0, 64, 0));
+
+        assertEquals(1, knowledge.size(), "merged, never duplicated");
+        assertEquals(5, knowledge.all(PoiKind.TREE).iterator().next().units(),
+                "the belief tracked the growth");
+    }
+
+    @Test
     void aBlockedRayRetriesInPlaceOnceTheOccluderClears() {
         FakeProbe probe = new FakeProbe();
         probe.placeOak(8, 0);

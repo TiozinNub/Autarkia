@@ -24,7 +24,11 @@ import java.util.Locale;
  *       {@link Instinct#failCooldown()} set after a FAILED root is INELIGIBLE, and its cooldown
  *       then ticks down by one.</li>
  *   <li>Top eligible bidder by EFFECTIVE pressure — the incumbent gets a {@link #STICKINESS}
- *       bonus, and ties go to the earlier instinct in the constructor list.</li>
+ *       bonus, and ties go to the earlier instinct in the constructor list.
+ *       <b>Zero raw pressure is not a bid</b>: with every drive at zero the executor idles
+ *       rather than granting by list order, which once sprinted a zero-pressure Flee at
+ *       nothing, out of the loaded world. Wander's {@code IDLE_PRESSURE} is the explicit
+ *       do-something floor.</li>
  *   <li><b>Executor idle</b> → grant the top bidder; re-granting the incumbent after a SUCCESS is
  *       the continuous-behavior loop, {@code root()} called anew each time.</li>
  *   <li><b>Executor busy</b> → switch only if the top bidder is not the incumbent, beats it on
@@ -96,8 +100,8 @@ public final class Arbiter {
         int topIndex = -1;
         double topEffective = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < n; i++) {
-            if (!eligible[i]) {
-                continue;
+            if (!eligible[i] || lastPressures[i] <= 0.0) {
+                continue; // cooling down, or wanting nothing — zero pressure is not a bid
             }
             double effective = lastPressures[i] + (i == activeIndex ? STICKINESS : 0.0);
             if (effective > topEffective) { // strict > keeps the earlier entry on a tie

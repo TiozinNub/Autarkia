@@ -18,7 +18,9 @@ import java.util.List;
  *       other way to say so: the region's belief is invalidated;</li>
  *   <li>surface claimed and matching — refreshed; mismatching — invalidated (a negative claim is
  *       just cleared);</li>
- *   <li>claims only <em>below</em> the surface — benign (region interior), skip;</li>
+ *   <li>claims only <em>below</em> the surface — something new on an investigated footprint, so
+ *       a fresh hypothesis. Interiors never fire this arm (a live region's interior sits under a
+ *       claimed surface), and skipping it made taller rebuilds invisible forever;</li>
  *   <li>no claims — hypothesis: leaves/log grow a {@link TreeRule} scan, water a
  *       {@link WaterRule} one, gated by the confirm-ray ({@code visibleFromEyes}). One growth
  *       runs at a time.</li>
@@ -112,32 +114,32 @@ public final class PoiSensorCore {
         if (top == Integer.MIN_VALUE) {
             return reads;
         }
+        Pos surface = new Pos(column.x(), top, column.z());
         if (highestClaim != null) {
             if (highestClaim.y() > top) {
                 invalidate(highestClaim, claims.get(highestClaim), events);
                 return reads;
             }
-            Pos surface = new Pos(column.x(), top, column.z());
             ClaimIndex.Claim exact = claims.get(surface);
-            if (exact == null) {
+            if (exact != null) {
+                BlockKind kind = probe.at(surface.x(), surface.y(), surface.z());
+                reads++;
+                if (kind == exact.expected()) {
+                    if (exact.anchor() != null
+                            && !knowledge.refresh(exact.kind(), exact.anchor(), now)) {
+                        // Orphaned claims: the memory is gone (a task forgot it, or eviction)
+                        // but the claim survives and would mask the region forever. Drop them so
+                        // a later sweep re-discovers whatever stands here now.
+                        claims.dropRegion(exact.kind(), exact.anchor());
+                    }
+                } else {
+                    invalidate(surface, exact, events);
+                }
                 return reads;
             }
-            BlockKind kind = probe.at(surface.x(), surface.y(), surface.z());
-            reads++;
-            if (kind == exact.expected()) {
-                if (exact.anchor() != null
-                        && !knowledge.refresh(exact.kind(), exact.anchor(), now)) {
-                    // Orphaned claims: the memory is gone (a task forgot it, or eviction) but
-                    // the claim survived and would mask the region forever. Drop them so a later
-                    // sweep re-discovers whatever stands here now.
-                    claims.dropRegion(exact.kind(), exact.anchor());
-                }
-            } else {
-                invalidate(surface, exact, events);
-            }
-            return reads;
+            // Claims below, surface UNclaimed: the world grew TALLER on this investigated
+            // footprint — fall through to the hypothesis path (see the class doc's third arm).
         }
-        Pos surface = new Pos(column.x(), top, column.z());
         BlockKind kind = probe.at(surface.x(), surface.y(), surface.z());
         reads++;
         GrowthRule rule = ruleFor(kind);
