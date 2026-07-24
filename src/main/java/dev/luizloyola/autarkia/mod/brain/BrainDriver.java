@@ -11,6 +11,8 @@ import dev.luizloyola.autarkia.core.brain.act.BlockPlacer;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
 import dev.luizloyola.autarkia.core.brain.act.Scaffolder;
+import dev.luizloyola.autarkia.core.brain.board.PersonClaims;
+import dev.luizloyola.autarkia.core.brain.instinct.DescendInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.EatInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
@@ -65,6 +67,13 @@ public final class BrainDriver {
      * {@code Person.tick()}, before the brain runs).
      */
     private PersonKnowledge knowledge;
+
+    /**
+     * This person's view of the server-shared work-site claims — resolved lazily exactly like
+     * {@link #knowledge}, and for the same reason (the {@code PersonId} arrives after
+     * construction).
+     */
+    private PersonClaims claims;
 
     /**
      * This person's personal board (layer 3's degenerate v1): the hardcoded keep-16-logs
@@ -136,6 +145,11 @@ public final class BrainDriver {
             }
 
             @Override
+            public PersonClaims claims() {
+                return resolveClaims();
+            }
+
+            @Override
             public double costTolerance() {
                 // Manual driving answers to no pressure: a dev-issued task runs to completion (or
                 // failure) on its own terms rather than getting judged against the arbiter's
@@ -173,9 +187,11 @@ public final class BrainDriver {
             }
         };
         // Flee is first on purpose: the arbiter breaks pressure ties in list order, so an exact
-        // flee/eat tie must resolve to fleeing.
+        // flee/eat tie must resolve to fleeing. Descend sits between the needs and wander: a
+        // stranded body gets down before it drifts, but never before it flees or eats urgently.
         this.arbiter = new Arbiter(List.of(
-                new FleeInstinct(random), new EatInstinct(), new WanderInstinct(random)),
+                new FleeInstinct(random), new EatInstinct(), new DescendInstinct(),
+                new WanderInstinct(random)),
                 celebrating);
     }
 
@@ -245,6 +261,15 @@ public final class BrainDriver {
             this.knowledge = Knowledges.of(level.getServer()).forPerson(this.person.getPersonId());
         }
         return this.knowledge;
+    }
+
+    /** The person's claims view, resolved once and cached — see {@link #claims}. */
+    private PersonClaims resolveClaims() {
+        if (this.claims == null) {
+            ServerLevel level = (ServerLevel) this.person.level();
+            this.claims = Claims.of(level.getServer()).forPerson(this.person.getPersonId());
+        }
+        return this.claims;
     }
 
     /** The personal board's status line — see {@link PersonalBoard#describe}. */

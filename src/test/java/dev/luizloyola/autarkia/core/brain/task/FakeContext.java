@@ -5,6 +5,8 @@ import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
 import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
 import dev.luizloyola.autarkia.core.brain.act.BlockPlacer;
 import dev.luizloyola.autarkia.core.brain.act.Scaffolder;
+import dev.luizloyola.autarkia.core.brain.board.PersonClaims;
+import dev.luizloyola.autarkia.core.brain.board.SiteClaims;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
@@ -26,6 +28,13 @@ final class FakeContext implements BrainContext {
     final FakePercepts percepts = new FakePercepts();
     /** A real knowledge store (pure and headless anyway) — chop tests seed and inspect it. */
     final PersonKnowledge knowledge = new PersonKnowledge();
+    /** This fake person's identity — what its claims are held under. */
+    final PersonId self = PersonId.random();
+    /**
+     * A real claim registry (pure anyway), private by default so solo tests behave as before;
+     * contention tests point two contexts at one shared instance to simulate a settlement.
+     */
+    SiteClaims siteClaims = new SiteClaims();
     /**
      * A real (in-memory) journal on a fixed-tick clock, so a narrating task records somewhere
      * inspectable ({@code journalService.recent(...)}). Bound to one throwaway person.
@@ -82,6 +91,11 @@ final class FakeContext implements BrainContext {
     @Override
     public PersonKnowledge knowledge() {
         return knowledge;
+    }
+
+    @Override
+    public PersonClaims claims() {
+        return siteClaims.forPerson(self);
     }
 
     @Override

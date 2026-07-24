@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.brain;
 
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
+import dev.luizloyola.autarkia.core.brain.board.PersonClaims;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
@@ -35,6 +36,16 @@ public interface BrainContext {
      * the entity.
      */
     PersonKnowledge knowledge();
+
+    /**
+     * The shared work-site claims through this person's eyes ({@link PersonClaims}): a method skips
+     * sites that are not available, a working task heartbeats its site every tick and releases it
+     * on every exit. Defaults to {@link PersonClaims#SOLO} — everything available, claims always
+     * succeed — so a context with no shared registry behaves as a group of one.
+     */
+    default PersonClaims claims() {
+        return PersonClaims.SOLO;
+    }
 
     /**
      * The maximum method cost currently acceptable, in the walk-block currency methods price

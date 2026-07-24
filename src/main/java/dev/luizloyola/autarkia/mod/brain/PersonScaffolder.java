@@ -2,7 +2,11 @@ package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.core.brain.act.ScaffoldState;
 import dev.luizloyola.autarkia.core.brain.act.Scaffolder;
+import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -21,8 +25,8 @@ import org.jspecify.annotations.Nullable;
  * owns the jump/place timing (ticked from {@link Person#serverAiStep()}); the brain only asks for
  * steps.
  *
- * <p>Refusals are free, and a step that never clears block height within
- * {@link #STEP_TIMEOUT_TICKS} FAILS with nothing consumed.
+ * <p>Refusals are free, including the ledger at {@link Scaffolder#PILLAR_MAX}; a step that never
+ * clears block height within {@link #STEP_TIMEOUT_TICKS} FAILS with nothing consumed.
  */
 public final class PersonScaffolder implements Scaffolder {
     /** Ticks a step may take before it is declared dead — a clean jump lands in ~12. */
@@ -34,6 +38,12 @@ public final class PersonScaffolder implements Scaffolder {
     private @Nullable BlockPos base;
     private @Nullable String itemId;
     private int ticks;
+    /**
+     * The standing ledger (see {@link Scaffolder#placed()}): cells pushed when their block
+     * actually lands in {@link #tick()}, struck by {@link #reclaim}. Body state on purpose —
+     * it must outlive any one task so a canceled climb can still be un-built.
+     */
+    private final Deque<Pos> placed = new ArrayDeque<>();
 
     public PersonScaffolder(Person person) {
         this.person = person;
@@ -43,6 +53,9 @@ public final class PersonScaffolder implements Scaffolder {
     public boolean up(String itemId) {
         if (state == ScaffoldState.RISING) {
             return false;
+        }
+        if (placed.size() >= PILLAR_MAX) {
+            return false; // the bodily height cap — un-build before building higher
         }
         if (person.inventory().count(itemId) <= 0) {
             return false;
@@ -84,6 +97,7 @@ public final class PersonScaffolder implements Scaffolder {
                     (sound.getVolume() + 1.0F) / 2.0F, sound.getPitch() * 0.8F);
             person.swing(InteractionHand.MAIN_HAND);
             person.inventory().remove(itemId, 1);
+            placed.push(new Pos(base.getX(), base.getY(), base.getZ()));
             state = ScaffoldState.RISEN;
             return;
         }
@@ -91,6 +105,16 @@ public final class PersonScaffolder implements Scaffolder {
             person.setJumping(false);
             state = ScaffoldState.FAILED; 
         }
+    }
+
+    @Override
+    public List<Pos> placed() {
+        return List.copyOf(placed);
+    }
+
+    @Override
+    public void reclaim(Pos cell) {
+        placed.remove(cell);
     }
 
     @Override

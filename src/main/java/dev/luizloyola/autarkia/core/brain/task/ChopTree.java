@@ -33,14 +33,18 @@ import java.util.Set;
  *
  * <p>The reach ladder, per blocked swing: break the first obstruction on the arm's path, a leaf
  * or a weed (bounded per target) → WALK once → <b>PILLAR up</b> one nerd-pole step on her own
- * logs ({@link dev.luizloyola.autarkia.core.brain.act.Scaffolder}). Every placed pillar cell is
- * remembered and un-built on the way down (broken underfoot, drops reclaimed) — she leaves no
- * towers. Building up is what makes bottom-up felling safe: nothing stays out of reach, so no
- * floating remnants get manufactured.
+ * logs ({@link dev.luizloyola.autarkia.core.brain.act.Scaffolder}). Building up is what makes
+ * bottom-up felling safe: nothing stays out of reach, so no floating remnants get manufactured.
+ * Climbing is attempted only when it can CONVERGE — target above her, column within
+ * {@link #PILLAR_HORIZONTAL} — and the ledger lives on the BODY ({@code Scaffolder.placed()}),
+ * so a fresh instance un-builds any standing ledger before walking ({@link PillarDescent}) and
+ * every relocation descends first. She leaves no towers, even across task instances.
  *
- * <p>Memory writes on the way out: ghost or ungrounded blob → forget + FAILED; felled → forget +
- * SUCCESS; real-but-unworkable → memory kept, FAILED, anchor AVOIDED a while so retries rotate
- * targets. {@link #failureDetail()} reports the ending.
+ * <p>The tree is a CLAIMED site, heartbeated every tick, so a second chopper rotates away rather
+ * than felling this one's logs (or its climber's scaffolding) out from under her; every exit
+ * releases the claim. Memory writes on the way out: ghost or ungrounded blob → forget + FAILED;
+ * felled → forget + SUCCESS; real-but-unworkable → memory kept, FAILED, anchor AVOIDED a while.
+ * {@link #failureDetail()} reports the ending.
  */
 public final class ChopTree implements PrimitiveTask {
     /** Close enough to the anchor to count as "at the tree" — the chop loop steps the rest. */
@@ -53,12 +57,17 @@ public final class ChopTree implements PrimitiveTask {
     public static final int COLLECT_MARGIN = 3;
     /** Obstruction-clearing swings allowed per log target (leaves/weeds in the arm's path). */
     public static final int CLEARS_PER_TARGET = 4;
-    /** Nerd-pole height cap for one chop — taller than any vanilla tree's working need. */
-    public static final int PILLAR_MAX = 12;
+    /**
+     * How far (horizontally, in blocks) a target's column may be for pillaring to converge:
+     * past this, no height ever brings it into the arm's reach — reposition or let it go.
+     */
+    public static final int PILLAR_HORIZONTAL = 3;
     /** Leaves broken while fishing for a replant sapling before giving up. */
     public static final int FISH_LIMIT = 24;
     /** Ticks an unworkable tree's anchor stays avoided, so retries rotate targets. */
     public static final int AVOID_TICKS = 6000;
+    /** Shorter avoid for a tree someone ELSE is working — they'll likely be done in a minute. */
+    public static final int CLAIMED_AVOID_TICKS = 1200;
 
     private enum Phase {
         APPROACH, SCAN, TRUNK, BRANCHES, MOUNT, STUMP_BRANCHES, FREE_ITEMS, DESCEND, STUMP,
@@ -75,8 +84,10 @@ public final class ChopTree implements PrimitiveTask {
     /** Branches unreachable from the ground, retried from atop the stump. */
     private final List<Pos> deferred = new ArrayList<>();
     private final Set<Pos> triedStranded = new HashSet<>();
-    /** Pillar cells placed this chop, newest first — un-built in DESCEND. */
-    private final Deque<Pos> pillar = new ArrayDeque<>();
+    /** The way down — un-builds the BODY's pillar ledger; also the resume-safe tower cleaner. */
+    private final PillarDescent descent = new PillarDescent();
+    /** Whether a descent is in flight — set at every relocation gate, cleared when it completes. */
+    private boolean descentActive;
     /** LEAVES cells from the arrival scan — the sapling-fishing menu. */
     private final List<Pos> canopy = new ArrayList<>();
 
@@ -109,6 +120,11 @@ public final class ChopTree implements PrimitiveTask {
 
     @Override
     public TaskStatus tick(BrainContext ctx) {
+        // Heartbeat the site claim every tick. A refusal means someone else's LIVE claim — ours
+        // lapsed during a long suspension — so rotate away briefly; the memory itself stays true.
+        if (!ctx.claims().claim(PoiKind.TREE, memory.anchor(), ctx.percepts().time())) {
+            return unworkable(ctx, "someone else is working this tree", CLAIMED_AVOID_TICKS);
+        }
         return switch (phase) {
             case APPROACH -> approach(ctx);
             case SCAN -> scan(ctx);
@@ -127,6 +143,10 @@ public final class ChopTree implements PrimitiveTask {
         ctx.actuators().breaker().abort();
         ctx.actuators().mover().stop();
         ctx.actuators().scaffolder().abort();
+        // The claim goes with the task: a suspension frees the site, a resume re-claims or
+        // rotates. Any standing pillar stays LEDGERED on the body for the next instance or the
+        // descend instinct to un-build.
+        ctx.claims().release(PoiKind.TREE, memory.anchor());
     }
 
     @Override
@@ -147,6 +167,14 @@ public final class ChopTree implements PrimitiveTask {
     // --- phases ----------------------------------------------------------------------------------
 
     private TaskStatus approach(BrainContext ctx) {
+        // A fresh instance may inherit a standing ledger (a suspended climb's tower — the
+        // ledger is the BODY's): un-build it before walking anywhere.
+        if (!ctx.actuators().scaffolder().placed().isEmpty()) {
+            descentActive = true;
+        }
+        if (unbuilding(ctx)) {
+            return TaskStatus.RUNNING;
+        }
         Pos here = ctx.percepts().position();
         if (horizontalDistSq(here, memory.anchor()) <= (long) APPROACH_NEAR * APPROACH_NEAR) {
             if (walkIssued) {
@@ -212,6 +240,9 @@ public final class ChopTree implements PrimitiveTask {
      * (bounded) → walk once → pillar up (bounded, her own logs) → give up on this log.
      */
     private TaskStatus chop(BrainContext ctx) {
+        if (unbuilding(ctx)) {
+            return TaskStatus.RUNNING; // a relocation's descend-first owns the arm until done
+        }
         BlockBreaker breaker = ctx.actuators().breaker();
         if (breaking) {
             switch (breaker.state()) {
@@ -272,19 +303,24 @@ public final class ChopTree implements PrimitiveTask {
         }
         // Clear path (or unclearable blocker): distance. Walk once, then climb.
         if (blocker == null && !walked && phase != Phase.STUMP_BRANCHES) {
+            if (!ctx.actuators().scaffolder().placed().isEmpty()) {
+                descentActive = true; // never relocate off a standing pillar — un-build first
+                return TaskStatus.RUNNING;
+            }
             walked = true;
             ctx.actuators().mover().moveTo(target.x(), target.y(), target.z());
             walkIssued = true;
             return TaskStatus.RUNNING;
         }
-        if (pillar.size() < PILLAR_MAX) {
+        // Climb only when it CONVERGES — target above her, column within arm's horizontal
+        // reach; otherwise a pillar is just a tower to get stranded on. The ledger cap
+        // (Scaffolder.PILLAR_MAX) bounds height; a refusal falls through cleanly.
+        Pos feet = ctx.percepts().position();
+        if (target.y() > feet.y() + 1
+                && horizontalDistSq(feet, target) <= (long) PILLAR_HORIZONTAL * PILLAR_HORIZONTAL) {
             String block = pillarBlock(ctx);
-            if (block != null) {
-                Pos feet = ctx.percepts().position();
-                if (ctx.actuators().scaffolder().up(block)) {
-                    pillar.push(feet); // the cell being vacated receives the block
-                    return TaskStatus.RUNNING;
-                }
+            if (block != null && ctx.actuators().scaffolder().up(block)) {
+                return TaskStatus.RUNNING; // the body ledgers the cell when the block lands
             }
         }
         if (phase == Phase.BRANCHES) {
@@ -297,7 +333,14 @@ public final class ChopTree implements PrimitiveTask {
     }
 
     private TaskStatus mount(BrainContext ctx) {
+        if (unbuilding(ctx)) {
+            return TaskStatus.RUNNING;
+        }
         if (!walkIssued) {
+            if (!ctx.actuators().scaffolder().placed().isEmpty()) {
+                descentActive = true; // down off the pillar before walking to the stump
+                return TaskStatus.RUNNING;
+            }
             Pos top = tree.base().get(0);
             ctx.actuators().mover().moveTo(top.x(), top.y() + 1, top.z());
             walkIssued = true;
@@ -360,43 +403,29 @@ public final class ChopTree implements PrimitiveTask {
 
     /** Un-build the nerd-pole, newest block first, standing on each — she leaves no towers. */
     private TaskStatus descend(BrainContext ctx) {
-        BlockBreaker breaker = ctx.actuators().breaker();
-        if (breaking) {
-            if (breaker.state() == BreakState.BREAKING) {
-                return TaskStatus.RUNNING;
-            }
-            breaking = false;
-            if (!pillar.isEmpty()) {
-                pillar.pop(); // broken underfoot; the drop reclaims via walk-over/collect
-            }
+        descentActive = true;
+        if (unbuilding(ctx)) {
             return TaskStatus.RUNNING;
         }
-        if (pillar.isEmpty()) {
-            queue.addAll(tree.base()); // breaking the block under her own feet is allowed —
-            phase = Phase.STUMP;       // she drops one block, exactly like a player would
-            return TaskStatus.RUNNING;
-        }
-        Pos step = pillar.peek();
-        if (ctx.percepts().blocks().at(step.x(), step.y(), step.z()) == BlockKind.AIR) {
-            pillar.pop(); // never landed, or someone beat her to it
-            return TaskStatus.RUNNING;
-        }
-        if (breaker.begin(step)) {
-            breaking = true;
-            return TaskStatus.RUNNING;
-        }
-        if (!walkIssued) {
-            ctx.actuators().mover().moveTo(step.x(), step.y() + 1, step.z());
-            walkIssued = true;
-            return TaskStatus.RUNNING;
-        }
-        if (ctx.actuators().mover().state() == MoveState.MOVING) {
-            return TaskStatus.RUNNING;
-        }
-        walkIssued = false;
-        pillar.pop(); // can't get back to it — leave one block rather than loop forever
-        skipped++;
+        queue.addAll(tree.base()); // breaking the block under her own feet is allowed —
+        phase = Phase.STUMP;       // she drops one block, exactly like a player would
         return TaskStatus.RUNNING;
+    }
+
+    /**
+     * The descend-first gate every relocation and the DESCEND phase route through: ticks the
+     * shared {@link PillarDescent} while {@link #descentActive}, and reports whether this tick
+     * was spent un-building (in which case the caller must do nothing else with the arm).
+     */
+    private boolean unbuilding(BrainContext ctx) {
+        if (!descentActive) {
+            return false;
+        }
+        if (descent.tick(ctx) == TaskStatus.RUNNING) {
+            return true;
+        }
+        descentActive = false;
+        return false;
     }
 
     private TaskStatus collect(BrainContext ctx) {
@@ -576,6 +605,7 @@ public final class ChopTree implements PrimitiveTask {
     private TaskStatus finish(BrainContext ctx) {
         if (felled > 0) {
             ctx.knowledge().forget(PoiKind.TREE, memory.anchor());
+            ctx.claims().release(PoiKind.TREE, memory.anchor());
             return TaskStatus.SUCCESS;
         }
         return unworkable(ctx, "nothing reachable to fell");
@@ -583,8 +613,13 @@ public final class ChopTree implements PrimitiveTask {
 
     /** A real tree she cannot work right now: keep the memory, avoid it a while, fail outright. */
     private TaskStatus unworkable(BrainContext ctx, String why) {
+        return unworkable(ctx, why, AVOID_TICKS);
+    }
+
+    private TaskStatus unworkable(BrainContext ctx, String why, int avoidTicks) {
         ending = why;
-        ctx.knowledge().avoid(PoiKind.TREE, memory.anchor(), ctx.percepts().time() + AVOID_TICKS);
+        ctx.knowledge().avoid(PoiKind.TREE, memory.anchor(), ctx.percepts().time() + avoidTicks);
+        ctx.claims().release(PoiKind.TREE, memory.anchor()); // only removes what is OURS
         ctx.journal().record(Category.BRAIN, "chop", why + " — avoiding it a while");
         return TaskStatus.FAILED;
     }
@@ -592,6 +627,7 @@ public final class ChopTree implements PrimitiveTask {
     private TaskStatus ghost(BrainContext ctx) {
         Pos a = memory.anchor();
         ctx.knowledge().forget(PoiKind.TREE, a);
+        ctx.claims().release(PoiKind.TREE, a);
         ending = "no tree here anymore — forgot it";
         ctx.journal().record(Category.BRAIN, "chop",
                 "grove gone — forgot TREE (" + a.x() + ", " + a.y() + ", " + a.z() + ")");

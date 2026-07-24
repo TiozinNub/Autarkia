@@ -207,10 +207,12 @@ class ChopTreeTest {
         for (int i = 0; i < 400 && status == TaskStatus.RUNNING; i++) {
             status = task.tick(ctx);
             if (ctx.scaffolder.state == dev.luizloyola.autarkia.core.brain.act.ScaffoldState.RISING) {
-                // Play the body: land one block higher on a block from the pack.
+                // Play the body: land one block higher on a block from the pack — and LEDGER
+                // the landed cell, the way PersonScaffolder does at the actual placement.
                 Pos feet = ctx.percepts.position;
                 ctx.percepts.blocks.set(feet.x(), feet.y(), feet.z(),
                         dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+                ctx.scaffolder.placed.push(feet);
                 ctx.percepts.position = new Pos(feet.x(), feet.y() + 1, feet.z());
                 ctx.scaffolder.state = dev.luizloyola.autarkia.core.brain.act.ScaffoldState.RISEN;
                 if (ctx.scaffolder.ups >= 2) {
@@ -230,6 +232,48 @@ class ChopTreeTest {
         Pos firstStep = new Pos(8, 64, 8); // where she stood when the first step went down
         assertTrue(ctx.breaker.targets.contains(firstStep),
                 "the pillar was un-built on the way down — no towers left behind");
+        assertTrue(ctx.scaffolder.placed.isEmpty(), "the body's ledger ends the chop clean");
+    }
+
+    @Test
+    void neverPillarsTowardASidewaysBranch() {
+        placeOakAndStandBy();
+        // A horizontal branch off the crown: no pillar height ever brings the far cells into
+        // arm's reach from under the trunk.
+        for (int x = 12; x <= 15; x++) {
+            ctx.percepts.blocks.set(x, 68, 10, dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+            ctx.breaker.refuse.add(new Pos(x, 68, 10)); // "out of reach", forever
+        }
+        ctx.percepts.inventory.add(dev.luizloyola.autarkia.core.inv.ItemStack.of(
+                "minecraft:oak_log", 8, 64)); // scaffolding material is available — the guard decides
+
+        TaskStatus status = drive(new ChopTree(memory, false), 400);
+
+        assertEquals(TaskStatus.SUCCESS, status, "the trunk still fell; the branch was let go");
+        assertEquals(0, ctx.scaffolder.ups,
+                "no tower under a sideways branch — climbing there can never converge");
+    }
+
+    @Test
+    void aFreshChopUnbuildsAnInheritedTowerBeforeWalking() {
+        placeOakAndStandBy();
+        // A leftover tower from a suspended climb: the BODY remembers it, no task does.
+        Pos lower = new Pos(8, 64, 8);
+        Pos upper = new Pos(8, 65, 8);
+        ctx.percepts.blocks.set(lower.x(), lower.y(), lower.z(),
+                dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+        ctx.percepts.blocks.set(upper.x(), upper.y(), upper.z(),
+                dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+        ctx.scaffolder.placed.push(lower);
+        ctx.scaffolder.placed.push(upper);
+        ctx.percepts.position = new Pos(8, 66, 8); // standing on top of it
+
+        TaskStatus status = drive(new ChopTree(memory, false), 400);
+
+        assertEquals(TaskStatus.SUCCESS, status);
+        assertEquals(upper, ctx.breaker.targets.get(0), "first swing: the tower, newest cell first");
+        assertEquals(lower, ctx.breaker.targets.get(1), "second swing: the next cell down");
+        assertTrue(ctx.scaffolder.placed.isEmpty(), "the inherited tower is fully reclaimed");
     }
 
     @Test

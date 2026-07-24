@@ -5,6 +5,7 @@ import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;
 import dev.luizloyola.autarkia.mod.item.ModItems;
+import dev.luizloyola.autarkia.mod.brain.Claims;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.log.Journals;
 import dev.luizloyola.autarkia.mod.nav.PathfinderService;
@@ -31,6 +32,7 @@ public class AutarkiaMod implements ModInitializer {
         DebugGlowSync.install();
         PathfinderService.init();
         Journals.init();
+        Claims.init();
         KnowledgeViewer.init();
         registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);

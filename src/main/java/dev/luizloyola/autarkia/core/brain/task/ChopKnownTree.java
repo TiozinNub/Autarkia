@@ -38,7 +38,11 @@ public final class ChopKnownTree implements Method {
 
     @Override
     public List<Task> decompose(BrainContext ctx) {
-        return List.of(new ChopTree(nearest(ctx).orElseThrow(), true));
+        PoiMemory memory = nearest(ctx).orElseThrow();
+        // Selection is commitment: claim the site here, not on the chop's first tick, so two
+        // Persons deciding in the same server tick can't both leave for the same tree.
+        ctx.claims().claim(PoiKind.TREE, memory.anchor(), ctx.percepts().time());
+        return List.of(new ChopTree(memory, true));
     }
 
     @Override
@@ -46,14 +50,15 @@ public final class ChopKnownTree implements Method {
         return "chop known tree";
     }
 
-    /** The nearest remembered tree that is not currently avoided (unworkable-lately marks). */
+    /** Nearest remembered tree neither avoided (unworkable lately) nor claimed by another. */
     private static Optional<PoiMemory> nearest(BrainContext ctx) {
         var here = ctx.percepts().position();
         long now = ctx.percepts().time();
         PoiMemory best = null;
         long bestDist = Long.MAX_VALUE;
         for (PoiMemory m : ctx.knowledge().all(PoiKind.TREE)) {
-            if (ctx.knowledge().isAvoided(PoiKind.TREE, m.anchor(), now)) {
+            if (ctx.knowledge().isAvoided(PoiKind.TREE, m.anchor(), now)
+                    || !ctx.claims().availableTo(PoiKind.TREE, m.anchor(), now)) {
                 continue;
             }
             long dx = m.anchor().x() - here.x();
