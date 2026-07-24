@@ -26,4 +26,9 @@ public final class KnowledgeRegistry {
     public Set<PersonId> persons() {
         return Collections.unmodifiableSet(byPerson.keySet());
     }
+
+    /** Drops a person's knowledge outright — the dev purge path. */
+    public boolean remove(PersonId id) {
+        return byPerson.remove(id) != null;
+    }
 }

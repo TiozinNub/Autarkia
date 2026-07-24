@@ -118,6 +118,11 @@ public final class JournalService {
      * Drops lines older than {@link #maxAgeTicks}, forgetting any person left with none. Entries
      * are in clock order, so each ring evicts a run from its head. Never the write path.
      */
+    /** Drops a person's ring outright — the dev purge path (the durable file is untouched). */
+    public void drop(PersonId who) {
+        byPerson.remove(who);
+    }
+
     public void sweep() {
         long cutoff = clock.getAsLong() - maxAgeTicks;
         Iterator<Map.Entry<PersonId, Ring>> it = byPerson.entrySet().iterator();

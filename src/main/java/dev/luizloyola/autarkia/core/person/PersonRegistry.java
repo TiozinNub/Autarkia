@@ -40,6 +40,11 @@ public final class PersonRegistry {
         return byId.containsKey(id);
     }
 
+    /** Removes an identity outright — the dev purge path; real deaths KEEP identity. */
+    public boolean remove(PersonId id) {
+        return byId.remove(id) != null;
+    }
+
     /** All known identities, in insertion order; unmodifiable view. */
     public Collection<PersonIdentity> all() {
         return Collections.unmodifiableCollection(byId.values());

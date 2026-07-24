@@ -230,6 +230,12 @@ public final class AutarkiaCommands {
                                 // flag; "nobrain" is a literal, so quote it to use it as a name.
                                 .then(spawnLeaves(Commands.literal("spawn"), true)
                                         .then(spawnLeaves(Commands.literal("nobrain"), false)))
+                                // Every identity with no loaded entity loses its directory entry,
+                                // knowledge and journal ring. Real deaths keep identity;
+                                // this is for test-world churn.
+                                .then(Commands.literal("purge")
+                                        .then(Commands.literal("graveyard")
+                                                .executes(ctx -> purgeGraveyard(ctx.getSource()))))
                                 .then(Commands.literal("needs")
                                         .executes(ctx -> personNeeds(ctx.getSource())))
                                 .then(Commands.literal("setfood")
@@ -292,6 +298,35 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
         return 1;
+    }
+
+    /** Purges every identity with no loaded entity — dev hygiene for test-world churn. */
+    private static int purgeGraveyard(CommandSourceStack source) {
+        MinecraftServer server = source.getServer();
+        PersonDirectory directory = PersonDirectory.get(server);
+        java.util.Set<PersonId> loaded = new java.util.HashSet<>();
+        for (Person person : loadedPersons(server)) {
+            if (person.getPersonId() != null) {
+                loaded.add(person.getPersonId());
+            }
+        }
+        List<PersonId> dead = new ArrayList<>();
+        for (PersonIdentity identity : directory.all()) {
+            if (!loaded.contains(identity.id())) {
+                dead.add(identity.id());
+            }
+        }
+        var knowledge = Knowledges.of(server);
+        JournalService journals = Journals.of(server);
+        for (PersonId id : dead) {
+            directory.purge(id);
+            knowledge.remove(id);
+            journals.drop(id);
+        }
+        source.sendSuccess(() -> Component.literal("Purged " + dead.size()
+                + " unloaded identit" + (dead.size() == 1 ? "y" : "ies")
+                + " (directory + knowledge + journal ring).").withStyle(ChatFormatting.GRAY), false);
+        return dead.size();
     }
 
     /** Prints the resolved Person's personal board — the work-demand side of the brain. */

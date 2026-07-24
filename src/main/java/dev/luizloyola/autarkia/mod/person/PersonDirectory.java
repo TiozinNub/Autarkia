@@ -116,6 +116,16 @@ public final class PersonDirectory extends SavedData {
         return registry.get(id);
     }
 
+    /** Dev-tooling removal (the purge command); marks dirty. Real deaths never call this —
+     *  identity outlives the entity. */
+    public boolean purge(PersonId id) {
+        boolean removed = registry.remove(id);
+        if (removed) {
+            setDirty();
+        }
+        return removed;
+    }
+
     public Optional<String> nameOf(PersonId id) {
         return registry.get(id).map(PersonIdentity::name);
     }
