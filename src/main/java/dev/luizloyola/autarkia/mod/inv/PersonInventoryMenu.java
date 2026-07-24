@@ -2,6 +2,8 @@ package dev.luizloyola.autarkia.mod.inv;
 
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
+import dev.luizloyola.autarkia.core.person.Needs;
+import java.util.function.IntSupplier;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
@@ -49,6 +51,27 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     private final Container personContainer;
     /** The Person entity's network id, synced to the client so the screen can render its paper-doll. */
     private final DataSlot personEntityId = DataSlot.standalone();
+    /** Last food level the server broadcast; the {@link #foodLevel} slot reads it back on the client. */
+    private int syncedFood = Needs.MAX_FOOD;
+    /** Live food source: the Person's needs on the server, the {@link #syncedFood} cache on the client. */
+    private final IntSupplier foodSource;
+    /**
+     * The Person's food level ({@code 0..20}), for the screen's hunger row. Health rides the
+     * {@link net.minecraft.world.entity.LivingEntity} sync, but a plain {@code LivingEntity} carries
+     * no food, so hunger needs its own slot. Polled every {@code broadcastChanges} tick, so the bar
+     * tracks eating and starving live.
+     */
+    private final DataSlot foodLevel = new DataSlot() {
+        @Override
+        public int get() {
+            return foodSource.getAsInt();
+        }
+
+        @Override
+        public void set(int value) {
+            syncedFood = value;
+        }
+    };
 
     /** Client-side factory (via the {@code MenuType}): dummy container + unknown entity id (both synced). */
     public PersonInventoryMenu(int syncId, net.minecraft.world.entity.player.Inventory playerInv) {
@@ -61,8 +84,11 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         super(ModMenus.PERSON_INVENTORY, syncId);
         checkContainerSize(personContainer, Inventory.SIZE);
         this.personContainer = personContainer;
+        // The client's container is a dummy SimpleContainer, so it falls back to the broadcast value.
+        this.foodSource = (personContainer instanceof PersonContainer pc) ? pc::foodLevel : () -> syncedFood;
         this.personEntityId.set(entityId);
         addDataSlot(this.personEntityId);
+        addDataSlot(this.foodLevel);
 
         // Vanilla's own player-inventory layout: 3 main rows (container 9..35) at (GRID_X, GRID_Y),
         // then the hotbar (container 0..8) 58px below. The same call the vanilla inventory uses, so
@@ -82,6 +108,11 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     /** The Person's entity network id (synced), for the screen's paper-doll lookup; {@code -1} if unknown. */
     public int personEntityId() {
         return this.personEntityId.get();
+    }
+
+    /** The Person's food level ({@code 0..20}, synced), for the screen's hunger row. */
+    public int foodLevel() {
+        return this.foodLevel.get();
     }
 
     @Override

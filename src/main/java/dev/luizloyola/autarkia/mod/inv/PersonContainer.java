@@ -36,6 +36,14 @@ public final class PersonContainer implements Container {
         }
     }
 
+    /**
+     * The Person's current food level ({@code 0..20}), for {@link PersonInventoryMenu}'s hunger
+     * sync. Server-side only — the client menu uses a plain {@code SimpleContainer}, never this.
+     */
+    public int foodLevel() {
+        return person.needs().foodLevel();
+    }
+
     @Override
     public int getContainerSize() {
         return Inventory.SIZE;
