@@ -179,4 +179,20 @@ class AchieveTaskTest {
 
         assertEquals(Optional.of(TaskStatus.FAILED), status);
     }
+
+    @Test
+    void failuresCarryTheirDeepestCause() {
+        // A failing primitive: the origin survives the bubble.
+        drive(goal(1, way("broken", 1, () -> List.of(new Fail()))), 10);
+        assertTrue(executor.failureReason().orElseThrow().contains("fail failed"),
+                "the deepest failing node names itself");
+
+        // Everything applicable but unaffordable: the tolerance story is printable.
+        ctx.costTolerance = 10;
+        Produce one = new Produce(1);
+        drive(goal(9, way("far away", 50, () -> List.of(one))), 10);
+        assertTrue(executor.failureReason().orElseThrow().contains("priced out at tolerance 10"),
+                "priced-out failures say so, with the budget");
+        assertEquals(0, one.runs);
+    }
 }

@@ -68,6 +68,10 @@ public final class TaskExecutor {
         /** Achieve-frames only: selection rounds burned this activation (see ACHIEVE_ROUNDS_CAP). */
         int rounds;
 
+        /** Applicable-but-priced-out count from the last {@code choose} pass — the "why" of a
+         *  no-method failure: nothing fit, or nothing was affordable. */
+        int pricedOut;
+
         Frame(CompoundTask compound) {
             this.compound = compound;
             this.methods = compound.methods();
@@ -80,6 +84,13 @@ public final class TaskExecutor {
     private final List<Frame> stack = new ArrayList<>();
     private String lastDescription;
     private TaskStatus lastStatus;
+    /**
+     * The DEEPEST cause of the last FAILED root — first writer wins while a failure bubbles, so
+     * the origin survives the cascade ("why?" must be printable: a failed primitive's name, a
+     * compound with no applicable way, everything priced out, the depth or rounds cap). Cleared
+     * on {@link #run} and on a SUCCESS terminal.
+     */
+    private String failureReason;
 
     /**
      * Install a tree as the one being executed, preempting (cancelling) any incumbent first.
@@ -89,6 +100,7 @@ public final class TaskExecutor {
     public void run(Task task, BrainContext ctx) {
         releaseAndClear(ctx);
         root = task;
+        failureReason = null;
     }
 
     /**
@@ -118,6 +130,7 @@ public final class TaskExecutor {
         if (status == TaskStatus.SUCCESS) {
             succeedCurrent(ctx);
         } else if (status == TaskStatus.FAILED) {
+            noteFailure(leaf.describe() + " failed");
             failCurrent(ctx);
         }
     }
@@ -133,6 +146,11 @@ public final class TaskExecutor {
      */
     public Optional<TaskStatus> lastStatus() {
         return Optional.ofNullable(lastStatus);
+    }
+
+    /** The deepest cause of the last FAILED root, for the journal's "why" — see {@link #failureReason}. */
+    public Optional<String> failureReason() {
+        return Optional.ofNullable(failureReason);
     }
 
     /**
@@ -192,11 +210,13 @@ public final class TaskExecutor {
                 continue;
             }
             if (stack.size() >= MAX_DEPTH) {
+                noteFailure(compound.describe() + ": depth cap (" + MAX_DEPTH + ")");
                 failCurrent(ctx); // the branch fails, as a method failure in the parent — no exception
                 continue;
             }
             Frame frame = new Frame(compound);
             if (!chooseRound(frame, ctx)) {
+                noteFailure(noWay(frame, ctx));
                 failCurrent(ctx); // no applicable method at all
                 continue;
             }
@@ -225,6 +245,7 @@ public final class TaskExecutor {
         int bestIndex = -1;
         double bestCost = 0.0;
         double tolerance = ctx.costTolerance();
+        frame.pricedOut = 0;
         for (int i = 0; i < frame.methods.size(); i++) {
             if (frame.tried[i]) {
                 continue;
@@ -235,6 +256,7 @@ public final class TaskExecutor {
             }
             double cost = method.estimateCost(ctx);
             if (cost > tolerance) {
+                frame.pricedOut++;
                 continue; // priced out of the current tolerance — inapplicable in effect
             }
             if (best == null || cost < bestCost) {
@@ -278,6 +300,7 @@ public final class TaskExecutor {
                     continue;
                 }
                 if (++top.rounds >= ACHIEVE_ROUNDS_CAP) {
+                    noteFailure(top.compound.describe() + ": rounds cap (no progress)");
                     stack.remove(stack.size() - 1);
                     failCurrent(ctx); // the zero-progress backstop: fails like any dead end
                     return;
@@ -286,6 +309,7 @@ public final class TaskExecutor {
                 if (chooseRound(top, ctx)) {
                     return;
                 }
+                noteFailure(noWay(top, ctx));
                 stack.remove(stack.size() - 1);
                 failCurrent(ctx); // nothing applicable or affordable is left -> the goal is out of reach
                 return;
@@ -343,8 +367,27 @@ public final class TaskExecutor {
     private void record(TaskStatus status) {
         lastDescription = describeNode(root);
         lastStatus = status;
+        if (status == TaskStatus.SUCCESS) {
+            failureReason = null;
+        }
         root = null;
         stack.clear();
+    }
+
+    /** First writer wins: the deepest origin of a bubbling failure is the one worth printing. */
+    private void noteFailure(String reason) {
+        if (failureReason == null) {
+            failureReason = reason;
+        }
+    }
+
+    /** The no-method message, split by cause: nothing applicable vs everything unaffordable. */
+    private String noWay(Frame frame, BrainContext ctx) {
+        if (frame.pricedOut > 0) {
+            return frame.compound.describe() + ": no affordable way (" + frame.pricedOut
+                    + " priced out at tolerance " + Math.round(ctx.costTolerance()) + ")";
+        }
+        return frame.compound.describe() + ": no applicable way";
     }
 
     /**

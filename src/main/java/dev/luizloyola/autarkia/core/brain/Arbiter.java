@@ -153,7 +153,8 @@ public final class Arbiter {
                 // The errand reached a terminal: report to the board either way. Failure pacing
                 // is the ITEM's (board cooldown), never an instinct cooldown.
                 if (executor.lastStatus().orElse(null) == TaskStatus.FAILED) {
-                    ctx.journal().record(Category.PROJECT, claimedItem.describe(), "failed");
+                    ctx.journal().record(Category.PROJECT, claimedItem.describe(), "failed"
+                            + executor.failureReason().map(r -> " — " + r).orElse(""));
                     work.failed(claimedItem, ctx);
                 } else {
                     ctx.journal().record(Category.PROJECT, claimedItem.describe(),
@@ -166,7 +167,8 @@ public final class Arbiter {
                 // BRAIN log: failures only — an unsatisfiable drive is the signal, and every
                 // wander SUCCESS would be noise. The switch/take-over lines already mark what she
                 // started.
-                ctx.journal().record(Category.BRAIN, active.describe(), "failed");
+                ctx.journal().record(Category.BRAIN, active.describe(), "failed"
+                        + executor.failureReason().map(r -> " — " + r).orElse(""));
                 cooldowns[indexOf(active)] = active.failCooldown();
             }
             active = null; // next tick's idle-grant re-arbitrates
