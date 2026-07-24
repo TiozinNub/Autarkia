@@ -16,6 +16,9 @@ public interface ActuatorAccess {
     /** The gullet — see {@link ItemConsumer}. */
     ItemConsumer consumer();
 
-    /** The working arm — see {@link BlockBreaker}. */
+    /** The working arm, breaking — see {@link BlockBreaker}. */
     BlockBreaker breaker();
+
+    /** The working arm, placing — see {@link BlockPlacer}. */
+    BlockPlacer placer();
 }

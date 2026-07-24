@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.brain.task;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
 import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
+import dev.luizloyola.autarkia.core.brain.act.BlockPlacer;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
@@ -19,6 +20,7 @@ final class FakeContext implements BrainContext {
     final FakeMover mover = new FakeMover();
     final FakeConsumer consumer = new FakeConsumer();
     final FakeBreaker breaker = new FakeBreaker();
+    final FakePlacer placer = new FakePlacer();
     final FakePercepts percepts = new FakePercepts();
     /** A real knowledge store (pure and headless anyway) — chop tests seed and inspect it. */
     final PersonKnowledge knowledge = new PersonKnowledge();
@@ -47,6 +49,11 @@ final class FakeContext implements BrainContext {
         @Override
         public BlockBreaker breaker() {
             return breaker;
+        }
+
+        @Override
+        public BlockPlacer placer() {
+            return placer;
         }
     };
 

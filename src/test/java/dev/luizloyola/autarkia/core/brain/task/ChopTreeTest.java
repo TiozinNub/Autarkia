@@ -111,6 +111,57 @@ class ChopTreeTest {
     }
 
     @Test
+    void replantPlantsOneSaplingPerStumpLogAfterCollecting() {
+        placeOakAndStandBy();
+        ctx.percepts.inventory.add(dev.luizloyola.autarkia.core.inv.ItemStack.of(
+                "minecraft:oak_sapling", 1, 64));
+        ctx.percepts.drops = List.of(new Drop(new Pos(10, 64, 9), "minecraft:oak_log"));
+
+        ChopTree task = new ChopTree(memory, true);
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < 300 && status == TaskStatus.RUNNING; i++) {
+            status = task.tick(ctx);
+            if (ctx.breaker.state == BreakState.BREAKING) {
+                Pos t = ctx.breaker.target;
+                ctx.percepts.blocks.clear(t.x(), t.y(), t.z());
+                ctx.breaker.state = BreakState.FINISHED;
+            }
+            if (!ctx.mover.events.isEmpty() && !ctx.percepts.drops.isEmpty()
+                    && ctx.mover.events.get(ctx.mover.events.size() - 1).contains("moveTo(10, 64")) {
+                ctx.percepts.drops = List.of(); // vacuumed on the collect walk
+            }
+        }
+
+        assertEquals(TaskStatus.SUCCESS, status);
+        assertEquals(List.of(new FakePlacer.Placement("minecraft:oak_sapling", anchor)),
+                ctx.placer.placed, "one sapling, on the stump site, planted LAST");
+    }
+
+    @Test
+    void replantSkipsGracefullyWithoutASapling() {
+        placeOakAndStandBy();
+        ctx.percepts.drops = List.of(new Drop(new Pos(10, 64, 9), "minecraft:oak_log"));
+
+        ChopTree task = new ChopTree(memory, true);
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < 300 && status == TaskStatus.RUNNING; i++) {
+            status = task.tick(ctx);
+            if (ctx.breaker.state == BreakState.BREAKING) {
+                Pos t = ctx.breaker.target;
+                ctx.percepts.blocks.clear(t.x(), t.y(), t.z());
+                ctx.breaker.state = BreakState.FINISHED;
+            }
+            if (!ctx.mover.events.isEmpty() && !ctx.percepts.drops.isEmpty()
+                    && ctx.mover.events.get(ctx.mover.events.size() - 1).contains("moveTo(10, 64")) {
+                ctx.percepts.drops = List.of();
+            }
+        }
+
+        assertEquals(TaskStatus.SUCCESS, status, "no sapling is a courtesy skipped, never a failure");
+        assertTrue(ctx.placer.placed.isEmpty());
+    }
+
+    @Test
     void anUnreachableTreeFailsButStaysRemembered() {
         placeOakAndStandBy();
         ctx.breaker.refuseBegin = true; // every swing out of reach, forever

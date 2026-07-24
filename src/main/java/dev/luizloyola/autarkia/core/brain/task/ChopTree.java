@@ -48,7 +48,7 @@ public final class ChopTree implements PrimitiveTask {
     public static final int COLLECT_MARGIN = 3;
 
     private enum Phase {
-        APPROACH, SCAN, TRUNK, BRANCHES, MOUNT, STUMP_BRANCHES, FREE_ITEMS, STUMP, COLLECT
+        APPROACH, SCAN, TRUNK, BRANCHES, MOUNT, STUMP_BRANCHES, FREE_ITEMS, STUMP, COLLECT, REPLANT
     }
 
     private final PoiMemory memory;
@@ -71,6 +71,10 @@ public final class ChopTree implements PrimitiveTask {
     private int freedLeaves;
     private int collectLaps;
     private int collectLapCap = -1;
+    /** The species chopped, learned from the first log drop seen — names the sapling to plant. */
+    private String speciesLogId;
+    private final Deque<Pos> replantSites = new ArrayDeque<>();
+    private int planted;
 
     public ChopTree(PoiMemory memory, boolean replant) {
         this.memory = memory;
@@ -86,6 +90,7 @@ public final class ChopTree implements PrimitiveTask {
             case MOUNT -> mount(ctx);
             case FREE_ITEMS -> freeItems(ctx);
             case COLLECT -> collect(ctx);
+            case REPLANT -> replant(ctx);
         };
     }
 
@@ -267,6 +272,7 @@ public final class ChopTree implements PrimitiveTask {
         Pos bestLeaf = null;
         long bestDist = Long.MAX_VALUE;
         for (Drop drop : ctx.percepts().drops()) {
+            noteSpecies(drop);
             if (!inArea(drop.pos(), 1) || triedStranded.contains(drop.pos())) {
                 continue;
             }
@@ -297,6 +303,7 @@ public final class ChopTree implements PrimitiveTask {
         List<Pos> ground = new ArrayList<>();
         BlockProbe probe = ctx.percepts().blocks();
         for (Drop drop : ctx.percepts().drops()) {
+            noteSpecies(drop);
             if (inArea(drop.pos(), COLLECT_MARGIN)
                     && probe.at(drop.pos().x(), drop.pos().y() - 1, drop.pos().z()) != BlockKind.LEAVES) {
                 ground.add(drop.pos());
@@ -306,6 +313,15 @@ public final class ChopTree implements PrimitiveTask {
             collectLapCap = Flocks.count(ground) * 3 + 6;
         }
         if (ground.isEmpty() || collectLaps >= collectLapCap) {
+            if (replant && !tree.base().isEmpty()) {
+                if (walkIssued) {
+                    ctx.actuators().mover().stop();
+                    walkIssued = false;
+                }
+                replantSites.addAll(tree.base());
+                phase = Phase.REPLANT;
+                return TaskStatus.RUNNING;
+            }
             return finish(ctx);
         }
         if (walkIssued && ctx.actuators().mover().state() == MoveState.MOVING) {
@@ -339,10 +355,6 @@ public final class ChopTree implements PrimitiveTask {
             case STUMP -> {
                 ctx.journal().record(Category.BRAIN, "chop", "felled (" + felled + " logs"
                         + (skipped > 0 ? ", " + skipped + " out of reach" : "") + ")");
-                if (replant) {
-                    // Build 2b: BlockPlacer + one sapling per stump log. Plumbed, not built.
-                    ctx.journal().record(Category.BRAIN, "chop", "replant deferred (placer not built)");
-                }
                 phase = Phase.COLLECT;
             }
             default -> throw new IllegalStateException("no advance from " + phase);
@@ -357,6 +369,80 @@ public final class ChopTree implements PrimitiveTask {
             return advancePhase(ctx); // floating remnant: straight to the summary + collect
         }
         return TaskStatus.RUNNING;
+    }
+
+    /**
+     * One sapling per stump log — 1×1 vs 2×2 falls out of the base size. Planted last so
+     * saplings gathered during this chop count. Walks once toward a site the placer refuses,
+     * then lets it go: replanting never fails a finished chop.
+     */
+    private TaskStatus replant(BrainContext ctx) {
+        if (walkIssued) {
+            if (ctx.actuators().mover().state() == MoveState.MOVING) {
+                return TaskStatus.RUNNING;
+            }
+            walkIssued = false;
+        }
+        if (target == null) {
+            if (replantSites.isEmpty()) {
+                if (planted > 0) {
+                    ctx.journal().record(Category.BRAIN, "chop", "replanted " + planted + " sapling"
+                            + (planted == 1 ? "" : "s"));
+                }
+                return finish(ctx);
+            }
+            target = replantSites.poll();
+            walked = false;
+        }
+        String sapling = speciesLogId == null ? null : saplingFor(speciesLogId);
+        if (sapling == null || ctx.percepts().inventory().count(sapling) == 0) {
+            ctx.journal().record(Category.BRAIN, "chop", "replant skipped (no sapling in the pack)");
+            target = null;
+            replantSites.clear();
+            return finish(ctx);
+        }
+        if (ctx.actuators().placer().place(sapling, target)) {
+            planted++;
+            target = null;
+            return TaskStatus.RUNNING;
+        }
+        if (!walked) {
+            walked = true;
+            ctx.actuators().mover().moveTo(target.x(), target.y(), target.z());
+            walkIssued = true;
+            return TaskStatus.RUNNING;
+        }
+        target = null; // site blocked or out of reach even after the walk — let it go
+        return TaskStatus.RUNNING;
+    }
+
+    /** Remembers the chopped species from the first log-ish drop sighted. */
+    private void noteSpecies(dev.luizloyola.autarkia.core.brain.sense.Drop drop) {
+        if (speciesLogId == null
+                && (drop.itemId().endsWith("_log") || drop.itemId().endsWith("_stem"))) {
+            speciesLogId = drop.itemId();
+        }
+    }
+
+    /**
+     * The sapling that regrows this log — string-level vanilla knowledge, the two irregular
+     * families special-cased, until a compat materials lens exists. Modded trees skip
+     * replanting.
+     */
+    static String saplingFor(String logId) {
+        if (logId.endsWith("mangrove_log")) {
+            return "minecraft:mangrove_propagule";
+        }
+        if (logId.endsWith("crimson_stem")) {
+            return "minecraft:crimson_fungus";
+        }
+        if (logId.endsWith("warped_stem")) {
+            return "minecraft:warped_fungus";
+        }
+        if (logId.endsWith("_log")) {
+            return logId.substring(0, logId.length() - "_log".length()) + "_sapling";
+        }
+        return null;
     }
 
     private TaskStatus finish(BrainContext ctx) {
