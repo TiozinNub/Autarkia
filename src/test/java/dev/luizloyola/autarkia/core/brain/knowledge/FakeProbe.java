@@ -11,16 +11,20 @@ import java.util.Set;
  * {@link #GROUND_Y}, with markable unloaded columns and hidden (ray-blocked) cells. Counts
  * every {@code surfaceY}/{@code at} call so tests can assert the read budget from outside.
  */
-final class FakeProbe implements BlockProbe {
-    static final int GROUND_Y = 63;
+public final class FakeProbe implements BlockProbe {
+    public static final int GROUND_Y = 63;
 
     private final Map<Pos, BlockKind> blocks = new HashMap<>();
     private final Set<Column> unloaded = new HashSet<>();
     private final Set<Pos> hidden = new HashSet<>();
     int reads;
 
-    void set(int x, int y, int z, BlockKind kind) {
+    public void set(int x, int y, int z, BlockKind kind) {
         blocks.put(new Pos(x, y, z), kind);
+    }
+
+    public void clear(int x, int y, int z) {
+        blocks.remove(new Pos(x, y, z));
     }
 
     /**
@@ -28,7 +32,7 @@ final class FakeProbe implements BlockProbe {
      * 8 leaves around the trunk top (y 67), a full 3×3 leaf cap (y 68). 4 logs, 17 leaves;
      * every canopy column's surface is a leaf at y 68.
      */
-    void placeOak(int x, int z) {
+    public void placeOak(int x, int z) {
         for (int y = 64; y <= 67; y++) {
             set(x, y, z, BlockKind.LOG);
         }
@@ -42,7 +46,7 @@ final class FakeProbe implements BlockProbe {
         }
     }
 
-    void removeOak(int x, int z) {
+    public void removeOak(int x, int z) {
         for (int y = 64; y <= 68; y++) {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
@@ -52,11 +56,11 @@ final class FakeProbe implements BlockProbe {
         }
     }
 
-    void markUnloaded(int x, int z) {
+    public void markUnloaded(int x, int z) {
         unloaded.add(new Column(x, z));
     }
 
-    void hide(Pos target) {
+    public void hide(Pos target) {
         hidden.add(target);
     }
 

@@ -11,6 +11,7 @@ import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.autarkia.core.brain.task.BreakBlock;
+import dev.luizloyola.autarkia.core.brain.task.ChopNearestTree;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
 import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
@@ -142,6 +143,8 @@ public final class AutarkiaCommands {
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                                 .executes(ctx -> brainBreak(ctx.getSource(),
                                                         BlockPosArgument.getLoadedBlockPos(ctx, "pos")))))
+                                .then(Commands.literal("chop")
+                                        .executes(ctx -> brainChop(ctx.getSource())))
                                 .then(Commands.literal("status")
                                         .executes(ctx -> brainStatus(ctx.getSource())))
                                 .then(Commands.literal("cancel")
@@ -273,6 +276,18 @@ public final class AutarkiaCommands {
         Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new BreakBlock(pos.getX(), pos.getY(), pos.getZ()));
+        String suffix = autoDisabledSuffix(autoDisabled);
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** Runs {@link ChopNearestTree} on the resolved Person — the full chop choreography against
+     *  her nearest REMEMBERED grove (knowledge-driven: no memory of a tree, no chop). */
+    private static int brainChop(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        boolean autoDisabled = person.brain().run(new ChopNearestTree());
         String suffix = autoDisabledSuffix(autoDisabled);
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);

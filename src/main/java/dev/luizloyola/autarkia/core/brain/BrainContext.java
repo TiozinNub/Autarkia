@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.brain;
 
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
+import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
 
@@ -26,6 +27,14 @@ public interface BrainContext {
      * offline-simulated person (with no entity at all) logs through the very same call.
      */
     PersonJournal journal();
+
+    /**
+     * This person's remembered POIs — memory, not perception: the same object the "notice as you
+     * go" sensor fills, so a task's {@code forget(...)} is read by everything else. Methods price
+     * staleness with {@code nearest(...)}/{@code age(...)}. {@code PersonId}-keyed, so it outlives
+     * the entity.
+     */
+    PersonKnowledge knowledge();
 
     /**
      * The maximum method cost currently acceptable, in the walk-block currency methods price

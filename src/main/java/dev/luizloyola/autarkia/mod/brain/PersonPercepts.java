@@ -2,6 +2,9 @@ package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.compat.inv.CookedForms;
 import dev.luizloyola.autarkia.compat.inv.FoodValues;
+import dev.luizloyola.autarkia.compat.sense.LevelProbe;
+import dev.luizloyola.autarkia.core.brain.knowledge.BlockProbe;
+import dev.luizloyola.autarkia.core.brain.sense.Drop;
 import dev.luizloyola.autarkia.core.brain.sense.FoodLookup;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
@@ -15,6 +18,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Monster;
 import org.jspecify.annotations.Nullable;
 
@@ -43,9 +48,17 @@ public final class PersonPercepts implements Percepts {
     private int threatsQueriedAt;
     /** Last threat scan, reused within the budget window; {@code null} until the first query. */
     private @Nullable List<Threat> threatsCache;
+    /** The block sense — one {@link LevelProbe} over this person's level and eyes, shared with
+     *  nothing (the sensor builds its own): stateless views are cheap, aliasing is not. */
+    private final LevelProbe blocks;
+    /** {@code person.tickCount} at which {@link #dropsCache} was last filled. */
+    private int dropsQueriedAt;
+    /** Last drop scan, reused within the budget window; {@code null} until the first query. */
+    private @Nullable List<Drop> dropsCache;
 
     public PersonPercepts(Person person) {
         this.person = person;
+        this.blocks = new LevelProbe(person);
         this.foods = new FoodLookup() {
             @Override
             public Optional<FoodValue> of(ItemStack stack) {
@@ -116,5 +129,43 @@ public final class PersonPercepts implements Percepts {
         this.threatsQueriedAt = now;
         this.threatsCache = List.copyOf(threats);
         return this.threatsCache;
+    }
+
+    /** The world's blocks through the one {@link BlockProbe} vocabulary — the task-time re-walk sense. */
+    @Override
+    public BlockProbe blocks() {
+        return this.blocks;
+    }
+
+    /**
+     * Nearby dropped items as bare sightings — budgeted exactly like {@link #threats()}, over the
+     * same 16×8×16 box. Consumers filter to their own work areas.
+     */
+    @Override
+    public List<Drop> drops() {
+        int now = this.person.tickCount;
+        if (this.dropsCache != null && now - this.dropsQueriedAt < CACHE_TICKS) {
+            return this.dropsCache;
+        }
+        List<ItemEntity> items = this.person.level().getEntitiesOfClass(
+                ItemEntity.class, this.person.getBoundingBox().inflate(16.0, 8.0, 16.0));
+        List<Drop> drops = new ArrayList<>(items.size());
+        for (ItemEntity item : items) {
+            if (!item.isAlive()) {
+                continue;
+            }
+            BlockPos at = item.blockPosition();
+            drops.add(new Drop(new Pos(at.getX(), at.getY(), at.getZ()),
+                    BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString()));
+        }
+        this.dropsQueriedAt = now;
+        this.dropsCache = List.copyOf(drops);
+        return this.dropsCache;
+    }
+
+    /** The overworld game clock — the same one knowledge timestamps carry. */
+    @Override
+    public long time() {
+        return this.person.level().getGameTime();
     }
 }

@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.brain.sense;
 
+import dev.luizloyola.autarkia.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.person.Needs;
 import java.util.List;
@@ -44,4 +45,24 @@ public interface Percepts {
      * {@code FleeInstinct} needs.
      */
     List<Threat> threats();
+
+    /**
+     * The world's blocks, seen through the one block vocabulary ({@code BlockKind}) — the same
+     * probe perception's sensor reads through, now offered to tasks for their task-time re-walks
+     * (a chop re-scanning a remembered grove: memory points, world is truth). Live reads, server
+     * side; use them budgeted the way the sensor does — this is the expensive sense class.
+     */
+    BlockProbe blocks();
+
+    /**
+     * Nearby dropped items, sensed right now — budgeted and briefly cached. Bare sightings (cell
+     * + item id); ground-vs-stranded and mine-vs-noise are the consumer's questions.
+     */
+    List<Drop> drops();
+
+    /**
+     * The current game time in ticks — the same clock knowledge timestamps carry, so staleness
+     * pricing ({@code memory.age(time())}) compares like with like.
+     */
+    long time();
 }

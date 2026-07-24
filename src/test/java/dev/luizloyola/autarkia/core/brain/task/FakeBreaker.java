@@ -11,7 +11,11 @@ import org.jspecify.annotations.Nullable;
  */
 final class FakeBreaker implements BlockBreaker {
     @Nullable Pos target;
+    /** Every begin target in order — the choreography assertions read this. */
+    final java.util.List<Pos> targets = new java.util.ArrayList<>();
     boolean refuseBegin;
+    /** Targets begin() refuses (simulated out-of-reach); refuseBegin refuses everything. */
+    final java.util.Set<Pos> refuse = new java.util.HashSet<>();
     BreakState state = BreakState.IDLE;
     int begins;
     int aborts;
@@ -19,9 +23,10 @@ final class FakeBreaker implements BlockBreaker {
     @Override
     public boolean begin(Pos target) {
         this.begins++;
-        if (refuseBegin) {
+        if (refuseBegin || refuse.contains(target)) {
             return false;
         }
+        this.targets.add(target);
         this.target = target;
         this.state = BreakState.BREAKING;
         return true;

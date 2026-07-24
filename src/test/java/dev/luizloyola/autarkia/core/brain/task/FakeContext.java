@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.brain.task;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
 import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
+import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
 import dev.luizloyola.autarkia.core.brain.act.Mover;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
@@ -19,6 +20,8 @@ final class FakeContext implements BrainContext {
     final FakeConsumer consumer = new FakeConsumer();
     final FakeBreaker breaker = new FakeBreaker();
     final FakePercepts percepts = new FakePercepts();
+    /** A real knowledge store (pure and headless anyway) — chop tests seed and inspect it. */
+    final PersonKnowledge knowledge = new PersonKnowledge();
     /**
      * A real (in-memory) journal on a fixed-tick clock, so a narrating task records somewhere
      * inspectable ({@code journalService.recent(...)}). Bound to one throwaway person.
@@ -60,6 +63,11 @@ final class FakeContext implements BrainContext {
     @Override
     public PersonJournal journal() {
         return journal;
+    }
+
+    @Override
+    public PersonKnowledge knowledge() {
+        return knowledge;
     }
 
     @Override

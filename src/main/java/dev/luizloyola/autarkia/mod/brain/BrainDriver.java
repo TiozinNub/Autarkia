@@ -9,6 +9,7 @@ import dev.luizloyola.autarkia.core.brain.act.Mover;
 import dev.luizloyola.autarkia.core.brain.instinct.EatInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
+import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.task.Task;
 import dev.luizloyola.autarkia.core.log.Category;
@@ -16,6 +17,7 @@ import dev.luizloyola.autarkia.core.log.PersonJournal;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.List;
 import java.util.Random;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Per-{@link Person} brain host: mounts the pure core decision machinery on the entity and hands it
@@ -45,6 +47,14 @@ public final class BrainDriver {
      * manual command has taken the wheel, and only its task runs until autonomy is re-enabled.
      */
     private boolean auto = true;
+
+    /**
+     * This person's knowledge view, resolved lazily on first use and cached — the journal's
+     * pattern, for the same reason: the {@code PersonId} and the running server are absent at
+     * construction but guaranteed by the time any task asks (identity resolves at the top of
+     * {@code Person.tick()}, before the brain runs).
+     */
+    private PersonKnowledge knowledge;
 
     public BrainDriver(Person person) {
         this.person = person;
@@ -83,6 +93,11 @@ public final class BrainDriver {
             @Override
             public PersonJournal journal() {
                 return person.journal(); // the entity owns the one cached view; the body/nav share it
+            }
+
+            @Override
+            public PersonKnowledge knowledge() {
+                return resolveKnowledge();
             }
 
             @Override
@@ -149,6 +164,15 @@ public final class BrainDriver {
         this.auto = auto;
         // BRAIN log: the dev override is worth a line — it explains a gap where the arbiter went quiet.
         this.person.journal().record(Category.BRAIN, "auto", auto ? "on" : "off");
+    }
+
+    /** The person's knowledge store, resolved once and cached — see {@link #knowledge}. */
+    private PersonKnowledge resolveKnowledge() {
+        if (this.knowledge == null) {
+            ServerLevel level = (ServerLevel) this.person.level();
+            this.knowledge = Knowledges.of(level.getServer()).forPerson(this.person.getPersonId());
+        }
+        return this.knowledge;
     }
 
     /** The brain's one-line status, for the debug commands: which side is driving, then its report. */
