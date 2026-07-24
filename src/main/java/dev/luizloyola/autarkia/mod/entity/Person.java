@@ -303,7 +303,6 @@ public class Person extends Avatar {
         // The working arm advances after the brain, so a break begun this tick gains its first
         // progress this tick — same-tick actuation, like the navigator below.
         this.blockBreaker.tick();
-        this.scaffolder.tick();
         if (this.debugRunForward) {
             // getAttributeValue includes the sprint modifier applied by setSprinting, so this is
             // already the ×1.3 sprint speed; the 0.98 damping keeps it exact vs a player.
@@ -318,6 +317,10 @@ public class Person extends Avatar {
             // when it has one, and holds the input at rest otherwise.
             this.navigator.tick();
         }
+        // The climbing legs tick after the navigator: the nerd-pole's jump input must survive to
+        // aiStep, and the navigator's at-rest path resets inputs — ticking before it swallowed
+        // every pillar jump.
+        this.scaffolder.tick();
         // Buoyancy last: it owns the vertical input while submerged, whatever drove the horizontal.
         floatInWater();
     }

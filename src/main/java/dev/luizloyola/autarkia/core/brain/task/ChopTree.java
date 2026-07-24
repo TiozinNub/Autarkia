@@ -93,6 +93,8 @@ public final class ChopTree implements PrimitiveTask {
     private int skipped;
     private int freedLeaves;
     private int fished;
+    private int fishCursor = -1;
+    private boolean fishPassProgress;
     private int collectLaps;
     private int collectLapCap = -1;
     /** The species chopped, learned from the first log drop seen — names the sapling to plant. */
@@ -321,7 +323,7 @@ public final class ChopTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         if (freedLeaves >= FREED_LEAVES_LIMIT) {
-            phase = Phase.DESCEND;
+            phase = wantsFishing(ctx) ? Phase.FISH : Phase.DESCEND;
             return TaskStatus.RUNNING;
         }
         BlockProbe probe = ctx.percepts().blocks();
@@ -344,7 +346,7 @@ public final class ChopTree implements PrimitiveTask {
             }
         }
         if (bestLeaf == null) {
-            phase = Phase.DESCEND;
+            phase = wantsFishing(ctx) ? Phase.FISH : Phase.DESCEND;
             return TaskStatus.RUNNING;
         }
         if (breaker.begin(bestLeaf)) {
@@ -417,7 +419,7 @@ public final class ChopTree implements PrimitiveTask {
                     walkIssued = false;
                 }
                 replantSites.addAll(tree.base());
-                phase = Phase.FISH;
+                phase = Phase.REPLANT;
                 return TaskStatus.RUNNING;
             }
             return finish(ctx);
@@ -433,15 +435,16 @@ public final class ChopTree implements PrimitiveTask {
     }
 
     /**
-     * No sapling in the pack: break an accessible leftover leaf, walk to whatever dropped, and
-     * repeat until a sapling lands or the canopy (or the budget) runs out. Replanting is a
-     * courtesy — running dry skips, never fails.
+     * No sapling in the pack? Fish for one (decision: Luiz): break leftover canopy leaves WHILE
+     * Still up AT the CROWN (after the descent every leaf is out of arm's reach), and let the
+     * ground sweep collect what falls. Yielding nothing skips, never fails.
      */
     private TaskStatus fish(BrainContext ctx) {
-        String sapling = speciesLogId == null ? null : saplingFor(speciesLogId);
+        String species = species(ctx);
+        String sapling = species == null ? null : saplingFor(species);
         if (sapling == null || ctx.percepts().inventory().count(sapling) > 0
                 || fished >= FISH_LIMIT) {
-            phase = Phase.REPLANT;
+            phase = Phase.DESCEND;
             return TaskStatus.RUNNING;
         }
         BlockBreaker breaker = ctx.actuators().breaker();
@@ -452,35 +455,49 @@ public final class ChopTree implements PrimitiveTask {
             breaking = false;
             return TaskStatus.RUNNING;
         }
-        if (walkIssued) {
-            if (ctx.actuators().mover().state() == MoveState.MOVING) {
-                return TaskStatus.RUNNING;
-            }
-            walkIssued = false;
-        }
-        // A dropped sapling in sight beats breaking more leaves — go get it.
+        // The canopy blocks its own interior (leaves are opaque to arms), so refused leaves
+        // stay on the menu: breaking the outer shell is what exposes the next pass's targets.
+        // A full pass with no swing means everything left is truly unreachable.
         BlockProbe probe = ctx.percepts().blocks();
-        for (Drop drop : ctx.percepts().drops()) {
-            if (drop.itemId().equals(sapling) && inArea(drop.pos(), COLLECT_MARGIN)) {
-                ctx.actuators().mover().moveTo(drop.pos().x(), drop.pos().y(), drop.pos().z());
-                walkIssued = true;
-                return TaskStatus.RUNNING;
-            }
+        if (fishCursor < 0) {
+            fishCursor = canopy.size() - 1;
+            fishPassProgress = false;
         }
-        while (!canopy.isEmpty()) {
-            Pos leaf = canopy.remove(canopy.size() - 1);
+        while (fishCursor >= 0) {
+            if (fishCursor >= canopy.size()) {
+                fishCursor = canopy.size() - 1;
+                continue;
+            }
+            Pos leaf = canopy.get(fishCursor);
             if (probe.at(leaf.x(), leaf.y(), leaf.z()) != BlockKind.LEAVES) {
-                continue; // already broken or decayed
+                canopy.remove(fishCursor--); // broken or decayed — off the menu
+                continue;
             }
             if (breaker.begin(leaf)) {
+                canopy.remove(fishCursor--);
                 breaking = true;
                 fished++;
+                fishPassProgress = true;
                 return TaskStatus.RUNNING;
             }
-            // out of the arm's reach — try the next leftover leaf
+            fishCursor--; // out of reach this pass — the shell may open it up next pass
         }
-        phase = Phase.REPLANT; // canopy exhausted, still saplingless: the courtesy will skip
+        if (canopy.isEmpty() || !fishPassProgress) {
+            phase = Phase.DESCEND; // exhausted, or the rest is truly unreachable
+        } else {
+            fishCursor = -1; // another pass: the broken shell exposed new targets
+        }
         return TaskStatus.RUNNING;
+    }
+
+    /** Whether the crown is worth fishing: replanting is on, and the pack lacks the sapling. */
+    private boolean wantsFishing(BrainContext ctx) {
+        if (!replant || tree == null || tree.base().isEmpty() || fished >= FISH_LIMIT) {
+            return false;
+        }
+        String species = species(ctx);
+        String sapling = species == null ? null : saplingFor(species);
+        return sapling != null && ctx.percepts().inventory().count(sapling) == 0;
     }
 
     /**
@@ -505,7 +522,8 @@ public final class ChopTree implements PrimitiveTask {
             target = replantSites.poll();
             walked = false;
         }
-        String sapling = speciesLogId == null ? null : saplingFor(speciesLogId);
+        String speciesId = species(ctx);
+        String sapling = speciesId == null ? null : saplingFor(speciesId);
         if (sapling == null || ctx.percepts().inventory().count(sapling) == 0) {
             ctx.journal().record(Category.BRAIN, "chop", "replant skipped (no sapling in the pack)");
             target = null;
@@ -634,6 +652,23 @@ public final class ChopTree implements PrimitiveTask {
                 && (drop.itemId().endsWith("_log") || drop.itemId().endsWith("_stem"))) {
             speciesLogId = drop.itemId();
         }
+    }
+
+    /**
+     * The species, from sightings or — the walk-over pickup usually vacuums drops before any
+     * percept loop sees them — from her own pack.
+     */
+    private String species(BrainContext ctx) {
+        if (speciesLogId == null) {
+            for (var entry : ctx.percepts().inventory().occupied()) {
+                String id = entry.stack().id();
+                if (id.endsWith("_log") || id.endsWith("_stem")) {
+                    speciesLogId = id;
+                    break;
+                }
+            }
+        }
+        return speciesLogId;
     }
 
     /**
