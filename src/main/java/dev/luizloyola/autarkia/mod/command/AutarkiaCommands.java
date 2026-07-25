@@ -10,6 +10,7 @@ import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.autarkia.core.brain.sense.Peer;
 import dev.luizloyola.autarkia.core.brain.task.BreakBlock;
 import dev.luizloyola.autarkia.core.brain.task.ChopNearestTree;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
@@ -235,6 +236,10 @@ public final class AutarkiaCommands {
                         // The personal board (layer 3's degenerate v1): posted/claimed/cooling.
                         .then(Commands.literal("board")
                                 .executes(ctx -> boardShow(ctx.getSource())))
+                        // Who she can currently SEE — the peers() sense: Persons and live
+                        // players, one seamless list, activity read off the visible body.
+                        .then(Commands.literal("peers")
+                                .executes(ctx -> peersList(ctx.getSource())))
                         .then(Commands.literal("inv")
                                 .then(Commands.literal("list")
                                         .executes(ctx -> invList(ctx.getSource())))
@@ -367,6 +372,28 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " board: "
                 + person.brain().describeBoard()).withStyle(ChatFormatting.LIGHT_PURPLE), false);
         return 1;
+    }
+
+    /** The resolved Person's live {@code peers()} reading — who she sees, and what they're visibly doing. */
+    private static int peersList(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        List<Peer> peers = person.brain().percepts().peers();
+        String name = person.getName().getString();
+        if (peers.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(name + " sees nobody around.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(name + " — " + peers.size() + " in sight")
+                .withStyle(ChatFormatting.AQUA), false);
+        for (Peer peer : peers) {
+            String line = String.format(Locale.ROOT, "%s (%d, %d, %d) - %.1f blocks away, %s",
+                    peer.name(), peer.pos().x(), peer.pos().y(), peer.pos().z(),
+                    peer.distance(), peer.activity().name().toLowerCase(Locale.ROOT));
+            source.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.GREEN), false);
+        }
+        return peers.size();
     }
 
     // --- config -----------------------------------------------------------------------------
