@@ -16,25 +16,30 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@link ItemConsumer} actuator <em>adapter</em>: the mouth. Core tasks say "consume slot N";
- * this class drives VANILLA's item-use pipeline, so the animation, sounds, duration, consume
- * effects and stack shrink are vanilla's own. Verified on 26.1.2 bytecode:
- * {@code LivingEntity.tick()} runs {@code updatingUsingItem()} for any living entity, so once
- * {@code startUsingItem} is called the countdown, {@code completeUsingItem} and
- * {@code Consumable.onConsume} all run without a player.
+ * this drives VANILLA's item-use pipeline, so the animation, sounds, particles, duration, consume
+ * effects and stack shrink are vanilla's own. {@code LivingEntity.tick()} runs
+ * {@code updatingUsingItem()} for any living entity (26.1.2 bytecode), so the countdown,
+ * {@code completeUsingItem} and {@code Consumable.onConsume} all happen with no player anywhere.
  *
- * <p><b>Except nutrition</b>, which vanilla applies behind an {@code instanceof Player} gate in
- * {@code FoodProperties.onConsume} and would silently vanish on a Person — so on completion this
- * actuator applies the item's {@link FoodValue} to {@link Person#needs()} itself.
+ * <p><b>Except nutrition</b>, which {@code FoodProperties.onConsume} applies behind an
+ * {@code instanceof Player} gate and so vanishes on a Person: this actuator applies the item's
+ * {@link FoodValue} to {@link Person#needs()} on completion.
  *
- * <p><b>The one-tick handshake with the equipment mirror.</b> Only the hand item can be used:
- * {@link #begin} arranges the CORE inventory (hotbar shuffle + {@code setSelectedSlot}) and waits;
- * the mirror pushes core&nbsp;→&nbsp;entity hand at the START of the next {@code serverAiStep},
- * and the brain polls {@link #state()} after the mirror that same tick, so PREPARING resolves on
- * the next poll. The mirror's pull path carries vanilla's in-place shrink back into core storage —
- * this class never edits the eaten slot.
+ * <p><b>The handshake with the equipment mirror.</b> Only the hand item can be used: {@link #begin}
+ * arranges the CORE inventory and waits; the mirror pushes core&nbsp;→&nbsp;entity hand at the
+ * START of the next {@code serverAiStep}, and the brain polls {@link #state()} after the mirror
+ * that same tick, so PREPARING resolves on the very next poll. The mirror's pull path carries the
+ * completion shrink back — this class never edits the eaten slot.
  *
- * <p>Phases {@code IDLE → PREPARING → CONSUMING → FINISHED | FAILED}; externally PREPARING reads
- * as {@link ConsumeState#CONSUMING}.
+ * <p><b>SETTLING burns one more tick, for the watching clients.</b> {@code detectEquipmentUpdates()}
+ * runs before {@code aiStep()} (26.1.2 bytecode, offsets 125 and 178), so a hand set during
+ * {@code serverAiStep} reaches clients a tick after the using-item flag, which ships in the tracker
+ * phase of the tick it was set. Biting immediately leaves the client an empty hand, so it keeps
+ * {@code useItem} EMPTY and calls {@code stopUsingItem}: no client consume tick, and so no item
+ * particles (the eating sound is server-broadcast and survived).
+ *
+ * <p>Phases: {@code IDLE → PREPARING → SETTLING → CONSUMING → FINISHED | FAILED}; externally both
+ * PREPARING and SETTLING read as {@link ConsumeState#CONSUMING}.
  */
 public final class PersonItemConsumer implements ItemConsumer {
     /**
@@ -44,7 +49,7 @@ public final class PersonItemConsumer implements ItemConsumer {
      */
     private static final int PREPARING_GRACE_TICKS = 5;
 
-    private enum Phase { IDLE, PREPARING, CONSUMING, FINISHED, FAILED }
+    private enum Phase { IDLE, PREPARING, SETTLING, CONSUMING, FINISHED, FAILED }
 
     private final Person person;
     private Phase phase = Phase.IDLE;
@@ -104,24 +109,39 @@ public final class PersonItemConsumer implements ItemConsumer {
     public ConsumeState state() {
         switch (this.phase) {
             case PREPARING -> tickPreparing();
+            case SETTLING -> tickSettling();
             case CONSUMING -> tickConsuming();
             default -> { }
         }
         return switch (this.phase) {
             case IDLE -> ConsumeState.IDLE;
-            case PREPARING, CONSUMING -> ConsumeState.CONSUMING;
+            case PREPARING, SETTLING, CONSUMING -> ConsumeState.CONSUMING;
             case FINISHED -> ConsumeState.FINISHED;
             case FAILED -> ConsumeState.FAILED;
         };
     }
 
-    /** Waits for the mirror to put the intended stack in the visible hand, then starts the bite. */
+    /** Waits for the mirror to put the intended stack in the visible hand. */
     private void tickPreparing() {
-        ItemStack hand = this.person.getItemInHand(InteractionHand.MAIN_HAND);
-        if (!ItemStack.isSameItemSameComponents(hand, this.intended)) {
+        if (!ItemStack.isSameItemSameComponents(
+                this.person.getItemInHand(InteractionHand.MAIN_HAND), this.intended)) {
             if (++this.preparingTicks > PREPARING_GRACE_TICKS) {
                 this.phase = Phase.FAILED; // the hand never arrived — rearranged under us
             }
+            return;
+        }
+        this.phase = Phase.SETTLING;
+    }
+
+    /**
+     * One tick later — the tick whose {@code detectEquipmentUpdates} has now broadcast the hand (see
+     * the class doc) — starts the bite, so the using-item flag reaches clients behind the item they
+     * need it to apply to.
+     */
+    private void tickSettling() {
+        ItemStack hand = this.person.getItemInHand(InteractionHand.MAIN_HAND);
+        if (!ItemStack.isSameItemSameComponents(hand, this.intended)) {
+            this.phase = Phase.FAILED; // rearranged out from under us while the hand settled
             return;
         }
         if (this.person.isUsingItem()) {
@@ -174,8 +194,8 @@ public final class PersonItemConsumer implements ItemConsumer {
     /** Stops any bite in progress ({@code releaseUsingItem}, vanilla's put-it-down) and resets to IDLE. */
     @Override
     public void abort() {
-        // Only release a use this actuator started (CONSUMING); a foreign use seen during
-        // PREPARING is someone else's business and must not be cancelled from here.
+        // Only release a use this actuator started (CONSUMING); no use exists yet in PREPARING or
+        // SETTLING, and a foreign one seen there is someone else's business to cancel, not ours.
         if (this.phase == Phase.CONSUMING && this.person.isUsingItem()) {
             this.person.releaseUsingItem();
         }
