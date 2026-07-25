@@ -18,8 +18,18 @@ import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.Identifier;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.player.PlayerModelType;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SwingAnimationType;
+import net.minecraft.world.item.component.SwingAnimation;
 
 /**
  * Renders a {@link Person} with the vanilla {@link PlayerModel}, using the entity's chosen
@@ -67,6 +77,8 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
     public void extractRenderState(Person person, AvatarRenderState state, float partialTick) {
         super.extractRenderState(person, state, partialTick);
         HumanoidMobRenderer.extractHumanoidRenderState(person, state, partialTick, this.itemModelResolver);
+        state.rightArmPose = armPose(person, HumanoidArm.RIGHT);
+        state.leftArmPose = armPose(person, HumanoidArm.LEFT);
         state.skin = ((ClientPerson) person).getSkin();
         state.showHat = true;
         state.showJacket = true;
@@ -81,5 +93,55 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
     @Override
     public Identifier getTextureLocation(AvatarRenderState state) {
         return state.skin.body().texturePath();
+    }
+
+    /**
+     * What an arm is DOING with what it holds — the one half of the humanoid render state
+     * {@link HumanoidMobRenderer#extractHumanoidRenderState} leaves alone, because vanilla fills it
+     * per-renderer. Both poses default to {@link HumanoidModel.ArmPose#EMPTY}, so without this a
+     * Person eats, drinks and draws a bow with her arms idle: the item-use facts are already in the
+     * state, only the pose that reads them was missing.
+     *
+     * <p>Mirrors {@code AvatarRenderer.getArmPose} (26.1.2 bytecode) rather than calling it: it is
+     * private static, and a Person is not rendered through {@code AvatarRenderer}.
+     */
+    private static HumanoidModel.ArmPose armPose(Person person, HumanoidArm arm) {
+        ItemStack offHand = person.getItemInHand(InteractionHand.OFF_HAND);
+        HumanoidModel.ArmPose mainPose = armPose(
+                person, person.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND);
+        HumanoidModel.ArmPose offPose = armPose(person, offHand, InteractionHand.OFF_HAND);
+        if (mainPose.isTwoHanded()) {
+            offPose = offHand.isEmpty() ? HumanoidModel.ArmPose.EMPTY : HumanoidModel.ArmPose.ITEM;
+        }
+        return person.getMainArm() == arm ? mainPose : offPose;
+    }
+
+    /**
+     * One hand's pose. Eating and drinking fall through to {@link HumanoidModel.ArmPose#ITEM} — that
+     * Is vanilla's eat pose, there is no separate chew: the bite reads as the raised item plus the
+     * food particles and eating sounds the item's {@code Consumable} emits every few ticks of the
+     * use, which {@code PersonItemConsumer} already drives through vanilla's own item-use pipeline.
+     */
+    private static HumanoidModel.ArmPose armPose(Person person, ItemStack stack, InteractionHand hand) {
+        if (stack.isEmpty()) return HumanoidModel.ArmPose.EMPTY;
+        if (!person.swinging && stack.is(Items.CROSSBOW) && CrossbowItem.isCharged(stack)) {
+            return HumanoidModel.ArmPose.CROSSBOW_HOLD;
+        }
+        if (person.getUsedItemHand() == hand && person.getUseItemRemainingTicks() > 0) {
+            ItemUseAnimation animation = stack.getUseAnimation();
+            if (animation == ItemUseAnimation.BLOCK) return HumanoidModel.ArmPose.BLOCK;
+            if (animation == ItemUseAnimation.BOW) return HumanoidModel.ArmPose.BOW_AND_ARROW;
+            if (animation == ItemUseAnimation.TRIDENT) return HumanoidModel.ArmPose.THROW_TRIDENT;
+            if (animation == ItemUseAnimation.CROSSBOW) return HumanoidModel.ArmPose.CROSSBOW_CHARGE;
+            if (animation == ItemUseAnimation.SPYGLASS) return HumanoidModel.ArmPose.SPYGLASS;
+            if (animation == ItemUseAnimation.TOOT_HORN) return HumanoidModel.ArmPose.TOOT_HORN;
+            if (animation == ItemUseAnimation.BRUSH) return HumanoidModel.ArmPose.BRUSH;
+            if (animation == ItemUseAnimation.SPEAR) return HumanoidModel.ArmPose.SPEAR;
+        }
+        SwingAnimation swing = stack.get(DataComponents.SWING_ANIMATION);
+        if (swing != null && swing.type() == SwingAnimationType.STAB && person.swinging) {
+            return HumanoidModel.ArmPose.SPEAR;
+        }
+        return stack.is(ItemTags.SPEARS) ? HumanoidModel.ArmPose.SPEAR : HumanoidModel.ArmPose.ITEM;
     }
 }
