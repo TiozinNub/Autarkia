@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.brain.task;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.autarkia.core.brain.Arbiter;
 import dev.luizloyola.autarkia.core.brain.act.BreakState;
 import dev.luizloyola.autarkia.core.brain.instinct.DescendInstinct;
 import dev.luizloyola.autarkia.core.brain.knowledge.BlockKind;
@@ -78,8 +79,8 @@ class UnbuildPillarTest {
         DescendInstinct instinct = new DescendInstinct();
         assertEquals(0.0, instinct.pressure(ctx), "no tower, no want");
         tower(new Pos(5, 64, 5));
-        assertEquals(DescendInstinct.PRESSURE, instinct.pressure(ctx));
-        assertTrue(instinct.pressure(ctx) < 0.6,
+        assertEquals(DescendInstinct.strandedPressure(), instinct.pressure(ctx));
+        assertTrue(instinct.pressure(ctx) < Arbiter.preempt(),
                 "below the arbiter's PREEMPT bar: a chop legitimately mid-climb is never cut");
         assertTrue(instinct.root(ctx) instanceof UnbuildPillar);
     }

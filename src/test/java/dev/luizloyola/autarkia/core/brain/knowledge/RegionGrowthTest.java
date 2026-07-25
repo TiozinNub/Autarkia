@@ -133,7 +133,7 @@ class RegionGrowthTest {
 
         assertTrue(region.accepted());
         assertTrue(region.partial(), "the river continues beyond the spread cap");
-        assertTrue(region.units() <= RegionGrowth.MAX_SPREAD + 1,
+        assertTrue(region.units() <= RegionGrowth.maxSpread() + 1,
                 "only the reach within the cap: " + region.units());
     }
 }

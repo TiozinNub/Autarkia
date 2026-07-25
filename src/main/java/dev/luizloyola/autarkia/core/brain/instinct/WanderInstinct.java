@@ -3,10 +3,12 @@ package dev.luizloyola.autarkia.core.brain.instinct;
 import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.task.Task;
 import dev.luizloyola.autarkia.core.brain.task.WanderStep;
+import dev.luizloyola.autarkia.core.config.Config;
+import dev.luizloyola.autarkia.core.config.Knob;
 import java.util.random.RandomGenerator;
 
 /**
- * The idle-default drive. Its pressure is a constant {@link #IDLE_PRESSURE} floor: low enough that any real
+ * The idle-default drive. Its pressure is a constant {@link #idlePressure()} floor: low enough that any real
  * need beats it, high enough to beat doing nothing. Its root is a fresh {@link WanderStep} (roll a
  * nearby spot, walk there, pause), re-granted each time the last one finishes.
  *
@@ -19,35 +21,45 @@ public final class WanderInstinct implements Instinct {
 
     /**
      * The ambient pressure every real drive must beat to take over — low enough that once peckish
-     * (0.30) sticks past the arbiter's stickiness it loses to Eat, high enough to beat standing
-     * still.
+     * (0.30) sticks past the arbiter's stickiness it loses to Eat, high enough to beat doing
+     * nothing. Set it to zero and an unbothered Person stands still.
      */
-    public static final double IDLE_PRESSURE = 0.15;
+    public static double idlePressure() {
+        return Config.get().d(Knob.WANDER_IDLE_PRESSURE);
+    }
 
     /** Default roam radius (whole blocks) when the caller doesn't specify — a modest saunter. */
-    public static final int DEFAULT_RADIUS = 8;
+    public static int defaultRadius() {
+        return Config.get().i(Knob.WANDER_RADIUS);
+    }
 
     private final RandomGenerator random;
-    private final int radius;
+    /** An explicit caller-pinned radius, or {@code null} to follow {@link #defaultRadius()} live. */
+    private final Integer radius;
 
     public WanderInstinct(RandomGenerator random, int radius) {
         this.random = random;
         this.radius = radius;
     }
 
-    /** Wander with the {@link #DEFAULT_RADIUS default radius}. */
+    /**
+     * Wander with the {@link #defaultRadius() configured radius} — and keep following it, so a
+     * {@code /autarkia config reload} re-tunes Persons already walking around rather than only
+     * the next ones spawned.
+     */
     public WanderInstinct(RandomGenerator random) {
-        this(random, DEFAULT_RADIUS);
+        this.random = random;
+        this.radius = null;
     }
 
     @Override
     public double pressure(BrainContext ctx) {
-        return IDLE_PRESSURE;
+        return idlePressure();
     }
 
     @Override
     public Task root(BrainContext ctx) {
-        return new WanderStep(random, radius);
+        return new WanderStep(random, radius == null ? defaultRadius() : radius);
     }
 
     @Override

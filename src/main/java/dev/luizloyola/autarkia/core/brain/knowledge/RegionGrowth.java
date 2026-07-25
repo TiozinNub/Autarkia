@@ -1,6 +1,8 @@
 package dev.luizloyola.autarkia.core.brain.knowledge;
 
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.config.Config;
+import dev.luizloyola.autarkia.core.config.Knob;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Deque;
@@ -21,8 +23,15 @@ import java.util.Set;
  * borders ({@link BlockKind#UNKNOWN}).
  */
 public final class RegionGrowth {
-    public static final int MAX_BLOCKS = 512;
-    public static final int MAX_SPREAD = 24;
+    /** Block cap on one scan — hitting it marks the region partial. */
+    public static int maxBlocks() {
+        return Config.get().i(Knob.REGION_MAX_BLOCKS);
+    }
+
+    /** Chebyshev spread cap from the seed — what splits a fused mega-forest into groves. */
+    public static int maxSpread() {
+        return Config.get().i(Knob.REGION_MAX_SPREAD);
+    }
 
     private static final int[][] NEIGHBORS =
             {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
@@ -48,6 +57,10 @@ public final class RegionGrowth {
      * spent. Call again next tick while {@link #isDone()} is false.
      */
     public int step(BlockProbe probe, int maxReads) {
+        // Hoisted so one step is always bounded by one consistent pair of caps, even if a
+        // reload lands mid-scan.
+        int spreadCap = maxSpread();
+        int blockCap = maxBlocks();
         int reads = 0;
         while (result == null && reads < maxReads) {
             if (frontier.isEmpty()) {
@@ -78,11 +91,11 @@ public final class RegionGrowth {
                 if (!rule.joins(n, kind, probe)) {
                     continue;
                 }
-                if (chebyshev(n, seed) > MAX_SPREAD) {
+                if (chebyshev(n, seed) > spreadCap) {
                     partial = true;
                     continue;
                 }
-                if (blocks.size() >= MAX_BLOCKS) {
+                if (blocks.size() >= blockCap) {
                     partial = true;
                     frontier.clear();
                     break;

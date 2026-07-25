@@ -17,7 +17,7 @@ class PoiSensorCoreTest {
 
     /** Per-tick read ceiling asserted from outside. The wallet counts probe+growth reads; the
      *  rules' own surface checks ride uncounted (bounded by region size), hence the slack. */
-    private static final int READ_CEILING = PoiSensorCore.READS_PER_TICK + 40;
+    private static final int READ_CEILING = PoiSensorCore.readsPerTick() + 40;
 
     private final PersonKnowledge knowledge = new PersonKnowledge();
     private final PoiSensorCore sensor = new PoiSensorCore(knowledge);

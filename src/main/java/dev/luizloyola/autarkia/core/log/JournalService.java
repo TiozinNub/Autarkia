@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.core.log;
 
+import dev.luizloyola.autarkia.core.config.Config;
+import dev.luizloyola.autarkia.core.config.Knob;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -13,54 +15,60 @@ import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
 
 /**
- * Every person's debug log, written and read through one world-scoped service keyed by
- * {@link PersonId}. Pure {@code core}: it owns the in-memory rings and the retention policy, never
- * a file handle, thread or clock — the {@code mod} wrapper injects a game-time clock and a file
- * sink, as {@code PersonDirectory} wraps {@code PersonRegistry}.
+ * The one place every person's debug log is written and read: one world-scoped service keyed by
+ * {@link PersonId}, so an offline-simulated person records through the same call and the log does
+ * not go blind when a chunk unloads. Pure {@code core} — it owns the rings and the retention
+ * policy, never a file handle, a thread or a clock; the {@code mod} wrapper injects the game clock
+ * and attaches the file sink.
  *
- * <p>Keyed by identity, not entity: a {@code PersonId} outlives (and never requires) an in-world
- * entity, so an offline-simulated person records through the same call and the log does not go
- * blind when a chunk unloads.
+ * <p>Two retention bounds. The line cap ({@link #maxEntriesPerPerson()}) is enforced on every
+ * {@link #record} and the rings are per-person, so one chatty person neither unbounds memory nor
+ * evicts a quiet one's history; the age sweep ({@link #sweep()}, {@link #maxAgeTicks()}) runs on
+ * the caller's cadence, never on the write path. The rings are the ephemeral tier; the durable
+ * archive is the file the sink writes.
  *
- * <p>Two retention bounds:
- * <ul>
- *   <li><em>line cap</em> — at most {@link #maxEntriesPerPerson} lines each, oldest dropped on
- *       every {@link #record}, so memory is hard-bounded and, the rings being per-person, a chatty
- *       person can never evict a quiet one's history.</li>
- *   <li><em>age sweep</em> — {@link #sweep()} drops lines older than {@link #maxAgeTicks}, called
- *       on a cadence by the caller, never on the write path.</li>
- * </ul>
- * The rings are the ephemeral tier; the durable archive is the file the sink writes.
+ * <p>A {@link #subscribe}d sink is notified synchronously on the caller's (game) thread and must
+ * only <em>enqueue</em>, never block on I/O; it sees every entry, including ones a later cap or
+ * sweep evicts.
  *
- * <p>{@link #subscribe} sinks are notified synchronously on the caller's (game) thread and must
- * only <em>enqueue</em>, never block on I/O. A sink sees every entry, including ones a later
- * cap/sweep evicts.
- *
- * <p>Unsynchronised: records arrive on the server thread today (brain/nav/body all tick from
- * {@code serverAiStep}). If offline sim later records off-thread, this is the one place to guard.
+ * <p>Unsynchronised: records arrive on the server thread today (brain/nav/body tick from
+ * {@code serverAiStep}) — the one place to guard if offline sim ever records off-thread.
  */
 public final class JournalService {
 
     /** Per-person line cap (see the class doc): a person's ring keeps at most this many entries. */
-    public static final int DEFAULT_MAX_ENTRIES_PER_PERSON = 256;
+    public static int defaultMaxEntriesPerPerson() {
+        return Config.get().i(Knob.JOURNAL_MAX_ENTRIES);
+    }
 
     /** Default age bound for {@link #sweep()}: ~10 game-minutes at 20 ticks/second. */
-    public static final long DEFAULT_MAX_AGE_TICKS = 20L * 60 * 10;
+    public static long defaultMaxAgeTicks() {
+        return Config.get().i(Knob.JOURNAL_MAX_AGE_TICKS);
+    }
 
     private final LongSupplier clock;
-    private final int maxEntriesPerPerson;
-    private final long maxAgeTicks;
+    /** A caller-pinned line cap, or {@code null} to track the configured default live. */
+    private final Integer maxEntriesOverride;
+    /** A caller-pinned age bound, or {@code null} to track the configured default live. */
+    private final Long maxAgeOverride;
 
     /** One ring per person; entries within a ring are in clock (append) order, oldest at the head. */
     private final Map<PersonId, Ring> byPerson = new HashMap<>();
     /** Sinks notified as each entry lands — the file writer hangs here (see the class doc). */
     private final List<BiConsumer<PersonId, Entry>> sinks = new ArrayList<>();
 
-    /** A service with the default retention bounds; {@code clock} is the game-time source. */
+    /**
+     * A service that follows the configured retention bounds — and keeps following them, so a
+     * {@code /autarkia config reload} retunes a world's journal without a restart. {@code clock}
+     * is the game-time source.
+     */
     public JournalService(LongSupplier clock) {
-        this(clock, DEFAULT_MAX_ENTRIES_PER_PERSON, DEFAULT_MAX_AGE_TICKS);
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.maxEntriesOverride = null;
+        this.maxAgeOverride = null;
     }
 
+    /** A service pinned to explicit bounds, ignoring configuration — the shape tests want. */
     public JournalService(LongSupplier clock, int maxEntriesPerPerson, long maxAgeTicks) {
         this.clock = Objects.requireNonNull(clock, "clock");
         if (maxEntriesPerPerson < 1) {
@@ -69,8 +77,18 @@ public final class JournalService {
         if (maxAgeTicks < 0) {
             throw new IllegalArgumentException("maxAgeTicks must be >= 0: " + maxAgeTicks);
         }
-        this.maxEntriesPerPerson = maxEntriesPerPerson;
-        this.maxAgeTicks = maxAgeTicks;
+        this.maxEntriesOverride = maxEntriesPerPerson;
+        this.maxAgeOverride = maxAgeTicks;
+    }
+
+    /** The line cap in force: this service's pin, else the configured default. */
+    public int maxEntriesPerPerson() {
+        return maxEntriesOverride == null ? defaultMaxEntriesPerPerson() : maxEntriesOverride;
+    }
+
+    /** The age bound in force: this service's pin, else the configured default. */
+    public long maxAgeTicks() {
+        return maxAgeOverride == null ? defaultMaxAgeTicks() : maxAgeOverride;
     }
 
     /**
@@ -81,7 +99,7 @@ public final class JournalService {
     public void record(PersonId who, Category category, String event, String detail) {
         Objects.requireNonNull(who, "who");
         Entry entry = new Entry(clock.getAsLong(), category, event, detail);
-        byPerson.computeIfAbsent(who, id -> new Ring()).add(entry, maxEntriesPerPerson);
+        byPerson.computeIfAbsent(who, id -> new Ring()).add(entry, maxEntriesPerPerson());
         for (BiConsumer<PersonId, Entry> sink : sinks) {
             sink.accept(who, entry);
         }
@@ -115,8 +133,9 @@ public final class JournalService {
     }
 
     /**
-     * Drops lines older than {@link #maxAgeTicks}, forgetting any person left with none. Entries
-     * are in clock order, so each ring evicts a run from its head. Never the write path.
+     * Drop every line older than {@link #maxAgeTicks()} and forget any person left with none.
+     * Cheap: entries are in clock order, so each ring evicts a run from its head and stops. Call
+     * on a slow cadence, never on the write path.
      */
     /** Drops a person's ring outright — the dev purge path (the durable file is untouched). */
     public void drop(PersonId who) {
@@ -124,7 +143,7 @@ public final class JournalService {
     }
 
     public void sweep() {
-        long cutoff = clock.getAsLong() - maxAgeTicks;
+        long cutoff = clock.getAsLong() - maxAgeTicks();
         Iterator<Map.Entry<PersonId, Ring>> it = byPerson.entrySet().iterator();
         while (it.hasNext()) {
             Ring ring = it.next().getValue();

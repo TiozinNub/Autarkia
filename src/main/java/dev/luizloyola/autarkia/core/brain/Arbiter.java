@@ -5,6 +5,8 @@ import dev.luizloyola.autarkia.core.brain.board.WorkSource;
 import dev.luizloyola.autarkia.core.brain.instinct.Instinct;
 import dev.luizloyola.autarkia.core.brain.task.TaskExecutor;
 import dev.luizloyola.autarkia.core.brain.task.TaskStatus;
+import dev.luizloyola.autarkia.core.config.Config;
+import dev.luizloyola.autarkia.core.config.Knob;
 import dev.luizloyola.autarkia.core.log.Category;
 import java.util.List;
 import java.util.Locale;
@@ -23,7 +25,7 @@ import java.util.Locale;
  *   <li>Pressures are read once. An instinct sitting out the ticks its own
  *       {@link Instinct#failCooldown()} set after a FAILED root is INELIGIBLE, and its cooldown
  *       then ticks down by one.</li>
- *   <li>Top eligible bidder by EFFECTIVE pressure — the incumbent gets a {@link #STICKINESS}
+ *   <li>Top eligible bidder by EFFECTIVE pressure — the incumbent gets a {@link #stickiness()}
  *       bonus, and ties go to the earlier instinct in the constructor list.
  *       <b>Zero raw pressure is not a bid</b>: with every drive at zero the executor idles
  *       rather than granting by list order, which once sprinted a zero-pressure Flee at
@@ -32,7 +34,7 @@ import java.util.Locale;
  *   <li><b>Executor idle</b> → grant the top bidder; re-granting the incumbent after a SUCCESS is
  *       the continuous-behavior loop, {@code root()} called anew each time.</li>
  *   <li><b>Executor busy</b> → switch only if the top bidder is not the incumbent, beats it on
- *       effective pressure, and has RAW pressure at least {@link #PREEMPT}; below that it
+ *       effective pressure, and has RAW pressure at least {@link #preempt()}; below that it
  *       waits for the task boundary. Switching cancels the incumbent's task.</li>
  *   <li>The executor ticks once. On a boundary (busy before, idle after) a FAILED root sets its
  *       instinct's {@link #FAIL_COOLDOWN}, and {@code active} clears so the next tick's idle-grant
@@ -44,10 +46,14 @@ import java.util.Locale;
 public final class Arbiter {
 
     /** Incumbency bonus on the active instinct's bid — the hysteresis that stops 51/49 dithering. */
-    public static final double STICKINESS = 0.1;
+    public static double stickiness() {
+        return Config.get().d(Knob.BRAIN_STICKINESS);
+    }
 
     /** Minimum RAW pressure to preempt mid-flight; below it a challenger waits for the boundary. */
-    public static final double PREEMPT = 0.6;
+    public static double preempt() {
+        return Config.get().d(Knob.BRAIN_PREEMPT);
+    }
 
     private final List<Instinct> instincts;
     private final WorkSource work;
@@ -84,6 +90,11 @@ public final class Arbiter {
     /** One arbitration + execution step — see the class doc for the exact semantics. */
     public void tick(BrainContext ctx) {
         int n = instincts.size();
+        // One reading of the arbitration constants for the whole tick: a reload landing between
+        // the bid comparison and the preempt check would otherwise arbitrate against two
+        // different rulebooks in a single decision.
+        double stickiness = stickiness();
+        double preempt = preempt();
 
         // 1. Eligibility is noted before the countdown, so a fresh cooldown buys that many ticks.
         boolean[] eligible = new boolean[n];
@@ -103,7 +114,7 @@ public final class Arbiter {
             if (!eligible[i] || lastPressures[i] <= 0.0) {
                 continue; // cooling down, or wanting nothing — zero pressure is not a bid
             }
-            double effective = lastPressures[i] + (i == activeIndex ? STICKINESS : 0.0);
+            double effective = lastPressures[i] + (i == activeIndex ? stickiness : 0.0);
             if (effective > topEffective) { // strict > keeps the earlier entry on a tie
                 topEffective = effective;
                 topIndex = i;
@@ -117,7 +128,7 @@ public final class Arbiter {
                 : work.bestAvailable(ctx).orElse(null);
         double workEffective = candidate == null
                 ? Double.NEGATIVE_INFINITY
-                : candidate.priority() + (workRunning ? STICKINESS : 0.0);
+                : candidate.priority() + (workRunning ? stickiness : 0.0);
 
         // 3 & 4. Work never preempts mid-flight; a drive cuts a running errand only past the
         // PREEMPT bar, and the claim survives the cut.
@@ -128,7 +139,7 @@ public final class Arbiter {
                 grant(topIndex, ctx);
             }
         } else if (workRunning) {
-            if (topIndex >= 0 && lastPressures[topIndex] >= PREEMPT && topEffective > workEffective) {
+            if (topIndex >= 0 && lastPressures[topIndex] >= preempt && topEffective > workEffective) {
                 ctx.journal().record(Category.PROJECT, claimedItem.describe(), String.format(Locale.ROOT,
                         "suspended (by %s %.2f)",
                         instincts.get(topIndex).describe(), lastPressures[topIndex]));
@@ -137,9 +148,9 @@ public final class Arbiter {
             }
         } else if (topIndex >= 0 && topIndex != activeIndex) {
             double activeEffective = activeIndex >= 0
-                    ? lastPressures[activeIndex] + STICKINESS
+                    ? lastPressures[activeIndex] + stickiness
                     : Double.NEGATIVE_INFINITY; // a manual task (no active instinct) yields to any real bidder... but only if it preempts
-            if (topEffective > activeEffective && lastPressures[topIndex] >= PREEMPT) {
+            if (topEffective > activeEffective && lastPressures[topIndex] >= preempt) {
                 grant(topIndex, ctx);
             }
         }

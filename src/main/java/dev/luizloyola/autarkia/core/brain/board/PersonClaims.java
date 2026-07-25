@@ -14,7 +14,7 @@ import dev.luizloyola.autarkia.core.brain.sense.Pos;
 public interface PersonClaims {
     /**
      * Claim (or re-heartbeat) the site for this person until {@code now + }{@link
-     * SiteClaims#TTL_TICKS}. Returns {@code false} when someone else's live claim holds it —
+     * SiteClaims#ttlTicks()}. Returns {@code false} when someone else's live claim holds it —
      * in which case nothing changed and the site is not hers to work.
      */
     boolean claim(PoiKind kind, Pos anchor, long now);

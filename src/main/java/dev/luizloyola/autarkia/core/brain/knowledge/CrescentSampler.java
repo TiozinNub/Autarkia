@@ -1,6 +1,8 @@
 package dev.luizloyola.autarkia.core.brain.knowledge;
 
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.config.Config;
+import dev.luizloyola.autarkia.core.config.Knob;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,10 +13,10 @@ import java.util.List;
  * sighting, teleport, any jump beyond R) yields the full disc.
  */
 public final class CrescentSampler {
-    /** Horizontal sense radius in blocks; kept inside the threat-scan scale of 16. */
-    public static final int RADIUS = 12;
-
-    private static final int RADIUS_SQ = RADIUS * RADIUS;
+    /** Horizontal sense radius in blocks. Configurable; kept inside the threat-scan scale of 16. */
+    public static int radius() {
+        return Config.get().i(Knob.SENSE_RADIUS);
+    }
 
     private Column center;
 
@@ -26,15 +28,18 @@ public final class CrescentSampler {
             return List.of();
         }
         this.center = now;
+        // Read the radius once per sweep: one crescent always uses one consistent radius.
+        int radius = radius();
+        int radiusSq = radius * radius;
         List<Column> fresh = new ArrayList<>();
-        boolean jump = before == null || horizontalDistSq(before, now) > RADIUS_SQ;
-        for (int dx = -RADIUS; dx <= RADIUS; dx++) {
-            for (int dz = -RADIUS; dz <= RADIUS; dz++) {
-                if (dx * dx + dz * dz > RADIUS_SQ) {
+        boolean jump = before == null || horizontalDistSq(before, now) > radiusSq;
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                if (dx * dx + dz * dz > radiusSq) {
                     continue;
                 }
                 Column column = new Column(now.x() + dx, now.z() + dz);
-                if (jump || horizontalDistSq(before, column) > RADIUS_SQ) {
+                if (jump || horizontalDistSq(before, column) > radiusSq) {
                     fresh.add(column);
                 }
             }

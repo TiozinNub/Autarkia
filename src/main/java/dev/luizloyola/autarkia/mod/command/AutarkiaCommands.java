@@ -15,6 +15,9 @@ import dev.luizloyola.autarkia.core.brain.task.ChopNearestTree;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
 import dev.luizloyola.autarkia.core.brain.task.ObtainItem;
 import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
+import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
+import dev.luizloyola.autarkia.core.config.Config;
+import dev.luizloyola.autarkia.core.config.Knob;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.inv.ItemSpec;
@@ -27,6 +30,7 @@ import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.brain.Knowledges;
+import dev.luizloyola.autarkia.mod.config.ConfigFile;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.log.Journals;
@@ -201,6 +205,33 @@ public final class AutarkiaCommands {
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), true)))
                                         .then(Commands.literal("false")
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), false)))))
+                        // The tuning knobs (config/autarkia.json). Unlike everything above, this
+                        // block is world-wide, not per-Person — no selection is consulted.
+                        .then(Commands.literal("config")
+                                .executes(ctx -> configShow(ctx.getSource()))
+                                .then(Commands.literal("show")
+                                        .executes(ctx -> configShow(ctx.getSource())))
+                                .then(Commands.literal("reload")
+                                        .executes(ctx -> configReload(ctx.getSource())))
+                                .then(Commands.literal("get")
+                                        .then(Commands.argument("key", StringArgumentType.string())
+                                                .suggests(KNOB_SUGGESTIONS)
+                                                .executes(ctx -> configGet(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "key")))))
+                                .then(Commands.literal("set")
+                                        .then(Commands.argument("key", StringArgumentType.string())
+                                                .suggests(KNOB_SUGGESTIONS)
+                                                .then(Commands.argument("value", StringArgumentType.string())
+                                                        .executes(ctx -> configSet(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "key"),
+                                                                StringArgumentType.getString(ctx, "value"))))))
+                                .then(Commands.literal("reset")
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> configResetAll(ctx.getSource())))
+                                        .then(Commands.argument("key", StringArgumentType.string())
+                                                .suggests(KNOB_SUGGESTIONS)
+                                                .executes(ctx -> configReset(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "key"))))))
                         // The personal board (layer 3's degenerate v1): posted/claimed/cooling.
                         .then(Commands.literal("board")
                                 .executes(ctx -> boardShow(ctx.getSource())))
@@ -336,6 +367,118 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " board: "
                 + person.brain().describeBoard()).withStyle(ChatFormatting.LIGHT_PURPLE), false);
         return 1;
+    }
+
+    // --- config -----------------------------------------------------------------------------
+    // World-wide tuning, not per-Person: none of these resolve a selection. Every mutating path
+    // installs the new value and writes the file, so a reload restores what is in force.
+
+    private static int configShow(CommandSourceStack source) {
+        AutarkiaConfig config = Config.get();
+        List<String> overrides = config.describeOverrides();
+        source.sendSuccess(() -> Component.literal("Autarkia config — " + ConfigFile.path())
+                .withStyle(ChatFormatting.AQUA), false);
+        if (overrides.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("  all " + Knob.values().length
+                    + " knobs at their defaults").withStyle(ChatFormatting.GRAY), false);
+            return 1;
+        }
+        for (String line : overrides) {
+            source.sendSuccess(() -> Component.literal("  " + line)
+                    .withStyle(ChatFormatting.YELLOW), false);
+        }
+        return overrides.size();
+    }
+
+    private static int configReload(CommandSourceStack source) {
+        List<String> problems = ConfigFile.reload();
+        if (problems.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("Autarkia config reloaded — "
+                    + Config.get().describeOverrides().size() + " override(s) in force")
+                    .withStyle(ChatFormatting.GREEN), true);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("Autarkia config reloaded with "
+                + problems.size() + " problem(s):").withStyle(ChatFormatting.YELLOW), true);
+        for (String problem : problems) {
+            source.sendSuccess(() -> Component.literal("  " + problem)
+                    .withStyle(ChatFormatting.RED), false);
+        }
+        return 1;
+    }
+
+    private static int configGet(CommandSourceStack source, String key) {
+        Knob knob = Knob.byKey(key).orElse(null);
+        if (knob == null) return unknownKnob(source, key);
+        AutarkiaConfig config = Config.get();
+        source.sendSuccess(() -> Component.literal(knob.key() + " = " + knob.format(config.get(knob))
+                + (config.isDefault(knob) ? " (default)"
+                        : " — default is " + knob.format(knob.def())))
+                .withStyle(ChatFormatting.AQUA), false);
+        source.sendSuccess(() -> Component.literal("  " + knob.doc())
+                .withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> Component.literal("  accepts " + knob.expects())
+                .withStyle(ChatFormatting.DARK_GRAY), false);
+        return 1;
+    }
+
+    private static int configSet(CommandSourceStack source, String key, String value) {
+        Knob knob = Knob.byKey(key).orElse(null);
+        if (knob == null) return unknownKnob(source, key);
+        Double parsed = knob.parse(value).orElse(null);
+        if (parsed == null) {
+            source.sendFailure(Component.literal(knob.key() + " accepts " + knob.expects()
+                    + " — \"" + value + "\" is not one"));
+            return 0;
+        }
+        double clamped = knob.clamp(parsed);
+        if (clamped != parsed) {
+            source.sendSuccess(() -> Component.literal(knob.format(parsed) + " is outside "
+                    + knob.expects() + " — clamped to " + knob.format(clamped))
+                    .withStyle(ChatFormatting.YELLOW), false);
+        }
+        return applyAndSave(source, knob, Config.get().with(knob, parsed));
+    }
+
+    private static int configReset(CommandSourceStack source, String key) {
+        Knob knob = Knob.byKey(key).orElse(null);
+        if (knob == null) return unknownKnob(source, key);
+        return applyAndSave(source, knob, Config.get().with(knob, knob.def()));
+    }
+
+    private static int configResetAll(CommandSourceStack source) {
+        int had = Config.get().describeOverrides().size();
+        Config.install(AutarkiaConfig.DEFAULTS);
+        if (!ConfigFile.save(AutarkiaConfig.DEFAULTS)) {
+            source.sendFailure(Component.literal("Reset in memory, but " + ConfigFile.path()
+                    + " could not be written — the old values will come back on restart"));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Autarkia config reset to defaults ("
+                + had + " override(s) cleared)").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    /** Install + persist one changed knob, reporting what actually landed. */
+    private static int applyAndSave(CommandSourceStack source, Knob knob, AutarkiaConfig updated) {
+        Config.install(updated);
+        double now = updated.get(knob);
+        if (!ConfigFile.save(updated)) {
+            source.sendFailure(Component.literal(knob.key() + " is now " + knob.format(now)
+                    + " in memory, but " + ConfigFile.path()
+                    + " could not be written — it will revert on restart"));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(knob.key() + " = " + knob.format(now)
+                + (updated.isDefault(knob) ? " (back to the default)" : ""))
+                .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int unknownKnob(CommandSourceStack source, String key) {
+        source.sendFailure(Component.literal("No such config key \"" + key
+                + "\" — try tab-completion, or /autarkia config show"));
+        return 0;
     }
 
     /** Runs {@link ObtainItem} (logs × count): rounds of scavenge-or-chop until the pack holds the
@@ -876,6 +1019,10 @@ public final class AutarkiaCommands {
 
     /** Suggests every loaded Person's name (quoted when it has spaces) and short id, so {@code select}
      *  tab-completes to something that actually resolves. */
+    /** Every knob's dotted key — the completions behind {@code config get/set/reset}. */
+    private static final SuggestionProvider<CommandSourceStack> KNOB_SUGGESTIONS = (ctx, builder) ->
+            SharedSuggestionProvider.suggest(Stream.of(Knob.values()).map(Knob::key), builder);
+
     private static final SuggestionProvider<CommandSourceStack> PERSON_SUGGESTIONS = (ctx, builder) -> {
         MinecraftServer server = ctx.getSource().getServer();
         PersonDirectory directory = PersonDirectory.get(server);

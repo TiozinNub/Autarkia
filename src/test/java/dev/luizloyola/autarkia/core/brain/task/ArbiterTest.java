@@ -27,12 +27,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Pins the {@link Arbiter}'s arbitration semantics with scripted instincts (settable pressure, a
- * fresh root per grant): idle-grant of the top bidder, {@link Arbiter#STICKINESS} holding the
- * incumbent against a marginal challenger but not a decisive one, the {@link Arbiter#PREEMPT} floor
- * (mild challengers wait for the task boundary, strong ones cancel mid-task), fresh-root re-grant
- * after SUCCESS, {@link Instinct#failCooldown()} after a FAILED root, the manual-task and cost
- * tolerance paths, and two scenes from the real instincts: a threat preempting mid-chew, and Flee
- * chaining re-aimed legs.
+ * fresh scripted root per grant), every rule in isolation: {@link Arbiter#stickiness()}, the
+ * {@link Arbiter#preempt()} floor, fresh-root re-grant after SUCCESS, and
+ * {@link Instinct#failCooldown()} after a FAILED root. Two scenes wire the real instincts: a threat
+ * preempting mid-chew, and Flee chaining fresh, re-aimed legs.
  */
 class ArbiterTest {
 
@@ -395,11 +393,10 @@ class ArbiterTest {
     // --- Flee: real-instinct scenes -----------------------------------------------------------
 
     /**
-     * The scene the emergency drive exists for: mid-bite, a threat closes in hard enough to blow
-     * past both {@link Arbiter#STICKINESS} and {@link Arbiter#PREEMPT}, so Flee cuts the chew off
-     * (the incumbent {@code ConsumeItem}'s cancel aborts the consumer) and takes the legs. Once the
-     * threat clears, the running leg still finishes (Eat's pressure here sits under PREEMPT), and
-     * the runner-up resumes only at the next boundary.
+     * Mid-bite, a threat blows past both {@link Arbiter#stickiness()} and
+     * {@link Arbiter#preempt()}: Flee cuts the chew off ({@code ConsumeItem}'s cancel aborts the
+     * consumer) and takes the legs. Once it clears, the running leg still finishes — Eat is under
+     * PREEMPT — and the runner-up resumes only at the next boundary.
      */
     @Test
     void aCloseThreatPreemptsAMidChewEatThenClearsAndTheRunnerUpResumesAtTheNextBoundary() {

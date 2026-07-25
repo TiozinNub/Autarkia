@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 /** The leading-crescent geometry: event-driven, zero at rest, full disc on discontinuity. */
 class CrescentSamplerTest {
 
-    private static final int R = CrescentSampler.RADIUS;
+    private static final int R = CrescentSampler.radius();
 
     @Test
     void firstSightYieldsTheFullDisc() {

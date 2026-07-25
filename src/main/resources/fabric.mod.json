@@ -16,6 +16,9 @@
     ],
     "client": [
       "dev.luizloyola.autarkia.mod.client.AutarkiaClient"
+    ],
+    "modmenu": [
+      "dev.luizloyola.autarkia.mod.config.AutarkiaModMenu"
     ]
   },
   "mixins": [
@@ -24,6 +27,11 @@
   "accessWidener": "autarkia.ct",
   "depends": {
     "fabricloader": ">=0.17",
-    "minecraft": "${minecraft}"
+    "minecraft": "${minecraft}",
+    "fabric-api": "*"
+  },
+  "recommends": {
+    "cloth-config2": "*",
+    "modmenu": "*"
   }
 }

@@ -32,18 +32,18 @@ class SiteClaimsTest {
     @Test
     void aClaimIsAHeartbeatNotALock() {
         claims.claim(PoiKind.TREE, anchor, alice, 0);
-        long lastGasp = SiteClaims.TTL_TICKS - 1;
+        long lastGasp = SiteClaims.ttlTicks() - 1;
         assertFalse(claims.availableTo(PoiKind.TREE, anchor, bob, lastGasp), "still fresh");
-        assertTrue(claims.availableTo(PoiKind.TREE, anchor, bob, SiteClaims.TTL_TICKS),
+        assertTrue(claims.availableTo(PoiKind.TREE, anchor, bob, SiteClaims.ttlTicks()),
                 "no heartbeat for a full TTL: the claimant is gone, the site frees itself");
-        assertTrue(claims.claim(PoiKind.TREE, anchor, bob, SiteClaims.TTL_TICKS));
+        assertTrue(claims.claim(PoiKind.TREE, anchor, bob, SiteClaims.ttlTicks()));
     }
 
     @Test
     void reclaimingRefreshesTheHeartbeat() {
         claims.claim(PoiKind.TREE, anchor, alice, 0);
         claims.claim(PoiKind.TREE, anchor, alice, 500); // the working tick's re-claim
-        assertFalse(claims.availableTo(PoiKind.TREE, anchor, bob, SiteClaims.TTL_TICKS + 400),
+        assertFalse(claims.availableTo(PoiKind.TREE, anchor, bob, SiteClaims.ttlTicks() + 400),
                 "the refresh moved the lapse out, not the original claim time");
     }
 

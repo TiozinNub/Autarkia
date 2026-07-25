@@ -36,7 +36,7 @@ class FleeInstinctTest {
     @Test
     void aThreatAtTheEdgeOfRangeExertsNoPressure() {
         FleeInstinct flee = new FleeInstinct(new Random(0));
-        ctx.percepts.threats = List.of(threatAt(FleeInstinct.RANGE, false));
+        ctx.percepts.threats = List.of(threatAt(FleeInstinct.range(), false));
         assertEquals(0.0, flee.pressure(ctx), 1e-9);
     }
 

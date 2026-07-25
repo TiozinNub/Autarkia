@@ -1,6 +1,8 @@
 package dev.luizloyola.autarkia.core.brain.knowledge;
 
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.autarkia.core.config.Config;
+import dev.luizloyola.autarkia.core.config.Knob;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -32,13 +34,21 @@ public final class PoiSensorCore {
      * (2 reads each), so probing normally keeps up in real time and the rest of the wallet
      * drains growths. Tuning knob.
      */
-    public static final int READS_PER_TICK = 64;
+    public static int readsPerTick() {
+        return Config.get().i(Knob.READS_PER_TICK);
+    }
+
     /**
      * Pending-column capacity, sized to hold a FULL disc (~450 columns at R=12): a spawn or
      * teleport glance that drops columns biases the initial sweep toward whichever side
      * enumerates last. Overflow drops the oldest.
+     *
+     * <p>Keep the cap at or above the disc area, roughly {@code 3.2 * R * R}, when raising
+     * {@code perception.sense_radius}, or that bias returns.
      */
-    public static final int QUEUE_CAP = 512;
+    public static int queueCap() {
+        return Config.get().i(Knob.QUEUE_CAP);
+    }
     /** Flat wallet charge for one confirm-ray (a ~R-block voxel walk). Tuning knob. */
     public static final int RAY_COST = 8;
     /**
@@ -69,7 +79,7 @@ public final class PoiSensorCore {
     public List<SenseEvent> tick(Pos feet, long now, BlockProbe probe) {
         for (Column column : sampler.advance(feet)) {
             rayRetries.remove(column); // freshly re-entered range: a fresh retry cycle
-            if (pending.size() >= QUEUE_CAP) {
+            if (pending.size() >= queueCap()) {
                 pending.pollFirst();
             }
             pending.addLast(column);
@@ -83,10 +93,13 @@ public final class PoiSensorCore {
             }
         }
         List<SenseEvent> events = new ArrayList<>();
+        // One wallet for the whole tick, read once — a reload mid-tick must not let a Person
+        // spend twice.
+        int wallet = readsPerTick();
         int reads = 0;
-        while (reads < READS_PER_TICK) {
+        while (reads < wallet) {
             if (active != null) {
-                reads += active.step(probe, READS_PER_TICK - reads);
+                reads += active.step(probe, wallet - reads);
                 if (!active.isDone()) {
                     break;
                 }

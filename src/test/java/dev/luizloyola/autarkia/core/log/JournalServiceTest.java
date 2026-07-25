@@ -51,7 +51,7 @@ class JournalServiceTest {
     @Test
     void lineCapDropsTheOldestOnWrite() {
         FakeClock clock = new FakeClock();
-        JournalService journal = new JournalService(clock, 3, JournalService.DEFAULT_MAX_AGE_TICKS);
+        JournalService journal = new JournalService(clock, 3, JournalService.defaultMaxAgeTicks());
         PersonId bob = person();
 
         for (int i = 0; i < 5; i++) {
@@ -102,7 +102,7 @@ class JournalServiceTest {
     @Test
     void subscribersSeeEveryEntryEvenOnesTheCapWillEvict() {
         FakeClock clock = new FakeClock();
-        JournalService journal = new JournalService(clock, 2, JournalService.DEFAULT_MAX_AGE_TICKS);
+        JournalService journal = new JournalService(clock, 2, JournalService.defaultMaxAgeTicks());
         PersonId bob = person();
 
         List<String> seen = new ArrayList<>();
@@ -123,7 +123,7 @@ class JournalServiceTest {
     @Test
     void ringsArePerPersonSoOnePersonNeverEvictsAnother() {
         FakeClock clock = new FakeClock();
-        JournalService journal = new JournalService(clock, 2, JournalService.DEFAULT_MAX_AGE_TICKS);
+        JournalService journal = new JournalService(clock, 2, JournalService.defaultMaxAgeTicks());
         PersonId bob = person();
         PersonId alice = person();
 
