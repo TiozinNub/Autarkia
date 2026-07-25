@@ -277,6 +277,15 @@ public final class BrainDriver {
         return this.board.describe(this.context);
     }
 
+    /**
+     * The brain's sense bundle — for debug readouts that want the same eyes the brain uses
+     * (the peers dump reads the live cache with its movement history, not a fresh throwaway
+     * whose first scan can't tell moving from standing).
+     */
+    public Percepts percepts() {
+        return this.context.percepts();
+    }
+
     /** The brain's one-line status, for the debug commands: which side is driving, then its report. */
     public String describe() {
         return this.auto

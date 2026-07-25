@@ -61,6 +61,13 @@ public interface Percepts {
     List<Drop> drops();
 
     /**
+     * Nearby people, sensed right now — other Persons and live players, one list, deliberately
+     * indistinguishable (see {@link Peer}). Budgeted and briefly cached like {@link #threats()};
+     * nearest-first is not guaranteed.
+     */
+    List<Peer> peers();
+
+    /**
      * The current game time in ticks — the same clock knowledge timestamps carry, so staleness
      * pricing ({@code memory.age(time())}) compares like with like.
      */

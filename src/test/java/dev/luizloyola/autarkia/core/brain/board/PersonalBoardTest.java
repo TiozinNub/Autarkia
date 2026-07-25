@@ -122,6 +122,11 @@ class PersonalBoardTest {
                 }
 
                 @Override
+                public java.util.List<dev.luizloyola.autarkia.core.brain.sense.Peer> peers() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
                 public long time() {
                     return 0L;
                 }

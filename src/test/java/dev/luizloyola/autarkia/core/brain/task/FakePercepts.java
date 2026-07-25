@@ -5,6 +5,7 @@ import dev.luizloyola.autarkia.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.autarkia.core.brain.knowledge.FakeProbe;
 import dev.luizloyola.autarkia.core.brain.sense.Drop;
 import dev.luizloyola.autarkia.core.brain.sense.FoodLookup;
+import dev.luizloyola.autarkia.core.brain.sense.Peer;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.brain.sense.Threat;
@@ -32,6 +33,8 @@ final class FakePercepts implements Percepts {
     /** The block world — a real {@link FakeProbe} (flat ground at y 63, sparse blocks on top). */
     final FakeProbe blocks = new FakeProbe();
     List<Drop> drops = List.of();
+    /** Nearby people — Persons and players alike. */
+    List<Peer> peers = List.of();
     /** The game clock — settable; tests that price staleness advance it. */
     long time;
     private final Map<String, FoodValue> foodById = new HashMap<>();
@@ -75,6 +78,11 @@ final class FakePercepts implements Percepts {
     @Override
     public List<Drop> drops() {
         return drops;
+    }
+
+    @Override
+    public List<Peer> peers() {
+        return peers;
     }
 
     @Override
