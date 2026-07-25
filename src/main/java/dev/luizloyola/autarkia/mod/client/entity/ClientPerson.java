@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.client.entity;
 
+import dev.luizloyola.autarkia.mod.client.anim.ShadowPlayer;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -14,6 +15,7 @@ import net.minecraft.world.entity.animal.parrot.Parrot;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.world.level.Level;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Client-side twin of {@link Person}, so the client-only {@link PlayerSkin} resolves here, mirroring
@@ -30,8 +32,21 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
      *  {@code ClientMannequin} so a consumer of {@link #avatarState()} sees sane values. */
     private final ClientAvatarState avatarState = new ClientAvatarState();
 
+    /** This Person's stand-in player for NotEnoughAnimations, built on first render and only when
+     *  that mod is present — see {@link ShadowPlayer}. Lives here, not on the renderer, because NEA
+     *  keeps per-entity animation state on it and one model instance serves every Person on screen. */
+    private @Nullable ShadowPlayer shadow;
+
     public ClientPerson(EntityType<? extends Person> type, Level level) {
         super(type, level);
+    }
+
+    /** The lazily-built shadow; never null, but its {@code synced()} may be. */
+    public ShadowPlayer shadow() {
+        if (this.shadow == null) {
+            this.shadow = new ShadowPlayer(this);
+        }
+        return this.shadow;
     }
 
     /** Point the shared factory at the client twin for client-side levels. */

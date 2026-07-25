@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.luizloyola.autarkia.mod.client.anim.NeaBridge;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.fabricmc.api.EnvType;
@@ -9,6 +10,7 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.ArmorModelSet;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -30,6 +32,7 @@ import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SwingAnimationType;
 import net.minecraft.world.item.component.SwingAnimation;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Renders a {@link Person} with the vanilla {@link PlayerModel}, using the entity's chosen
@@ -40,6 +43,7 @@ import net.minecraft.world.item.component.SwingAnimation;
  */
 @Environment(EnvType.CLIENT)
 public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderState, PlayerModel> {
+
     private final PlayerModel wideModel;
     private final PlayerModel slimModel;
 
@@ -61,9 +65,10 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
     @Override
     public void submit(AvatarRenderState state, PoseStack poseStack, SubmitNodeCollector collector,
                        CameraRenderState camera) {
-        // Per-Person wide/slim dispatch. The skin carries its own model type; submit() renders
-        // synchronously with this.model, so selecting it here is safe under the batched pipeline
-        // (unlike extractRenderState, whose writes would be overwritten before rendering).
+        // Per-Person wide/slim dispatch, kept for correctness but measured not to run:
+        // getRenderer(renderState) picks the submitting renderer by STATE type, so every
+        // AvatarRenderState goes to vanilla's AvatarRenderer, which makes the same pick itself.
+        // Verified in-game: a probe here never fired, one in extractRenderState did.
         this.model = state.skin.model() == PlayerModelType.SLIM ? this.slimModel : this.wideModel;
         super.submit(state, poseStack, collector, camera);
     }
@@ -88,6 +93,16 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
         state.showRightPants = true;
         state.showCape = false;
         state.id = person.getId();
+        // last, and only here. NEA records the entity on this state from inside the super call
+        // above, so swapping in the shadow now is the whole integration. Not in submit():
+        // dispatch is by STATE type and an AvatarRenderState always routes to vanilla's
+        // AvatarRenderer, so this renderer's submit() never runs for a Person.
+        if (NeaBridge.available() && person instanceof ClientPerson clientPerson) {
+            AbstractClientPlayer shadow = clientPerson.shadow().synced();
+            if (shadow != null) {
+                NeaBridge.retarget(state, shadow);
+            }
+        }
     }
 
     @Override
@@ -103,7 +118,9 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
      * state, only the pose that reads them was missing.
      *
      * <p>Mirrors {@code AvatarRenderer.getArmPose} (26.1.2 bytecode) rather than calling it: it is
-     * private static, and a Person is not rendered through {@code AvatarRenderer}.
+     * private static and runs in that renderer's own extraction, which a Person never reaches —
+     * extraction is dispatched by entity type. Submission does go through {@code AvatarRenderer},
+     * which is why filling these two fields is enough.
      */
     private static HumanoidModel.ArmPose armPose(Person person, HumanoidArm arm) {
         ItemStack offHand = person.getItemInHand(InteractionHand.OFF_HAND);
