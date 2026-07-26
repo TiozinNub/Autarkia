@@ -67,6 +67,11 @@ public final class PeerSense {
                 new Pos(feet.getX(), feet.getY(), feet.getZ()), person.getYHeadRot(), now, world);
         for (PeerEvent event : events) {
             journal(event);
+            PersonId self = person.getPersonId();
+            if (self != null && person.level().getServer() != null) {
+                PeerViewer.onEvent(person.level().getServer(), self,
+                        person.getName().getString(), event);
+            }
         }
     }
 

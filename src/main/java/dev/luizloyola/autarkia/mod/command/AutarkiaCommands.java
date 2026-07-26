@@ -239,7 +239,12 @@ public final class AutarkiaCommands {
                         // Who she can currently SEE — the peers() sense: Persons and live
                         // players, one seamless list, activity read off the visible body.
                         .then(Commands.literal("peers")
-                                .executes(ctx -> peersList(ctx.getSource())))
+                                .executes(ctx -> peersList(ctx.getSource()))
+                                .then(Commands.literal("view")
+                                        .then(Commands.literal("true")
+                                                .executes(ctx -> peersView(ctx.getSource(), true)))
+                                        .then(Commands.literal("false")
+                                                .executes(ctx -> peersView(ctx.getSource(), false)))))
                         .then(Commands.literal("inv")
                                 .then(Commands.literal("list")
                                         .executes(ctx -> invList(ctx.getSource())))
@@ -371,6 +376,39 @@ public final class AutarkiaCommands {
         if (person == null) return 0;
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " board: "
                 + person.brain().describeBoard()).withStyle(ChatFormatting.LIGHT_PURPLE), false);
+        return 1;
+    }
+
+    /**
+     * Toggles live narration of the resolved Person's peer events ({@code PeerViewer}) — the
+     * people-sense twin of {@code knowledge view}. From a player, the lines whisper to that
+     * player; from the console they broadcast (and land in the server log). That is what
+     * makes the toggle usable headlessly.
+     */
+    private static int peersView(CommandSourceStack source, boolean on) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        PersonId id = person.getPersonId();
+        if (id == null) {
+            source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            return 0;
+        }
+        String name = person.getName().getString();
+        if (on) {
+            ServerPlayer player = source.getPlayer();
+            dev.luizloyola.autarkia.mod.brain.PeerViewer.watch(source.getServer(), id,
+                    player == null ? null : player.getUUID());
+            source.sendSuccess(() -> Component.literal("Narrating " + name
+                            + "'s people sense — spotted/lost/activity lines land in "
+                            + (player == null ? "everyone's chat (console toggle)." : "your chat."))
+                    .withStyle(ChatFormatting.GREEN), false);
+        } else {
+            boolean was = dev.luizloyola.autarkia.mod.brain.PeerViewer.unwatch(source.getServer(), id);
+            source.sendSuccess(() -> Component.literal(was
+                            ? "Stopped narrating " + name + "'s people sense."
+                            : name + "'s people sense wasn't being narrated.")
+                    .withStyle(ChatFormatting.YELLOW), false);
+        }
         return 1;
     }
 
