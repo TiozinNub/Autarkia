@@ -39,8 +39,14 @@ import org.jspecify.annotations.Nullable;
  * the way a human guess is.
  */
 public final class PeerSense {
-    /** How long a dealt-damage mark keeps a swinger classified as FIGHTING. */
-    private static final int FIGHT_MARK_TICKS = 20;
+    /** A swing right after a landed hit is a melee MISS, not mining; five seconds without
+     *  hitting anyone clears it back to mining (decision: Luiz). */
+    private static final int FIGHT_MARK_TICKS = 100;
+    /** How long a place-mark keeps a body classified as BUILDING between placements. */
+    private static final int BUILD_MARK_TICKS = 60;
+    /** How tightly a drawn bow's view must align on her to read "aiming at" (cos ~15°,
+     *  not exact). No dwell: a bow crossing you alarms immediately. */
+    private static final double AIM_ALIGN = 0.966;
     /**
      * Blocks-per-tick above which feet count as moving — walking is ~0.21, sneak-walking ~0.065,
      * standing jitter ~0. A SPEED, not a displacement: readings arrive on an irregular cadence, so
@@ -49,8 +55,9 @@ public final class PeerSense {
     private static final double MOVE_SPEED_PER_TICK = 0.04;
     /** Blocks-per-tick above which walking reads as sprinting (a sprint is ~0.28). */
     private static final double SPRINT_SPEED_PER_TICK = 0.25;
-    /** How far ahead (blocks) the crafting-table assumption looks along the gaze. */
-    private static final double STATION_REACH = 2.5;
+    /** How far ahead (blocks) the crafting-table assumption looks along the gaze —
+     *  generous on purpose ("allow further from the crafting table", decision: Luiz). */
+    private static final double STATION_REACH = 4.0;
 
     private final Person person;
     private final PeerSensorCore sensor = new PeerSensorCore();
@@ -107,7 +114,8 @@ public final class PeerSense {
         BlockPos feet = person.blockPosition();
         long now = person.level().getGameTime();
         List<PeerEvent> events = sensor.tick(
-                new Pos(feet.getX(), feet.getY(), feet.getZ()), person.getYHeadRot(), now, world);
+                new Pos(feet.getX(), feet.getY(), feet.getZ()), person.getYHeadRot(),
+                person.getXRot(), now, world);
         for (PeerEvent event : events) {
             journal(event);
             PersonId self = person.getPersonId();
@@ -147,7 +155,7 @@ public final class PeerSense {
             bodies.put(reading.id(), source);
             sensor.heard(new PeerReading(reading.id(), reading.name(), reading.pos(),
                     reading.distance(), heardMoving, reading.sneaking(), reading.watching(),
-                    heardAs), person.level().getGameTime());
+                    reading.aimedAt(), heardAs), person.level().getGameTime());
         }
     }
 
@@ -238,7 +246,7 @@ public final class PeerSense {
             moveTracks.put(body.getId(), new MoveTrack(at, now, locomotion, streak));
         }
         GazeTrack gaze = gazeTracks.computeIfAbsent(body.getId(), k -> new GazeTrack());
-        if (lookingAtHer(body)) {
+        if (gazeOnHer(body, GAZE_ALIGN)) {
             if (now - gaze.meLastRaw > GAZE_GRACE_TICKS) {
                 gaze.meSince = now; // the chain broke — dwell starts over
             }
@@ -255,17 +263,19 @@ public final class PeerSense {
         boolean atTable = now - gaze.tableLastRaw <= GAZE_GRACE_TICKS
                 && gaze.tableLastRaw - gaze.tableSince >= GAZE_CONFIRM_TICKS;
         BlockPos cell = body.blockPosition();
+        Peer.Activity activity = classify(body, streak, atTable, locomotion);
+        boolean aimedAt = activity == Peer.Activity.AIMING && gazeOnHer(body, AIM_ALIGN);
         return new PeerReading(id, body.getName().getString(),
                 new Pos(cell.getX(), cell.getY(), cell.getZ()),
-                body.distanceTo(person), locomotion, body.isCrouching(), watching,
-                classify(body, streak, atTable, locomotion));
+                body.distanceTo(person), locomotion, body.isCrouching(), watching, aimedAt,
+                activity);
     }
 
-    /** Whether their gaze is ON her right now — the raw signal behind the watching dwell. */
-    private boolean lookingAtHer(LivingEntity body) {
+    /** Whether their gaze is ON her within {@code minDot} — watching's raw signal, aiming's cone. */
+    private boolean gazeOnHer(LivingEntity body, double minDot) {
         Vec3 toHer = person.getEyePosition().subtract(body.getEyePosition());
         double length = toHer.length();
-        return length > 0.5 && toHer.scale(1.0 / length).dot(body.getViewVector(1.0F)) >= GAZE_ALIGN;
+        return length > 0.5 && toHer.scale(1.0 / length).dot(body.getViewVector(1.0F)) >= minDot;
     }
 
     /** The occupation ladder (ARMS/ATTENTION only — the legs are their own axis now). */
@@ -295,7 +305,11 @@ public final class PeerSense {
             return Peer.Activity.AT_CHEST; // just stepped back from the lid — the exit grace
         }
         if (body.swinging && recentlyDealtDamage(body)) {
-            return Peer.Activity.FIGHTING; // a landed hit confirms instantly — no streak needed
+            return Peer.Activity.FIGHTING; // a landed hit confirms instantly, and lingers:
+                                           // the next swings are misses, not mining
+        }
+        if (PlaceMarks.placedWithin(body.getUUID(), person.level().getGameTime(), BUILD_MARK_TICKS)) {
+            return Peer.Activity.BUILDING; // blocks landing tell the swing apart from mining
         }
         if (body.swinging && swingStreak >= MINING_STREAK) {
             return Peer.Activity.MINING; // sustained arm work; a lone swing is an interaction

@@ -51,6 +51,10 @@ public final class PersonBlockPlacer implements BlockPlacer {
         }
         person.faceBlock(pos); 
         level.setBlockAndUpdate(pos, state);
+        // The world hears it: the vibration bus (sculk, other Persons' ears) and the
+        // place-marks that let a WATCHING peer read the swing as building, not mining.
+        level.gameEvent(net.minecraft.world.level.gameevent.GameEvent.BLOCK_PLACE, pos,
+                net.minecraft.world.level.gameevent.GameEvent.Context.of(person, state));
         SoundType sound = state.getSoundType();
         level.playSound(null, pos, sound.getPlaceSound(), SoundSource.BLOCKS,
                 (sound.getVolume() + 1.0F) / 2.0F, sound.getPitch() * 0.8F);

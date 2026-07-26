@@ -157,6 +157,8 @@ public final class PersonScaffolder implements Scaffolder {
             }
             BlockState blockState = blockItem.getBlock().defaultBlockState();
             level.setBlockAndUpdate(base, blockState);
+            level.gameEvent(net.minecraft.world.level.gameevent.GameEvent.BLOCK_PLACE, base,
+                    net.minecraft.world.level.gameevent.GameEvent.Context.of(person, blockState));
             SoundType sound = blockState.getSoundType();
             level.playSound(null, base, sound.getPlaceSound(), SoundSource.BLOCKS,
                     (sound.getVolume() + 1.0F) / 2.0F, sound.getPitch() * 0.8F);

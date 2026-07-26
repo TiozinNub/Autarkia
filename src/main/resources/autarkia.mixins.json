@@ -5,6 +5,7 @@
   "mixins": [
     "NearestAttackableTargetGoalMixin",
     "ServerLevelCrackMixin",
+    "ServerLevelGameEventMixin",
     "TargetGoalAccessor"
   ],
   "injectors": {

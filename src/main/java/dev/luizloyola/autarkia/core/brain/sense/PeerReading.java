@@ -10,5 +10,5 @@ import dev.luizloyola.autarkia.core.person.PersonId;
  */
 public record PeerReading(PersonId id, String name, Pos pos, double distance,
                           Peer.Locomotion locomotion, boolean sneaking, boolean watching,
-                          Peer.Activity activity) {
+                          boolean aimedAt, Peer.Activity activity) {
 }

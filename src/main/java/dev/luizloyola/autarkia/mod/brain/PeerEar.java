@@ -74,8 +74,11 @@ public final class PeerEar implements GameEventListener {
      * say otherwise.
      */
     private static Peer.Activity activityOf(Holder<GameEvent> event) {
-        if (event.is(GameEvent.BLOCK_DESTROY) || event.is(GameEvent.BLOCK_PLACE)) {
+        if (event.is(GameEvent.BLOCK_DESTROY)) {
             return Peer.Activity.MINING;
+        }
+        if (event.is(GameEvent.BLOCK_PLACE)) {
+            return Peer.Activity.BUILDING; // a landing block sounds different from a breaking one
         }
         if (event.is(GameEvent.CONTAINER_OPEN)) {
             return Peer.Activity.AT_CHEST;

@@ -83,14 +83,16 @@ public final class PeerSensorCore {
      * One perception tick: sweep on the discovery cadence, re-check whoever is due, age the dark
      * ones toward forgetting. Returns this tick's events — empty on the common quiet tick.
      */
-    public List<PeerEvent> tick(Pos feet, double yawDegrees, long now, PeerWorld world) {
+    public List<PeerEvent> tick(Pos feet, double yawDegrees, double pitchDegrees, long now,
+                                PeerWorld world) {
         if (now - lastSweepAt >= SWEEP_INTERVAL_TICKS) {
             lastSweepAt = now;
             for (PeerReading candidate : world.candidates()) {
                 if (tracks.containsKey(candidate.id())) {
                     continue; // already perceived — their own cadence owns updates
                 }
-                if (inCone(feet, yawDegrees, candidate.pos()) && world.inSight(candidate.id())) {
+                if (inCone(feet, yawDegrees, pitchDegrees, candidate.pos())
+                        && world.inSight(candidate.id())) {
                     Track track = new Track();
                     track.last = candidate;
                     track.awareness = Peer.Awareness.SEEN;
@@ -114,7 +116,8 @@ public final class PeerSensorCore {
                 goDarkOrForget(track, now, it);
                 continue;
             }
-            boolean seen = inCone(feet, yawDegrees, fresh.pos()) && world.inSight(entry.getKey());
+            boolean seen = inCone(feet, yawDegrees, pitchDegrees, fresh.pos())
+                    && world.inSight(entry.getKey());
             boolean heardFresh = now - track.heardAt <= HEARD_FRESH_TICKS;
             if (seen || heardFresh) {
                 Peer before = peer(track);
@@ -229,6 +232,7 @@ public final class PeerSensorCore {
                 || before.locomotion() != after.locomotion()
                 || before.sneaking() != after.sneaking()
                 || before.watching() != after.watching()
+                || before.aimedAt() != after.aimedAt()
                 || before.awareness() != after.awareness()) {
             pending.add(PeerEvent.readingChanged(after, before));
         }
@@ -244,29 +248,41 @@ public final class PeerSensorCore {
     }
 
     /**
-     * The horizontal view cone: the angle between her facing and the direction to the target,
-     * against half of {@link #coneDegrees()}. Someone standing in her cell is trivially in view.
-     * Yaw follows the Minecraft convention (0° = +Z, 90° = −X).
+     * Vertical field half-angle, relative to gaze pitch: human vision is wide across
+     * ({@link #coneDegrees()}) and much narrower up-down. One circular cone at 200° would
+     * include the zenith — an omniscience hole, just rotated.
      */
-    private static boolean inCone(Pos feet, double yawDegrees, Pos target) {
+    private static final double VERTICAL_HALF_DEGREES = 60.0;
+
+    /**
+     * The view volume: the horizontal cone (yaw against half of {@link #coneDegrees()}) PLUS a
+     * ±{@link #verticalHalfDegrees()} elevation band around gaze pitch. Someone within arm's
+     * touch is trivially in view. Minecraft convention: yaw 0° = +Z, pitch −90° = straight up.
+     */
+    private static boolean inCone(Pos feet, double yawDegrees, double pitchDegrees, Pos target) {
         double dx = target.x() - feet.x();
+        double dy = target.y() - feet.y();
         double dz = target.z() - feet.z();
-        double lengthSq = dx * dx + dz * dz;
-        if (lengthSq < 1.0) {
-            return true; 
+        if (dx * dx + dy * dy + dz * dz < 2.25) {
+            return true; // within touch — no meaningful bearing, and unmissable regardless
+        }
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        double elevation = Math.toDegrees(Math.atan2(dy, horizontal));
+        if (Math.abs(elevation + pitchDegrees) > VERTICAL_HALF_DEGREES) {
+            return false; // above or below the band (MC pitch is positive-down, hence the +)
+        }
+        if (horizontal < 0.01) {
+            return true; // straight up/down passed the band; there is no bearing left to test
         }
         double yaw = Math.toRadians(yawDegrees);
-        double fx = -Math.sin(yaw);
-        double fz = Math.cos(yaw);
-        double length = Math.sqrt(lengthSq);
-        double dot = (fx * dx + fz * dz) / length;
+        double dot = (-Math.sin(yaw) * dx + Math.cos(yaw) * dz) / horizontal;
         return dot >= Math.cos(Math.toRadians(coneDegrees() / 2.0));
     }
 
     private static Peer peer(Track track) {
         PeerReading r = track.last;
         return new Peer(r.id(), r.name(), r.pos(), r.distance(), r.activity(), r.locomotion(),
-                r.sneaking(), r.watching(), track.identified, track.awareness);
+                r.sneaking(), r.watching(), r.aimedAt(), track.identified, track.awareness);
     }
 
     /**
@@ -275,12 +291,12 @@ public final class PeerSensorCore {
      */
     private static PeerReading heardFacts(PeerReading placed, PeerReading told) {
         return new PeerReading(placed.id(), placed.name(), placed.pos(), placed.distance(),
-                told.locomotion(), false, false, told.activity());
+                told.locomotion(), false, false, false, told.activity());
     }
 
     /** The shape a stale reading collapses to: just someone there — all axes faded. */
     private static PeerReading faded(PeerReading last) {
         return new PeerReading(last.id(), last.name(), last.pos(), last.distance(),
-                Peer.Locomotion.STILL, false, false, Peer.Activity.IDLE);
+                Peer.Locomotion.STILL, false, false, false, Peer.Activity.IDLE);
     }
 }

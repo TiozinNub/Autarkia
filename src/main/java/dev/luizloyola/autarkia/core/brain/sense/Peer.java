@@ -25,7 +25,7 @@ import java.util.Locale;
  * identity-dependent behavior must gate on {@code identified}, never on the id existing.
  */
 public record Peer(PersonId id, String name, Pos pos, double distance, Activity activity,
-                   Locomotion locomotion, boolean sneaking, boolean watching,
+                   Locomotion locomotion, boolean sneaking, boolean watching, boolean aimedAt,
                    boolean identified, Awareness awareness) {
 
     /** The name she'd use — sound doesn't identify: unseen means "someone". */
@@ -45,7 +45,9 @@ public record Peer(PersonId id, String name, Pos pos, double distance, Activity 
             tell.append(locomotion == Locomotion.STILL
                     ? "idle" : locomotion.name().toLowerCase(Locale.ROOT));
         } else {
-            tell.append(activity.name().toLowerCase(Locale.ROOT));
+            tell.append(activity == Activity.AIMING && aimedAt
+                    ? "aiming at " + observerPronoun
+                    : activity.name().toLowerCase(Locale.ROOT));
             if (locomotion != Locomotion.STILL) {
                 tell.append(", ").append(locomotion.name().toLowerCase(Locale.ROOT));
             }
@@ -90,8 +92,12 @@ public record Peer(PersonId id, String name, Pos pos, double distance, Activity 
         DRINKING,
         /** Shield raised. */
         BLOCKING,
-        /** Bow or crossbow drawn. */
+        /** Bow or crossbow drawn — {@link #aimedAt} says whether it points at the OBSERVER
+         *  (a tight cone off the draw, instant: a bow crossing you alarms immediately). */
         AIMING,
+        /** Placing blocks — the same swing as mining, told apart by fresh place-marks (seen)
+         *  or the block-place sound (heard). */
+        BUILDING,
         /** At a visibly open chest — seen near it, CONFIRMED by the container (the lid tells). */
         AT_CHEST,
         /** Facing a crafting table within reach — assumed, and fallible. */

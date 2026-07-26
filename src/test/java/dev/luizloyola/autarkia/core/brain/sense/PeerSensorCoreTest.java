@@ -29,7 +29,7 @@ class PeerSensorCoreTest {
     private List<PeerEvent> tickN(int ticks) {
         List<PeerEvent> events = new ArrayList<>();
         for (int i = 0; i < ticks; i++) {
-            events.addAll(sensor.tick(self, 0.0, now++, world));
+            events.addAll(sensor.tick(self, 0.0, 0.0, now++, world));
         }
         return events;
     }
@@ -147,7 +147,7 @@ class PeerSensorCoreTest {
         PersonId noisy = world.add("Rustler", new Pos(0, 64, -5), 5.0, Peer.Activity.AT_CRAFTING);
         world.hidden.add(noisy);
         PeerReading heard = new PeerReading(noisy, "Rustler", new Pos(0, 64, -5), 5.0,
-                Peer.Locomotion.WALKING, false, false, Peer.Activity.IDLE);
+                Peer.Locomotion.WALKING, false, false, false, Peer.Activity.IDLE);
         sensor.heard(heard, now);
         List<PeerEvent> events = tickN(PeerSensorCore.HEARD_FRESH_TICKS - 2);
 
@@ -169,12 +169,13 @@ class PeerSensorCoreTest {
         PersonId starer = world.add("Starer", new Pos(0, 64, -5), 5.0, Peer.Activity.MINING);
         world.hidden.add(starer);
         sensor.heard(new PeerReading(starer, "Starer", new Pos(0, 64, -5), 5.0,
-                Peer.Locomotion.STILL, true, true, Peer.Activity.MINING), now);
+                Peer.Locomotion.STILL, true, true, true, Peer.Activity.MINING), now);
         tickN(2);
 
         Peer heard = sensor.peers().get(0);
         assertTrue(!heard.watching(), "gaze is an eyes-only read");
         assertTrue(!heard.sneaking(), "posture is an eyes-only read");
+        assertTrue(!heard.aimedAt(), "and so is a bow's bearing");
         assertEquals(Peer.Activity.MINING, heard.activity(), "but the sound's story stands");
     }
 
@@ -183,7 +184,7 @@ class PeerSensorCoreTest {
         PersonId knocker = world.add("Knocker", new Pos(0, 64, -5), 5.0, Peer.Activity.MINING);
         world.hidden.add(knocker);
         sensor.heard(new PeerReading(knocker, "Knocker", new Pos(0, 64, -5), 5.0,
-                Peer.Locomotion.WALKING, false, false, Peer.Activity.MINING), now);
+                Peer.Locomotion.WALKING, false, false, false, Peer.Activity.MINING), now);
         List<PeerEvent> events = tickN(PeerSensorCore.heardActivityDecayTicks() + 20);
 
         assertEquals(Peer.Activity.IDLE, sensor.peers().get(0).activity(),
@@ -200,7 +201,7 @@ class PeerSensorCoreTest {
         PersonId walled = world.add("Masked", new Pos(0, 64, 5), 5.0, Peer.Activity.MINING);
         world.hidden.add(walled); // in front but walled: only the ear knows them
         sensor.heard(new PeerReading(walled, "Masked", new Pos(0, 64, 5), 5.0,
-                Peer.Locomotion.STILL, false, false, Peer.Activity.MINING), now);
+                Peer.Locomotion.STILL, false, false, false, Peer.Activity.MINING), now);
         tickN(3);
         Peer heardOnly = sensor.peers().get(0);
         assertEquals("someone", heardOnly.knownAs(), "ears carry no name");
@@ -214,12 +215,28 @@ class PeerSensorCoreTest {
     }
 
     @Test
+    void theConeHasAnUpAndDown() {
+        // Directly overhead, same column: a CYLINDER saw them ("no angle limit up and down",
+        // caught live by Luiz); a real cone looking level does not.
+        world.add("Hoverer", new Pos(0, 74, 3), 10.4, Peer.Activity.IDLE);
+        List<PeerEvent> level = tickN(15);
+        assertTrue(level.isEmpty(), "looking level: the sky is out of view");
+
+        List<PeerEvent> up = new ArrayList<>();
+        for (int i = 0; i < 15; i++) {
+            up.addAll(sensor.tick(self, 0.0, -70.0, now++, world)); // craning up
+        }
+        assertEquals(1, up.stream().filter(e -> e.type() == PeerEvent.Type.SPOTTED).count(),
+                "craning up brings them into the cone");
+    }
+
+    @Test
     void theAxesCoexist() {
         // The split's point (decision: Luiz): eating while walking keeps both facts; the arms
         // never eat the legs.
         PersonId snacker = world.add("Snacker", new Pos(0, 64, 3), 3.0, Peer.Activity.EATING);
         world.bodies.put(snacker, new PeerReading(snacker, "Snacker", new Pos(0, 64, 3), 3.0,
-                Peer.Locomotion.WALKING, false, false, Peer.Activity.EATING));
+                Peer.Locomotion.WALKING, false, false, false, Peer.Activity.EATING));
         tickN(2);
 
         Peer peer = sensor.peers().get(0);
@@ -249,13 +266,13 @@ class PeerSensorCoreTest {
 
         PersonId add(String name, Pos pos, double distance, Peer.Activity activity) {
             PersonId id = PersonId.random();
-            bodies.put(id, new PeerReading(id, name, pos, distance, Peer.Locomotion.STILL, false, false, activity));
+            bodies.put(id, new PeerReading(id, name, pos, distance, Peer.Locomotion.STILL, false, false, false, activity));
             return id;
         }
 
         void set(PersonId id, Pos pos, double distance, Peer.Activity activity) {
             bodies.put(id, new PeerReading(id, bodies.get(id).name(), pos, distance,
-                    Peer.Locomotion.STILL, false, false, activity));
+                    Peer.Locomotion.STILL, false, false, false, activity));
         }
 
         @Override
