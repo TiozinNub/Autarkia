@@ -79,6 +79,10 @@ public enum Knob {
     PEERS_CONE_DEGREES("peers.cone_degrees", Kind.INT, 200, 30, 360,
             "Horizontal field of view (degrees). People outside it are unseen until they make "
                     + "noise; 360 restores the old omniscience."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#verticalHalfDegrees() */
+    PEERS_VERTICAL_DEGREES("peers.vertical_degrees", Kind.INT, 60, 5, 90,
+            "Vertical field HALF-angle (degrees) around gaze pitch — human vision is wide "
+                    + "across but flat; 90 removes the up/down limit."),
     /** Read by the mod-side ear when deciding which sounds reach her. */
     PEERS_HEARING_RADIUS("peers.hearing_radius", Kind.INT, 12, 0, 32,
             "How far (blocks) sound-makers are noticed regardless of the view cone. Sneaking "

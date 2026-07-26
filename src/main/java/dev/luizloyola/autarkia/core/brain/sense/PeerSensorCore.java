@@ -248,11 +248,15 @@ public final class PeerSensorCore {
     }
 
     /**
-     * Vertical field half-angle, relative to gaze pitch: human vision is wide across
-     * ({@link #coneDegrees()}) and much narrower up-down. One circular cone at 200° would
-     * include the zenith — an omniscience hole, just rotated.
+     * Vertical field half-angle, relative to gaze pitch. Human-shaped vision: wide across
+     * ({@link #coneDegrees()} horizontally), much narrower up-down — a single circular cone at 200°
+     * would include the zenith.
+     *
+     * @see Knob#PEERS_VERTICAL_DEGREES
      */
-    private static final double VERTICAL_HALF_DEGREES = 60.0;
+    public static int verticalHalfDegrees() {
+        return Config.get().i(Knob.PEERS_VERTICAL_DEGREES);
+    }
 
     /**
      * The view volume: the horizontal cone (yaw against half of {@link #coneDegrees()}) PLUS a
@@ -268,7 +272,7 @@ public final class PeerSensorCore {
         }
         double horizontal = Math.sqrt(dx * dx + dz * dz);
         double elevation = Math.toDegrees(Math.atan2(dy, horizontal));
-        if (Math.abs(elevation + pitchDegrees) > VERTICAL_HALF_DEGREES) {
+        if (Math.abs(elevation + pitchDegrees) > verticalHalfDegrees()) {
             return false; // above or below the band (MC pitch is positive-down, hence the +)
         }
         if (horizontal < 0.01) {

@@ -168,7 +168,10 @@ public final class PeerSense {
             double sneakRadius = radius * Config.get().d(Knob.PEERS_SNEAK_RANGE_MULT);
             List<LivingEntity> found = person.level().getEntitiesOfClass(
                     LivingEntity.class,
-                    person.getBoundingBox().inflate(radius, radius / 2.0, radius),
+                    // A full cube: the vertical SHAPE of vision belongs to the cone band, not
+                    // the query (caught by repro: a half-height box silently capped sight at
+                    // ±12 blocks no matter what the band allowed).
+                    person.getBoundingBox().inflate(radius, radius, radius),
                     e -> e != person && e.isAlive()
                             && (e instanceof Person || (e instanceof Player p && !p.isSpectator())));
             bodies.keySet().removeIf(id -> {

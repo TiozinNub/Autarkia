@@ -35,6 +35,7 @@
   "autarkia.config.option.peers.radius": "Notice range",
   "autarkia.config.option.peers.sneak_range_mult": "Sneak range multiplier",
   "autarkia.config.option.peers.cone_degrees": "Field of view",
+  "autarkia.config.option.peers.vertical_degrees": "Vertical field",
   "autarkia.config.option.peers.hearing_radius": "Hearing range",
   "autarkia.config.option.peers.linger_ticks": "Memory linger",
   "autarkia.config.option.peers.heard_activity_decay_ticks": "Heard activity decay",
