@@ -336,9 +336,8 @@ public final class PeerSense {
             case SPOTTED -> "spotted " + event.peer().knownAs()
                     + " (" + describe(event.peer()) + ")";
             case LOST -> "lost track of " + event.peer().knownAs();
-            case ACTIVITY_CHANGED -> event.peer().knownAs() + " now "
-                    + describe(event.peer()) + " (was "
-                    + event.was().name().toLowerCase(Locale.ROOT) + ")";
+            case READING_CHANGED -> event.peer().knownAs() + " now "
+                    + describe(event.peer()) + " (was " + describe(event.was()) + ")";
             case RECOGNIZED -> "recognized " + event.peer().name() + " — the someone she'd heard";
         };
         person.journal().record(Category.SENSE, "peer", what);

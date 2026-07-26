@@ -84,7 +84,11 @@ class PeerSensorCoreTest {
 
         world.hidden.add(walker); // steps behind the pillar
         List<PeerEvent> during = tickN(40);
-        assertTrue(during.isEmpty(), "no LOST mid-pillar — 'someone there' all the way");
+        assertTrue(during.stream().noneMatch(e -> e.type() == PeerEvent.Type.LOST),
+                "no LOST mid-pillar — 'someone there' all the way");
+        assertEquals(1, during.stream()
+                        .filter(e -> e.type() == PeerEvent.Type.READING_CHANGED).count(),
+                "the slip out of sight is narrated exactly once");
         assertEquals(Peer.Awareness.REMEMBERED, sensor.peers().get(0).awareness());
 
         world.hidden.remove(walker); // steps out the other side
@@ -113,10 +117,10 @@ class PeerSensorCoreTest {
         List<PeerEvent> events = tickN(10);
 
         assertEquals(1, events.stream()
-                .filter(e -> e.type() == PeerEvent.Type.ACTIVITY_CHANGED).count());
+                .filter(e -> e.type() == PeerEvent.Type.READING_CHANGED).count());
         PeerEvent change = events.stream()
-                .filter(e -> e.type() == PeerEvent.Type.ACTIVITY_CHANGED).findFirst().orElseThrow();
-        assertEquals(Peer.Activity.IDLE, change.was());
+                .filter(e -> e.type() == PeerEvent.Type.READING_CHANGED).findFirst().orElseThrow();
+        assertEquals(Peer.Activity.IDLE, change.was().activity());
         assertEquals(Peer.Activity.MINING, change.peer().activity());
     }
 
@@ -128,7 +132,9 @@ class PeerSensorCoreTest {
         world.set(walled, new Pos(0, 64, 5), 5.0, Peer.Activity.IDLE); // world moves on, unseen
         List<PeerEvent> events = tickN(40);
 
-        assertTrue(events.isEmpty(), "no activity events from behind the wall");
+        assertTrue(events.stream().noneMatch(e -> e.type() == PeerEvent.Type.READING_CHANGED
+                        && e.peer().activity() != Peer.Activity.MINING),
+                "nothing announces an activity she can't see");
         assertEquals(Peer.Activity.MINING, sensor.peers().get(0).activity(),
                 "the remembered reading is the LAST LIVE one, frozen");
     }
@@ -149,8 +155,10 @@ class PeerSensorCoreTest {
                 "the heard reading holds — no visual classification through walls");
         assertEquals(Peer.Locomotion.WALKING, sensor.peers().get(0).locomotion(),
                 "the steps' story stands on the legs axis");
-        assertTrue(events.stream().noneMatch(e -> e.type() == PeerEvent.Type.ACTIVITY_CHANGED),
-                "and no phantom activity flips while the ear is the only channel");
+        assertTrue(events.stream().noneMatch(e -> e.type() == PeerEvent.Type.READING_CHANGED
+                        && (e.peer().activity() != e.was().activity()
+                                || e.peer().locomotion() != e.was().locomotion())),
+                "and no phantom axis flips while the ear is the only channel");
     }
 
     @Test
@@ -182,8 +190,8 @@ class PeerSensorCoreTest {
                 "no more knocks: 'mining' faded to 'just someone there' — never stuck forever");
         assertEquals(Peer.Locomotion.STILL, sensor.peers().get(0).locomotion(),
                 "the legs faded with it");
-        assertTrue(events.stream().anyMatch(e -> e.type() == PeerEvent.Type.ACTIVITY_CHANGED
-                        && e.was() == Peer.Activity.MINING),
+        assertTrue(events.stream().anyMatch(e -> e.type() == PeerEvent.Type.READING_CHANGED
+                        && e.was().activity() == Peer.Activity.MINING),
                 "and the fade is a narrated event, not a silent edit");
     }
 

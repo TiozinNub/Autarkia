@@ -79,14 +79,19 @@ public final class PeerViewer {
             case LOST -> Component.literal(
                             "[" + personName + "] lost track of " + peer.knownAs())
                     .withStyle(ChatFormatting.RED);
-            case ACTIVITY_CHANGED -> Component.literal(
+            case READING_CHANGED -> Component.literal(
                             "[" + personName + "] " + peer.knownAs() + " now " + detail
-                                    + " (was " + event.was().name().toLowerCase(Locale.ROOT) + ")")
+                                    + " (was " + tellOf(event.was()) + ")")
                     .withStyle(ChatFormatting.YELLOW);
             case RECOGNIZED -> Component.literal(
                             "[" + personName + "] recognized " + peer.name()
-                                    + " — the someone she'd been hearing")
+                                    + " — the someone she'd been hearing, now " + detail)
                     .withStyle(ChatFormatting.AQUA);
         };
+    }
+
+    private static String tellOf(Peer peer) {
+        return peer.tell() + (peer.awareness() == Peer.Awareness.SEEN
+                ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
     }
 }

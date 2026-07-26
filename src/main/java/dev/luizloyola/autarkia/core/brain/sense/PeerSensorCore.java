@@ -117,8 +117,8 @@ public final class PeerSensorCore {
             boolean seen = inCone(feet, yawDegrees, fresh.pos()) && world.inSight(entry.getKey());
             boolean heardFresh = now - track.heardAt <= HEARD_FRESH_TICKS;
             if (seen || heardFresh) {
-                boolean wasLive = track.awareness != Peer.Awareness.REMEMBERED;
-                Peer.Activity was = track.last.activity();
+                Peer before = peer(track);
+                boolean recognizedNow = false;
                 // Ears carry position but not the visual reads: a heard-only track keeps
                 // what the SOUND said (occupation and legs) until the ear or the eyes say
                 // otherwise. No "at_crafting" through the back of her head, no gaze, no crouch.
@@ -130,11 +130,12 @@ public final class PeerSensorCore {
                     track.activityAt = now; // a live look re-witnesses whatever they're doing
                     if (!track.identified) {
                         track.identified = true; 
+                        recognizedNow = true;
                         pending.add(PeerEvent.recognized(peer(track)));
                     }
                 }
-                if (wasLive && was != track.last.activity()) {
-                    pending.add(PeerEvent.activityChanged(peer(track), was));
+                if (!recognizedNow) {
+                    announceIfChanged(track, before); // recognition already tells the new reading
                 }
             } else {
                 goDarkOrForget(track, now, it);
@@ -157,12 +158,10 @@ public final class PeerSensorCore {
                     && (track.last.activity() != Peer.Activity.IDLE
                             || track.last.locomotion() != Peer.Locomotion.STILL)
                     && now - track.activityAt > heardActivityDecayTicks()) {
-                Peer.Activity was = track.last.activity();
+                Peer before = peer(track);
                 track.last = faded(track.last);
                 track.activityAt = now;
-                if (was != Peer.Activity.IDLE) {
-                    pending.add(PeerEvent.activityChanged(peer(track), was));
-                }
+                announceIfChanged(track, before);
             }
         }
     }
@@ -190,14 +189,11 @@ public final class PeerSensorCore {
         track.heardAt = now;
         track.lastLiveAt = now;
         if (track.awareness != Peer.Awareness.SEEN) {
-            boolean wasLive = track.awareness == Peer.Awareness.HEARD;
-            Peer.Activity was = track.last.activity();
+            Peer before = peer(track);
             track.last = heardFacts(who, who);
             track.awareness = Peer.Awareness.HEARD;
             track.activityAt = now; // the sound itself is the witness
-            if (wasLive && was != who.activity()) {
-                pending.add(PeerEvent.activityChanged(peer(track), was));
-            }
+            announceIfChanged(track, before);
         }
     }
 
@@ -220,8 +216,22 @@ public final class PeerSensorCore {
             it.remove();
             return;
         }
+        Peer before = peer(track);
         track.awareness = Peer.Awareness.REMEMBERED;
         track.nextCheckAt = now + interval(track.last.distance());
+        announceIfChanged(track, before); // the slip-out-of-sight moment, narrated once
+    }
+
+    /** The narrator's rule: if any rendered axis of the reading flipped, say so — once. */
+    private void announceIfChanged(Track track, Peer before) {
+        Peer after = peer(track);
+        if (before.activity() != after.activity()
+                || before.locomotion() != after.locomotion()
+                || before.sneaking() != after.sneaking()
+                || before.watching() != after.watching()
+                || before.awareness() != after.awareness()) {
+            pending.add(PeerEvent.readingChanged(after, before));
+        }
     }
 
     /**
