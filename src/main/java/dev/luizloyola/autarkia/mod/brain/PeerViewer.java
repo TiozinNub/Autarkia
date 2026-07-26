@@ -69,9 +69,7 @@ public final class PeerViewer {
 
     private static Component line(String personName, PeerEvent event) {
         Peer peer = event.peer();
-        String detail = peer.activity().name().toLowerCase(Locale.ROOT)
-                + (peer.sneaking() ? ", sneaking" : "")
-                + (peer.watching() ? ", watching her" : "")
+        String detail = peer.tell()
                 + (peer.awareness() == Peer.Awareness.SEEN
                         ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
         return switch (event.type()) {

@@ -38,7 +38,7 @@ public final class PeerKnocks {
         for (Person listener : level.getEntitiesOfClass(Person.class,
                 AABB.ofSize(at, radius * 2.0, radius * 2.0, radius * 2.0))) {
             if (listener != body && at.distanceTo(listener.getEyePosition()) <= radius) {
-                listener.peerSense().heard(body, Peer.Activity.MINING);
+                listener.peerSense().heard(body, Peer.Activity.MINING, Peer.Locomotion.STILL);
             }
         }
     }

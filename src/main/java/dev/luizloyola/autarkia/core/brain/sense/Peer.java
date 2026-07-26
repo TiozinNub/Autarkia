@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.brain.sense;
 
 import dev.luizloyola.autarkia.core.person.PersonId;
+import java.util.Locale;
 
 /**
  * A nearby person-shaped someone, as one perception — another Person or a live PLAYER,
@@ -12,12 +13,11 @@ import dev.luizloyola.autarkia.core.person.PersonId;
  * every channel went dark. A REMEMBERED reading is frozen at its last live values; consumers
  * wanting only live truth filter on awareness.
  *
- * <p>{@link #activity} comes from OBSERVABLE body signals only — the swinging arm, the use-item
- * animation, the pose, the visibly opening chest lid — never from another brain's internals.
- * Station activities are plain INFERENCE: {@code AT_CRAFTING} means "facing a crafting table
- * within reach", and is sometimes wrong the way a human watcher would be. {@link #sneaking} is a
- * manner, not an activity: it combines with anything and is what the hearing and range rules
- * read. {@link #watching} is sustained eye contact on the observer, never a passing glance.
+ * <p><b>The reading decomposes along the body's independent axes</b>: {@link #activity} the
+ * ARMS/ATTENTION occupation, one value off the classifier's ladder; {@link #locomotion} the
+ * LEGS, from measured speed; {@link #sneaking} posture; {@link #watching} gaze dwelling on the
+ * observer, never a passing glance. All are OBSERVABLE body signals, never a peek into another
+ * brain, and sound carries fewer of them: place, doing and moving feet, but not gaze or posture.
  *
  * <p>{@link #identified} carries the ear's limit: SOUND DOESN'T SAY WHO. A heard-never-seen
  * peer is "someone" ({@link #knownAs}); the first clear look flips it, marked by
@@ -25,11 +25,37 @@ import dev.luizloyola.autarkia.core.person.PersonId;
  * identity-dependent behavior must gate on {@code identified}, never on the id existing.
  */
 public record Peer(PersonId id, String name, Pos pos, double distance, Activity activity,
-                   boolean sneaking, boolean watching, boolean identified, Awareness awareness) {
+                   Locomotion locomotion, boolean sneaking, boolean watching,
+                   boolean identified, Awareness awareness) {
 
     /** The name she'd use — sound doesn't identify: unseen means "someone". */
     public String knownAs() {
         return identified ? name : "someone";
+    }
+
+    /**
+     * The one human-readable reading, all axes composed — {@code "eating, walking, sneaking"},
+     * {@code "watching her"} riding last. An idle-armed walker is just {@code "walking"}; an
+     * idle-armed still-stander is {@code "idle"}. Renderers append their own awareness tag.
+     */
+    public String tell() {
+        StringBuilder tell = new StringBuilder();
+        if (activity == Activity.IDLE) {
+            tell.append(locomotion == Locomotion.STILL
+                    ? "idle" : locomotion.name().toLowerCase(Locale.ROOT));
+        } else {
+            tell.append(activity.name().toLowerCase(Locale.ROOT));
+            if (locomotion != Locomotion.STILL) {
+                tell.append(", ").append(locomotion.name().toLowerCase(Locale.ROOT));
+            }
+        }
+        if (sneaking) {
+            tell.append(", sneaking");
+        }
+        if (watching) {
+            tell.append(", watching her");
+        }
+        return tell.toString();
     }
 
     /** Which channel produced this perception — the freshness story, live-first. */
@@ -42,13 +68,18 @@ public record Peer(PersonId id, String name, Pos pos, double distance, Activity 
         REMEMBERED
     }
 
-    /** What the body is visibly doing — one primary occupation, classified coarsest-first. */
+    /** The LEGS axis — from measured speed over a real window, sound's steps included. */
+    public enum Locomotion {
+        STILL,
+        WALKING,
+        SPRINTING
+    }
+
+    /** The ARMS/ATTENTION occupation — one primary, classified coarsest-first. */
     public enum Activity {
-        /** Standing around — the approachable state the social layer looks for. */
+        /** Unoccupied arms — the approachable state the social layer looks for. */
         IDLE,
-        /** Feet covering ground since the last look. */
-        MOVING,
-        /** Swinging at the world — breaking blocks, or any unclassified arm work. */
+        /** Swinging at the world — breaking blocks, or any sustained unclassified arm work. */
         MINING,
         /** Swinging and recently dealt damage — the same arm, a different story. */
         FIGHTING,

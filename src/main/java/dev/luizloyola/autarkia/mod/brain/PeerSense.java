@@ -47,6 +47,8 @@ public final class PeerSense {
      * a raw between-readings delta flickered moving/idle.
      */
     private static final double MOVE_SPEED_PER_TICK = 0.04;
+    /** Blocks-per-tick above which walking reads as sprinting (a sprint is ~0.28). */
+    private static final double SPRINT_SPEED_PER_TICK = 0.25;
     /** How far ahead (blocks) the crafting-table assumption looks along the gaze. */
     private static final double STATION_REACH = 2.5;
 
@@ -93,7 +95,7 @@ public final class PeerSense {
      * speed is measured over a real window; re-anchoring on every read flickered moving/idle off
      * single-tick packet hiccups.
      */
-    private record MoveTrack(Vec3 pos, long time, boolean moving, int swingStreak) {
+    private record MoveTrack(Vec3 pos, long time, Peer.Locomotion locomotion, int swingStreak) {
     }
 
     public PeerSense(Person person) {
@@ -139,13 +141,13 @@ public final class PeerSense {
      * {@code heardAs} is what the SOUND says they're doing; the ear never runs the visual
      * classifier, and the sensor keeps this activity while the ear is the only live channel.
      */
-    public void heard(LivingEntity source, Peer.Activity heardAs) {
+    public void heard(LivingEntity source, Peer.Activity heardAs, Peer.Locomotion heardMoving) {
         PeerReading reading = read(source);
         if (reading != null) {
             bodies.put(reading.id(), source);
             sensor.heard(new PeerReading(reading.id(), reading.name(), reading.pos(),
-                    reading.distance(), reading.sneaking(), reading.watching(), heardAs),
-                    person.level().getGameTime());
+                    reading.distance(), heardMoving, reading.sneaking(), reading.watching(),
+                    heardAs), person.level().getGameTime());
         }
     }
 
@@ -218,19 +220,22 @@ public final class PeerSense {
         Vec3 at = body.position();
         long now = person.level().getGameTime();
         MoveTrack before = moveTracks.get(body.getId());
-        boolean moving;
+        Peer.Locomotion locomotion;
         int streak;
         if (before == null) {
-            moving = false;
+            locomotion = Peer.Locomotion.STILL;
             streak = body.swinging ? 1 : 0;
-            moveTracks.put(body.getId(), new MoveTrack(at, now, false, streak));
+            moveTracks.put(body.getId(), new MoveTrack(at, now, locomotion, streak));
         } else if (now - before.time() < MOVE_WINDOW_TICKS) {
-            moving = before.moving(); // inside the window: reuse the verdict, KEEP the anchor
+            locomotion = before.locomotion(); // inside the window: reuse verdict, KEEP anchor
             streak = before.swingStreak();
         } else {
-            moving = before.pos().distanceTo(at) / (now - before.time()) > MOVE_SPEED_PER_TICK;
+            double speed = before.pos().distanceTo(at) / (now - before.time());
+            locomotion = speed > SPRINT_SPEED_PER_TICK ? Peer.Locomotion.SPRINTING
+                    : speed > MOVE_SPEED_PER_TICK ? Peer.Locomotion.WALKING
+                    : Peer.Locomotion.STILL;
             streak = body.swinging ? before.swingStreak() + 1 : 0;
-            moveTracks.put(body.getId(), new MoveTrack(at, now, moving, streak));
+            moveTracks.put(body.getId(), new MoveTrack(at, now, locomotion, streak));
         }
         GazeTrack gaze = gazeTracks.computeIfAbsent(body.getId(), k -> new GazeTrack());
         if (lookingAtHer(body)) {
@@ -252,8 +257,8 @@ public final class PeerSense {
         BlockPos cell = body.blockPosition();
         return new PeerReading(id, body.getName().getString(),
                 new Pos(cell.getX(), cell.getY(), cell.getZ()),
-                body.distanceTo(person), body.isCrouching(), watching,
-                classify(body, moving, streak, atTable));
+                body.distanceTo(person), locomotion, body.isCrouching(), watching,
+                classify(body, streak, atTable, locomotion));
     }
 
     /** Whether their gaze is ON her right now — the raw signal behind the watching dwell. */
@@ -263,9 +268,9 @@ public final class PeerSense {
         return length > 0.5 && toHer.scale(1.0 / length).dot(body.getViewVector(1.0F)) >= GAZE_ALIGN;
     }
 
-    /** The observable-activity ladder — coarsest, most certain signals first. */
-    private Peer.Activity classify(LivingEntity body, boolean moving, int swingStreak,
-                                   boolean atTable) {
+    /** The occupation ladder (ARMS/ATTENTION only — the legs are their own axis now). */
+    private Peer.Activity classify(LivingEntity body, int swingStreak, boolean atTable,
+                                   Peer.Locomotion locomotion) {
         if (body.isSleeping()) {
             return Peer.Activity.SLEEPING;
         }
@@ -279,6 +284,7 @@ public final class PeerSense {
                 default: break; // brush, horn, ... — no vocabulary for it yet, read on
             }
         }
+        long now = person.level().getGameTime();
         if (body instanceof ServerPlayer player && player.containerMenu instanceof ChestMenu) {
             // The one station the world ANNOUNCES: the lid visibly opens, so the server-side
             // menu check merely confirms what is already watchable (decision: Luiz).
@@ -294,12 +300,10 @@ public final class PeerSense {
         if (body.swinging && swingStreak >= MINING_STREAK) {
             return Peer.Activity.MINING; // sustained arm work; a lone swing is an interaction
         }
-        if (moving) {
-            return Peer.Activity.MOVING;
-        }
-        if (atTable) {
-            // Pure inference: standing at a table with the gaze dwelling on it — wrong the way a
-            // human guess is, but never off a passing glance (the dwell filter owns that).
+        if (atTable && locomotion == Peer.Locomotion.STILL) {
+            // Pure inference: STANDING at a table with the gaze dwelling on it — wrong the way a
+            // human guess is, but never off a passing glance (the dwell filter owns that) and never
+            // while walking past.
             return Peer.Activity.AT_CRAFTING;
         }
         return Peer.Activity.IDLE;
@@ -341,9 +345,6 @@ public final class PeerSense {
     }
 
     private static String describe(Peer peer) {
-        return peer.activity().name().toLowerCase(Locale.ROOT)
-                + (peer.sneaking() ? ", sneaking" : "")
-                + (peer.watching() ? ", watching her" : "")
-                + (peer.awareness() == Peer.Awareness.HEARD ? ", heard" : "");
+        return peer.tell() + (peer.awareness() == Peer.Awareness.HEARD ? ", heard" : "");
     }
 }

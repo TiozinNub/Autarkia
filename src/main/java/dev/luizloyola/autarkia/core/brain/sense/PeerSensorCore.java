@@ -120,9 +120,9 @@ public final class PeerSensorCore {
                 boolean wasLive = track.awareness != Peer.Awareness.REMEMBERED;
                 Peer.Activity was = track.last.activity();
                 // Ears carry position but not the visual reads: a heard-only track keeps
-                // whatever the SOUND said until the ear or the eyes say otherwise — no
-                // "at_crafting" through the back of her head, and no gaze or crouch either.
-                track.last = seen ? fresh : heardFacts(fresh, was);
+                // what the SOUND said (occupation and legs) until the ear or the eyes say
+                // otherwise. No "at_crafting" through the back of her head, no gaze, no crouch.
+                track.last = seen ? fresh : heardFacts(fresh, track.last);
                 track.awareness = seen ? Peer.Awareness.SEEN : Peer.Awareness.HEARD;
                 track.lastLiveAt = now;
                 track.nextCheckAt = now + interval(fresh.distance());
@@ -154,12 +154,15 @@ public final class PeerSensorCore {
     private void decayActivities(long now) {
         for (Track track : tracks.values()) {
             if (track.awareness != Peer.Awareness.SEEN
-                    && track.last.activity() != Peer.Activity.IDLE
+                    && (track.last.activity() != Peer.Activity.IDLE
+                            || track.last.locomotion() != Peer.Locomotion.STILL)
                     && now - track.activityAt > heardActivityDecayTicks()) {
                 Peer.Activity was = track.last.activity();
-                track.last = heardFacts(track.last, Peer.Activity.IDLE);
+                track.last = faded(track.last);
                 track.activityAt = now;
-                pending.add(PeerEvent.activityChanged(peer(track), was));
+                if (was != Peer.Activity.IDLE) {
+                    pending.add(PeerEvent.activityChanged(peer(track), was));
+                }
             }
         }
     }
@@ -174,7 +177,7 @@ public final class PeerSensorCore {
         Track track = tracks.get(who.id());
         if (track == null) {
             track = new Track();
-            track.last = heardFacts(who, who.activity());
+            track.last = heardFacts(who, who);
             track.awareness = Peer.Awareness.HEARD;
             track.lastLiveAt = now;
             track.heardAt = now;
@@ -189,7 +192,7 @@ public final class PeerSensorCore {
         if (track.awareness != Peer.Awareness.SEEN) {
             boolean wasLive = track.awareness == Peer.Awareness.HEARD;
             Peer.Activity was = track.last.activity();
-            track.last = heardFacts(who, who.activity());
+            track.last = heardFacts(who, who);
             track.awareness = Peer.Awareness.HEARD;
             track.activityAt = now; // the sound itself is the witness
             if (wasLive && was != who.activity()) {
@@ -252,16 +255,22 @@ public final class PeerSensorCore {
 
     private static Peer peer(Track track) {
         PeerReading r = track.last;
-        return new Peer(r.id(), r.name(), r.pos(), r.distance(), r.activity(), r.sneaking(),
-                r.watching(), track.identified, track.awareness);
+        return new Peer(r.id(), r.name(), r.pos(), r.distance(), r.activity(), r.locomotion(),
+                r.sneaking(), r.watching(), track.identified, track.awareness);
     }
 
     /**
-     * What a SOUND can carry: place and doing — never gaze or posture. Also the shape a decayed
-     * reading collapses to: just someone there.
+     * What a SOUND can carry: place, doing and moving feet — never gaze or posture. Place comes
+     * from {@code placed}, occupation and legs from {@code told}.
      */
-    private static PeerReading heardFacts(PeerReading fresh, Peer.Activity activity) {
-        return new PeerReading(fresh.id(), fresh.name(), fresh.pos(), fresh.distance(),
-                false, false, activity);
+    private static PeerReading heardFacts(PeerReading placed, PeerReading told) {
+        return new PeerReading(placed.id(), placed.name(), placed.pos(), placed.distance(),
+                told.locomotion(), false, false, told.activity());
+    }
+
+    /** The shape a stale reading collapses to: just someone there — all axes faded. */
+    private static PeerReading faded(PeerReading last) {
+        return new PeerReading(last.id(), last.name(), last.pos(), last.distance(),
+                Peer.Locomotion.STILL, false, false, Peer.Activity.IDLE);
     }
 }

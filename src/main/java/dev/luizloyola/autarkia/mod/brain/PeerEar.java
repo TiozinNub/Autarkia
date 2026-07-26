@@ -56,7 +56,7 @@ public final class PeerEar implements GameEventListener {
         if (!loud(event) && body.isCrouching()) {
             return false; // sneaking quiets FEET (decision: Luiz) — not a pick against stone
         }
-        person.peerSense().heard(body, activityOf(event));
+        person.peerSense().heard(body, activityOf(event), locomotionOf(event));
         return true;
     }
 
@@ -94,6 +94,13 @@ public final class PeerEar implements GameEventListener {
         if (event.is(GameEvent.EAT)) {
             return Peer.Activity.EATING;
         }
-        return Peer.Activity.MOVING; // steps, splashes, landings — something moved over there
+        return Peer.Activity.IDLE; // no occupation story in this sound — the legs may differ
+    }
+
+    /** What the sound says about the LEGS. */
+    private static Peer.Locomotion locomotionOf(Holder<GameEvent> event) {
+        boolean feet = event.is(GameEvent.STEP) || event.is(GameEvent.SWIM)
+                || event.is(GameEvent.HIT_GROUND);
+        return feet ? Peer.Locomotion.WALKING : Peer.Locomotion.STILL;
     }
 }

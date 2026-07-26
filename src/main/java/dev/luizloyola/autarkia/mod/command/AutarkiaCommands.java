@@ -515,11 +515,9 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(name + " — " + peers.size() + " in sight")
                 .withStyle(ChatFormatting.AQUA), false);
         for (Peer peer : peers) {
-            String line = String.format(Locale.ROOT, "%s (%d, %d, %d) - %.1f blocks away, %s%s%s%s",
+            String line = String.format(Locale.ROOT, "%s (%d, %d, %d) - %.1f blocks away, %s%s",
                     peer.knownAs(), peer.pos().x(), peer.pos().y(), peer.pos().z(),
-                    peer.distance(), peer.activity().name().toLowerCase(Locale.ROOT),
-                    peer.sneaking() ? ", sneaking" : "",
-                    peer.watching() ? ", watching her" : "",
+                    peer.distance(), peer.tell(),
                     peer.awareness() == Peer.Awareness.SEEN
                             ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
             source.sendSuccess(() -> Component.literal(line)
