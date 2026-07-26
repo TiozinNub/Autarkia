@@ -81,6 +81,8 @@ public final class DebugViewRenderer {
     private static final double NAME_TAG_CLEARANCE = 0.9;
     /** Vanilla's left-alignment nudge for stacked debug text. */
     private static final float TEXT_LEFT_ALIGN = 0.5F;
+    /** Stand-in height for a peer with no loaded body — a player's, since every peer is one. */
+    private static final double ASSUMED_BODY_HEIGHT = 1.8;
 
     /** Segments in the drawn cone arc — enough to read as a curve at any sane radius. */
     private static final int CONE_SEGMENTS = 24;
@@ -204,14 +206,24 @@ public final class DebugViewRenderer {
      */
     private static void overhead(Entity person, float partialTick, int line,
                                  String text, int color, float scale) {
-        Vec3 feet = person.getPosition(partialTick);
-        Vec3 at = new Vec3(feet.x,
-                feet.y + person.getBbHeight() + NAME_TAG_CLEARANCE + line * TEXT_LINE_STEP,
-                feet.z);
+        Vec3 at = above(person.getPosition(partialTick), person.getBbHeight(), line);
         Gizmos.billboardText(text, at, TextGizmo.Style.forColor(color)
                         .withScale(scale)
                         .withLeftAlignment(TEXT_LEFT_ALIGN))
                 .setAlwaysOnTop();
+    }
+
+    /**
+     * Where line {@code line} of a text stack belongs for a body of {@code height} standing at
+     * {@code feet} — the single answer to "put this above them".
+     *
+     * <p>Every label anchored to a body goes through here: text drawn AT a body's position competes
+     * with the skin behind it and with the name tag every Person carries.
+     */
+    private static Vec3 above(Vec3 feet, double height, int line) {
+        return new Vec3(feet.x,
+                feet.y + height + NAME_TAG_CLEARANCE + line * TEXT_LINE_STEP,
+                feet.z);
     }
 
     /**
@@ -244,30 +256,22 @@ public final class DebugViewRenderer {
         drawCone(eye, person.getYHeadRot(), view.coneDegrees(), view.senseRadius());
         for (DebugViewPayload.PeerMark peer : view.peers()) {
             int color = awarenessColor(peer.awareness());
-            Vec3 target = peerAnchor(peer, level, partialTick);
-            Gizmos.line(eye, target, color, PATH_WIDTH).setAlwaysOnTop();
-            Gizmos.billboardText(label(peer), target.add(0.0, 0.4, 0.0),
-                    TextGizmo.Style.forColorAndCentered(color).withScale(DETAIL_SCALE));
+            // The live body when the server sent one (a SEEN peer, whose cell is a live sample and
+            // so may as well be drawn smoothly); otherwise the believed cell exactly as sent, which
+            // for a HEARD or REMEMBERED peer is the whole point.
+            Entity body = peer.entityId() == DebugViewPayload.PeerMark.NO_BODY
+                    ? null
+                    : level.getEntity(peer.entityId());
+            Vec3 feet = body != null ? body.getPosition(partialTick) : floorCentre(peer.pos());
+            double height = body != null ? body.getBbHeight() : ASSUMED_BODY_HEIGHT;
+            // The LINE aims at mid-body — one drawn to the feet reads as pointing straight past
+            // someone — but the LABEL goes above the head, clear of the skin it describes, with
+            // the same clearance the selected Person's own stack uses.
+            Gizmos.line(eye, feet.add(0.0, height * 0.5, 0.0), color, PATH_WIDTH).setAlwaysOnTop();
+            Gizmos.billboardText(label(peer), above(feet, height, 0),
+                            TextGizmo.Style.forColorAndCentered(color).withScale(DETAIL_SCALE))
+                    .setAlwaysOnTop();
         }
-    }
-
-    /**
-     * Where a peer's line and label land: the live body when the server sent one (a SEEN peer,
-     * whose cell is a live sample and so may as well be drawn smoothly), otherwise the believed
-     * cell exactly as sent — which for a HEARD or REMEMBERED peer is the whole point.
-     *
-     * <p>Aims at the middle of the body rather than the feet: a line to a cell corner reads as
-     * pointing straight past someone.
-     */
-    private static Vec3 peerAnchor(
-            DebugViewPayload.PeerMark peer, ClientLevel level, float partialTick) {
-        if (peer.entityId() != DebugViewPayload.PeerMark.NO_BODY) {
-            Entity body = level.getEntity(peer.entityId());
-            if (body != null) {
-                return body.getPosition(partialTick).add(0.0, body.getBbHeight() * 0.5, 0.0);
-            }
-        }
-        return centre(peer.pos()).add(0.0, 1.0, 0.0);
     }
 
     /** The horizontal view cone: its two edges, and an arc closing them at sense range. */
@@ -350,8 +354,13 @@ public final class DebugViewRenderer {
         return (alpha << 24) | (argb & 0x00FFFFFF);
     }
 
-    /** The centre of a cell's floor — where a waypoint line is drawn through. */
+    /** The centre of a cell, lifted just off its floor — where a waypoint line is drawn through. */
     private static Vec3 centre(BlockPos pos) {
         return new Vec3(pos.getX() + 0.5, pos.getY() + PATH_Y, pos.getZ() + 0.5);
+    }
+
+    /** The exact floor centre of a cell — where a body standing in it has its feet. */
+    private static Vec3 floorCentre(BlockPos pos) {
+        return new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
     }
 }
