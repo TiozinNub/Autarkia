@@ -34,11 +34,12 @@ public record Peer(PersonId id, String name, Pos pos, double distance, Activity 
     }
 
     /**
-     * The one human-readable reading, all axes composed — {@code "eating, walking, sneaking"},
-     * {@code "watching her"} riding last. An idle-armed walker is just {@code "walking"}; an
-     * idle-armed still-stander is {@code "idle"}. Renderers append their own awareness tag.
+     * The one human-readable reading, all axes composed — {@code "eating, walking, sneaking"}, with
+     * {@code "watching him/her"} last in the OBSERVER's pronoun (callers pass
+     * {@code gender.objectPronoun()}). An idle-armed walker is {@code "walking"}, an idle-armed
+     * stander {@code "idle"}. Renderers append their own awareness tag.
      */
-    public String tell() {
+    public String tell(String observerPronoun) {
         StringBuilder tell = new StringBuilder();
         if (activity == Activity.IDLE) {
             tell.append(locomotion == Locomotion.STILL
@@ -53,7 +54,7 @@ public record Peer(PersonId id, String name, Pos pos, double distance, Activity 
             tell.append(", sneaking");
         }
         if (watching) {
-            tell.append(", watching her");
+            tell.append(", watching ").append(observerPronoun);
         }
         return tell.toString();
     }

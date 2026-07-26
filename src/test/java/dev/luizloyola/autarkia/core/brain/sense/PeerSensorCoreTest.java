@@ -225,7 +225,7 @@ class PeerSensorCoreTest {
         Peer peer = sensor.peers().get(0);
         assertEquals(Peer.Activity.EATING, peer.activity());
         assertEquals(Peer.Locomotion.WALKING, peer.locomotion());
-        assertEquals("eating, walking", peer.tell());
+        assertEquals("eating, walking", peer.tell("them"));
     }
 
     @Test

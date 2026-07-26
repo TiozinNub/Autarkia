@@ -50,13 +50,14 @@ public final class PeerViewer {
     }
 
     /** A peer event from a possibly-watched person — narrate it to whoever toggled the view. */
-    static void onEvent(MinecraftServer server, PersonId person, String personName, PeerEvent event) {
+    static void onEvent(MinecraftServer server, PersonId person, String personName,
+                        String pronoun, PeerEvent event) {
         Map<PersonId, UUID> watched = WATCHERS.get(server);
         UUID viewer = watched == null ? null : watched.get(person);
         if (viewer == null) {
             return;
         }
-        Component line = line(personName, event);
+        Component line = line(personName, pronoun, event);
         if (EVERYONE.equals(viewer)) {
             server.getPlayerList().broadcastSystemMessage(line, false);
             return;
@@ -67,9 +68,9 @@ public final class PeerViewer {
         }
     }
 
-    private static Component line(String personName, PeerEvent event) {
+    private static Component line(String personName, String pronoun, PeerEvent event) {
         Peer peer = event.peer();
-        String detail = peer.tell()
+        String detail = peer.tell(pronoun)
                 + (peer.awareness() == Peer.Awareness.SEEN
                         ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
         return switch (event.type()) {

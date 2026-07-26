@@ -20,4 +20,9 @@ public enum Gender {
     public <T> T choose(T ifMale, T ifFemale) {
         return this == MALE ? ifMale : ifFemale;
     }
+
+    /** The object pronoun for narration ("watching him/her"). Gains a "them" if the enum grows. */
+    public String objectPronoun() {
+        return choose("him", "her");
+    }
 }

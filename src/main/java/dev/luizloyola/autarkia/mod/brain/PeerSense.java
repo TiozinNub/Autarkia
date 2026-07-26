@@ -113,7 +113,7 @@ public final class PeerSense {
             PersonId self = person.getPersonId();
             if (self != null && person.level().getServer() != null) {
                 PeerViewer.onEvent(person.level().getServer(), self,
-                        person.getName().getString(), event);
+                        person.getName().getString(), person.getGender().objectPronoun(), event);
             }
         }
     }
@@ -343,7 +343,8 @@ public final class PeerSense {
         person.journal().record(Category.SENSE, "peer", what);
     }
 
-    private static String describe(Peer peer) {
-        return peer.tell() + (peer.awareness() == Peer.Awareness.HEARD ? ", heard" : "");
+    private String describe(Peer peer) {
+        return peer.tell(person.getGender().objectPronoun())
+                + (peer.awareness() == Peer.Awareness.HEARD ? ", heard" : "");
     }
 }
