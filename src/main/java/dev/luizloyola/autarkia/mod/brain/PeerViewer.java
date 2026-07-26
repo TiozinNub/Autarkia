@@ -80,18 +80,12 @@ public final class PeerViewer {
                             "[" + personName + "] lost track of " + peer.knownAs())
                     .withStyle(ChatFormatting.RED);
             case READING_CHANGED -> Component.literal(
-                            "[" + personName + "] " + peer.knownAs() + " now " + detail
-                                    + " (was " + tellOf(event.was()) + ")")
+                            "[" + personName + "] " + peer.knownAs() + " now " + detail)
                     .withStyle(ChatFormatting.YELLOW);
             case RECOGNIZED -> Component.literal(
                             "[" + personName + "] recognized " + peer.name()
                                     + " — the someone she'd been hearing, now " + detail)
                     .withStyle(ChatFormatting.AQUA);
         };
-    }
-
-    private static String tellOf(Peer peer) {
-        return peer.tell() + (peer.awareness() == Peer.Awareness.SEEN
-                ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
     }
 }
