@@ -31,6 +31,7 @@ import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.brain.Knowledges;
+import dev.luizloyola.autarkia.mod.brain.PeerViewer;
 import dev.luizloyola.autarkia.mod.config.ConfigFile;
 import dev.luizloyola.autarkia.mod.debug.DebugLayer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
@@ -69,6 +70,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -81,6 +83,10 @@ import java.util.stream.Stream;
  * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs the same work
  * through the task machinery the arbiter feeds; {@code brain auto true | false} flips autonomy — ON
  * by default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
+ *
+ * <p><b>Every {@code true|false} switch reads back when you leave the value off</b>, changing
+ * nothing and returning 1 for on, 0 for off — usable from a command block or an {@code execute if}
+ * without parsing the chat line.
  *
  * <p>{@code log} reads the resolved Person's in-memory journal ring, all subsystems or one;
  * {@code log for <name|id>} reaches any person by directory lookup, including one whose entity is
@@ -167,8 +173,10 @@ public final class AutarkiaCommands {
                                         .executes(ctx -> brainStatus(ctx.getSource())))
                                 .then(Commands.literal("cancel")
                                         .executes(ctx -> brainCancel(ctx.getSource())))
-                                // The autonomy switch — spawns start ON.
+                                // The autonomy switch — spawns start ON. Bare, it READS the
+                                // switch rather than flipping it (see the note on toggles below).
                                 .then(Commands.literal("auto")
+                                        .executes(ctx -> brainAutoShow(ctx.getSource()))
                                         .then(Commands.literal("true")
                                                 .executes(ctx -> brainAuto(ctx.getSource(), true)))
                                         .then(Commands.literal("false")
@@ -207,6 +215,7 @@ public final class AutarkiaCommands {
                         .then(Commands.literal("knowledge")
                                 .executes(ctx -> knowledgeList(ctx.getSource()))
                                 .then(Commands.literal("view")
+                                        .executes(ctx -> knowledgeViewShow(ctx.getSource()))
                                         .then(Commands.literal("true")
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), true)))
                                         .then(Commands.literal("false")
@@ -222,6 +231,8 @@ public final class AutarkiaCommands {
                                         .executes(ctx -> debugOff(ctx.getSource())))
                                 .then(Commands.argument("layer", StringArgumentType.word())
                                         .suggests(LAYER_SUGGESTIONS)
+                                        .executes(ctx -> debugLayerShow(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "layer")))
                                         .then(Commands.literal("true")
                                                 .executes(ctx -> debugLayer(ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "layer"), true)))
@@ -263,6 +274,7 @@ public final class AutarkiaCommands {
                         .then(Commands.literal("peers")
                                 .executes(ctx -> peersList(ctx.getSource()))
                                 .then(Commands.literal("view")
+                                        .executes(ctx -> peersViewShow(ctx.getSource()))
                                         .then(Commands.literal("true")
                                                 .executes(ctx -> peersView(ctx.getSource(), true)))
                                         .then(Commands.literal("false")
@@ -417,11 +429,8 @@ public final class AutarkiaCommands {
                             + "(For a headless readout use knowledge view / peers view.)"));
             return 0;
         }
-        DebugLayer layer = DebugLayer.byKey(token).orElse(null);
+        DebugLayer layer = parseLayer(source, token);
         if (layer == null) {
-            source.sendFailure(Component.literal("Unknown debug layer '" + token + "' — try "
-                    + Stream.of(DebugLayer.values()).map(DebugLayer::key)
-                            .collect(Collectors.joining(", "))));
             return 0;
         }
         EnumSet<DebugLayer> now = DebugView.set(source.getServer(), player.getUUID(), layer, on);
@@ -429,6 +438,40 @@ public final class AutarkiaCommands {
                         + " — showing " + describeLayers(now))
                 .withStyle(on ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
         return 1;
+    }
+
+    /**
+     * {@code /autarkia debug <layer>} with the {@code true|false} left off READS that layer for this
+     * player instead of moving it, as every {@code true|false} switch in this file does: a status
+     * line has to be safe to run when you have forgotten the state.
+     */
+    private static int debugLayerShow(CommandSourceStack source, String token) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal("The debug view is per-player — run it as a player."));
+            return 0;
+        }
+        DebugLayer layer = parseLayer(source, token);
+        if (layer == null) {
+            return 0;
+        }
+        EnumSet<DebugLayer> now = DebugView.layers(source.getServer(), player.getUUID());
+        boolean on = now.contains(layer);
+        source.sendSuccess(() -> Component.literal("Debug " + layer.key() + " is " + on
+                        + " — showing " + describeLayers(now))
+                .withStyle(on ? ChatFormatting.GREEN : ChatFormatting.GRAY), false);
+        return on ? 1 : 0;
+    }
+
+    /** The layer this token names, or null having already reported the vocabulary it should use. */
+    private static @Nullable DebugLayer parseLayer(CommandSourceStack source, String token) {
+        DebugLayer layer = DebugLayer.byKey(token).orElse(null);
+        if (layer == null) {
+            source.sendFailure(Component.literal("Unknown debug layer '" + token + "' — try "
+                    + Stream.of(DebugLayer.values()).map(DebugLayer::key)
+                            .collect(Collectors.joining(", "))));
+        }
+        return layer;
     }
 
     /** What this player currently has drawn, and what else there is to draw. */
@@ -485,20 +528,60 @@ public final class AutarkiaCommands {
         String name = person.getName().getString();
         if (on) {
             ServerPlayer player = source.getPlayer();
-            dev.luizloyola.autarkia.mod.brain.PeerViewer.watch(source.getServer(), id,
-                    player == null ? null : player.getUUID());
+            PeerViewer.watch(source.getServer(), id, player == null ? null : player.getUUID());
             source.sendSuccess(() -> Component.literal("Narrating " + name
                             + "'s people sense — spotted/lost/activity lines land in "
                             + (player == null ? "everyone's chat (console toggle)." : "your chat."))
                     .withStyle(ChatFormatting.GREEN), false);
         } else {
-            boolean was = dev.luizloyola.autarkia.mod.brain.PeerViewer.unwatch(source.getServer(), id);
+            boolean was = PeerViewer.unwatch(source.getServer(), id);
             source.sendSuccess(() -> Component.literal(was
                             ? "Stopped narrating " + name + "'s people sense."
                             : name + "'s people sense wasn't being narrated.")
                     .withStyle(ChatFormatting.YELLOW), false);
         }
         return 1;
+    }
+
+    /** {@code peers view} with no {@code true|false}: who, if anyone, is hearing her narration. */
+    private static int peersViewShow(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        PersonId id = person.getPersonId();
+        if (id == null) {
+            source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            return 0;
+        }
+        String name = person.getName().getString();
+        UUID viewer = PeerViewer.viewer(source.getServer(), id);
+        if (viewer == null) {
+            source.sendSuccess(() -> Component.literal(name + "'s peers view is false.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(name + "'s peers view is true — "
+                        + "spotted/lost/activity lines land in " + describeViewer(source, viewer))
+                .withStyle(ChatFormatting.GREEN), false);
+        return 1;
+    }
+
+    /**
+     * Names where a viewer's chat is going, from the asker's point of view: their own chat, another
+     * player's, or everyone's (the console toggle). Shared by both {@code view} readouts — telling
+     * "on, but narrating to someone else" apart from "off" is the whole point of asking.
+     */
+    private static String describeViewer(CommandSourceStack source, UUID viewer) {
+        if (PeerViewer.EVERYONE.equals(viewer)) {
+            return "everyone's chat (console toggle).";
+        }
+        ServerPlayer self = source.getPlayer();
+        if (self != null && self.getUUID().equals(viewer)) {
+            return "your chat.";
+        }
+        ServerPlayer other = source.getServer().getPlayerList().getPlayer(viewer);
+        return other == null
+                ? "the chat of a player who has since logged off."
+                : other.getName().getString() + "'s chat.";
     }
 
     /** The resolved Person's live {@code peers()} reading — who she sees, and what they're visibly doing. */
@@ -702,6 +785,19 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
+    }
+
+    /** {@code brain auto} with no {@code true|false}: reads the switch instead of flipping it. */
+    private static int brainAutoShow(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        boolean auto = person.brain().isAuto();
+        source.sendSuccess(() -> Component.literal(person.getName().getString() + "'s brain auto is "
+                        + auto + " — " + (auto
+                                ? "the arbiter is deciding."
+                                : "manual; hand it back with /autarkia brain auto true."))
+                .withStyle(auto ? ChatFormatting.GREEN : ChatFormatting.GRAY), false);
+        return auto ? 1 : 0;
     }
 
     /** The note appended to a manual {@code brain goto}/{@code brain eat} reply when that very
@@ -916,6 +1012,32 @@ public final class AutarkiaCommands {
                             : name + " wasn't being viewed.")
                     .withStyle(ChatFormatting.GRAY), false);
         }
+        return 1;
+    }
+
+    /**
+     * {@code knowledge view} with no {@code true|false}: whether her beliefs are on screen, and
+     * whose. Unlike switching it on, asking works from the console — the answer is a chat line
+     * here, not particles over there.
+     */
+    private static int knowledgeViewShow(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        PersonId id = person.getPersonId();
+        if (id == null) {
+            source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            return 0;
+        }
+        String name = person.getName().getString();
+        UUID viewer = KnowledgeViewer.viewer(source.getServer(), id);
+        if (viewer == null) {
+            source.sendSuccess(() -> Component.literal(name + "'s knowledge view is false.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(name + "'s knowledge view is true — "
+                        + "particles mark her beliefs, discoveries land in " + describeViewer(source, viewer))
+                .withStyle(ChatFormatting.GREEN), false);
         return 1;
     }
 

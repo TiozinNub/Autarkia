@@ -20,6 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The POI viewer: a watched person's <em>beliefs</em> made visible — particles over every
@@ -52,6 +53,15 @@ public final class KnowledgeViewer {
     /** Starts viewing this person's knowledge, routing discovery chat to {@code viewer}. */
     public static void watch(MinecraftServer server, PersonId person, UUID viewer) {
         WATCHERS.computeIfAbsent(server, s -> new HashMap<>()).put(person, viewer);
+    }
+
+    /**
+     * The player currently receiving this person's discovery chat, or {@code null} when nobody is
+     * viewing her — the read side the status readout of {@code /autarkia knowledge view} prints.
+     */
+    public static @Nullable UUID viewer(MinecraftServer server, PersonId person) {
+        Map<PersonId, UUID> watched = WATCHERS.get(server);
+        return watched == null ? null : watched.get(person);
     }
 
     /** Stops viewing; false when the person wasn't being viewed. */

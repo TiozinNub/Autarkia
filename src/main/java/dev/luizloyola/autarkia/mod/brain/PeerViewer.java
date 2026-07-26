@@ -26,8 +26,12 @@ import org.jspecify.annotations.Nullable;
 public final class PeerViewer {
     private PeerViewer() {}
 
-    /** Sentinel viewer for a console toggle: broadcast instead of whispering to one player. */
-    private static final UUID EVERYONE = new UUID(0L, 0L);
+    /**
+     * Sentinel viewer for a console toggle: broadcast instead of whispering to one player. Public
+     * because a caller reading {@link #viewer} has to tell "narrating to everyone" from "narrating
+     * to that player".
+     */
+    public static final UUID EVERYONE = new UUID(0L, 0L);
 
     /** Watched person → who gets the narration (a player, or {@link #EVERYONE}). */
     private static final Map<MinecraftServer, Map<PersonId, UUID>> WATCHERS = new HashMap<>();
@@ -41,6 +45,16 @@ public final class PeerViewer {
     public static void watch(MinecraftServer server, PersonId person, @Nullable UUID viewer) {
         WATCHERS.computeIfAbsent(server, s -> new HashMap<>())
                 .put(person, viewer == null ? EVERYONE : viewer);
+    }
+
+    /**
+     * Who this person's narration currently goes to — a player's UUID, {@link #EVERYONE} for a
+     * console toggle, or {@code null} when she isn't being narrated at all. The read side the
+     * status readout of {@code /autarkia peers view} prints.
+     */
+    public static @Nullable UUID viewer(MinecraftServer server, PersonId person) {
+        Map<PersonId, UUID> watched = WATCHERS.get(server);
+        return watched == null ? null : watched.get(person);
     }
 
     /** Stops narrating; false when the person wasn't being watched. */
