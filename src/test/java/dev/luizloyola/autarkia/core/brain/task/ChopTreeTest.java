@@ -235,6 +235,32 @@ class ChopTreeTest {
         assertTrue(ctx.scaffolder.placed.isEmpty(), "the body's ledger ends the chop clean");
     }
 
+    /**
+     * The same tall trunk, but the body refuses to climb. {@link
+     * dev.luizloyola.autarkia.core.brain.act.Scaffolder#up}'s retry is bounded: a spot that keeps
+     * killing steps starts refusing and stays refusing while she stands there, so a caller that
+     * re-asks every tick spins forever — the 16-tick jump loop. The refusal has to END the target.
+     */
+    @Test
+    void aRefusedClimbLetsTheTargetGoInsteadOfAskingForever() {
+        placeOakAndStandBy();
+        ctx.percepts.blocks.set(10, 68, 10, dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+        ctx.percepts.blocks.set(10, 69, 10, dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG);
+        ctx.percepts.inventory.add(dev.luizloyola.autarkia.core.inv.ItemStack.of(
+                "minecraft:oak_log", 4, 64)); // material is carried — only the body's refusal decides
+        Pos high = new Pos(10, 69, 10);
+        ctx.breaker.refuse.add(high); // reachable by pillar alone, and she will not pillar
+        ctx.scaffolder.refuse = true;
+
+        TaskStatus status = drive(new ChopTree(memory, false), 400);
+
+        assertEquals(TaskStatus.SUCCESS, status,
+                "a refusal ends the target, not the tick loop — everything reachable still fell");
+        assertEquals(0, ctx.scaffolder.ups, "a refused climb is never begun");
+        assertEquals(dev.luizloyola.autarkia.core.brain.knowledge.BlockKind.LOG,
+                ctx.percepts.blocks.at(10, 69, 10), "the log she could not reach was let go");
+    }
+
     @Test
     void neverPillarsTowardASidewaysBranch() {
         placeOakAndStandBy();

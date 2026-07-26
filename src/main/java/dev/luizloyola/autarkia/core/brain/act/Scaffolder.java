@@ -27,10 +27,15 @@ public interface Scaffolder {
     int PILLAR_MAX = 12;
 
     /**
-     * Begin one pillar step using one {@code itemId} block from the carried inventory.
-     * Returns {@code false} when the step cannot start — nothing carried, no headroom, a step
-     * already in flight, or the ledger at {@link #PILLAR_MAX} — in which case nothing was
-     * consumed.
+     * Begin one pillar step using one {@code itemId} block from the carried inventory. Returns
+     * {@code false} when the step cannot start — nothing carried, no headroom, a step already in
+     * flight, the ledger at {@link #PILLAR_MAX}, or this spot having already killed several steps
+     * in a row — and nothing is consumed.
+     *
+     * <p>That last refusal is the one callers must handle: the body's bounded retries step to the
+     * middle of the cell first (a box straddling two columns bonks headroom the cell's own check
+     * called clear), so once it refuses, asking from the same spot keeps refusing —
+     * <b>treat it as "not from here"</b>. A caller that re-asks every tick spins forever.
      */
     boolean up(String itemId);
 
