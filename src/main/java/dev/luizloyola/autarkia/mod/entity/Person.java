@@ -5,6 +5,7 @@ import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.inv.ArmorType;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.log.Category;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
@@ -120,14 +121,6 @@ public class Person extends Avatar {
      * reference, so the identity itself outlives the entity. {@code null} until first assigned.
      */
     private @Nullable PersonId personId;
-
-    /**
-     * Debug movement harness for tuning locomotion: while {@code true}, {@link #serverAiStep()}
-     * drives this person straight forward, sprinting and auto-jumping, at a player's jump-sprint
-     * speed. Toggled by shift-right-clicking the debug wand ({@code mod.item.DebugWandItem}).
-     * Transient: movement is server-authoritative, so nothing is saved or synced.
-     */
-    private boolean debugRunForward;
 
     /**
      * Drives this person toward a target position (see {@link #serverAiStep()} /
@@ -324,20 +317,8 @@ public class Person extends Avatar {
         // The working arm advances after the brain, so a break begun this tick gains its first
         // progress this tick — same-tick actuation, like the navigator below.
         this.blockBreaker.tick();
-        if (this.debugRunForward) {
-            // getAttributeValue includes the sprint modifier applied by setSprinting, so this is
-            // already the ×1.3 sprint speed; the 0.98 damping keeps it exact vs a player.
-            this.setSpeed((float) this.getAttributeValue(Attributes.MOVEMENT_SPEED));
-            this.zza = PLAYER_INPUT_DAMPING; // forward along the current yRot; no strafe
-            // Auto-jump: aiStep's grounded jumpFromGround() adds vanilla's own 0.2 sprint-jump
-            // boost while sprinting, so no manual momentum. Set here because aiStep runs
-            // serverAiStep before its jump check — the press lands the same tick.
-            this.setJumping(true);
-        } else {
-            // The navigator owns the forward input the rest of the time: it walks toward a target
-            // when it has one, and holds the input at rest otherwise.
-            this.navigator.tick();
-        }
+        // The navigator owns the forward input.
+        this.navigator.tick();
         // The climbing legs tick after the navigator: the nerd-pole's jump input must survive to
         // aiStep, and the navigator's at-rest path resets inputs — ticking before it swallowed
         // every pillar jump.
@@ -552,15 +533,18 @@ public class Person extends Avatar {
 
     /**
      * Send this person to the cell containing {@code target} (world coordinates): the
-     * {@link Navigator} computes a route (off the main thread) and walks it. Cancels the debug
-     * jump-sprinter first — the two both own the forward input, so only one may drive at a time.
+     * {@link Navigator} computes a route (off the main thread) and walks it.
      */
     public void navigateTo(Vec3 target) {
-        if (this.debugRunForward) {
-            this.debugRunForward = false;
-            setSprinting(false);
-        }
         this.navigator.pathTo(net.minecraft.core.BlockPos.containing(target));
+    }
+
+    /**
+     * The same order at a chosen pace. The gait is advisory — the follower still slows for careful
+     * ground and still takes a leap's run-up at full speed.
+     */
+    public void navigateTo(Vec3 target, Gait gait) {
+        this.navigator.pathTo(net.minecraft.core.BlockPos.containing(target), gait);
     }
 
     /**
@@ -635,9 +619,9 @@ public class Person extends Avatar {
     public void stopMoving() {
         this.zza = 0.0F;
         setJumping(false);
-        // Not for the debug sprinter (which never routes through here): a navigator that stops
-        // mid-sprint must not leave the ×1.3 modifier latched for its next plain walk.
-        if (!this.debugRunForward && isSprinting()) {
+        // A navigator that stops mid-sprint must not leave the ×1.3 modifier latched for its
+        // next plain walk.
+        if (isSprinting()) {
             setSprinting(false);
         }
     }
@@ -703,24 +687,6 @@ public class Person extends Avatar {
             setYHeadRot(yaw);
             this.yBodyRot = yaw;
         }
-    }
-
-    /**
-     * Debug harness toggle: flips the straight-line jump-sprinter (see {@link #debugRunForward}) and
-     * enables sprinting ({@link #setSprinting} → vanilla's ×1.3 MOVEMENT_SPEED modifier);
-     * {@link #serverAiStep()} drives the forward input and the auto-jump. Both are vanilla's, so it
-     * matches a player's jump-sprint exactly. On enable the person snaps to face {@code heading}.
-     */
-    public boolean toggleDebugWalk(float heading) {
-        this.debugRunForward = !this.debugRunForward;
-        this.setSprinting(this.debugRunForward);
-        if (this.debugRunForward) {
-            this.navigator.stop(); // the sprinter takes the forward input over from any active nav
-            face(heading);
-        } else {
-            this.zza = 0.0F;
-        }
-        return this.debugRunForward;
     }
 
     /**

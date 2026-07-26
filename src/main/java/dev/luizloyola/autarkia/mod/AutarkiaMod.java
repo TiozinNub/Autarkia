@@ -9,6 +9,7 @@ import dev.luizloyola.autarkia.mod.item.ModItems;
 import dev.luizloyola.autarkia.mod.brain.Claims;
 import dev.luizloyola.autarkia.mod.brain.DamageMarks;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
+import dev.luizloyola.autarkia.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.log.Journals;
 import dev.luizloyola.autarkia.mod.nav.PathfinderService;
 import dev.luizloyola.autarkia.mod.net.DebugGlowSync;
@@ -34,6 +35,7 @@ public class AutarkiaMod implements ModInitializer {
         ModMenus.init();
         AutarkiaCommands.register();
         DebugGlowSync.install();
+        DebugView.init();
         PathfinderService.init();
         Journals.init();
         Claims.init();

@@ -21,5 +21,7 @@ public class AutarkiaClient implements ClientModInitializer {
         MenuScreens.register(ModMenus.PERSON_INVENTORY, PersonInventoryScreen::new);
         DebugGlowClient.install();
         DebugGlow.install();
+        DebugViewClient.install();
+        DebugViewRenderer.install();
     }
 }

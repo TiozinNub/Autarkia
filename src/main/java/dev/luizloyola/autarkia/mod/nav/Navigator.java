@@ -16,7 +16,6 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
@@ -124,8 +123,6 @@ public final class Navigator {
      */
     private static final int PROACTIVE_REPATH_COOLDOWN = 20;
 
-    /** Dev-phase visuals: END_ROD breadcrumbs on the remaining path, FLAME on the goal. */
-    public static boolean debugParticles = true;
     /**
      * Debug escape hatch: {@code false} runs the search synchronously on the server thread
      * (identical pipeline, no executor), taking threading out of the picture when chasing a
@@ -221,6 +218,22 @@ public final class Navigator {
     /** The current goal cell, or {@code null} when idle. Survives ARRIVED/FAILED for inspection. */
     public @Nullable BlockPos goal() {
         return this.goal;
+    }
+
+    /**
+     * The path being followed, or {@code null} — read-only, for the debug view. {@link Path} and
+     * its waypoints are immutable, but the reference is swapped wholesale on every re-path:
+     * callers must re-read it, not hold it.
+     *
+     * <p>Server-thread only, writer included (see {@link PathfinderService}).
+     */
+    public @Nullable Path path() {
+        return this.path;
+    }
+
+    /** Which waypoint of {@link #path()} she is walking toward. */
+    public int pathIndex() {
+        return this.index;
     }
 
     /** One-line progress summary for the debug command. */
@@ -518,10 +531,6 @@ public final class Navigator {
                 this.lastLeapPressIndex = this.index;
             }
         }
-
-        if (debugParticles && this.person.tickCount % 5 == 0) {
-            emitPathParticles();
-        }
     }
 
     /**
@@ -568,10 +577,6 @@ public final class Navigator {
         // horizontal swimming.
         float heading = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
         this.person.driveForward(heading);
-
-        if (debugParticles && this.person.tickCount % 5 == 0) {
-            emitPathParticles();
-        }
     }
 
     /**
@@ -796,20 +801,6 @@ public final class Navigator {
             default -> "changed";
         };
         return phrase + " at " + need.x() + ", " + need.y() + ", " + need.z();
-    }
-
-    private void emitPathParticles() {
-        ServerLevel level = level();
-        for (int i = this.index; i < this.path.waypoints().size(); i++) {
-            Waypoint w = this.path.waypoints().get(i);
-            level.sendParticles(ParticleTypes.END_ROD,
-                    w.x() + 0.5, w.y() + 0.2, w.z() + 0.5, 1, 0.0, 0.0, 0.0, 0.0);
-        }
-        if (this.goal != null) {
-            level.sendParticles(ParticleTypes.FLAME,
-                    this.goal.getX() + 0.5, this.goal.getY() + 0.5, this.goal.getZ() + 0.5,
-                    2, 0.0, 0.0, 0.0, 0.0);
-        }
     }
 
     /** Record a PATHFIND line to this person's debug journal (see {@link Person#journal()}). */

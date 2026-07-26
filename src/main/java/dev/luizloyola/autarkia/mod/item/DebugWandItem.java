@@ -1,11 +1,16 @@
 package dev.luizloyola.autarkia.mod.item;
 
 import dev.luizloyola.autarkia.compat.Players;
+import dev.luizloyola.autarkia.core.nav.Gait;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.mod.command.PersonSelection;
-import dev.luizloyola.autarkia.mod.entity.ModEntities;
+import dev.luizloyola.autarkia.mod.debug.DebugLayer;
+import dev.luizloyola.autarkia.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import dev.luizloyola.autarkia.mod.entity.Persons;
+import java.util.EnumSet;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -43,19 +48,19 @@ public class DebugWandItem extends Item {
             Players.overlay(player, Component.translatable("item.autarkia.debug_wand.no_selection"));
             return InteractionResult.SUCCESS;
         }
-        // Resolve the selection to a loaded entity: scan every loaded Person for the pinned id. Fine
-        // for a debug tool; the real command path will hold a direct handle.
-        Person person = ((ServerLevel) level)
-                .getEntities(ModEntities.PERSON, p -> selected.equals(p.getPersonId()))
-                .stream().findFirst().orElse(null);
+        Person person = Persons.findLoaded(player.level().getServer(), selected);
         if (person == null) {
             Players.overlay(player, Component.translatable("item.autarkia.debug_wand.not_loaded"));
             return InteractionResult.SUCCESS;
         }
         // Stand on top of the clicked face.
         Vec3 target = Vec3.atBottomCenterOf(context.getClickedPos().relative(context.getClickedFace()));
-        person.navigateTo(target);
-        Players.overlay(player, Component.translatable("item.autarkia.debug_wand.moving",
+        // Shift sends her at a run. The gait is advisory all the way down — the follower still
+        // slows for careful ground and still takes a leap's run-up at full speed.
+        boolean hurry = player.isSecondaryUseActive();
+        person.navigateTo(target, hurry ? Gait.SPRINT : Gait.WALK);
+        Players.overlay(player, Component.translatable(
+                hurry ? "item.autarkia.debug_wand.running" : "item.autarkia.debug_wand.moving",
                 person.getName(), (int) target.x, (int) target.y, (int) target.z));
         return InteractionResult.SUCCESS;
     }
@@ -66,15 +71,9 @@ public class DebugWandItem extends Item {
         if (!(target instanceof Person person)) {
             return InteractionResult.PASS;
         }
-        // Shift-right-click drives the temporary debug walker (locomotion tuning); a plain click
-        // selects. Mutate only on the server, mirroring the selection path below.
         if (player.isSecondaryUseActive()) {
-            if (!player.level().isClientSide()) {
-                boolean walking = person.toggleDebugWalk(player.getYRot());
-                Players.overlay(player, Component.translatable(
-                        walking ? "item.autarkia.debug_wand.walk_on"
-                                : "item.autarkia.debug_wand.walk_off",
-                        person.getName()));
+            if (player instanceof ServerPlayer serverPlayer) {
+                cycleDebugLayer(serverPlayer, person);
             }
             return InteractionResult.SUCCESS;
         }
@@ -91,5 +90,37 @@ public class DebugWandItem extends Item {
             }
         }
         return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * The wand's debug-view cycle: shift-click a Person to walk her debug layers one at a time —
+     * path, brain, memory, peers, then off. It REPLACES the layer set rather than adding to it; the
+     * command is the only way to have several up at once (decision: Luiz). Clicking also pins her,
+     * so a shift-click on someone new both selects her and starts her cycle.
+     */
+    private static void cycleDebugLayer(ServerPlayer player, Person person) {
+        PersonId id = person.getPersonId();
+        if (id == null) {
+            Players.overlay(player, Component.translatable("item.autarkia.debug_wand.no_identity"));
+            return;
+        }
+        MinecraftServer server = player.level().getServer();
+        boolean reselected = !id.equals(PersonSelection.pinned(player).orElse(null));
+        if (reselected) {
+            PersonSelection.pin(player, id);
+        }
+        // The cycle only CONTINUES from a single showing layer: with several up there is no
+        // "current rung" to advance from, so the wand restarts at the first rather than guessing.
+        EnumSet<DebugLayer> showing = DebugView.layers(server, player.getUUID());
+        DebugLayer current = reselected || showing.size() != 1
+                ? null
+                : showing.iterator().next();
+        DebugLayer next = DebugLayer.next(current).orElse(null);
+        DebugView.replace(server, player.getUUID(),
+                next == null ? EnumSet.noneOf(DebugLayer.class) : EnumSet.of(next));
+        Players.overlay(player, next == null
+                ? Component.translatable("item.autarkia.debug_wand.debug_off", person.getName())
+                : Component.translatable("item.autarkia.debug_wand.debug_layer",
+                        person.getName(), next.key()));
     }
 }

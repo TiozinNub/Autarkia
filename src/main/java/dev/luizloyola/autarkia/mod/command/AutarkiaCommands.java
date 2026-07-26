@@ -32,7 +32,10 @@ import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.brain.Knowledges;
 import dev.luizloyola.autarkia.mod.config.ConfigFile;
+import dev.luizloyola.autarkia.mod.debug.DebugLayer;
+import dev.luizloyola.autarkia.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
+import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.log.Journals;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
@@ -62,9 +65,11 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -206,6 +211,23 @@ public final class AutarkiaCommands {
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), true)))
                                         .then(Commands.literal("false")
                                                 .executes(ctx -> knowledgeView(ctx.getSource(), false)))))
+                        // The in-world debug view: gizmo lines, boxes and floating text over the
+                        // SELECTED Person. Per-player, and the only way to raise several layers at
+                        // once (the wand's shift-click cycles them one at a time).
+                        .then(Commands.literal("debug")
+                                .executes(ctx -> debugShow(ctx.getSource()))
+                                .then(Commands.literal("show")
+                                        .executes(ctx -> debugShow(ctx.getSource())))
+                                .then(Commands.literal("off")
+                                        .executes(ctx -> debugOff(ctx.getSource())))
+                                .then(Commands.argument("layer", StringArgumentType.word())
+                                        .suggests(LAYER_SUGGESTIONS)
+                                        .then(Commands.literal("true")
+                                                .executes(ctx -> debugLayer(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "layer"), true)))
+                                        .then(Commands.literal("false")
+                                                .executes(ctx -> debugLayer(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "layer"), false)))))
                         // The tuning knobs (config/autarkia.json). Unlike everything above, this
                         // block is world-wide, not per-Person — no selection is consulted.
                         .then(Commands.literal("config")
@@ -377,6 +399,73 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " board: "
                 + person.brain().describeBoard()).withStyle(ChatFormatting.LIGHT_PURPLE), false);
         return 1;
+    }
+
+    /**
+     * Switches one debug-view layer on or off for this player. Layers are per-player and combine
+     * freely, which the debug wand's one-at-a-time cycle cannot; what gets drawn is whoever the
+     * player has selected, so the view moves with the pin.
+     *
+     * <p>Player-only, and it fails loudly: the layers are drawn by a client, and the console has
+     * none.
+     */
+    private static int debugLayer(CommandSourceStack source, String token, boolean on) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal(
+                    "The debug view draws on a client — run it as a player. "
+                            + "(For a headless readout use knowledge view / peers view.)"));
+            return 0;
+        }
+        DebugLayer layer = DebugLayer.byKey(token).orElse(null);
+        if (layer == null) {
+            source.sendFailure(Component.literal("Unknown debug layer '" + token + "' — try "
+                    + Stream.of(DebugLayer.values()).map(DebugLayer::key)
+                            .collect(Collectors.joining(", "))));
+            return 0;
+        }
+        EnumSet<DebugLayer> now = DebugView.set(source.getServer(), player.getUUID(), layer, on);
+        source.sendSuccess(() -> Component.literal("Debug " + layer.key() + " " + (on ? "on" : "off")
+                        + " — showing " + describeLayers(now))
+                .withStyle(on ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    /** What this player currently has drawn, and what else there is to draw. */
+    private static int debugShow(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal("The debug view is per-player — run it as a player."));
+            return 0;
+        }
+        EnumSet<DebugLayer> now = DebugView.layers(source.getServer(), player.getUUID());
+        source.sendSuccess(() -> Component.literal("Debug view — showing " + describeLayers(now))
+                .withStyle(ChatFormatting.AQUA), false);
+        source.sendSuccess(() -> Component.literal("  layers: "
+                        + Stream.of(DebugLayer.values()).map(DebugLayer::key)
+                                .collect(Collectors.joining(", ")))
+                .withStyle(ChatFormatting.GRAY), false);
+        return 1;
+    }
+
+    /** Clears every layer for this player — the command twin of cycling the wand back past the end. */
+    private static int debugOff(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal("The debug view is per-player — run it as a player."));
+            return 0;
+        }
+        boolean had = DebugView.clear(source.getServer(), player.getUUID());
+        source.sendSuccess(() -> Component.literal(had
+                        ? "Debug view off." : "Debug view was already off.")
+                .withStyle(ChatFormatting.YELLOW), false);
+        return had ? 1 : 0;
+    }
+
+    private static String describeLayers(EnumSet<DebugLayer> layers) {
+        return layers.isEmpty()
+                ? "nothing"
+                : layers.stream().map(DebugLayer::key).collect(Collectors.joining(", "));
     }
 
     /**
@@ -1094,6 +1183,11 @@ public final class AutarkiaCommands {
     private static final SuggestionProvider<CommandSourceStack> KNOB_SUGGESTIONS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(Stream.of(Knob.values()).map(Knob::key), builder);
 
+    /** Every debug layer's name — the completions behind {@code debug <layer>}. */
+    private static final SuggestionProvider<CommandSourceStack> LAYER_SUGGESTIONS = (ctx, builder) ->
+            SharedSuggestionProvider.suggest(
+                    Stream.of(DebugLayer.values()).map(DebugLayer::key), builder);
+
     private static final SuggestionProvider<CommandSourceStack> PERSON_SUGGESTIONS = (ctx, builder) -> {
         MinecraftServer server = ctx.getSource().getServer();
         PersonDirectory directory = PersonDirectory.get(server);
@@ -1245,22 +1339,13 @@ public final class AutarkiaCommands {
      *  moments ago (it lingers through its death animation before being swept), so {@code isAlive}
      *  is filtered on, or {@code list} and the resolver would act on a corpse. */
     private static List<Person> loadedPersons(MinecraftServer server) {
-        List<Person> out = new ArrayList<>();
-        for (ServerLevel level : server.getAllLevels()) {
-            out.addAll(level.getEntities(ModEntities.PERSON, Person::isAlive));
-        }
-        return out;
+        return Persons.loaded(server);
     }
 
     /** The live Person with this id, searching every dimension, or {@code null} if none is loaded.
-     *  A dead/dying Person (not yet swept) does not count — see {@link #loadedPersons}. */
+     *  A dead/dying Person (not yet swept) does not count — see {@link Persons#findLoaded}. */
     private static @Nullable Person findLoaded(MinecraftServer server, PersonId id) {
-        for (ServerLevel level : server.getAllLevels()) {
-            for (Person person : level.getEntities(ModEntities.PERSON, p -> p.isAlive() && id.equals(p.getPersonId()))) {
-                return person;
-            }
-        }
-        return null;
+        return Persons.findLoaded(server, id);
     }
 
     /** The person's name if the directory knows it, else the short id — a stable label for messages. */

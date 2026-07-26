@@ -117,6 +117,19 @@ public final class PeerSense {
     }
 
     /**
+     * The live body behind a perceived peer, or {@code null} when none is tracked.
+     *
+     * <p>DEBUG VIEW only, and only for a {@link Peer.Awareness#SEEN} peer: the sensor's cell
+     * reading snaps from cell to cell on its attention cadence, and the body lets the client
+     * interpolate instead. The map keeps a body while the peer is only remembered, so following it
+     * for a HEARD or REMEMBERED peer would draw where the body is, not where she believes it to be.
+     * The caller gates on awareness; see {@code DebugView.peers}.
+     */
+    public @Nullable LivingEntity bodyOf(PersonId id) {
+        return bodies.get(id);
+    }
+
+    /**
      * The ear's push channel — called by the game-event listener and the crack-knock hook.
      * {@code heardAs} is what the SOUND says they're doing; the ear never runs the visual
      * classifier, and the sensor keeps this activity while the ear is the only live channel.
