@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.brain;
 
+import dev.luizloyola.autarkia.core.brain.sense.Peer;
 import dev.luizloyola.autarkia.core.config.Config;
 import dev.luizloyola.autarkia.core.config.Knob;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -49,10 +50,45 @@ public final class PeerEar implements GameEventListener {
         }
         boolean personShaped = body instanceof Person
                 || (body instanceof Player player && !player.isSpectator());
-        if (!personShaped || body.isCrouching()) {
-            return false; 
+        if (!personShaped) {
+            return false;
         }
-        person.peerSense().heard(body);
+        if (!loud(event) && body.isCrouching()) {
+            return false; // sneaking quiets FEET (decision: Luiz) — not a pick against stone
+        }
+        person.peerSense().heard(body, activityOf(event));
         return true;
+    }
+
+    /** Sounds that carry regardless of crouching: work, containers, violence, projectiles. */
+    private static boolean loud(Holder<GameEvent> event) {
+        return event.is(GameEvent.BLOCK_DESTROY) || event.is(GameEvent.BLOCK_PLACE)
+                || event.is(GameEvent.CONTAINER_OPEN) || event.is(GameEvent.CONTAINER_CLOSE)
+                || event.is(GameEvent.ENTITY_DAMAGE)
+                || event.is(GameEvent.PROJECTILE_SHOOT) || event.is(GameEvent.PROJECTILE_LAND);
+    }
+
+    /**
+     * What the SOUND says they're doing — ears don't run the visual classifier (a heard-only peer
+     * read "at_crafting" through the back of her head). Coarse, and kept until the ear or the eyes
+     * say otherwise.
+     */
+    private static Peer.Activity activityOf(Holder<GameEvent> event) {
+        if (event.is(GameEvent.BLOCK_DESTROY) || event.is(GameEvent.BLOCK_PLACE)) {
+            return Peer.Activity.MINING;
+        }
+        if (event.is(GameEvent.CONTAINER_OPEN) || event.is(GameEvent.CONTAINER_CLOSE)) {
+            return Peer.Activity.AT_CHEST;
+        }
+        if (event.is(GameEvent.PROJECTILE_SHOOT)) {
+            return Peer.Activity.AIMING;
+        }
+        if (event.is(GameEvent.ENTITY_DAMAGE)) {
+            return Peer.Activity.FIGHTING;
+        }
+        if (event.is(GameEvent.EAT)) {
+            return Peer.Activity.EATING;
+        }
+        return Peer.Activity.MOVING; // steps, splashes, landings — something moved over there
     }
 }

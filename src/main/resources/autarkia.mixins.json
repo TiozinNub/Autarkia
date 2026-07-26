@@ -4,6 +4,7 @@
   "compatibilityLevel": "${java}",
   "mixins": [
     "NearestAttackableTargetGoalMixin",
+    "ServerLevelCrackMixin",
     "TargetGoalAccessor"
   ],
   "injectors": {

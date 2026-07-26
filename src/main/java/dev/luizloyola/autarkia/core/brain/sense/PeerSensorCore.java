@@ -45,6 +45,11 @@ public final class PeerSensorCore {
         return Config.get().i(Knob.PEERS_LINGER_TICKS);
     }
 
+    /** @see Knob#PEERS_HEARD_DECAY_TICKS */
+    public static int heardActivityDecayTicks() {
+        return Config.get().i(Knob.PEERS_HEARD_DECAY_TICKS);
+    }
+
     /** @see Knob#PEERS_NEAR_INTERVAL */
     public static int nearIntervalTicks() {
         return Config.get().i(Knob.PEERS_NEAR_INTERVAL);
@@ -61,8 +66,13 @@ public final class PeerSensorCore {
         Peer.Awareness awareness;
         long nextCheckAt;
         long lastLiveAt;
-        // Half-range sentinel: "never" must survive (now - heardAt) without overflowing.
+        // Half-range sentinels: "never" must survive (now - stamp) without overflowing.
         long heardAt = Long.MIN_VALUE / 2;
+        /** When {@link #last}'s ACTIVITY was actually witnessed (seen live, or told by a
+         *  sound) — sound-told activities decay against this; see {@code decayActivities}. */
+        long activityAt = Long.MIN_VALUE / 2;
+        /** Whether she has ever SEEN this one — sound doesn't say who. */
+        boolean identified;
     }
 
     private final Map<PersonId, Track> tracks = new LinkedHashMap<>();
@@ -85,6 +95,8 @@ public final class PeerSensorCore {
                     track.last = candidate;
                     track.awareness = Peer.Awareness.SEEN;
                     track.lastLiveAt = now;
+                    track.activityAt = now;
+                    track.identified = true;
                     track.nextCheckAt = now + interval(candidate.distance());
                     tracks.put(candidate.id(), track);
                     pending.add(PeerEvent.spotted(peer(track)));
@@ -107,20 +119,49 @@ public final class PeerSensorCore {
             if (seen || heardFresh) {
                 boolean wasLive = track.awareness != Peer.Awareness.REMEMBERED;
                 Peer.Activity was = track.last.activity();
-                track.last = fresh;
+                // Ears carry position (sound places its source) but not the visual activity
+                // read: a heard-only track keeps whatever the SOUND said until the ear or the
+                // eyes say otherwise — no reading "at_crafting" through the back of her head.
+                track.last = seen ? fresh : keepActivity(fresh, was);
                 track.awareness = seen ? Peer.Awareness.SEEN : Peer.Awareness.HEARD;
                 track.lastLiveAt = now;
                 track.nextCheckAt = now + interval(fresh.distance());
-                if (wasLive && was != fresh.activity()) {
+                if (seen) {
+                    track.activityAt = now; // a live look re-witnesses whatever they're doing
+                    if (!track.identified) {
+                        track.identified = true; 
+                        pending.add(PeerEvent.recognized(peer(track)));
+                    }
+                }
+                if (wasLive && was != track.last.activity()) {
                     pending.add(PeerEvent.activityChanged(peer(track), was));
                 }
             } else {
                 goDarkOrForget(track, now, it);
             }
         }
+        decayActivities(now);
         List<PeerEvent> events = List.copyOf(pending);
         pending.clear();
         return events;
+    }
+
+    /**
+     * Sound-told (and remembered) activities go stale: past {@link #heardActivityDecayTicks()}
+     * without a fresh witness, "mining" fades to "just someone there". A SEEN track never decays —
+     * its activity is re-witnessed on every attention beat.
+     */
+    private void decayActivities(long now) {
+        for (Track track : tracks.values()) {
+            if (track.awareness != Peer.Awareness.SEEN
+                    && track.last.activity() != Peer.Activity.IDLE
+                    && now - track.activityAt > heardActivityDecayTicks()) {
+                Peer.Activity was = track.last.activity();
+                track.last = keepActivity(track.last, Peer.Activity.IDLE);
+                track.activityAt = now;
+                pending.add(PeerEvent.activityChanged(peer(track), was));
+            }
+        }
     }
 
     /**
@@ -137,6 +178,7 @@ public final class PeerSensorCore {
             track.awareness = Peer.Awareness.HEARD;
             track.lastLiveAt = now;
             track.heardAt = now;
+            track.activityAt = now;
             track.nextCheckAt = now + interval(who.distance());
             tracks.put(who.id(), track);
             pending.add(PeerEvent.spotted(peer(track)));
@@ -149,6 +191,7 @@ public final class PeerSensorCore {
             Peer.Activity was = track.last.activity();
             track.last = who;
             track.awareness = Peer.Awareness.HEARD;
+            track.activityAt = now; // the sound itself is the witness
             if (wasLive && was != who.activity()) {
                 pending.add(PeerEvent.activityChanged(peer(track), was));
             }
@@ -210,6 +253,12 @@ public final class PeerSensorCore {
     private static Peer peer(Track track) {
         PeerReading r = track.last;
         return new Peer(r.id(), r.name(), r.pos(), r.distance(), r.activity(), r.sneaking(),
-                track.awareness);
+                r.watching(), track.identified, track.awareness);
+    }
+
+    /** A fresh reading's live facts with the previous activity kept — the ear's coarse truth. */
+    private static PeerReading keepActivity(PeerReading fresh, Peer.Activity activity) {
+        return new PeerReading(fresh.id(), fresh.name(), fresh.pos(), fresh.distance(),
+                fresh.sneaking(), fresh.watching(), activity);
     }
 }

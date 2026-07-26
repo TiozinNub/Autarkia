@@ -36,6 +36,7 @@
   "autarkia.config.option.peers.cone_degrees": "Field of view",
   "autarkia.config.option.peers.hearing_radius": "Hearing range",
   "autarkia.config.option.peers.linger_ticks": "Memory linger",
+  "autarkia.config.option.peers.heard_activity_decay_ticks": "Heard activity decay",
   "autarkia.config.option.peers.near_interval_ticks": "Attention up close",
   "autarkia.config.option.peers.far_interval_ticks": "Attention at range",
 

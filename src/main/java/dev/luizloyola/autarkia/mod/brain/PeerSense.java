@@ -41,8 +41,12 @@ import org.jspecify.annotations.Nullable;
 public final class PeerSense {
     /** How long a dealt-damage mark keeps a swinger classified as FIGHTING. */
     private static final int FIGHT_MARK_TICKS = 20;
-    /** Feet displacement between two consecutive readings that counts as moving. */
-    private static final double MOVE_EPSILON_SQ = 0.0025;
+    /**
+     * Blocks-per-tick above which feet count as moving — walking is ~0.21, sneak-walking ~0.065,
+     * standing jitter ~0. A SPEED, not a displacement: readings arrive on an irregular cadence, so
+     * a raw between-readings delta flickered moving/idle.
+     */
+    private static final double MOVE_SPEED_PER_TICK = 0.04;
     /** How far ahead (blocks) the crafting-table assumption looks along the gaze. */
     private static final double STATION_REACH = 2.5;
 
@@ -50,10 +54,42 @@ public final class PeerSense {
     private final PeerSensorCore sensor = new PeerSensorCore();
     private final PeerWorld world = new Oracle();
 
+    /** Ticks a movement anchor must age before it is re-measured — the anti-flicker window. */
+    private static final int MOVE_WINDOW_TICKS = 4;
+    /** Consecutive swinging windows before a swing counts as MINING (one lone swing is just
+     *  an interaction — caught live: opening a chest blipped "mining" on the way). */
+    private static final int MINING_STREAK = 2;
+
+    /** Ticks a gaze must dwell before it counts — a passing glance at a table (or at HER)
+     *  must not trigger. */
+    private static final int GAZE_CONFIRM_TICKS = 20;
+    /** Ticks a confirmed gaze survives a break — head-bobs must not untrigger it. */
+    private static final int GAZE_GRACE_TICKS = 10;
+    /** How tightly their view vector must align to count as looking (cos ~12°). */
+    private static final double GAZE_ALIGN = 0.978;
+
     /** Live bodies by person-id, refreshed on every sweep; the oracle's reverse lookup. */
     private final Map<PersonId, LivingEntity> bodies = new HashMap<>();
-    /** Each body's feet at its previous reading — the movement signal, observable-only. */
-    private final Map<Integer, Vec3> lastFeet = new HashMap<>();
+    /** Each body's movement anchor and swing streak — the windowed observable signals. */
+    private final Map<Integer, MoveTrack> moveTracks = new HashMap<>();
+    /** Each body's gaze dwell state (on HER, on a station) — the confirm-time filters. */
+    private final Map<Integer, GazeTrack> gazeTracks = new HashMap<>();
+
+    /** Dwell bookkeeping for one body's gaze targets; sentinels are half-range ("never"). */
+    private static final class GazeTrack {
+        long meSince = Long.MIN_VALUE / 2;
+        long meLastRaw = Long.MIN_VALUE / 2;
+        long tableSince = Long.MIN_VALUE / 2;
+        long tableLastRaw = Long.MIN_VALUE / 2;
+    }
+
+    /**
+     * One body's anchored sample. The anchor advances only every {@link #MOVE_WINDOW_TICKS}, so
+     * speed is measured over a real window; re-anchoring on every read flickered moving/idle off
+     * single-tick packet hiccups.
+     */
+    private record MoveTrack(Vec3 pos, long time, boolean moving, int swingStreak) {
+    }
 
     public PeerSense(Person person) {
         this.person = person;
@@ -81,14 +117,17 @@ public final class PeerSense {
     }
 
     /**
-     * The ear's push channel — called by the game-event listener when a person-shaped body
-     * makes a sound within hearing range. Sneak-silence is enforced by the caller.
+     * The ear's push channel — called by the game-event listener and the crack-knock hook.
+     * {@code heardAs} is what the SOUND says they're doing; the ear never runs the visual
+     * classifier, and the sensor keeps this activity while the ear is the only live channel.
      */
-    public void heard(LivingEntity source) {
+    public void heard(LivingEntity source, Peer.Activity heardAs) {
         PeerReading reading = read(source);
         if (reading != null) {
             bodies.put(reading.id(), source);
-            sensor.heard(reading, person.level().getGameTime());
+            sensor.heard(new PeerReading(reading.id(), reading.name(), reading.pos(),
+                    reading.distance(), reading.sneaking(), reading.watching(), heardAs),
+                    person.level().getGameTime());
         }
     }
 
@@ -159,16 +198,56 @@ public final class PeerSense {
             return null;
         }
         Vec3 at = body.position();
-        Vec3 before = lastFeet.put(body.getId(), at);
-        boolean moving = before != null && before.distanceToSqr(at) > MOVE_EPSILON_SQ;
+        long now = person.level().getGameTime();
+        MoveTrack before = moveTracks.get(body.getId());
+        boolean moving;
+        int streak;
+        if (before == null) {
+            moving = false;
+            streak = body.swinging ? 1 : 0;
+            moveTracks.put(body.getId(), new MoveTrack(at, now, false, streak));
+        } else if (now - before.time() < MOVE_WINDOW_TICKS) {
+            moving = before.moving(); // inside the window: reuse the verdict, KEEP the anchor
+            streak = before.swingStreak();
+        } else {
+            moving = before.pos().distanceTo(at) / (now - before.time()) > MOVE_SPEED_PER_TICK;
+            streak = body.swinging ? before.swingStreak() + 1 : 0;
+            moveTracks.put(body.getId(), new MoveTrack(at, now, moving, streak));
+        }
+        GazeTrack gaze = gazeTracks.computeIfAbsent(body.getId(), k -> new GazeTrack());
+        if (lookingAtHer(body)) {
+            if (now - gaze.meLastRaw > GAZE_GRACE_TICKS) {
+                gaze.meSince = now; // the chain broke — dwell starts over
+            }
+            gaze.meLastRaw = now;
+        }
+        boolean watching = now - gaze.meLastRaw <= GAZE_GRACE_TICKS
+                && gaze.meLastRaw - gaze.meSince >= GAZE_CONFIRM_TICKS;
+        if (facingCraftingTable(body)) {
+            if (now - gaze.tableLastRaw > GAZE_GRACE_TICKS) {
+                gaze.tableSince = now;
+            }
+            gaze.tableLastRaw = now;
+        }
+        boolean atTable = now - gaze.tableLastRaw <= GAZE_GRACE_TICKS
+                && gaze.tableLastRaw - gaze.tableSince >= GAZE_CONFIRM_TICKS;
         BlockPos cell = body.blockPosition();
         return new PeerReading(id, body.getName().getString(),
                 new Pos(cell.getX(), cell.getY(), cell.getZ()),
-                body.distanceTo(person), body.isCrouching(), classify(body, moving));
+                body.distanceTo(person), body.isCrouching(), watching,
+                classify(body, moving, streak, atTable));
+    }
+
+    /** Whether their gaze is ON her right now — the raw signal behind the watching dwell. */
+    private boolean lookingAtHer(LivingEntity body) {
+        Vec3 toHer = person.getEyePosition().subtract(body.getEyePosition());
+        double length = toHer.length();
+        return length > 0.5 && toHer.scale(1.0 / length).dot(body.getViewVector(1.0F)) >= GAZE_ALIGN;
     }
 
     /** The observable-activity ladder — coarsest, most certain signals first. */
-    private Peer.Activity classify(LivingEntity body, boolean moving) {
+    private Peer.Activity classify(LivingEntity body, boolean moving, int swingStreak,
+                                   boolean atTable) {
         if (body.isSleeping()) {
             return Peer.Activity.SLEEPING;
         }
@@ -187,14 +266,18 @@ public final class PeerSense {
             // menu check merely confirms what is already watchable (decision: Luiz).
             return Peer.Activity.AT_CHEST;
         }
-        if (body.swinging) {
-            return recentlyDealtDamage(body) ? Peer.Activity.FIGHTING : Peer.Activity.MINING;
+        if (body.swinging && recentlyDealtDamage(body)) {
+            return Peer.Activity.FIGHTING; // a landed hit confirms instantly — no streak needed
+        }
+        if (body.swinging && swingStreak >= MINING_STREAK) {
+            return Peer.Activity.MINING; // sustained arm work; a lone swing is an interaction
         }
         if (moving) {
             return Peer.Activity.MOVING;
         }
-        if (facingCraftingTable(body)) {
-            // Pure inference: standing at a table, facing it — wrong the way a human guess is.
+        if (atTable) {
+            // Pure inference: standing at a table with the gaze dwelling on it — wrong the way a
+            // human guess is, but never off a passing glance (the dwell filter owns that).
             return Peer.Activity.AT_CRAFTING;
         }
         return Peer.Activity.IDLE;
@@ -224,12 +307,13 @@ public final class PeerSense {
 
     private void journal(PeerEvent event) {
         String what = switch (event.type()) {
-            case SPOTTED -> "spotted " + event.peer().name()
+            case SPOTTED -> "spotted " + event.peer().knownAs()
                     + " (" + describe(event.peer()) + ")";
-            case LOST -> "lost track of " + event.peer().name();
-            case ACTIVITY_CHANGED -> event.peer().name() + " now "
+            case LOST -> "lost track of " + event.peer().knownAs();
+            case ACTIVITY_CHANGED -> event.peer().knownAs() + " now "
                     + describe(event.peer()) + " (was "
                     + event.was().name().toLowerCase(Locale.ROOT) + ")";
+            case RECOGNIZED -> "recognized " + event.peer().name() + " — the someone she'd heard";
         };
         person.journal().record(Category.SENSE, "peer", what);
     }
@@ -237,6 +321,7 @@ public final class PeerSense {
     private static String describe(Peer peer) {
         return peer.activity().name().toLowerCase(Locale.ROOT)
                 + (peer.sneaking() ? ", sneaking" : "")
+                + (peer.watching() ? ", watching her" : "")
                 + (peer.awareness() == Peer.Awareness.HEARD ? ", heard" : "");
     }
 }

@@ -9,5 +9,5 @@ import dev.luizloyola.autarkia.core.person.PersonId;
  * carries no awareness of its own.
  */
 public record PeerReading(PersonId id, String name, Pos pos, double distance,
-                          boolean sneaking, Peer.Activity activity) {
+                          boolean sneaking, boolean watching, Peer.Activity activity) {
 }

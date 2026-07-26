@@ -71,19 +71,24 @@ public final class PeerViewer {
         Peer peer = event.peer();
         String detail = peer.activity().name().toLowerCase(Locale.ROOT)
                 + (peer.sneaking() ? ", sneaking" : "")
+                + (peer.watching() ? ", watching her" : "")
                 + (peer.awareness() == Peer.Awareness.SEEN
                         ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
         return switch (event.type()) {
             case SPOTTED -> Component.literal(
-                            "[" + personName + "] spotted " + peer.name() + " — " + detail)
+                            "[" + personName + "] spotted " + peer.knownAs() + " — " + detail)
                     .withStyle(ChatFormatting.GREEN);
             case LOST -> Component.literal(
-                            "[" + personName + "] lost track of " + peer.name())
+                            "[" + personName + "] lost track of " + peer.knownAs())
                     .withStyle(ChatFormatting.RED);
             case ACTIVITY_CHANGED -> Component.literal(
-                            "[" + personName + "] " + peer.name() + " now " + detail
+                            "[" + personName + "] " + peer.knownAs() + " now " + detail
                                     + " (was " + event.was().name().toLowerCase(Locale.ROOT) + ")")
                     .withStyle(ChatFormatting.YELLOW);
+            case RECOGNIZED -> Component.literal(
+                            "[" + personName + "] recognized " + peer.name()
+                                    + " — the someone she'd been hearing")
+                    .withStyle(ChatFormatting.AQUA);
         };
     }
 }

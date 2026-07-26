@@ -87,6 +87,10 @@ public enum Knob {
     PEERS_LINGER_TICKS("peers.linger_ticks", Kind.INT, 100, 0, 1200,
             "Object permanence: how long a peer stays perceived (frozen, as remembered) after "
                     + "every channel goes dark — the walking-behind-a-pillar grace."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#heardActivityDecayTicks() */
+    PEERS_HEARD_DECAY_TICKS("peers.heard_activity_decay_ticks", Kind.INT, 60, 0, 1200,
+            "How long a sound-told activity (heard mining, a heard scuffle) stays believed "
+                    + "after the sound stops — then she just knows someone is there."),
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#nearIntervalTicks() */
     PEERS_NEAR_INTERVAL("peers.near_interval_ticks", Kind.INT, 1, 1, 100,
             "Attention at point-blank: re-check interval (ticks) for a peer right next to her."),

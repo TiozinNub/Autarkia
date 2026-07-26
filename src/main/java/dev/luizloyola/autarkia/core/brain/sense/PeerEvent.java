@@ -15,7 +15,9 @@ public record PeerEvent(Type type, Peer peer, Peer.@Nullable Activity was) {
         /** The linger window expired — gone from perception. {@code peer} is the final reading. */
         LOST,
         /** A live peer's activity flipped; {@code was} is the previous one. */
-        ACTIVITY_CHANGED
+        ACTIVITY_CHANGED,
+        /** A heard-only "someone" finally got SEEN — now she knows who it was all along. */
+        RECOGNIZED
     }
 
     public static PeerEvent spotted(Peer peer) {
@@ -28,5 +30,9 @@ public record PeerEvent(Type type, Peer peer, Peer.@Nullable Activity was) {
 
     public static PeerEvent activityChanged(Peer peer, Peer.Activity was) {
         return new PeerEvent(Type.ACTIVITY_CHANGED, peer, was);
+    }
+
+    public static PeerEvent recognized(Peer peer) {
+        return new PeerEvent(Type.RECOGNIZED, peer, null);
     }
 }

@@ -17,10 +17,20 @@ import dev.luizloyola.autarkia.core.person.PersonId;
  * Station activities are plain INFERENCE: {@code AT_CRAFTING} means "facing a crafting table
  * within reach", and is sometimes wrong the way a human watcher would be. {@link #sneaking} is a
  * manner, not an activity: it combines with anything and is what the hearing and range rules
- * read.
+ * read. {@link #watching} is sustained eye contact on the observer, never a passing glance.
+ *
+ * <p>{@link #identified} carries the ear's limit: SOUND DOESN'T SAY WHO. A heard-never-seen
+ * peer is "someone" ({@link #knownAs}); the first clear look flips it, marked by
+ * {@link PeerEvent.Type#RECOGNIZED}. The {@link #id} stays stable either way, but
+ * identity-dependent behavior must gate on {@code identified}, never on the id existing.
  */
 public record Peer(PersonId id, String name, Pos pos, double distance, Activity activity,
-                   boolean sneaking, Awareness awareness) {
+                   boolean sneaking, boolean watching, boolean identified, Awareness awareness) {
+
+    /** The name she'd use — sound doesn't identify: unseen means "someone". */
+    public String knownAs() {
+        return identified ? name : "someone";
+    }
 
     /** Which channel produced this perception — the freshness story, live-first. */
     public enum Awareness {

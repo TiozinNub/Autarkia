@@ -134,6 +134,57 @@ class PeerSensorCoreTest {
     }
 
     @Test
+    void earsDoNotReadTheUnseenBodysActivity() {
+        // Behind her and walled: the ear is the only channel. The visual classifier says
+        // AT_CRAFTING, the sound said moving, and sound is all she has — a heard-only peer once
+        // read "at_crafting" through the back of her head.
+        PersonId noisy = world.add("Rustler", new Pos(0, 64, -5), 5.0, Peer.Activity.AT_CRAFTING);
+        world.hidden.add(noisy);
+        PeerReading heard = new PeerReading(noisy, "Rustler", new Pos(0, 64, -5), 5.0, false,
+                false, Peer.Activity.MOVING);
+        sensor.heard(heard, now);
+        List<PeerEvent> events = tickN(PeerSensorCore.HEARD_FRESH_TICKS - 2);
+
+        assertEquals(Peer.Activity.MOVING, sensor.peers().get(0).activity(),
+                "the heard reading holds — no visual classification through walls");
+        assertTrue(events.stream().noneMatch(e -> e.type() == PeerEvent.Type.ACTIVITY_CHANGED),
+                "and no phantom activity flips while the ear is the only channel");
+    }
+
+    @Test
+    void aHeardActivityDecaysWhenTheSoundStops() {
+        PersonId knocker = world.add("Knocker", new Pos(0, 64, -5), 5.0, Peer.Activity.MINING);
+        world.hidden.add(knocker);
+        sensor.heard(new PeerReading(knocker, "Knocker", new Pos(0, 64, -5), 5.0, false, false,
+                Peer.Activity.MINING), now);
+        List<PeerEvent> events = tickN(PeerSensorCore.heardActivityDecayTicks() + 20);
+
+        assertEquals(Peer.Activity.IDLE, sensor.peers().get(0).activity(),
+                "no more knocks: 'mining' faded to 'just someone there' — never stuck forever");
+        assertTrue(events.stream().anyMatch(e -> e.type() == PeerEvent.Type.ACTIVITY_CHANGED
+                        && e.was() == Peer.Activity.MINING),
+                "and the fade is a narrated event, not a silent edit");
+    }
+
+    @Test
+    void soundDoesNotSayWho() {
+        PersonId walled = world.add("Masked", new Pos(0, 64, 5), 5.0, Peer.Activity.MINING);
+        world.hidden.add(walled); // in front but walled: only the ear knows them
+        sensor.heard(new PeerReading(walled, "Masked", new Pos(0, 64, 5), 5.0, false, false,
+                Peer.Activity.MINING), now);
+        tickN(3);
+        Peer heardOnly = sensor.peers().get(0);
+        assertEquals("someone", heardOnly.knownAs(), "ears carry no name");
+        assertTrue(!heardOnly.identified());
+
+        world.hidden.remove(walled); // the wall comes down — the eyes catch up
+        List<PeerEvent> events = tickN(10);
+        assertEquals(1, events.stream()
+                .filter(e -> e.type() == PeerEvent.Type.RECOGNIZED).count());
+        assertEquals("Masked", sensor.peers().get(0).knownAs(), "a face at last");
+    }
+
+    @Test
     void attentionScalesWithDistance() {
         PersonId near = world.add("Near", new Pos(0, 64, 2), 2.0, Peer.Activity.IDLE);
         PersonId far = world.add("Far", new Pos(0, 64, 23), 23.0, Peer.Activity.IDLE);
@@ -154,12 +205,13 @@ class PeerSensorCoreTest {
 
         PersonId add(String name, Pos pos, double distance, Peer.Activity activity) {
             PersonId id = PersonId.random();
-            bodies.put(id, new PeerReading(id, name, pos, distance, false, activity));
+            bodies.put(id, new PeerReading(id, name, pos, distance, false, false, activity));
             return id;
         }
 
         void set(PersonId id, Pos pos, double distance, Peer.Activity activity) {
-            bodies.put(id, new PeerReading(id, bodies.get(id).name(), pos, distance, false, activity));
+            bodies.put(id, new PeerReading(id, bodies.get(id).name(), pos, distance, false, false,
+                    activity));
         }
 
         @Override
