@@ -5,29 +5,30 @@ import com.terraformersmc.modmenu.api.ModMenuApi;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
- * Puts a Config button next to Autarkia in Mod Menu's list, opening {@link ClothConfigScreen}.
+ * Puts a Config button next to Autarkia in Mod Menu's list, opening {@link YaclConfigScreen}.
  *
- * <p>Both halves are optional and independently so: Mod Menu is the only thing that ever loads
- * this class (through the {@code modmenu} entrypoint), and Cloth Config's absence is caught by the
- * {@link FabricLoader#isModLoaded} check below, so this class names no
- * {@code me.shedaniel} type itself.
+ * <p>Both halves are optional, independently. Mod Menu is the only thing that loads this class (the
+ * {@code modmenu} entrypoint); YACL's absence is caught by the {@link FabricLoader#isModLoaded}
+ * check below, returning Mod Menu's own "no screen" answer — hence no {@code dev.isxander} type is
+ * named here.
  *
- * <p>The id checked is the legacy {@code cloth-config2}: the modern Fabric jar still declares
- * {@code provides: ["cloth-config2"]}, and Sinytra Connector's default alias maps NeoForge's
- * {@code cloth_config} onto it, so that spelling is the one that resolves on both loaders.
+ * <p>The id is YACL's own and the same on Fabric and NeoForge, so nothing depends on Sinytra
+ * Connector's mod-alias table — unlike Cloth Config, which this replaced and which crosses loaders
+ * only under its legacy {@code cloth-config2} id.
  *
- * <p>Mod Menu runs only on Fabric and Quilt clients; on a dedicated server, and under Connector,
- * {@code config/autarkia.json} and {@code /autarkia config} are the whole interface.
+ * <p>Mod Menu runs on Fabric and Quilt clients only, and Autarkia's Fabric-through-Connector jar
+ * cannot hook NeoForge's config-screen extension point: on a dedicated server and for NeoForge
+ * users, {@code config/autarkia.json} and {@code /autarkia config} are the whole interface.
  */
 public final class AutarkiaModMenu implements ModMenuApi {
 
-    private static final String CLOTH_CONFIG = "cloth-config2";
+    private static final String YACL = "yet_another_config_lib_v3";
 
     @Override
     public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        if (!FabricLoader.getInstance().isModLoaded(CLOTH_CONFIG)) {
+        if (!FabricLoader.getInstance().isModLoaded(YACL)) {
             return parent -> null; // Mod Menu's own default: no Config button
         }
-        return ClothConfigScreen::create;
+        return YaclConfigScreen::create;
     }
 }

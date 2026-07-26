@@ -4,18 +4,17 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * One enum constant per Autarkia tunable: dotted key, type, default, legal range. The JSON schema,
- * the {@code /autarkia config} completions, the validation clamp and the optional Cloth Config
- * screen all derive from this list, so a new tunable is a line here plus a one-line accessor, and
- * nothing reflects over field names.
+ * The single source of truth for every tunable Autarkia exposes: one constant per knob — dotted
+ * key, type, default, legal range. The JSON schema, the {@code /autarkia config} completions, the
+ * validation clamp and the optional YACL screen all derive from this list, and nothing reflects
+ * over field names, so a new tunable is a line here plus a one-line accessor.
  *
  * <p>Keys are dotted {@code snake_case}, the leading segment naming the JSON object the knob nests
- * under ({@code perception.sense_radius} lives at {@code {"perception": {"sense_radius": …}}}),
- * the convention Minecraft moved to in 26.1.
+ * under — the convention Minecraft itself moved to in 26.1.
  *
- * <p>{@code min}/{@code max} are safety bounds, not taste: they stop a hand-edited file producing a
- * Person that cannot function or a server that stalls. {@link AutarkiaConfig} clamps rather than
- * rejects, so one bad line degrades to a warning instead of failing the file.
+ * <p>Ranges are safety bounds, not taste: they only stop a hand-edited file producing a Person that
+ * cannot function or a server that stalls. {@link AutarkiaConfig} clamps rather than rejects, so
+ * one bad line warns instead of failing the whole file.
  */
 public enum Knob {
 
