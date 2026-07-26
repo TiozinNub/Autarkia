@@ -9,7 +9,9 @@ import java.util.Optional;
 /**
  * Recognizes a tree — grove semantics: the connected mass of logs and leaves, however many
  * trunks it contains. Touching canopies fuse deliberately, and the growth caps turn a
- * mega-forest into several partial groves.
+ * mega-forest into several partial groves. Only GROWN leaves count: the probe reports placed,
+ * never-decaying ones as {@link BlockKind#OTHER} ({@code compat.sense.LevelProbe}), so a hedge
+ * is a wall and a leaf-roofed cabin is a cabin.
  *
  * <p>Accepts iff the mass holds <b>≥ 1 GROUNDED log, ≥ 1 log and ≥ 1 sunlit leaf</b> — grounded
  * means standing on a non-tree block. A roofed-over or cave structure never validates, a bare

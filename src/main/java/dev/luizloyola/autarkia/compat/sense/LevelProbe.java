@@ -10,6 +10,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
@@ -59,7 +60,12 @@ public final class LevelProbe implements BlockProbe {
             return BlockKind.LOG;
         }
         if (state.is(BlockTags.LEAVES)) {
-            return BlockKind.LEAVES;
+            // Persistent leaves were PLACED, not grown, so they read as ordinary blocks: nothing
+            // hypothesizes a tree from them and a log-and-leaf BUILDING never validates as one.
+            // A missing property (a modded canopy) is assumed to decay — only proof demotes. The
+            // eye still sees through leaves (sightClear below).
+            boolean built = state.getOptionalValue(BlockStateProperties.PERSISTENT).orElse(false);
+            return built ? BlockKind.OTHER : BlockKind.LEAVES;
         }
         // Open water only (a collision-free cell whose fluid is water): a waterlogged fence is a
         // fence to her, not something to drink from.

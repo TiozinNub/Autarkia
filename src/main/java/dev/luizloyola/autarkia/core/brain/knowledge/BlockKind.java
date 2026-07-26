@@ -9,6 +9,10 @@ public enum BlockKind {
     AIR,
     /** Any log/stem the tree rule treats as trunk material. */
     LOG,
+    /**
+     * A leaf block that GREW — one that would decay if its tree were felled. Placed leaves never
+     * decay and the compat probe hands them over as {@link #OTHER}.
+     */
     LEAVES,
     /** A water source or flowing water. */
     WATER,
