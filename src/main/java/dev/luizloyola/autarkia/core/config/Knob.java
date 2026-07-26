@@ -76,7 +76,7 @@ public enum Knob {
             "Detection range multiplier against a SNEAKING target — sneaking shrinks how far "
                     + "away you are noticed, it never makes you invisible."),
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#coneDegrees() */
-    PEERS_CONE_DEGREES("peers.cone_degrees", Kind.INT, 200, 30, 360,
+    PEERS_CONE_DEGREES("peers.cone_degrees", Kind.INT, 150, 30, 360,
             "Horizontal field of view (degrees). People outside it are unseen until they make "
                     + "noise; 360 restores the old omniscience."),
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#verticalHalfDegrees() */
