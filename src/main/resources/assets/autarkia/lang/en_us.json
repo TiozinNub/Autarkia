@@ -7,5 +7,33 @@
   "item.autarkia.debug_wand.walk_off": "%s stopped",
   "item.autarkia.debug_wand.no_selection": "No person selected — right-click one first",
   "item.autarkia.debug_wand.not_loaded": "Selected person isn't loaded",
-  "item.autarkia.debug_wand.moving": "Sending %s to %s, %s, %s"
+  "item.autarkia.debug_wand.moving": "Sending %s to %s, %s, %s",
+
+  "autarkia.config.category.brain": "Arbitration",
+  "autarkia.config.category.instincts": "Instincts",
+  "autarkia.config.category.perception": "Perception",
+  "autarkia.config.category.claims": "Claims",
+  "autarkia.config.category.journal": "Journal",
+
+  "autarkia.config.option.brain.stickiness": "Incumbency bonus",
+  "autarkia.config.option.brain.preempt": "Interrupt threshold",
+
+  "autarkia.config.option.instincts.flee_range": "Threat notice range",
+  "autarkia.config.option.instincts.flee_ramp": "Panic ramp distance",
+  "autarkia.config.option.instincts.descend_pressure": "Urge to get down",
+  "autarkia.config.option.instincts.wander_idle_pressure": "Urge to wander",
+  "autarkia.config.option.instincts.wander_radius": "Wander radius",
+
+  "autarkia.config.option.perception.sense_radius": "Sense radius",
+  "autarkia.config.option.perception.reads_per_tick": "Block reads per tick",
+  "autarkia.config.option.perception.queue_cap": "Sighting queue cap",
+  "autarkia.config.option.perception.region_max_blocks": "Scan block cap",
+  "autarkia.config.option.perception.region_max_spread": "Scan spread cap",
+
+  "autarkia.config.option.claims.ttl_ticks": "Claim lifetime",
+
+  "autarkia.config.option.journal.max_entries_per_person": "Entries per Person",
+  "autarkia.config.option.journal.max_age_ticks": "Entry lifetime",
+  "autarkia.config.option.journal.sweep_interval_ticks": "Sweep interval",
+  "autarkia.config.option.journal.file_sink": "Write to disk"
 }

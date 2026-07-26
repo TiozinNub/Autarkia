@@ -50,7 +50,9 @@ final class YaclConfigScreen {
         Map<String, ConfigCategory.Builder> categories = new LinkedHashMap<>();
         for (Knob knob : Knob.values()) {
             categories.computeIfAbsent(knob.section(), section -> ConfigCategory.createBuilder()
-                    .name(Component.literal(section))).option(option(knob, live, staged));
+                    .name(Component.translatableWithFallback(
+                            "autarkia.config.category." + section, prettify(section))))
+                    .option(option(knob, live, staged));
         }
 
         YetAnotherConfigLib.Builder builder = YetAnotherConfigLib.createBuilder()
@@ -62,9 +64,14 @@ final class YaclConfigScreen {
     }
 
     private static Option<?> option(Knob knob, AutarkiaConfig live, Map<Knob, Double> staged) {
-        Component name = Component.literal(knob.leaf());
+        // Labels are translation keys with the knob as the fallback, so a knob with no lang entry
+        // reads sensibly and any label is overridable without touching Java. The last tooltip line
+        // stays literal: the dotted key and the accepted range are what you type into /autarkia
+        // config.
+        Component name = Component.translatableWithFallback(
+                nameKey(knob), prettify(knob.leaf()));
         OptionDescription description = OptionDescription.of(
-                Component.literal(knob.doc()),
+                Component.translatableWithFallback(nameKey(knob) + ".desc", knob.doc()),
                 Component.literal(""),
                 Component.literal(knob.key() + " — accepts " + knob.expects()));
         switch (knob.kind()) {
@@ -96,6 +103,18 @@ final class YaclConfigScreen {
                                 .range(knob.min(), knob.max()))
                         .build();
         }
+    }
+
+    /** {@code autarkia.config.option.<section>.<leaf>}; append {@code .desc} for the tooltip. */
+    private static String nameKey(Knob knob) {
+        return "autarkia.config.option." + knob.key();
+    }
+
+    /** {@code sense_radius} -> {@code Sense radius} — the label an untranslated knob falls back to. */
+    private static String prettify(String snakeCase) {
+        String spaced = snakeCase.replace('_', ' ');
+        return spaced.isEmpty() ? spaced
+                : Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
     }
 
     /** Install the edited values as one config, then persist — the same path {@code config set} takes. */
