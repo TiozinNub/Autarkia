@@ -72,8 +72,14 @@ public record DebugViewPayload(
     }
 
     /**
-     * One perceived someone: the believed cell, and (only when that belief is live) the body to
-     * interpolate it from.
+     * One perceived someone, as SHE has them: the name she'd use, the whole reading in words, the
+     * believed cell, and (only when that belief is live) the body to interpolate it from.
+     *
+     * <p>{@link #name} is {@code Peer.knownAs()}, not the account name: sound does not identify, so
+     * an unseen someone reads as "someone". {@link #tell} is {@code Peer.tell()} composed
+     * server-side with her own pronoun — every observable axis (arm, legs, sneak, gaze) in one
+     * phrase, composed there so there is one description of a peer, the same one the chat readouts
+     * print.
      *
      * <p>{@link #pos} is always what she BELIEVES: a REMEMBERED peer's position is frozen at her
      * last live reading and a HEARD one is where the noise came from, so drawing the live entity
@@ -81,17 +87,19 @@ public record DebugViewPayload(
      * {@link #NO_BODY} for every awareness but SEEN, where the cell is a live sample on the
      * sensor's attention cadence. The gate is server-side so a client cannot follow a ghost.
      */
-    public record PeerMark(String name, BlockPos pos, int entityId, int awareness, int activity) {
+    public record PeerMark(String name, String tell, BlockPos pos, int entityId,
+                           int awareness, float distance) {
         /** No body to interpolate from — draw the believed cell as sent. */
         public static final int NO_BODY = -1;
 
         public static final StreamCodec<RegistryFriendlyByteBuf, PeerMark> CODEC =
                 StreamCodec.composite(
                         ByteBufCodecs.STRING_UTF8, PeerMark::name,
+                        ByteBufCodecs.STRING_UTF8, PeerMark::tell,
                         BlockPos.STREAM_CODEC, PeerMark::pos,
                         ByteBufCodecs.VAR_INT, PeerMark::entityId,
                         ByteBufCodecs.VAR_INT, PeerMark::awareness,
-                        ByteBufCodecs.VAR_INT, PeerMark::activity,
+                        ByteBufCodecs.FLOAT, PeerMark::distance,
                         PeerMark::new);
     }
 

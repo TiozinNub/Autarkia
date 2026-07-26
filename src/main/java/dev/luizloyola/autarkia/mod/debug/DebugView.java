@@ -233,11 +233,14 @@ public final class DebugView {
      * would report everyone as freshly seen and standing still.
      */
     private static List<DebugViewPayload.PeerMark> peers(Person person) {
+        // Her pronoun, not the peer's: tell() ends with "watching him/her" about the OBSERVER,
+        // which is her — the same argument the chat readouts pass.
+        String pronoun = person.getGender().objectPronoun();
         List<DebugViewPayload.PeerMark> out = new ArrayList<>();
         for (Peer peer : person.brain().percepts().peers()) {
             out.add(new DebugViewPayload.PeerMark(
-                    peer.name(), cell(peer.pos()), bodyId(person, peer),
-                    peer.awareness().ordinal(), peer.activity().ordinal()));
+                    peer.knownAs(), peer.tell(pronoun), cell(peer.pos()), bodyId(person, peer),
+                    peer.awareness().ordinal(), (float) peer.distance()));
         }
         return out;
     }

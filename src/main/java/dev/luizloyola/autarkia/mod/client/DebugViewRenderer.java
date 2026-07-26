@@ -260,9 +260,8 @@ public final class DebugViewRenderer {
             // someone — but the LABEL goes above the head, clear of the skin it describes, with
             // the same clearance the selected Person's own stack uses.
             Gizmos.line(eye, feet.add(0.0, height * 0.5, 0.0), color, PATH_WIDTH).setAlwaysOnTop();
-            Gizmos.billboardText(label(peer), above(feet, height, 0),
-                            TextGizmo.Style.forColorAndCentered(color).withScale(DETAIL_SCALE))
-                    .setAlwaysOnTop();
+            peerText(peer.name(), above(feet, height, 1), color, TITLE_SCALE);
+            peerText(detail(peer), above(feet, height, 0), color, DETAIL_SCALE);
         }
     }
 
@@ -292,12 +291,29 @@ public final class DebugViewRenderer {
         return eye.add(-Math.sin(angle) * radius, 0.0, Math.cos(angle) * radius);
     }
 
-    private static String label(DebugViewPayload.PeerMark peer) {
-        Peer.Activity[] activities = Peer.Activity.values();
-        String activity = peer.activity() >= 0 && peer.activity() < activities.length
-                ? activities[peer.activity()].name().toLowerCase(Locale.ROOT)
-                : "?";
-        return peer.name() + " — " + activity;
+    /** A centred, always-visible line of peer text. */
+    private static void peerText(String text, Vec3 at, int color, float scale) {
+        Gizmos.billboardText(text, at,
+                        TextGizmo.Style.forColorAndCentered(color).withScale(scale))
+                .setAlwaysOnTop();
+    }
+
+    /**
+     * The reading under a peer's name: everything she has on them, then how she has it.
+     *
+     * <p>Awareness follows the chat readouts' convention — SEEN unmarked, {@code [heard]} and
+     * {@code [remembered]} called out because those readings can be wrong. Spelled out as well as
+     * colour-coded: a grey line reads as stale only beside a green one.
+     */
+    private static String detail(DebugViewPayload.PeerMark peer) {
+        Peer.Awareness[] values = Peer.Awareness.values();
+        Peer.Awareness awareness = peer.awareness() >= 0 && peer.awareness() < values.length
+                ? values[peer.awareness()]
+                : Peer.Awareness.REMEMBERED;
+        String tag = awareness == Peer.Awareness.SEEN
+                ? ""
+                : " [" + awareness.name().toLowerCase(Locale.ROOT) + "]";
+        return String.format(Locale.ROOT, "%s%s · %.1fm", peer.tell(), tag, peer.distance());
     }
 
     private static int moveColor(int move) {
