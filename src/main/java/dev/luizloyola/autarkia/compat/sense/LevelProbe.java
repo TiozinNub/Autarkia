@@ -99,23 +99,48 @@ public final class LevelProbe implements BlockProbe {
      */
     @Override
     public boolean visibleFromEyes(Pos target) {
-        Vec3 from = this.eyes.getEyePosition();
         Vec3 to = new Vec3(target.x() + 0.5, target.y() + 0.5, target.z() + 0.5);
-        BlockPos targetPos = new BlockPos(target.x(), target.y(), target.z());
+        return sightClear(this.level, this.eyes.getEyePosition(), to,
+                new BlockPos(target.x(), target.y(), target.z()));
+    }
+
+    /**
+     * Eye-to-BODY sight: rays from {@code from} to sampled points of the target's hitbox —
+     * eyes, torso center, feet — cheapest-first with EARLY-OUT, so any visible body part
+     * counts as seen (peeking over a wall works; decision: Luiz) and a fully visible person
+     * costs a single march. Same eye transparency as {@link #visibleFromEyes}.
+     */
+    public static boolean bodyVisible(Level level, Vec3 from, LivingEntity target) {
+        Vec3 feet = target.position();
+        Vec3[] samples = {
+                target.getEyePosition(),
+                feet.add(0.0, target.getBbHeight() * 0.5, 0.0),
+                feet.add(0.0, 0.1, 0.0),
+        };
+        for (Vec3 to : samples) {
+            if (sightClear(level, from, to, BlockPos.containing(to))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The shared sight march — see {@link #visibleFromEyes} for the transparency rationale. */
+    private static boolean sightClear(Level level, Vec3 from, Vec3 to, BlockPos targetCell) {
         int steps = (int) Math.ceil(from.distanceTo(to) * 2.0);
         for (int i = 1; i < steps; i++) {
             BlockPos cell = BlockPos.containing(from.lerp(to, i / (double) steps));
-            if (cell.equals(targetPos) || !this.level.isLoaded(cell)) {
+            if (cell.equals(targetCell) || !level.isLoaded(cell)) {
                 continue;
             }
             // The ray needs FINER transparency than the BlockKind vocabulary: grass blades,
             // flowers, ferns (anything without a collision shape) are see-through (a meadow
             // must not blind her; caught live on real worldgen), as are leaves and water.
-            BlockState state = this.level.getBlockState(cell);
+            BlockState state = level.getBlockState(cell);
             boolean transparent = state.isAir()
                     || state.is(BlockTags.LEAVES)
                     || state.getFluidState().is(FluidTags.WATER)
-                    || state.getCollisionShape(this.level, cell).isEmpty();
+                    || state.getCollisionShape(level, cell).isEmpty();
             if (!transparent) {
                 return false;
             }

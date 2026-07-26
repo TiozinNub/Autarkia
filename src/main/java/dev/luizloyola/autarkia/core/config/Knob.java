@@ -66,6 +66,35 @@ public enum Knob {
     REGION_MAX_SPREAD("perception.region_max_spread", Kind.INT, 24, 1, 128,
             "Chebyshev spread cap from the seed — what splits a fused mega-forest into groves."),
 
+    // --- peers (the people sense) -----------------------------------------------------------
+
+    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#radius() */
+    PEERS_RADIUS("peers.radius", Kind.INT, 24, 4, 64,
+            "How far (blocks) another person can be perceived at all."),
+    /** Read by the mod-side candidate query against sneaking targets. */
+    PEERS_SNEAK_RANGE_MULT("peers.sneak_range_mult", Kind.DOUBLE, 0.75, 0.1, 1.0,
+            "Detection range multiplier against a SNEAKING target — sneaking shrinks how far "
+                    + "away you are noticed, it never makes you invisible."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#coneDegrees() */
+    PEERS_CONE_DEGREES("peers.cone_degrees", Kind.INT, 200, 30, 360,
+            "Horizontal field of view (degrees). People outside it are unseen until they make "
+                    + "noise; 360 restores the old omniscience."),
+    /** Read by the mod-side ear when deciding which sounds reach her. */
+    PEERS_HEARING_RADIUS("peers.hearing_radius", Kind.INT, 12, 0, 32,
+            "How far (blocks) sound-makers are noticed regardless of the view cone. Sneaking "
+                    + "people are silent (vanilla's own rule); 0 makes her deaf."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#lingerTicks() */
+    PEERS_LINGER_TICKS("peers.linger_ticks", Kind.INT, 100, 0, 1200,
+            "Object permanence: how long a peer stays perceived (frozen, as remembered) after "
+                    + "every channel goes dark — the walking-behind-a-pillar grace."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#nearIntervalTicks() */
+    PEERS_NEAR_INTERVAL("peers.near_interval_ticks", Kind.INT, 1, 1, 100,
+            "Attention at point-blank: re-check interval (ticks) for a peer right next to her."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#farIntervalTicks() */
+    PEERS_FAR_INTERVAL("peers.far_interval_ticks", Kind.INT, 20, 1, 400,
+            "Attention at the edge: re-check interval (ticks) for a peer at max range; "
+                    + "distances between lerp between the two."),
+
     // --- claims -----------------------------------------------------------------------------
 
     /** @see dev.luizloyola.autarkia.core.brain.board.SiteClaims#ttlTicks() */

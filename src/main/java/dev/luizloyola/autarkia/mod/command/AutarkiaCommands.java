@@ -388,10 +388,15 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(name + " — " + peers.size() + " in sight")
                 .withStyle(ChatFormatting.AQUA), false);
         for (Peer peer : peers) {
-            String line = String.format(Locale.ROOT, "%s (%d, %d, %d) - %.1f blocks away, %s",
+            String line = String.format(Locale.ROOT, "%s (%d, %d, %d) - %.1f blocks away, %s%s%s",
                     peer.name(), peer.pos().x(), peer.pos().y(), peer.pos().z(),
-                    peer.distance(), peer.activity().name().toLowerCase(Locale.ROOT));
-            source.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.GREEN), false);
+                    peer.distance(), peer.activity().name().toLowerCase(Locale.ROOT),
+                    peer.sneaking() ? ", sneaking" : "",
+                    peer.awareness() == Peer.Awareness.SEEN
+                            ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
+            source.sendSuccess(() -> Component.literal(line)
+                    .withStyle(peer.awareness() == Peer.Awareness.REMEMBERED
+                            ? ChatFormatting.GRAY : ChatFormatting.GREEN), false);
         }
         return peers.size();
     }

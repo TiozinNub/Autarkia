@@ -14,20 +14,14 @@ import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.FoodValue;
 import dev.luizloyola.autarkia.core.person.Needs;
-import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -62,16 +56,6 @@ public final class PersonPercepts implements Percepts {
     private int dropsQueriedAt;
     /** Last drop scan, reused within the budget window; {@code null} until the first query. */
     private @Nullable List<Drop> dropsCache;
-    /** {@code person.tickCount} at which {@link #peersCache} was last filled. */
-    private int peersQueriedAt;
-    /** Last peer scan, reused within the budget window; {@code null} until the first query. */
-    private @Nullable List<Peer> peersCache;
-    /**
-     * Each peer's exact position at the PREVIOUS scan, keyed by entity id — the movement signal
-     * behind {@link Peer.Activity#MOVING}. Observable-only, so it works identically for players;
-     * pruned to the current scan so departed peers don't accumulate.
-     */
-    private final Map<Integer, Vec3> peerLastPos = new HashMap<>();
 
     public PersonPercepts(Person person) {
         this.person = person;
@@ -182,47 +166,12 @@ public final class PersonPercepts implements Percepts {
 
     /**
      * Nearby people — other {@link Person}s and live players, one seamless list (see
-     * {@link Peer}): the same 16×8×16 box and {@link #CACHE_TICKS} budget as the sibling entity
-     * senses. A Person still resolving her identity is skipped (no id yet — the whois command's
-     * "still spawning" case); spectators aren't diegetically present. Activity is read off the
-     * body alone, the judgment a watching player would make.
+     * {@link Peer}). A read of the body's {@link PeerSense} state, not a scan: the cone, line of
+     * sight, ears, cadences and linger window all live in the sensor.
      */
     @Override
     public List<Peer> peers() {
-        int now = this.person.tickCount;
-        if (this.peersCache != null && now - this.peersQueriedAt < CACHE_TICKS) {
-            return this.peersCache;
-        }
-        List<LivingEntity> bodies = this.person.level().getEntitiesOfClass(
-                LivingEntity.class, this.person.getBoundingBox().inflate(16.0, 8.0, 16.0),
-                e -> e != this.person && e.isAlive()
-                        && (e instanceof Person || (e instanceof Player player && !player.isSpectator())));
-        Map<Integer, Vec3> seen = new HashMap<>(bodies.size());
-        List<Peer> peers = new ArrayList<>(bodies.size());
-        for (LivingEntity body : bodies) {
-            PersonId id = body instanceof Person other
-                    ? other.getPersonId()
-                    : PersonId.of(body.getUUID()); // a player's account uuid is their person-identity
-            if (id == null) {
-                continue;
-            }
-            Vec3 at = body.position();
-            seen.put(body.getId(), at);
-            Vec3 before = this.peerLastPos.get(body.getId());
-            boolean moving = before != null && before.distanceToSqr(at) > 0.0025;
-            Peer.Activity activity = body.swinging ? Peer.Activity.WORKING
-                    : moving ? Peer.Activity.MOVING
-                    : Peer.Activity.IDLE;
-            BlockPos cell = body.blockPosition();
-            peers.add(new Peer(id, body.getName().getString(),
-                    new Pos(cell.getX(), cell.getY(), cell.getZ()),
-                    body.distanceTo(this.person), activity));
-        }
-        this.peerLastPos.clear();
-        this.peerLastPos.putAll(seen);
-        this.peersQueriedAt = now;
-        this.peersCache = List.copyOf(peers);
-        return this.peersCache;
+        return this.person.peerSense().peers();
     }
 
     /** The overworld game clock — the same one knowledge timestamps carry. */
