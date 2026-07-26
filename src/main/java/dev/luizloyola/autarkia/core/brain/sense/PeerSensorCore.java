@@ -119,10 +119,10 @@ public final class PeerSensorCore {
             if (seen || heardFresh) {
                 boolean wasLive = track.awareness != Peer.Awareness.REMEMBERED;
                 Peer.Activity was = track.last.activity();
-                // Ears carry position (sound places its source) but not the visual activity
-                // read: a heard-only track keeps whatever the SOUND said until the ear or the
-                // eyes say otherwise — no reading "at_crafting" through the back of her head.
-                track.last = seen ? fresh : keepActivity(fresh, was);
+                // Ears carry position but not the visual reads: a heard-only track keeps
+                // whatever the SOUND said until the ear or the eyes say otherwise — no
+                // "at_crafting" through the back of her head, and no gaze or crouch either.
+                track.last = seen ? fresh : heardFacts(fresh, was);
                 track.awareness = seen ? Peer.Awareness.SEEN : Peer.Awareness.HEARD;
                 track.lastLiveAt = now;
                 track.nextCheckAt = now + interval(fresh.distance());
@@ -157,7 +157,7 @@ public final class PeerSensorCore {
                     && track.last.activity() != Peer.Activity.IDLE
                     && now - track.activityAt > heardActivityDecayTicks()) {
                 Peer.Activity was = track.last.activity();
-                track.last = keepActivity(track.last, Peer.Activity.IDLE);
+                track.last = heardFacts(track.last, Peer.Activity.IDLE);
                 track.activityAt = now;
                 pending.add(PeerEvent.activityChanged(peer(track), was));
             }
@@ -174,7 +174,7 @@ public final class PeerSensorCore {
         Track track = tracks.get(who.id());
         if (track == null) {
             track = new Track();
-            track.last = who;
+            track.last = heardFacts(who, who.activity());
             track.awareness = Peer.Awareness.HEARD;
             track.lastLiveAt = now;
             track.heardAt = now;
@@ -189,7 +189,7 @@ public final class PeerSensorCore {
         if (track.awareness != Peer.Awareness.SEEN) {
             boolean wasLive = track.awareness == Peer.Awareness.HEARD;
             Peer.Activity was = track.last.activity();
-            track.last = who;
+            track.last = heardFacts(who, who.activity());
             track.awareness = Peer.Awareness.HEARD;
             track.activityAt = now; // the sound itself is the witness
             if (wasLive && was != who.activity()) {
@@ -256,9 +256,12 @@ public final class PeerSensorCore {
                 r.watching(), track.identified, track.awareness);
     }
 
-    /** A fresh reading's live facts with the previous activity kept — the ear's coarse truth. */
-    private static PeerReading keepActivity(PeerReading fresh, Peer.Activity activity) {
+    /**
+     * What a SOUND can carry: place and doing — never gaze or posture. Also the shape a decayed
+     * reading collapses to: just someone there.
+     */
+    private static PeerReading heardFacts(PeerReading fresh, Peer.Activity activity) {
         return new PeerReading(fresh.id(), fresh.name(), fresh.pos(), fresh.distance(),
-                fresh.sneaking(), fresh.watching(), activity);
+                false, false, activity);
     }
 }

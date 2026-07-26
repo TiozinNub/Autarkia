@@ -152,6 +152,23 @@ class PeerSensorCoreTest {
     }
 
     @Test
+    void earsCannotSeeAGazeOrACrouch() {
+        // A sneaking someone behind her back, staring, making one loud noise: sound places them and
+        // says what they did, never that they are watching or crouching — "watching her" was once
+        // reported from behind her back.
+        PersonId starer = world.add("Starer", new Pos(0, 64, -5), 5.0, Peer.Activity.MINING);
+        world.hidden.add(starer);
+        sensor.heard(new PeerReading(starer, "Starer", new Pos(0, 64, -5), 5.0, true, true,
+                Peer.Activity.MINING), now);
+        tickN(2);
+
+        Peer heard = sensor.peers().get(0);
+        assertTrue(!heard.watching(), "gaze is an eyes-only read");
+        assertTrue(!heard.sneaking(), "posture is an eyes-only read");
+        assertEquals(Peer.Activity.MINING, heard.activity(), "but the sound's story stands");
+    }
+
+    @Test
     void aHeardActivityDecaysWhenTheSoundStops() {
         PersonId knocker = world.add("Knocker", new Pos(0, 64, -5), 5.0, Peer.Activity.MINING);
         world.hidden.add(knocker);
