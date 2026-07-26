@@ -74,6 +74,11 @@ public final class PeerSense {
     private final Map<Integer, MoveTrack> moveTracks = new HashMap<>();
     /** Each body's gaze dwell state (on HER, on a station) — the confirm-time filters. */
     private final Map<Integer, GazeTrack> gazeTracks = new HashMap<>();
+    /** When each body's chest menu was last seen open — the station exit grace. */
+    private final Map<Integer, Long> chestLastOpenAt = new HashMap<>();
+    /** Ticks AT_CHEST survives past the last open-menu sighting: bridges the GUI-open inertia
+     *  slide (caught live: a drift-beat flashed "moving" mid-chest) and bounds the exit. */
+    private static final int CHEST_GRACE_TICKS = 15;
 
     /** Dwell bookkeeping for one body's gaze targets; sentinels are half-range ("never"). */
     private static final class GazeTrack {
@@ -277,7 +282,11 @@ public final class PeerSense {
         if (body instanceof ServerPlayer player && player.containerMenu instanceof ChestMenu) {
             // The one station the world ANNOUNCES: the lid visibly opens, so the server-side
             // menu check merely confirms what is already watchable (decision: Luiz).
+            chestLastOpenAt.put(body.getId(), now);
             return Peer.Activity.AT_CHEST;
+        }
+        if (now - chestLastOpenAt.getOrDefault(body.getId(), Long.MIN_VALUE / 2) <= CHEST_GRACE_TICKS) {
+            return Peer.Activity.AT_CHEST; // just stepped back from the lid — the exit grace
         }
         if (body.swinging && recentlyDealtDamage(body)) {
             return Peer.Activity.FIGHTING; // a landed hit confirms instantly — no streak needed

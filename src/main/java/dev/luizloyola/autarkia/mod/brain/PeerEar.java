@@ -77,8 +77,13 @@ public final class PeerEar implements GameEventListener {
         if (event.is(GameEvent.BLOCK_DESTROY) || event.is(GameEvent.BLOCK_PLACE)) {
             return Peer.Activity.MINING;
         }
-        if (event.is(GameEvent.CONTAINER_OPEN) || event.is(GameEvent.CONTAINER_CLOSE)) {
+        if (event.is(GameEvent.CONTAINER_OPEN)) {
             return Peer.Activity.AT_CHEST;
+        }
+        if (event.is(GameEvent.CONTAINER_CLOSE)) {
+            // The closing lid says DONE there — mapping it to AT_CHEST re-stamped the
+            // activity on the way out and it never cleared (caught live).
+            return Peer.Activity.IDLE;
         }
         if (event.is(GameEvent.PROJECTILE_SHOOT)) {
             return Peer.Activity.AIMING;
