@@ -23,6 +23,7 @@ import dev.luizloyola.autarkia.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -291,5 +292,24 @@ public final class BrainDriver {
         return this.auto
                 ? "auto | " + this.arbiter.describe()
                 : "manual | " + this.arbiter.executor().describe();
+    }
+
+    /**
+     * The whole brain as separate lines, for the stacked debug view: who is driving, every
+     * instinct's pressure, the claimed work item, and the running task tree one level per line.
+     *
+     * <p>Unlike {@link #describe()}, which reports only the side that is DRIVING and suppresses the
+     * arbiter under a manual order — a view watching the machinery wants "the arbiter wanted to
+     * flee at 0.80 while a manual chop held the wheel".
+     *
+     * <p>In manual mode the arbiter does not tick, so its pressures are the last ones it computed
+     * rather than live values; the mode line says so.
+     */
+    public List<String> describeLines() {
+        List<String> lines = new ArrayList<>();
+        lines.add(this.auto ? "auto" : "manual — arbiter dormant, pressures frozen");
+        lines.addAll(this.arbiter.pressureLines());
+        lines.addAll(this.arbiter.executor().describeLines());
+        return lines;
     }
 }

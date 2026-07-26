@@ -8,7 +8,6 @@ import dev.luizloyola.autarkia.mod.debug.DebugLayer;
 import dev.luizloyola.autarkia.mod.net.DebugViewPayload;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Pattern;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -86,9 +85,6 @@ public final class DebugViewRenderer {
 
     /** Segments in the drawn cone arc — enough to read as a curve at any sane radius. */
     private static final int CONE_SEGMENTS = 24;
-
-    /** Every separator the brain's describe chain uses to mean "new line" — see {@link #drawBrain}. */
-    private static final Pattern BRAIN_LINES = Pattern.compile("[\\r\\n|]+");
 
     public static void install() {
         GizmoFrame.onFrame(DebugViewRenderer::draw);
@@ -171,25 +167,21 @@ public final class DebugViewRenderer {
     /**
      * The arbiter's reasoning, stacked over her head — one gizmo per line.
      *
-     * <p>A text gizmo is a SINGLE line: an embedded newline renders as nothing, so a multi-line
-     * string arrives as one long unreadable row. Both separators the describe chain uses count:
-     * {@code Arbiter.describe()} emits {@code \n}-separated lines per instinct, and
-     * {@code BrainDriver.describe()} prefixes the driving side with a pipe.
+     * <p>A text gizmo is a SINGLE line: an embedded newline renders as nothing. The server
+     * therefore sends the readout already split ({@code BrainDriver.describeLines}); parsing a
+     * chat format's separators back out here made the view quietly wrong whenever it changed.
      */
     private static void drawBrain(
             DebugViewPayload view, Entity person, float partialTick, int[] line) {
-        if (view.brain().isBlank()) {
-            return;
-        }
         boolean first = true;
-        for (String part : BRAIN_LINES.split(view.brain())) {
-            String text = part.strip();
-            if (!text.isEmpty()) {
-                // The first fragment is "auto"/"manual" — the headline fact of who is driving.
-                overhead(person, partialTick, line[0]++, text,
-                        BRAIN_TEXT_COLOR, first ? TITLE_SCALE : DETAIL_SCALE);
-                first = false;
+        for (String text : view.brain()) {
+            if (text.isBlank()) {
+                continue;
             }
+            // The first line is "auto"/"manual" — the headline fact of who is driving.
+            overhead(person, partialTick, line[0]++, text,
+                    BRAIN_TEXT_COLOR, first ? TITLE_SCALE : DETAIL_SCALE);
+            first = false;
         }
     }
 

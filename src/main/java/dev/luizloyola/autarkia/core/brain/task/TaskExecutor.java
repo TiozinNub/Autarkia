@@ -173,6 +173,30 @@ public final class TaskExecutor {
         return path.toString();
     }
 
+    /**
+     * The same readout as {@link #describe()}, one expansion level per line — for surfaces that can
+     * stack lines rather than fit a chat row. The idle forms are one line either way.
+     */
+    public List<String> describeLines() {
+        if (root == null) {
+            return List.of(describe());
+        }
+        List<String> out = new ArrayList<>();
+        out.add("running: " + (stack.isEmpty()
+                ? describeNode(currentNode())
+                : stack.get(0).compound.describe()));
+        for (int i = 0; i < stack.size(); i++) {
+            Frame frame = stack.get(i);
+            out.add("  > " + frame.method.describe());
+            // The next frame's compound is this method's chosen subtask; the last frame's
+            // successor is the current node instead.
+            out.add("  > " + (i + 1 < stack.size()
+                    ? stack.get(i + 1).compound.describe()
+                    : describeNode(currentNode())));
+        }
+        return out;
+    }
+
     // --- internals -------------------------------------------------------------------------------
 
     /** The node execution is at: the top frame's current subtask, or the root before any expansion. */

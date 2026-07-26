@@ -8,6 +8,7 @@ import dev.luizloyola.autarkia.core.brain.act.ConsumeState;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.FoodValue;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -80,6 +81,32 @@ class SatisfyHungerTest {
         executor.tick(ctx); // SUCCESS bubbles: primitive -> method -> compound -> root
         assertFalse(executor.isBusy());
         assertEquals("idle (last: satisfy hunger -> SUCCESS)", executor.describe());
+    }
+
+    /**
+     * One expansion level per line, carrying what the single-line form carries. The
+     * interleaving (compound, its chosen method, the next compound, ... , the current node) is
+     * easy to get wrong (a dropped last node, a repeated frame), so this pins both.
+     */
+    @Test
+    void describeLinesIsTheExpansionPathOneLevelPerLine() {
+        registerFoods();
+        ctx.percepts.inventory.set(5, ItemStack.of("minecraft:cooked_beef", 1, 64));
+        executor.run(new SatisfyHunger(), ctx);
+        executor.tick(ctx);
+        ctx.consumer.setState(ConsumeState.CONSUMING);
+        executor.tick(ctx);
+        assertEquals(
+                List.of("running: satisfy hunger", "  > eat ready food", "  > consume slot 5"),
+                executor.describeLines());
+        // Same content as the chat form, just unjoined — the view must never drift from it.
+        assertEquals(executor.describe(),
+                String.join(" > ", executor.describeLines()).replace(" >   > ", " > "));
+
+        ctx.consumer.setState(ConsumeState.FINISHED);
+        executor.tick(ctx);
+        assertEquals(List.of("idle (last: satisfy hunger -> SUCCESS)"), executor.describeLines(),
+                "an idle executor is one line either way");
     }
 
     @Test

@@ -8,6 +8,7 @@ import dev.luizloyola.autarkia.core.brain.task.TaskStatus;
 import dev.luizloyola.autarkia.core.config.Config;
 import dev.luizloyola.autarkia.core.config.Knob;
 import dev.luizloyola.autarkia.core.log.Category;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -215,23 +216,36 @@ public final class Arbiter {
      */
     public String describe() {
         StringBuilder sb = new StringBuilder();
+        for (String line : pressureLines()) {
+            sb.append(line).append('\n');
+        }
+        sb.append(executor.describe());
+        return sb.toString();
+    }
+
+    /**
+     * Per-instinct pressure with its tag, and the claimed work item — one line each, without the
+     * executor's task chain (see {@link TaskExecutor#describeLines}), so a stacked readout composes
+     * the halves without re-parsing a joined string.
+     */
+    public List<String> pressureLines() {
+        List<String> lines = new ArrayList<>();
         for (int i = 0; i < instincts.size(); i++) {
             Instinct instinct = instincts.get(i);
-            sb.append(instinct.describe())
+            StringBuilder sb = new StringBuilder(instinct.describe())
                     .append(String.format(Locale.ROOT, " %.2f", lastPressures[i]));
             if (instinct == active) {
                 sb.append(" (active)");
             } else if (cooldowns[i] > 0) {
                 sb.append(" (cooldown ").append(cooldowns[i]).append("t)");
             }
-            sb.append('\n');
+            lines.add(sb.toString());
         }
         if (claimedItem != null) {
-            sb.append("work: ").append(claimedItem.describe())
-                    .append(workRunning ? " (active)" : " (suspended)").append('\n');
+            lines.add("work: " + claimedItem.describe()
+                    + (workRunning ? " (active)" : " (suspended)"));
         }
-        sb.append(executor.describe());
-        return sb.toString();
+        return lines;
     }
 
     // --- internals -------------------------------------------------------------------------------

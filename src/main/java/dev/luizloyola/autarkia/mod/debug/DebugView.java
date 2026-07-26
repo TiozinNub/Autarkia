@@ -197,7 +197,7 @@ public final class DebugView {
                 wantsPath ? navigator.pathIndex() : 0,
                 goal,
                 wantsPath ? navigator.describe() : "",
-                layers.contains(DebugLayer.BRAIN) ? person.brain().describe() : "",
+                layers.contains(DebugLayer.BRAIN) ? person.brain().describeLines() : List.of(),
                 layers.contains(DebugLayer.MEMORY) ? beliefs(server, person) : List.of(),
                 layers.contains(DebugLayer.PEERS) ? peers(person) : List.of(),
                 PeerSensorCore.coneDegrees(),

@@ -34,7 +34,7 @@ public record DebugViewPayload(
         int pathIndex,
         Optional<BlockPos> goal,
         String nav,
-        String brain,
+        List<String> brain,
         List<Belief> beliefs,
         List<PeerMark> peers,
         int coneDegrees,
@@ -103,7 +103,7 @@ public record DebugViewPayload(
                     ByteBufCodecs.VAR_INT, DebugViewPayload::pathIndex,
                     ByteBufCodecs.optional(BlockPos.STREAM_CODEC), DebugViewPayload::goal,
                     ByteBufCodecs.STRING_UTF8, DebugViewPayload::nav,
-                    ByteBufCodecs.STRING_UTF8, DebugViewPayload::brain,
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), DebugViewPayload::brain,
                     Belief.CODEC.apply(ByteBufCodecs.list()), DebugViewPayload::beliefs,
                     PeerMark.CODEC.apply(ByteBufCodecs.list()), DebugViewPayload::peers,
                     ByteBufCodecs.VAR_INT, DebugViewPayload::coneDegrees,
@@ -112,7 +112,7 @@ public record DebugViewPayload(
 
     /** The "draw nothing" snapshot — every layer off, no entity to anchor to. */
     public static DebugViewPayload clear() {
-        return new DebugViewPayload(-1, 0, List.of(), 0, Optional.empty(), "", "",
+        return new DebugViewPayload(-1, 0, List.of(), 0, Optional.empty(), "", List.of(),
                 List.of(), List.of(), 0, 0);
     }
 
