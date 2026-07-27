@@ -40,7 +40,9 @@ import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.log.Journals;
 import dev.luizloyola.autarkia.mod.log.ThoughtBroadcast;
+import dev.luizloyola.autarkia.mod.net.ContactsSync;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
+import dev.luizloyola.autarkia.mod.social.ContactData;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -71,6 +73,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -148,6 +151,27 @@ public final class AutarkiaCommands {
                                 .then(Commands.argument("targets", EntityArgument.entities())
                                         .executes(ctx -> whoisTargets(ctx.getSource(),
                                                 EntityArgument.getEntities(ctx, "targets")))))
+                        // Who knows whom. Until the encounter rung lands there is no in-world way
+                        // to be introduced, so "meet" is the scaffold that stands in for it.
+                        .then(Commands.literal("contacts")
+                                .executes(ctx -> contactsList(ctx.getSource()))
+                                .then(Commands.literal("of")
+                                        .then(Commands.argument("person", StringArgumentType.string())
+                                                .suggests(ALL_PERSON_SUGGESTIONS)
+                                                .executes(ctx -> contactsOf(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "person")))))
+                                .then(Commands.literal("meet")
+                                        .then(Commands.argument("person", StringArgumentType.string())
+                                                .suggests(ALL_PERSON_SUGGESTIONS)
+                                                .executes(ctx -> contactsMeet(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "person")))))
+                                .then(Commands.literal("forget")
+                                        .then(Commands.argument("person", StringArgumentType.string())
+                                                .suggests(ALL_PERSON_SUGGESTIONS)
+                                                .executes(ctx -> contactsForget(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "person")))))
+                                .then(Commands.literal("clear")
+                                        .executes(ctx -> contactsClear(ctx.getSource()))))
                         .then(Commands.literal("nav")
                                 .then(Commands.literal("goto")
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
@@ -1564,6 +1588,129 @@ public final class AutarkiaCommands {
     /** The person's name if the directory knows it, else the short id — a stable label for messages. */
     private static String label(MinecraftServer server, PersonId id) {
         return PersonDirectory.get(server).nameOf(id).orElse(shortId(id));
+    }
+
+    // --- contacts: who has been introduced to whom ----------------------------------------------
+
+    /**
+     * The identity the SOURCE holds a contact book under: a Person when running {@code execute as}
+     * one, else the player who typed it (their account uuid is their person-identity, the same rule
+     * the sense uses). The console has no book — it is nobody, and omniscient besides.
+     */
+    private static @Nullable PersonId sourceIdentity(CommandSourceStack source) {
+        Entity self = source.getEntity();
+        if (self instanceof Person person) {
+            PersonId id = person.getPersonId();
+            if (id == null) {
+                source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
+            }
+            return id;
+        }
+        if (self instanceof ServerPlayer player) {
+            return PersonId.of(player.getUUID());
+        }
+        source.sendFailure(Component.literal(
+                "The console knows everyone and nobody — run this as a player, or "
+                        + "/execute as <person> run autarkia contacts …"));
+        return null;
+    }
+
+    /** Everyone the source can put a name to. */
+    private static int contactsList(CommandSourceStack source) {
+        PersonId self = sourceIdentity(source);
+        return self == null ? 0 : printContacts(source, self, "You know");
+    }
+
+    /** Everyone that Person can name — the omniscient view: a dev tool reads any book. */
+    private static int contactsOf(CommandSourceStack source, String token) {
+        PersonId who = resolveDirectory(source, token);
+        return who == null ? 0
+                : printContacts(source, who, label(source.getServer(), who) + " knows");
+    }
+
+    private static int printContacts(CommandSourceStack source, PersonId who, String heading) {
+        MinecraftServer server = source.getServer();
+        Set<PersonId> known = ContactData.get(server).contactsOf(who);
+        if (known.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(heading + " nobody yet.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(heading + " " + known.size()
+                + (known.size() == 1 ? " person:" : " people:")).withStyle(ChatFormatting.AQUA), false);
+        for (PersonId id : known) {
+            String line = "  " + label(server, id) + "  " + shortId(id);
+            source.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.GRAY), false);
+        }
+        return known.size();
+    }
+
+    /**
+     * A mutual introduction — the hand-run stand-in for the identity exchange the encounter rung
+     * will do in-world. Both books gain an entry, because being told a name and telling yours are
+     * two facts, not one.
+     */
+    private static int contactsMeet(CommandSourceStack source, String token) {
+        PersonId self = sourceIdentity(source);
+        if (self == null) return 0;
+        PersonId other = resolveDirectory(source, token);
+        if (other == null) return 0;
+        MinecraftServer server = source.getServer();
+        if (self.equals(other)) {
+            source.sendFailure(Component.literal("You have already met yourself."));
+            return 0;
+        }
+        if (!ContactData.get(server).introduce(self, other)) {
+            source.sendSuccess(() -> Component.literal("Already acquainted.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        ContactsSync.learned(server, self, other);
+        ContactsSync.learned(server, other, self);
+        source.sendSuccess(() -> Component.literal(label(server, self) + " and " + label(server, other)
+                + " have been introduced.").withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** One-sided forgetting: the source loses the name, the other keeps theirs. */
+    private static int contactsForget(CommandSourceStack source, String token) {
+        PersonId self = sourceIdentity(source);
+        if (self == null) return 0;
+        PersonId other = resolveDirectory(source, token);
+        if (other == null) return 0;
+        MinecraftServer server = source.getServer();
+        if (!ContactData.get(server).forget(self, other)) {
+            source.sendSuccess(() -> Component.literal("You never knew who that is.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        resyncIfOnline(server, self);
+        source.sendSuccess(() -> Component.literal(label(server, other) + " is a stranger again.")
+                .withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    private static int contactsClear(CommandSourceStack source) {
+        PersonId self = sourceIdentity(source);
+        if (self == null) return 0;
+        MinecraftServer server = source.getServer();
+        if (!ContactData.get(server).clear(self)) {
+            source.sendSuccess(() -> Component.literal("You knew nobody to begin with.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+        resyncIfOnline(server, self);
+        source.sendSuccess(() -> Component.literal("Every name forgotten — everyone is a stranger.")
+                .withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
+    /** Pushes a whole book after a REMOVAL (an incremental add cannot express forgetting). */
+    private static void resyncIfOnline(MinecraftServer server, PersonId who) {
+        ServerPlayer player = server.getPlayerList().getPlayer(who.value());
+        if (player != null) {
+            ContactsSync.resync(player);
+        }
     }
 
     /** The first 8 characters of an id — enough to eyeball and to prefix-match in {@code select}. */

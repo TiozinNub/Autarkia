@@ -19,6 +19,7 @@ public class AutarkiaClient implements ClientModInitializer {
         EntityRenderers.register(ModEntities.PERSON, PersonRenderer::new);
         // MenuScreens.register is package-private too — the same access-widener route.
         MenuScreens.register(ModMenus.PERSON_INVENTORY, PersonInventoryScreen::new);
+        PersonContactsClient.install();
         DebugGlowClient.install();
         DebugGlow.install();
         DebugViewClient.install();

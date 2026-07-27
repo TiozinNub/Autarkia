@@ -15,6 +15,7 @@ import dev.luizloyola.autarkia.core.config.Knob;
 import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import dev.luizloyola.autarkia.mod.social.ContactData;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +24,7 @@ import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
@@ -411,10 +413,25 @@ public final class BeingSense {
         Being.Activity activity = classify(body, streak, atTable, locomotion);
         boolean aimedAt = activity == Being.Activity.AIMING && gazeOnHer(body, AIM_ALIGN);
         return new BeingReading(id, Being.Kind.PERSON, PERSON_SPECIES,
-                body.getName().getString(), null, false,
+                knownName(body, personId), null, false,
                 new Pos(cell.getX(), cell.getY(), cell.getZ()),
                 body.distanceTo(person), locomotion, body.isCrouching(), watching, aimedAt,
                 false, Being.Gear.NONE, activity);
+    }
+
+    /**
+     * What this observer may call that person — their name once the two have been introduced, else
+     * the empty string, which {@link Being#knownAs()} renders as "a stranger". Sight says this is
+     * one specific individual; only a contact book says who (decision: Luiz). Players are looked up
+     * the same way, by the id minted from their account.
+     */
+    private String knownName(LivingEntity body, PersonId whom) {
+        PersonId self = person.getPersonId();
+        MinecraftServer server = person.level().getServer();
+        if (self == null || server == null || !ContactData.get(server).knows(self, whom)) {
+            return "";
+        }
+        return body.getName().getString();
     }
 
     /** Whether their gaze is ON them within {@code minDot} — watching's signal, aiming's cone. */

@@ -78,16 +78,25 @@ public record Being(BeingId id, Kind kind, String species, String name,
     }
 
     /**
-     * The name they'd use, by tier: below SPECIES, {@code "someone"}; at SPECIES a creature is
-     * {@code "a zombie"} but a person is still {@code "someone"}, a person's species naming
-     * nobody; at INDIVIDUAL, a person's name and a creature's custom name if it wears one.
+     * The name they'd use, by tier: below SPECIES everything is {@code "someone"}; at SPECIES a
+     * creature is {@code "a zombie"} while a person is still {@code "someone"}, since voices name
+     * species and a person's species names nobody; at INDIVIDUAL a person is their name, a
+     * creature its custom name if it wears one.
+     *
+     * <p>A person seen clearly but never introduced is {@code "a stranger"} — the tier says the
+     * observer can tell them apart, the empty name that nobody ever said who they are. Seeing a
+     * face never revealed a name: the sensor fills {@link #name} from the observer's own contact
+     * book.
      */
     public String knownAs() {
         if (identified == Identified.NONE) {
             return "someone";
         }
         if (kind == Kind.PERSON) {
-            return identified == Identified.INDIVIDUAL ? name : "someone";
+            if (identified != Identified.INDIVIDUAL) {
+                return "someone";
+            }
+            return name.isEmpty() ? "a stranger" : name;
         }
         String species = this.species.replace('_', ' ');
         if (herd()) {

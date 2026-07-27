@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.luizloyola.autarkia.mod.client.PersonContactsClient;
 import dev.luizloyola.autarkia.mod.client.anim.NeaBridge;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -21,6 +22,7 @@ import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
@@ -108,6 +110,30 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
     @Override
     public Identifier getTextureLocation(AvatarRenderState state) {
         return state.skin.body().texturePath();
+    }
+
+    /**
+     * The nameplate gate: no introduction, no name over their head (decision: Luiz). An unmet Person
+     * still renders completely — they have no label.
+     *
+     * <p>{@code super} keeps vanilla's own reasons to hide a plate, and {@code Person} answers the
+     * custom-name half with a flat yes, so this check is the only one that matters.
+     */
+    @Override
+    protected boolean shouldShowName(Person person, double distanceSq) {
+        return PersonContactsClient.knows(person.getPersonId())
+                && super.shouldShowName(person, distanceSq);
+    }
+
+    /**
+     * What the plate says — this client's own contact book, the only place a client can learn a name
+     * now that it left entity data. Never reached without {@link #shouldShowName} passing first, so
+     * the fallback is unreachable belt-and-braces.
+     */
+    @Override
+    protected Component getNameTag(Person person) {
+        String known = PersonContactsClient.nameOf(person.getPersonId());
+        return known == null ? super.getNameTag(person) : Component.literal(known);
     }
 
     /**

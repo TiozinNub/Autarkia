@@ -13,6 +13,7 @@ import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.autarkia.core.person.Needs;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
+import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.autarkia.mod.brain.BrainDriver;
 import dev.luizloyola.autarkia.mod.brain.PersonBlockBreaker;
 import dev.luizloyola.autarkia.mod.brain.PersonScaffolder;
@@ -115,6 +116,13 @@ public class Person extends Avatar {
 
     /** Whether this load has projected the directory identity onto the synced fields yet. */
     private boolean identityProjected;
+
+    /**
+     * The directory name, cached on the SERVER when the identity projects ({@link #applyIdentity}).
+     * Never synced — a client learns names only through its contact book. Null on the client, and
+     * on the server only until the first tick resolves the identity.
+     */
+    private @Nullable String identityName;
 
     /**
      * This entity's link to its identity in the world-scoped {@link PersonDirectory} — only a
@@ -688,16 +696,61 @@ public class Person extends Avatar {
     }
 
     /**
-     * Push a person's public identity onto the synced fields (server-side). The name rides on the
-     * auto-synced custom name, always visible, so every client that sees this Person reads it.
+     * Push a person's EXTERNAL identity onto the synced fields (server-side): skin, gender, model —
+     * what anyone can see by looking. The NAME does not ride along: a custom name is
+     * broadcast to every client tracking the entity, which is the leak the contact book closes. It
+     * now reaches a client only through {@code ContactsPayload}, addressed to the player who earned
+     * it, and {@code PersonRenderer} decides the nameplate from there. Server-side the name is
+     * unchanged and omniscient — see {@link #getName()}.
      */
     private void applyIdentity(PersonIdentity identity) {
-        setCustomName(Component.literal(identity.name()));
-        setCustomNameVisible(true);
+        this.identityName = identity.name();
         Appearance appearance = identity.appearance();
         setSkinTexture(Identifier.parse(appearance.skin()));
         this.entityData.set(DATA_GENDER, appearance.gender().name());
         this.entityData.set(DATA_SLIM, appearance.model() == ModelType.SLIM);
+    }
+
+    /**
+     * This person's name, SERVER-SIDE and omniscient — commands, journals and logs read it here,
+     * unchanged by the contact book.
+     *
+     * <p>Overriding this rather than the custom name keeps every server-side caller working, since
+     * {@code Entity#getDisplayName} builds on it. On the CLIENT it falls through to the entity type —
+     * a client that has not been told a name genuinely does not have one, and the renderer asks
+     * {@code PersonContactsClient}.
+     */
+    @Override
+    public Component getName() {
+        return this.identityName == null ? super.getName() : Component.literal(this.identityName);
+    }
+
+    /**
+     * A Person always OFFERS a nameplate; whether a viewer can read it is decided on their own
+     * client, from their contact book ({@code PersonRenderer#shouldShowName}). Vanilla would gate
+     * this on the custom-name flag, which the name no longer uses.
+     */
+    @Override
+    public boolean shouldShowName() {
+        return true;
+    }
+
+    /**
+     * Records the death the way vanilla records a player's, because vanilla will not: a Person is not
+     * a {@code ServerPlayer}, so no death message is broadcast, and {@code LivingEntity} logs one only
+     * for a CUSTOM-NAMED entity — which a Person stopped being when the name left entity data. Server
+     * log plus the person's own journal; nothing goes to chat.
+     */
+    @Override
+    public void die(DamageSource cause) {
+        super.die(cause);
+        if (!level().isClientSide()) {
+            // The combat tracker's line already names them ("Alice starved to death"), so it is
+            // logged as-is rather than prefixed with the name a second time.
+            String story = getCombatTracker().getDeathMessage().getString();
+            AutarkiaMod.LOGGER.info("{}", story);
+            journal().record(Category.BODY, "death", story);
+        }
     }
 
     /**
