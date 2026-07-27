@@ -51,7 +51,7 @@ public final class PersonKnowledge {
     public PoiMemory note(PoiMemory memory) {
         Objects.requireNonNull(memory, "memory");
         Map<Pos, PoiMemory> entries = entriesFor(memory.kind());
-        Pos merged = findWithin(entries, memory.anchor(), memory.kind().mergeRadius());
+        Pos merged = findWithin(entries, memory);
         if (merged != null) {
             entries.remove(merged);
         } else if (entries.size() >= maxPerKind()) {
@@ -140,12 +140,23 @@ public final class PersonKnowledge {
         return byKind.computeIfAbsent(kind, k -> new LinkedHashMap<>());
     }
 
-    /** The anchor of an existing entry within Chebyshev {@code radius} of {@code anchor}, or null. */
-    private static Pos findWithin(Map<Pos, PoiMemory> entries, Pos anchor, int radius) {
-        for (Pos existing : entries.keySet()) {
-            int dx = Math.abs(existing.x() - anchor.x());
-            int dy = Math.abs(existing.y() - anchor.y());
-            int dz = Math.abs(existing.z() - anchor.z());
+    /**
+     * The anchor of an existing SAME-IDENTITY entry within the kind's merge radius, or null.
+     * Merging never crosses details (a cow flock never merges into the sheep flock beside it) nor
+     * individuals (two pigs in one cell are still two pigs); detail-free kinds compare {@code ""}
+     * to {@code ""} and null to null.
+     */
+    private static Pos findWithin(Map<Pos, PoiMemory> entries, PoiMemory memory) {
+        int radius = memory.kind().mergeRadius();
+        for (Map.Entry<Pos, PoiMemory> entry : entries.entrySet()) {
+            if (!entry.getValue().detail().equals(memory.detail())
+                    || !Objects.equals(entry.getValue().individual(), memory.individual())) {
+                continue;
+            }
+            Pos existing = entry.getKey();
+            int dx = Math.abs(existing.x() - memory.anchor().x());
+            int dy = Math.abs(existing.y() - memory.anchor().y());
+            int dz = Math.abs(existing.z() - memory.anchor().z());
             if (Math.max(dx, Math.max(dy, dz)) <= radius) {
                 return existing;
             }

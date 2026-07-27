@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.sense.Peer;
-import dev.luizloyola.autarkia.core.brain.sense.PeerEvent;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
+import dev.luizloyola.autarkia.core.brain.sense.BeingEvent;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import java.util.HashMap;
@@ -16,15 +16,19 @@ import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
 /**
- * {@code KnowledgeViewer}'s sibling for the people sense: {@code /autarkia peers view true} narrates
- * every {@link PeerEvent} a person perceives to chat. Renders their PERCEPTION, not the world —
- * losing track of someone in plain sight behind their back is the viewer working.
+ * The being viewer — {@code KnowledgeViewer}'s sibling for the being sense: toggle a person
+ * with {@code /autarkia peers view true} and every narratable {@link BeingEvent} they perceive
+ * is chatted as it happens (persons: every axis flip; identified creatures: spotted /
+ * recognized / lost — {@code BeingSense}'s gate). Renders their PERCEPTION, not the world:
+ * watching them lose track of someone standing in plain sight behind their back is the viewer
+ * working correctly.
  *
- * <p>A player's toggle whispers to that player; a CONSOLE toggle broadcasts to everyone and thus the
- * server log, which makes it usable from the headless harness. Transient, one map per server.
+ * <p>Toggled by a player, the lines go to that player alone; toggled from the CONSOLE, they
+ * broadcast to everyone (and thus the server log) — which is what makes the viewer usable
+ * from the headless harness. Transient debug state, one watcher map per server, gone on stop.
  */
-public final class PeerViewer {
-    private PeerViewer() {}
+public final class BeingViewer {
+    private BeingViewer() {}
 
     /**
      * Sentinel viewer for a console toggle: broadcast instead of whispering to one player. Public
@@ -41,7 +45,7 @@ public final class PeerViewer {
         ServerLifecycleEvents.SERVER_STOPPING.register(WATCHERS::remove);
     }
 
-    /** Starts narrating this person's peer events; a null viewer means console = everyone. */
+    /** Starts narrating this person's being events; a null viewer means console = everyone. */
     public static void watch(MinecraftServer server, PersonId person, @Nullable UUID viewer) {
         WATCHERS.computeIfAbsent(server, s -> new HashMap<>())
                 .put(person, viewer == null ? EVERYONE : viewer);
@@ -64,12 +68,13 @@ public final class PeerViewer {
     }
 
     /**
-     * A peer event from a possibly-watched person — narrated to whoever toggled the view. Takes
-     * {@link Gender} rather than a pre-picked pronoun: the lines need both cases ("watching
-     * him/her", "the someone he/she'd heard").
+     * A being event from a possibly-watched person — narrate it to whoever toggled the view.
+     * Takes the watched person's {@link Gender} rather than a pre-picked pronoun: the narration
+     * needs both cases ("watching him/her", "the something he/she'd heard"), and every one has
+     * to come from here rather than from a literal in the line.
      */
     static void onEvent(MinecraftServer server, PersonId person, String personName,
-                        Gender gender, PeerEvent event) {
+                        Gender gender, BeingEvent event) {
         Map<PersonId, UUID> watched = WATCHERS.get(server);
         UUID viewer = watched == null ? null : watched.get(person);
         if (viewer == null) {
@@ -86,24 +91,27 @@ public final class PeerViewer {
         }
     }
 
-    private static Component line(String personName, Gender gender, PeerEvent event) {
-        Peer peer = event.peer();
-        String detail = peer.tell(gender.objectPronoun())
-                + (peer.awareness() == Peer.Awareness.SEEN
-                        ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
+    private static Component line(String personName, Gender gender, BeingEvent event) {
+        Being being = event.being();
+        String detail = being.tell(gender.objectPronoun())
+                + (being.awareness() == Being.Awareness.SEEN
+                        ? "" : " [" + being.awareness().name().toLowerCase(Locale.ROOT) + "]");
         return switch (event.type()) {
             case SPOTTED -> Component.literal(
-                            "[" + personName + "] spotted " + peer.knownAs() + " — " + detail)
+                            "[" + personName + "] spotted " + being.knownAs() + " — " + detail)
                     .withStyle(ChatFormatting.GREEN);
             case LOST -> Component.literal(
-                            "[" + personName + "] lost track of " + peer.knownAs())
+                            "[" + personName + "] lost track of " + being.knownAs())
                     .withStyle(ChatFormatting.RED);
             case READING_CHANGED -> Component.literal(
-                            "[" + personName + "] " + peer.knownAs() + " now " + detail)
+                            "[" + personName + "] " + being.knownAs() + " now " + detail)
                     .withStyle(ChatFormatting.YELLOW);
             case RECOGNIZED -> Component.literal(
-                            "[" + personName + "] recognized " + peer.name()
-                                    + " — the someone " + gender.subjectPronoun()
+                            "[" + personName + "] recognized " + being.knownAs()
+                                    + " — the " + (event.was() == null
+                                            || event.was().identified() == Being.Identified.NONE
+                                            ? "someone" : event.was().knownAs())
+                                    + " " + gender.subjectPronoun()
                                     + "'d been hearing, now " + detail)
                     .withStyle(ChatFormatting.AQUA);
         };

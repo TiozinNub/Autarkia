@@ -151,22 +151,22 @@ public class Person extends Avatar {
     private final PoiSensor poiSensor = new PoiSensor(this);
 
     /**
-     * This person's people sense ({@link dev.luizloyola.autarkia.mod.brain.PeerSense}) — eyes
-     * (cone + line of sight), attention, and object permanence over nearby Persons and players
-     * alike. Body machinery beside the {@link #poiSensor}; the brain reads its output through
-     * {@code Percepts.peers()}.
+     * This person's being sense ({@link dev.luizloyola.autarkia.mod.brain.BeingSense}) — eyes
+     * (cone + line of sight), attention, and object permanence over every living body around them.
+     * The brain reads its output through {@code Percepts.beings()} (and the person-filtered
+     * {@code peers()} view).
      */
-    private final dev.luizloyola.autarkia.mod.brain.PeerSense peerSense =
-            new dev.luizloyola.autarkia.mod.brain.PeerSense(this);
+    private final dev.luizloyola.autarkia.mod.brain.BeingSense beingSense =
+            new dev.luizloyola.autarkia.mod.brain.BeingSense(this);
 
     /**
-     * The EAR half of the people sense — a game-event listener on the sculk vibration bus (see
-     * {@link dev.luizloyola.autarkia.mod.brain.PeerEar}), registered with the level through
+     * The EAR half of the being sense — a game-event listener on the sculk vibration bus (see
+     * {@link dev.luizloyola.autarkia.mod.brain.BeingEar}), registered with the level through
      * {@link #updateDynamicGameEventListener} the way the warden's is.
      */
-    private final net.minecraft.world.level.gameevent.DynamicGameEventListener<dev.luizloyola.autarkia.mod.brain.PeerEar> ear =
+    private final net.minecraft.world.level.gameevent.DynamicGameEventListener<dev.luizloyola.autarkia.mod.brain.BeingEar> ear =
             new net.minecraft.world.level.gameevent.DynamicGameEventListener<>(
-                    new dev.luizloyola.autarkia.mod.brain.PeerEar(this));
+                    new dev.luizloyola.autarkia.mod.brain.BeingEar(this));
 
     /**
      * This person's working arm ({@link PersonBlockBreaker}) — ticked here so the crack animation,
@@ -309,8 +309,7 @@ public class Person extends Avatar {
         // Perception before decision: the sensor notices what they moved past and writes it into
         // their knowledge; the brain (below) reads memory, never the world.
         this.poiSensor.tick();
-        // The people sense on the same beat — who is around, seen or heard or remembered.
-        this.peerSense.tick();
+        this.beingSense.tick();
         // The brain decides first, then the Navigator (below) executes locomotion the same tick.
         this.brain.tick();
         // The working arm advances after the brain, so a break begun this tick gains its first
@@ -354,9 +353,9 @@ public class Person extends Avatar {
         return this.poiSensor;
     }
 
-    /** This person's people sense — eyes, ears, attention. See {@link dev.luizloyola.autarkia.mod.brain.PeerSense}. */
-    public dev.luizloyola.autarkia.mod.brain.PeerSense peerSense() {
-        return this.peerSense;
+    /** This person's being sense — eyes, ears, attention. See {@link dev.luizloyola.autarkia.mod.brain.BeingSense}. */
+    public dev.luizloyola.autarkia.mod.brain.BeingSense beingSense() {
+        return this.beingSense;
     }
 
     /** Registers the ear with the level's vibration bus — the warden's own registration path. */

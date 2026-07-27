@@ -3,12 +3,12 @@ package dev.luizloyola.autarkia.core.brain.task;
 import dev.luizloyola.autarkia.core.brain.knowledge.BlockKind;
 import dev.luizloyola.autarkia.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.autarkia.core.brain.knowledge.FakeProbe;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
+import dev.luizloyola.autarkia.core.brain.sense.BeingId;
 import dev.luizloyola.autarkia.core.brain.sense.Drop;
 import dev.luizloyola.autarkia.core.brain.sense.FoodLookup;
-import dev.luizloyola.autarkia.core.brain.sense.Peer;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.brain.sense.Threat;
 import dev.luizloyola.autarkia.core.inv.Inventory;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.FoodValue;
@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Test double for the {@link Percepts} bundle: a real {@link Inventory} and {@link Needs} —
@@ -29,12 +30,10 @@ final class FakePercepts implements Percepts {
     final Needs needs = new Needs();
     /** The feet cell — settable; defaults to a plausible stance so wander targets are sane. */
     Pos position = new Pos(0, 64, 0);
-    List<Threat> threats = List.of();
+    List<Being> beings = List.of();
     /** The block world — a real {@link FakeProbe} (flat ground at y 63, sparse blocks on top). */
     final FakeProbe blocks = new FakeProbe();
     List<Drop> drops = List.of();
-    /** Nearby people — Persons and players alike. */
-    List<Peer> peers = List.of();
     /** The game clock — settable; tests that price staleness advance it. */
     long time;
     private final Map<String, FoodValue> foodById = new HashMap<>();
@@ -66,8 +65,17 @@ final class FakePercepts implements Percepts {
     }
 
     @Override
-    public List<Threat> threats() {
-        return threats;
+    public List<Being> beings() {
+        return beings;
+    }
+
+    /** An identified, aggressive, bare-handed zombie (danger weight 1.0) at this range —
+     *  the standard test threat; {@code approaching} maps to the old targeting bonus. */
+    static Being monsterAt(Pos pos, double distance, boolean approaching) {
+        return new Being(BeingId.of(UUID.randomUUID()), Being.Kind.MONSTER, "zombie", "",
+                null, pos, distance, 1, 0, false, List.of(), Being.Activity.IDLE,
+                Being.Locomotion.STILL, false, false, false, approaching, true,
+                Being.Gear.NONE, Being.Identified.SPECIES, Being.Awareness.SEEN);
     }
 
     @Override
@@ -78,11 +86,6 @@ final class FakePercepts implements Percepts {
     @Override
     public List<Drop> drops() {
         return drops;
-    }
-
-    @Override
-    public List<Peer> peers() {
-        return peers;
     }
 
     @Override

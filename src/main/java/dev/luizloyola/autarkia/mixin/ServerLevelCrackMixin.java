@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mixin;
 
-import dev.luizloyola.autarkia.mod.brain.PeerKnocks;
+import dev.luizloyola.autarkia.mod.brain.BeingKnocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,7 +22,7 @@ abstract class ServerLevelCrackMixin {
     @Inject(method = "destroyBlockProgress", at = @At("HEAD"))
     private void autarkia$hearTheKnock(int breakerId, BlockPos pos, int progress, CallbackInfo ci) {
         if (progress >= 0) {
-            PeerKnocks.onCrack((ServerLevel) (Object) this, breakerId, pos);
+            BeingKnocks.onCrack((ServerLevel) (Object) this, breakerId, pos);
         }
     }
 }

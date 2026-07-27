@@ -71,15 +71,22 @@ public final class PoiSensor {
     }
 
     /** One line description, shared with the viewer chat:
-     *  {@code TREE (10, 64, 8) 4 logs} / {@code WATER … partial}. */
+     *  {@code TREE (10, 64, 8) 4 logs} / {@code HERD cow (…) 6 head} / {@code WATER … partial}. */
     static String describe(SenseEvent event) {
-        StringBuilder line = new StringBuilder(event.kind().name())
-                .append(" (").append(event.anchor().x()).append(", ").append(event.anchor().y())
-                .append(", ").append(event.anchor().z()).append(")");
+        StringBuilder line = new StringBuilder(event.kind().name());
         PoiMemory memory = event.memory();
+        if (memory != null && !memory.detail().isEmpty()) {
+            line.append(' ').append(memory.detail());
+        }
+        line.append(" (").append(event.anchor().x()).append(", ").append(event.anchor().y())
+                .append(", ").append(event.anchor().z()).append(")");
         if (memory != null) {
             line.append(' ').append(memory.units())
-                    .append(memory.kind() == PoiKind.TREE ? " logs" : " cells");
+                    .append(switch (memory.kind()) {
+                        case TREE -> " logs";
+                        case HERD -> " head";
+                        default -> " cells";
+                    });
             if (memory.partial()) {
                 line.append(", partial");
             }

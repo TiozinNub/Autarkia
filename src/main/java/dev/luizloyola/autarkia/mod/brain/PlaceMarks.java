@@ -7,9 +7,9 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 
 /**
  * Who placed blocks lately — {@link DamageMarks}' sibling for the builder's arm: a landing block is
- * visible and audible, so a short-lived mark on the PLACER is fair perception knowledge.
- * {@code PeerSense} reads it to tell BUILDING from MINING, whose animation is identical. Fed by the
- * game-event choke point, Persons included. Server-wide and transient.
+ * visible and audible, so a short-lived mark on the PLACER is fair perception knowledge, and
+ * {@code BeingSense} reads it to tell BUILDING from MINING. Fed by the game-event choke point
+ * ({@code ServerLevelGameEventMixin}), players and Persons alike. Server-wide and transient.
  */
 public final class PlaceMarks {
     private PlaceMarks() {}

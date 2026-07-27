@@ -41,7 +41,8 @@ public class AutarkiaMod implements ModInitializer {
         Claims.init();
         DamageMarks.init();
         dev.luizloyola.autarkia.mod.brain.PlaceMarks.init();
-        dev.luizloyola.autarkia.mod.brain.PeerViewer.init();
+        dev.luizloyola.autarkia.mod.brain.BeingViewer.init();
+        dev.luizloyola.autarkia.mod.brain.BeingVoices.init();
         KnowledgeViewer.init();
         registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);

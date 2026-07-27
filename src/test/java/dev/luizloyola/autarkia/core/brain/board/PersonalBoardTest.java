@@ -112,8 +112,8 @@ class PersonalBoardTest {
                 }
 
                 @Override
-                public java.util.List<dev.luizloyola.autarkia.core.brain.sense.Threat> threats() {
-                    throw new UnsupportedOperationException();
+                public java.util.List<dev.luizloyola.autarkia.core.brain.sense.Being> beings() {
+                    return java.util.List.of();
                 }
 
                 @Override
@@ -126,10 +126,6 @@ class PersonalBoardTest {
                     throw new UnsupportedOperationException();
                 }
 
-                @Override
-                public java.util.List<dev.luizloyola.autarkia.core.brain.sense.Peer> peers() {
-                    throw new UnsupportedOperationException();
-                }
 
                 @Override
                 public long time() {

@@ -1,36 +1,36 @@
 package dev.luizloyola.autarkia.core.brain.task;
 
 import dev.luizloyola.autarkia.core.brain.BrainContext;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.nav.Gait;
-import dev.luizloyola.autarkia.core.brain.sense.Threat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.random.RandomGenerator;
 
 /**
- * One leg of a flight: aim away from whatever is pressing in, then run there. A
- * {@link CompoundTask} with a single always-applicable, cost-{@code 0} method, so the roll
- * happens at DECOMPOSE time against fresh percepts, not from the tick the instinct was granted.
+ * One leg of a flight: aim away from whatever is pressing in, then run. A {@link CompoundTask} with
+ * a single always-applicable, cost-{@code 0} method, so the roll happens at DECOMPOSE time against
+ * fresh percepts — from where they ACTUALLY stand and where the threats ACTUALLY are.
  *
- * <p><b>The escape vector.</b> Weight every current threat by {@code 1/distance²} (closest
- * dominates) into a proximity-weighted centroid; the direction is the unit vector from that
- * centroid THROUGH their position, the target that direction times {@link #FLEE_LEG} with
- * independent {@code +/-}{@link #JITTER} on each horizontal axis from the shared
- * {@link RandomGenerator}, so consecutive legs are not ruler-straight; {@code y} is unchanged —
- * the pathfinder finds the ground. No threats at decompose time, or a centroid landing exactly
- * on them (surrounded), fall back to a uniformly random heading of the same length.
+ * <p><b>The escape vector.</b> Each perceived AGGRESSIVE being is weighted {@code 1/distance²}
+ * (closest dominates) into a centroid; the direction is the unit vector from that centroid through
+ * their position. The target is their position plus that direction times {@link #FLEE_LEG}, with
+ * independent {@code +/-}{@link #JITTER} per horizontal axis from the shared
+ * {@link RandomGenerator} so consecutive legs are not a ruler-straight line; {@code y} is
+ * unchanged. No threats, or a centroid landing exactly on them (surrounded), falls back to a
+ * uniformly random heading of the same length.
  *
- * <p>Decomposes to a single {@code [GoTo(target, Gait.SPRINT)]}, no {@link Idle}: flight does
- * not pause between legs the way a wander does.
+ * <p>Decomposes to a single {@code [GoTo(target, Gait.SPRINT)]}, no {@link Idle}: flight does not
+ * pause between legs.
  *
- * <p><b>SUCCESS just ends the leg.</b> The arbiter re-grants {@link
- * dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct} while its pressure stays on top, and
- * a fresh {@code FleeStep} re-aims from the CURRENT threat positions, chaining legs as the
- * danger moves. Escape ends by pressure decay (out of {@link
- * dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct#RANGE}), never by a scripted finish;
- * a FAILED leg (cornered against terrain) retries almost immediately ({@link
- * dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct#failCooldown()}) with a fresh roll
- * rather than patching the failed one.
+ * <p><b>SUCCESS just ends the leg.</b> A fresh {@code FleeStep} re-aims from the CURRENT threat
+ * positions while the arbiter keeps granting
+ * {@link dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct}, chaining legs as the danger
+ * moves; escape ends by pressure decay, never by a scripted finish. A FAILED leg (cornered) retries
+ * almost immediately — see
+ * {@link dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct#failCooldown()} — with a fresh
+ * roll rather than a patch.
  */
 public final class FleeStep implements CompoundTask {
 
@@ -83,7 +83,13 @@ public final class FleeStep implements CompoundTask {
         @Override
         public List<Task> decompose(BrainContext ctx) {
             Pos here = ctx.percepts().position();
-            double[] direction = escapeDirection(here, ctx.percepts().threats());
+            List<Being> threats = new ArrayList<>();
+            for (Being being : ctx.percepts().beings()) {
+                if (being.aggressive()) {
+                    threats.add(being);
+                }
+            }
+            double[] direction = escapeDirection(here, threats);
             int jitterX = random.nextInt(2 * JITTER + 1) - JITTER;
             int jitterZ = random.nextInt(2 * JITTER + 1) - JITTER;
             int targetX = here.x() + (int) Math.round(direction[0] * FLEE_LEG) + jitterX;
@@ -102,14 +108,14 @@ public final class FleeStep implements CompoundTask {
      * random heading when there is nothing to run from (no threats) or nowhere is better than
      * anywhere else (surrounded — the centroid lands on them).
      */
-    private double[] escapeDirection(Pos here, List<Threat> threats) {
+    private double[] escapeDirection(Pos here, List<Being> threats) {
         if (threats.isEmpty()) {
             return randomDirection();
         }
         double weightSum = 0.0;
         double centroidX = 0.0;
         double centroidZ = 0.0;
-        for (Threat threat : threats) {
+        for (Being threat : threats) {
             double distance = Math.max(threat.distance(), MIN_WEIGHT_DISTANCE);
             double weight = 1.0 / (distance * distance);
             weightSum += weight;

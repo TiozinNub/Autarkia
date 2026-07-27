@@ -134,6 +134,16 @@ public final class LevelProbe implements BlockProbe {
         return false;
     }
 
+    /**
+     * The cheap sight check — one ray, eye to body center. Enough for creatures and small bodies,
+     * and much faster for farms and herds (decision: Luiz); persons keep the multi-sample
+     * {@link #bodyVisible} so peeking over a wall still works on people.
+     */
+    public static boolean centerVisible(Level level, Vec3 from, LivingEntity target) {
+        Vec3 center = target.position().add(0.0, target.getBbHeight() * 0.5, 0.0);
+        return sightClear(level, from, center, BlockPos.containing(center));
+    }
+
     /** The shared sight march — see {@link #visibleFromEyes} for the transparency rationale. */
     private static boolean sightClear(Level level, Vec3 from, Vec3 to, BlockPos targetCell) {
         int steps = (int) Math.ceil(from.distanceTo(to) * 2.0);

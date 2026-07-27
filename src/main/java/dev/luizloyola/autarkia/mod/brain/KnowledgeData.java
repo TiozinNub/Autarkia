@@ -45,14 +45,19 @@ public final class KnowledgeData extends SavedData {
 
     private static final Codec<PoiMemory> MEMORY_CODEC = RecordCodecBuilder.create(m -> m.group(
             KIND_CODEC.fieldOf("kind").forGetter(PoiMemory::kind),
+            // Absent in pre-herd saves — the defaults keep them loading unchanged.
+            Codec.STRING.optionalFieldOf("detail", "").forGetter(PoiMemory::detail),
+            UUIDUtil.CODEC.optionalFieldOf("individual")
+                    .forGetter(memory -> java.util.Optional.ofNullable(memory.individual())),
             POS_CODEC.fieldOf("anchor").forGetter(PoiMemory::anchor),
             POS_CODEC.fieldOf("min").forGetter(memory -> memory.bounds().min()),
             POS_CODEC.fieldOf("max").forGetter(memory -> memory.bounds().max()),
             Codec.INT.fieldOf("units").forGetter(PoiMemory::units),
             Codec.BOOL.optionalFieldOf("partial", false).forGetter(PoiMemory::partial),
             Codec.LONG.fieldOf("seen").forGetter(PoiMemory::lastSeenTick)
-    ).apply(m, (kind, anchor, min, max, units, partial, seen) ->
-            new PoiMemory(kind, anchor, new Region(min, max), units, partial, seen)));
+    ).apply(m, (kind, detail, individual, anchor, min, max, units, partial, seen) ->
+            new PoiMemory(kind, detail, individual.orElse(null), anchor, new Region(min, max),
+                    units, partial, seen)));
 
     /** One person's remembered POIs, flattened across kinds ({@code kind} rides in each memory). */
     private record PersonEntry(PersonId id, List<PoiMemory> pois) {

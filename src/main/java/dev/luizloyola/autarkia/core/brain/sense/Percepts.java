@@ -37,11 +37,12 @@ public interface Percepts {
     Pos position();
 
     /**
-     * Nearby hostiles, from the mod's budgeted entity queries. Nearest-first is not guaranteed:
-     * a consumer that cares about ordering must compute it from {@link Threat#distance()}. An
-     * empty list means no danger in range — the only signal {@code FleeInstinct} needs.
+     * Everything living they currently perceive — one list across every kind (see {@link Being}):
+     * persons, monsters, neutrals, herds, villagers, and the yet-unmade-out somethings, each
+     * masked to its achieved identification tier. {@code FleeInstinct} prices the AGGRESSIVE
+     * entries of this same list. Nearest-first is not guaranteed.
      */
-    List<Threat> threats();
+    List<Being> beings();
 
     /**
      * The world's blocks, seen through the one block vocabulary ({@code BlockKind}) — the same
@@ -58,11 +59,19 @@ public interface Percepts {
     List<Drop> drops();
 
     /**
-     * Nearby people, sensed right now — other Persons and live players, one list, deliberately
-     * indistinguishable (see {@link Peer}). Budgeted and briefly cached like {@link #threats()};
-     * nearest-first is not guaranteed.
+     * Nearby people — the {@link Being.Kind#PERSON} view over {@link #beings()}: other Persons
+     * And live players, one list, indistinguishable. The substrate every social
+     * behavior stands on.
      */
-    List<Peer> peers();
+    default List<Being> peers() {
+        List<Being> people = new java.util.ArrayList<>();
+        for (Being being : beings()) {
+            if (being.kind() == Being.Kind.PERSON) {
+                people.add(being);
+            }
+        }
+        return List.copyOf(people);
+    }
 
     /**
      * The current game time in ticks — the same clock knowledge timestamps carry, so staleness

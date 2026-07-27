@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import dev.luizloyola.autarkia.core.brain.instinct.Danger;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.core.config.Config;
 import dev.luizloyola.autarkia.core.config.Knob;
@@ -42,6 +43,15 @@ public final class ConfigFile {
     private static final String FILE_NAME = "autarkia.json";
     /** Prefix marking a generated documentation line rather than a value. */
     private static final String DOC_PREFIX = "// ";
+    /**
+     * The per-species flee weights — not knobs (the {@link Knob} enum is closed, entity ids
+     * are an open set), so this section has its own rules: every key is an entity species (or
+     * {@value Danger#DEFAULT_KEY}), unknown ids are VALID (they are modded mobs, not typos),
+     * and values clamp to a sane band instead of a per-knob range.
+     */
+    private static final String DANGER_SECTION = "danger";
+    private static final double DANGER_MIN = 0.0;
+    private static final double DANGER_MAX = 8.0;
 
     private ConfigFile() {
     }
@@ -61,6 +71,7 @@ public final class ConfigFile {
         Path path = path();
         if (!Files.exists(path)) {
             Config.install(AutarkiaConfig.DEFAULTS);
+            Danger.reset();
             save(AutarkiaConfig.DEFAULTS);
             AutarkiaMod.LOGGER.info("Autarkia config: wrote defaults to {}", path);
             return List.of();
@@ -97,6 +108,7 @@ public final class ConfigFile {
             supplied.put(knob, read);
         }
         problems.addAll(unknownKeys(root));
+        problems.addAll(loadDanger(root));
 
         AutarkiaConfig.Loaded loaded = AutarkiaConfig.from(supplied);
         problems.addAll(loaded.problems());
@@ -143,8 +155,64 @@ public final class ConfigFile {
             section.addProperty(DOC_PREFIX + knob.leaf(), knob.doc());
             section.add(knob.leaf(), toJson(knob, config.get(knob)));
         }
+        JsonObject danger = new JsonObject();
+        danger.addProperty(DOC_PREFIX + "about",
+                "Per-species flee weights. Any entity id is a valid key; mobs not listed use"
+                        + " \"" + Danger.DEFAULT_KEY + "\".");
+        danger.addProperty(Danger.DEFAULT_KEY, Danger.weight(Danger.DEFAULT_KEY));
+        Danger.table().keySet().stream()
+                .filter(species -> !species.equals(Danger.DEFAULT_KEY))
+                .sorted()
+                .forEach(species -> danger.addProperty(species, Danger.weight(species)));
+        root.add(DANGER_SECTION, danger);
         return new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(root)
                 + System.lineSeparator();
+    }
+
+    /** Reads the danger section into {@link Danger} — its open-key, clamp-only rules. */
+    private static List<String> loadDanger(JsonObject root) {
+        Danger.reset();
+        JsonElement section = root.get(DANGER_SECTION);
+        if (section == null) {
+            return List.of(); // absent: the seeded defaults stand — what a fresh file means
+        }
+        if (!section.isJsonObject()) {
+            return List.of(DANGER_SECTION + " should be an object — using the built-in weights");
+        }
+        List<String> problems = new ArrayList<>();
+        Map<String, Double> overrides = new java.util.LinkedHashMap<>();
+        for (String species : section.getAsJsonObject().keySet()) {
+            if (species.startsWith(DOC_PREFIX.trim())) {
+                continue;
+            }
+            JsonElement value = section.getAsJsonObject().get(species);
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
+                    || !Double.isFinite(value.getAsDouble())) {
+                problems.add(DANGER_SECTION + "." + species + ": expected a number, found "
+                        + value + " — ignored");
+                continue;
+            }
+            double raw = value.getAsDouble();
+            double clamped = Math.max(DANGER_MIN, Math.min(DANGER_MAX, raw));
+            if (clamped != raw) {
+                problems.add(String.format(Locale.ROOT,
+                        "%s.%s: %s is out of range [%s, %s] — using %s", DANGER_SECTION,
+                        species, raw, DANGER_MIN, DANGER_MAX, clamped));
+            }
+            overrides.put(species, clamped);
+        }
+        Danger.install(overrides);
+        return problems;
+    }
+
+    /** One live weight changed from the command — installs and persists. Returns the clamped value. */
+    public static double setDanger(String species, double raw) {
+        double clamped = Math.max(DANGER_MIN, Math.min(DANGER_MAX, raw));
+        Map<String, Double> overrides = new java.util.LinkedHashMap<>(Danger.table());
+        overrides.put(species, clamped);
+        Danger.install(overrides);
+        save(Config.get());
+        return clamped;
     }
 
     // --- internals -------------------------------------------------------------------------
@@ -211,6 +279,9 @@ public final class ConfigFile {
         }
         List<String> problems = new ArrayList<>();
         for (String sectionName : root.keySet()) {
+            if (sectionName.equals(DANGER_SECTION)) {
+                continue; // open-key section — its own loader validates values, never keys
+            }
             JsonElement section = root.get(sectionName);
             if (!sections.contains(sectionName)) {
                 problems.add(String.format(Locale.ROOT, "unknown section \"%s\" — ignored", sectionName));

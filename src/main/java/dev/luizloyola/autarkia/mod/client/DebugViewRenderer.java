@@ -2,7 +2,7 @@ package dev.luizloyola.autarkia.mod.client;
 
 import dev.luizloyola.autarkia.compat.client.debug.GizmoFrame;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
-import dev.luizloyola.autarkia.core.brain.sense.Peer;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
 import dev.luizloyola.autarkia.core.nav.MoveType;
 import dev.luizloyola.autarkia.mod.debug.DebugLayer;
 import dev.luizloyola.autarkia.mod.net.DebugViewPayload;
@@ -51,6 +51,7 @@ public final class DebugViewRenderer {
 
     private static final int TREE_COLOR = 0xFF3FBF5F;
     private static final int WATER_COLOR = 0xFF3F8FFF;
+    private static final int HERD_COLOR = 0xFFD9A05B;
     private static final int GHOST_COLOR = 0xFF9A9A9A;
 
     private static final int SEEN_COLOR = 0xFF57F287;
@@ -312,11 +313,11 @@ public final class DebugViewRenderer {
      * Spelled out as well as colour-coded: a grey line reads as stale only beside a green one.
      */
     private static String detail(DebugViewPayload.PeerMark peer) {
-        Peer.Awareness[] values = Peer.Awareness.values();
-        Peer.Awareness awareness = peer.awareness() >= 0 && peer.awareness() < values.length
+        Being.Awareness[] values = Being.Awareness.values();
+        Being.Awareness awareness = peer.awareness() >= 0 && peer.awareness() < values.length
                 ? values[peer.awareness()]
-                : Peer.Awareness.REMEMBERED;
-        String tag = awareness == Peer.Awareness.SEEN
+                : Being.Awareness.REMEMBERED;
+        String tag = awareness == Being.Awareness.SEEN
                 ? ""
                 : " [" + awareness.name().toLowerCase(Locale.ROOT) + "]";
         return String.format(Locale.ROOT, "%s%s · %.1fm", peer.tell(), tag, peer.distance());
@@ -344,11 +345,12 @@ public final class DebugViewRenderer {
         return switch (kinds[kind]) {
             case TREE -> TREE_COLOR;
             case WATER -> WATER_COLOR;
+            case HERD -> HERD_COLOR;
         };
     }
 
     private static int awarenessColor(int awareness) {
-        Peer.Awareness[] values = Peer.Awareness.values();
+        Being.Awareness[] values = Being.Awareness.values();
         if (awareness < 0 || awareness >= values.length) {
             return REMEMBERED_COLOR;
         }

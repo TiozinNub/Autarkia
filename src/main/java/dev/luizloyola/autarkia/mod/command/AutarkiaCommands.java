@@ -10,7 +10,7 @@ import dev.luizloyola.autarkia.compat.inv.ItemStacks;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
-import dev.luizloyola.autarkia.core.brain.sense.Peer;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
 import dev.luizloyola.autarkia.core.brain.task.BreakBlock;
 import dev.luizloyola.autarkia.core.brain.task.ChopNearestTree;
 import dev.luizloyola.autarkia.core.brain.task.GoTo;
@@ -31,7 +31,7 @@ import dev.luizloyola.autarkia.core.person.PersonId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.brain.Knowledges;
-import dev.luizloyola.autarkia.mod.brain.PeerViewer;
+import dev.luizloyola.autarkia.mod.brain.BeingViewer;
 import dev.luizloyola.autarkia.mod.config.ConfigFile;
 import dev.luizloyola.autarkia.mod.debug.DebugLayer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
@@ -525,7 +525,7 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * Toggles live narration of the resolved Person's peer events ({@code PeerViewer}) — the
+     * Toggles live narration of the resolved Person's peer events ({@code BeingViewer}) — the
      * people-sense twin of {@code knowledge view}. From a player, the lines whisper to that
      * player; from the console they broadcast (and land in the server log). That is what
      * makes the toggle usable headlessly.
@@ -541,13 +541,13 @@ public final class AutarkiaCommands {
         String name = person.getName().getString();
         if (on) {
             ServerPlayer player = source.getPlayer();
-            PeerViewer.watch(source.getServer(), id, player == null ? null : player.getUUID());
+            BeingViewer.watch(source.getServer(), id, player == null ? null : player.getUUID());
             source.sendSuccess(() -> Component.literal("Narrating " + name
                             + "'s people sense — spotted/lost/activity lines land in "
                             + (player == null ? "everyone's chat (console toggle)." : "your chat."))
                     .withStyle(ChatFormatting.GREEN), false);
         } else {
-            boolean was = PeerViewer.unwatch(source.getServer(), id);
+            boolean was = BeingViewer.unwatch(source.getServer(), id);
             source.sendSuccess(() -> Component.literal(was
                             ? "Stopped narrating " + name + "'s people sense."
                             : name + "'s people sense wasn't being narrated.")
@@ -566,7 +566,7 @@ public final class AutarkiaCommands {
             return 0;
         }
         String name = person.getName().getString();
-        UUID viewer = PeerViewer.viewer(source.getServer(), id);
+        UUID viewer = BeingViewer.viewer(source.getServer(), id);
         if (viewer == null) {
             source.sendSuccess(() -> Component.literal(name + "'s peers view is false.")
                     .withStyle(ChatFormatting.GRAY), false);
@@ -584,7 +584,7 @@ public final class AutarkiaCommands {
      * "on, but narrating to someone else" apart from "off" is the whole point of asking.
      */
     private static String describeViewer(CommandSourceStack source, UUID viewer) {
-        if (PeerViewer.EVERYONE.equals(viewer)) {
+        if (BeingViewer.EVERYONE.equals(viewer)) {
             return "everyone's chat (console toggle).";
         }
         ServerPlayer self = source.getPlayer();
@@ -597,31 +597,34 @@ public final class AutarkiaCommands {
                 : other.getName().getString() + "'s chat.";
     }
 
-    /** The resolved Person's live {@code peers()} reading — who they see, doing what. */
+    /** The resolved Person's live {@code beings()} reading — everything they make out. */
     private static int peersList(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        List<Peer> peers = person.brain().percepts().peers();
+        List<Being> beings = person.brain().percepts().beings();
         String name = person.getName().getString();
-        if (peers.isEmpty()) {
+        if (beings.isEmpty()) {
             source.sendSuccess(() -> Component.literal(name + " sees nobody around.")
                     .withStyle(ChatFormatting.GRAY), false);
             return 0;
         }
-        source.sendSuccess(() -> Component.literal(name + " — " + peers.size() + " in sight")
+        source.sendSuccess(() -> Component.literal(name + " — " + beings.size() + " perceived")
                 .withStyle(ChatFormatting.AQUA), false);
         String pronoun = person.getGender().objectPronoun();
-        for (Peer peer : peers) {
-            String line = String.format(Locale.ROOT, "%s (%d, %d, %d) - %.1f blocks away, %s%s",
-                    peer.knownAs(), peer.pos().x(), peer.pos().y(), peer.pos().z(),
-                    peer.distance(), peer.tell(pronoun),
-                    peer.awareness() == Peer.Awareness.SEEN
-                            ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
+        for (Being being : beings) {
+            String kind = being.kind() == Being.Kind.PERSON || being.kind() == Being.Kind.UNKNOWN
+                    ? "" : " [" + being.kind().name().toLowerCase(Locale.ROOT)
+                            + (being.aggressive() ? "!" : "") + "]";
+            String line = String.format(Locale.ROOT, "%s%s (%d, %d, %d) - %.1f blocks away, %s%s",
+                    being.knownAs(), kind, being.pos().x(), being.pos().y(), being.pos().z(),
+                    being.distance(), being.tell(pronoun),
+                    being.awareness() == Being.Awareness.SEEN
+                            ? "" : " [" + being.awareness().name().toLowerCase(Locale.ROOT) + "]");
             source.sendSuccess(() -> Component.literal(line)
-                    .withStyle(peer.awareness() == Peer.Awareness.REMEMBERED
+                    .withStyle(being.awareness() == Being.Awareness.REMEMBERED
                             ? ChatFormatting.GRAY : ChatFormatting.GREEN), false);
         }
-        return peers.size();
+        return beings.size();
     }
 
     // --- config -----------------------------------------------------------------------------
@@ -663,6 +666,15 @@ public final class AutarkiaCommands {
     }
 
     private static int configGet(CommandSourceStack source, String key) {
+        if (key.startsWith("danger.")) {
+            String species = key.substring("danger.".length());
+            double weight = dev.luizloyola.autarkia.core.brain.instinct.Danger.weight(species);
+            source.sendSuccess(() -> Component.literal(key + " = " + weight
+                    + " (unlisted species use danger." 
+                    + dev.luizloyola.autarkia.core.brain.instinct.Danger.DEFAULT_KEY + ")")
+                    .withStyle(ChatFormatting.AQUA), false);
+            return 1;
+        }
         Knob knob = Knob.byKey(key).orElse(null);
         if (knob == null) return unknownKnob(source, key);
         AutarkiaConfig config = Config.get();
@@ -678,6 +690,21 @@ public final class AutarkiaCommands {
     }
 
     private static int configSet(CommandSourceStack source, String key, String value) {
+        if (key.startsWith("danger.")) {
+            String species = key.substring("danger.".length());
+            double parsed;
+            try {
+                parsed = Double.parseDouble(value);
+            } catch (NumberFormatException e) {
+                source.sendFailure(Component.literal(key + " accepts a number — \"" + value
+                        + "\" is not one"));
+                return 0;
+            }
+            double landed = ConfigFile.setDanger(species, parsed);
+            source.sendSuccess(() -> Component.literal(key + " = " + landed
+                    + (landed != parsed ? " (clamped)" : "")).withStyle(ChatFormatting.GREEN), true);
+            return 1;
+        }
         Knob knob = Knob.byKey(key).orElse(null);
         if (knob == null) return unknownKnob(source, key);
         Double parsed = knob.parse(value).orElse(null);
@@ -993,11 +1020,18 @@ public final class AutarkiaCommands {
         String age = ageSeconds < 2 ? "just now"
                 : ageSeconds < 120 ? ageSeconds + "s ago"
                 : (ageSeconds / 60) + "m ago";
-        StringBuilder line = new StringBuilder(memory.kind().name())
-                .append(" (").append(memory.anchor().x()).append(", ").append(memory.anchor().y())
+        StringBuilder line = new StringBuilder(memory.kind().name());
+        if (!memory.detail().isEmpty()) {
+            line.append(' ').append(memory.detail());
+        }
+        line.append(" (").append(memory.anchor().x()).append(", ").append(memory.anchor().y())
                 .append(", ").append(memory.anchor().z()).append(") - ")
                 .append(Math.round(distance)).append(" blocks away, ")
-                .append(memory.units()).append(memory.kind() == PoiKind.TREE ? " logs" : " cells")
+                .append(memory.units()).append(switch (memory.kind()) {
+                    case TREE -> " logs";
+                    case HERD -> " head";
+                    default -> " cells";
+                })
                 .append(", seen ").append(age);
         if (memory.partial()) {
             line.append(", partial");
@@ -1352,7 +1386,10 @@ public final class AutarkiaCommands {
      *  tab-completes to something that actually resolves. */
     /** Every knob's dotted key — the completions behind {@code config get/set/reset}. */
     private static final SuggestionProvider<CommandSourceStack> KNOB_SUGGESTIONS = (ctx, builder) ->
-            SharedSuggestionProvider.suggest(Stream.of(Knob.values()).map(Knob::key), builder);
+            SharedSuggestionProvider.suggest(Stream.concat(
+                    Stream.of(Knob.values()).map(Knob::key),
+                    dev.luizloyola.autarkia.core.brain.instinct.Danger.table().keySet().stream()
+                            .sorted().map(species -> "danger." + species)), builder);
 
     /** Every debug layer's name — the completions behind {@code debug <layer>}. */
     private static final SuggestionProvider<CommandSourceStack> LAYER_SUGGESTIONS = (ctx, builder) ->

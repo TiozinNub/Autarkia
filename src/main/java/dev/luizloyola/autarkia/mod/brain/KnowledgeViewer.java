@@ -125,9 +125,11 @@ public final class KnowledgeViewer {
 
     /** One belief: a rising column at the anchor, a dot on each bounds corner. */
     private static void emit(ServerLevel level, PoiMemory memory) {
-        SimpleParticleType particle = memory.kind() == PoiKind.TREE
-                ? ParticleTypes.HAPPY_VILLAGER
-                : ParticleTypes.DRIPPING_WATER;
+        SimpleParticleType particle = switch (memory.kind()) {
+            case TREE -> ParticleTypes.HAPPY_VILLAGER;
+            case HERD -> ParticleTypes.HEART;
+            default -> ParticleTypes.DRIPPING_WATER;
+        };
         Pos anchor = memory.anchor();
         for (int i = 0; i < 4; i++) {
             level.sendParticles(particle,

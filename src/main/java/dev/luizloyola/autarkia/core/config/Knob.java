@@ -35,6 +35,14 @@ public enum Knob {
     /** @see dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct#ramp() */
     FLEE_RAMP("instincts.flee_ramp", Kind.DOUBLE, 12.0, 1.0, 64.0,
             "Distance (blocks) over which flee pressure ramps from nothing to full panic."),
+    /** @see dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct#rangedRangeMult() */
+    FLEE_RANGED_RANGE_MULT("instincts.flee_ranged_range_mult", Kind.DOUBLE, 1.5, 1.0, 4.0,
+            "Flee-range multiplier against a RANGED source (a skeleton's bow, a drowned's "
+                    + "trident, anyone aiming) — arrows out-reach claws, so fear starts farther."),
+    /** @see dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct#approachBonus() */
+    FLEE_APPROACH_BONUS("instincts.flee_approach_bonus", Kind.DOUBLE, 1.3, 1.0, 4.0,
+            "Pressure multiplier when the threat is measurably CLOSING IN — the observable "
+                    + "stand-in for 'it is hunting me'."),
     /** @see dev.luizloyola.autarkia.core.brain.instinct.DescendInstinct#pressure() */
     DESCEND_PRESSURE("instincts.descend_pressure", Kind.DOUBLE, 0.45, 0.0, 1.0,
             "Pressure to climb down off an orphaned pillar. Keep below brain.preempt so a "
@@ -73,18 +81,18 @@ public enum Knob {
 
     // --- peers (the people sense) -----------------------------------------------------------
 
-    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#radius() */
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#radius() */
     PEERS_RADIUS("peers.radius", Kind.INT, 24, 4, 64,
             "How far (blocks) another person can be perceived at all."),
     /** Read by the mod-side candidate query against sneaking targets. */
     PEERS_SNEAK_RANGE_MULT("peers.sneak_range_mult", Kind.DOUBLE, 0.75, 0.1, 1.0,
             "Detection range multiplier against a SNEAKING target — sneaking shrinks how far "
                     + "away you are noticed, it never makes you invisible."),
-    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#coneDegrees() */
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#coneDegrees() */
     PEERS_CONE_DEGREES("peers.cone_degrees", Kind.INT, 150, 30, 360,
             "Horizontal field of view (degrees). People outside it are unseen until they make "
                     + "noise; 360 restores the old omniscience."),
-    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#verticalHalfDegrees() */
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#verticalHalfDegrees() */
     PEERS_VERTICAL_DEGREES("peers.vertical_degrees", Kind.INT, 60, 5, 90,
             "Vertical field HALF-angle (degrees) around gaze pitch — human vision is wide "
                     + "across but flat; 90 removes the up/down limit."),
@@ -92,21 +100,59 @@ public enum Knob {
     PEERS_HEARING_RADIUS("peers.hearing_radius", Kind.INT, 12, 0, 32,
             "How far (blocks) sound-makers are noticed regardless of the view cone. Sneaking "
                     + "people are silent (vanilla's own rule); 0 makes a person deaf."),
-    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#lingerTicks() */
-    PEERS_LINGER_TICKS("peers.linger_ticks", Kind.INT, 100, 0, 1200,
-            "Object permanence: how long a peer stays perceived (frozen, as remembered) after "
-                    + "every channel goes dark — the walking-behind-a-pillar grace."),
-    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#heardActivityDecayTicks() */
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#lingerTicks() */
+    PEERS_LINGER_TICKS("peers.linger_ticks", Kind.INT, 300, 0, 2400,
+            "Object permanence: how long a tracked being stays perceived (frozen, as "
+                    + "remembered) after every channel goes dark. 15s bridges 2+ idle calls, "
+                    + "so repeated moos keep tracking the same unseen mob (decision: Luiz)."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#heardActivityDecayTicks() */
     PEERS_HEARD_DECAY_TICKS("peers.heard_activity_decay_ticks", Kind.INT, 60, 0, 1200,
             "How long a sound-told activity (heard mining, a heard scuffle) stays believed "
                     + "after the sound stops — then only the bare presence is left."),
-    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#nearIntervalTicks() */
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#nearIntervalTicks() */
     PEERS_NEAR_INTERVAL("peers.near_interval_ticks", Kind.INT, 1, 1, 100,
-            "Attention at point-blank: re-check interval (ticks) for a peer standing right there."),
-    /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#farIntervalTicks() */
+            "Attention at point-blank: re-check interval (ticks) for a body standing right there."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#farIntervalTicks() */
     PEERS_FAR_INTERVAL("peers.far_interval_ticks", Kind.INT, 20, 1, 400,
-            "Attention at the edge: re-check interval (ticks) for a peer at max range; "
+            "Attention at the edge: re-check interval (ticks) for a body at max range; "
                     + "distances between lerp between the two."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#herdLinkRadius() */
+    PEERS_HERD_LINK_RADIUS("peers.herd_link_radius", Kind.INT, 12, 2, 24,
+            "How far apart (blocks, per axis) two same-species animals may stand and still "
+                    + "chain into one herd — herds are chains, so a spread pasture links up."),
+    /** @see dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore#rayBudgetBase() */
+    PEERS_RAY_BUDGET("peers.ray_budget", Kind.INT, 8, 1, 256,
+            "Base line-of-sight checks per Person per tick. The effective budget scales up "
+                    + "with the backlog (max of this and a quarter of the due work), so a "
+                    + "100-mob wave is noticed within ~4 ticks — deferred, never skipped."),
+
+    // --- danger (the flee weighting; per-species weights live in the danger file section) ----
+
+    /** @see dev.luizloyola.autarkia.core.brain.instinct.Danger#meleeMult() */
+    DANGER_MELEE_MULT("danger.melee_mult", Kind.DOUBLE, 1.15, 0.0, 4.0,
+            "Danger multiplier for a visibly held melee weapon — a zombie with a sword "
+                    + "outranks bare claws (decision: Luiz)."),
+    /** @see dev.luizloyola.autarkia.core.brain.instinct.Danger#rangedMult() */
+    DANGER_RANGED_MULT("danger.ranged_mult", Kind.DOUBLE, 1.25, 0.0, 4.0,
+            "Danger multiplier for a visibly held ranged weapon (bow, crossbow, trident)."),
+    /** @see dev.luizloyola.autarkia.core.brain.instinct.Danger#armoredMult() */
+    DANGER_ARMORED_MULT("danger.armored_mult", Kind.DOUBLE, 1.2, 0.0, 4.0,
+            "Danger multiplier for visible armor on the body."),
+    /** @see dev.luizloyola.autarkia.core.brain.instinct.Danger#mountedMult() */
+    DANGER_MOUNTED_MULT("danger.mounted_mult", Kind.DOUBLE, 1.15, 0.0, 4.0,
+            "Danger multiplier for a mounted body (spider jockeys, skeleton horsemen)."),
+    /** @see dev.luizloyola.autarkia.core.brain.instinct.Danger#babyMult() */
+    DANGER_BABY_MULT("danger.baby_mult", Kind.DOUBLE, 1.2, 0.0, 4.0,
+            "Danger multiplier for a baby variant — smaller, faster, harder to hit."),
+
+    // --- social (talking, hailing, grouping up) ----------------------------------------------
+
+    /** Read by the mod-side ear, which sizes itself to the LOUDEST social range. */
+    SOCIAL_HAIL_RADIUS("social.hail_radius", Kind.INT, 48, 8, 64,
+            "How far (blocks) a HAIL carries — the deliberate shout that says 'hey, over "
+                    + "there'. It must outrange sight (peers.radius) or it would add nothing to "
+                    + "simply noticing someone. This is also the ear's own listener radius; "
+                    + "quieter sounds are narrowed back down to peers.hearing_radius."),
 
     // --- claims -----------------------------------------------------------------------------
 

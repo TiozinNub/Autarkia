@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.core.brain.instinct;
 
 import dev.luizloyola.autarkia.core.brain.BrainContext;
-import dev.luizloyola.autarkia.core.brain.sense.Threat;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
 import dev.luizloyola.autarkia.core.brain.task.FleeStep;
 import dev.luizloyola.autarkia.core.brain.task.Task;
 import dev.luizloyola.autarkia.core.config.Config;
@@ -9,37 +9,41 @@ import dev.luizloyola.autarkia.core.config.Knob;
 import java.util.random.RandomGenerator;
 
 /**
- * The emergency drive — the deferred item at the nav/brain boundary (pathfinder design doc). Its
- * pressure is the strongest currently-felt danger, read straight from {@link dev.luizloyola.autarkia.core.brain.sense.Percepts#threats()};
- * its root is a fresh {@link FleeStep}, re-granted while the pressure stays on top so the legs are
- * re-aimed as threats move (see {@link FleeStep}'s doc).
+ * The emergency drive, reading the PERCEIVED world rather than an omniscient scan: pressure comes
+ * from the AGGRESSIVE beings this body has made out. A creeper behind a wall does not press, one
+ * that spawned behind goes unnoticed until it sounds or crosses the cone, and a hit does not reveal
+ * the shooter.
  *
- * <p><b>Pressure.</b> Per threat, a linear ramp from {@link #range()} blocks (none) to contact (full)
- * over the last {@link #ramp()} blocks, times {@link #TARGETING_BONUS} when the threat is actively
- * hunting them ({@link Threat#targetingMe()}), capped at {@code 1.0}; the overall pressure is the MAX
- * across sensed threats — danger does not stack, no threats → {@code 0.0}. At the default range
- * and ramp a passive mob crosses the arbiter's {@code PREEMPT} line (0.6) at about 8.8 blocks, one
- * hunting them at about 10.5. A threat outside {@link #range()} can still lose the bid to a starving
- * {@code Eat} — they wolf the bread, then run; that is intended.
+ * <p><b>Per aggressive being:</b> a linear ramp from its REACH (extended for a shooter — seen bow,
+ * drawn aim, or {@link Danger#rangedSpecies}) to contact over the last {@link #ramp()} blocks,
+ * times {@link Danger#weight} and the visible-gear modifiers, times {@link #approachBonus()} when
+ * it is CLOSING IN, capped at 1.0. Overall pressure is the MAX across beings — danger does not
+ * stack; nothing aggressive perceived → 0.0.
  *
- * <p><b>The emergency {@link #failCooldown()}.</b> Ten ticks, not the {@link
- * Instinct#DEFAULT_FAIL_COOLDOWN 100} every other drive sits out: a cornered Person must retry at
- * once with a freshly-rolled direction rather than stand still being eaten.
+ * <p>{@link #failCooldown()} is ten ticks, not the {@link Instinct#DEFAULT_FAIL_COOLDOWN 100}: a
+ * cornered Person must retry immediately with a freshly-rolled direction.
  */
 public final class FleeInstinct implements Instinct {
 
-    /** Beyond this straight-line distance a threat exerts no pressure at all. */
+    /** Beyond this straight-line distance a melee threat exerts no pressure at all. */
     public static double range() {
         return Config.get().d(Knob.FLEE_RANGE);
     }
 
-    /** Pressure ramps linearly to full over this many blocks, ending at {@link #range()}. */
+    /** Pressure ramps linearly to full over this many blocks, ending at reach. */
     public static double ramp() {
         return Config.get().d(Knob.FLEE_RAMP);
     }
 
-    /** Multiplier when a threat is actively hunting, not merely nearby; capped at {@code 1.0}. */
-    public static final double TARGETING_BONUS = 1.3;
+    /** @see Knob#FLEE_RANGED_RANGE_MULT */
+    public static double rangedRangeMult() {
+        return Config.get().d(Knob.FLEE_RANGED_RANGE_MULT);
+    }
+
+    /** @see Knob#FLEE_APPROACH_BONUS */
+    public static double approachBonus() {
+        return Config.get().d(Knob.FLEE_APPROACH_BONUS);
+    }
 
     /** The emergency override of {@link Instinct#failCooldown()} — retry almost immediately. */
     public static final int FAIL_COOLDOWN = 10;
@@ -53,16 +57,59 @@ public final class FleeInstinct implements Instinct {
     @Override
     public double pressure(BrainContext ctx) {
         double max = 0.0;
-        double range = range();
-        double ramp = ramp();
-        for (Threat threat : ctx.percepts().threats()) {
-            double ramped = clamp01((range - threat.distance()) / ramp);
-            double pressure = threat.targetingMe() ? Math.min(1.0, ramped * TARGETING_BONUS) : ramped;
+        for (Being being : ctx.percepts().beings()) {
+            double pressure = pressureOf(being);
             if (pressure > max) {
                 max = pressure;
             }
         }
         return max;
+    }
+
+    /** One being's contribution — public so tests and debug readouts price fear the same way. */
+    public static double pressureOf(Being being) {
+        if (!being.aggressive()) {
+            return 0.0; // masked tiers read non-aggressive: unmade-out things exert nothing
+        }
+        double reach = range() * (ranged(being) ? rangedRangeMult() : 1.0);
+        double ramped = clamp01((reach - being.distance()) / ramp());
+        if (ramped == 0.0) {
+            return 0.0;
+        }
+        double weight = Danger.weight(being.species()) * gearMult(being.gear());
+        double pressure = ramped * weight;
+        if (being.approaching()) {
+            pressure *= approachBonus();
+        }
+        return Math.min(1.0, pressure);
+    }
+
+    /** Whether this threat's reach is a projectile's: seen ranged gear, a drawn aim, or a
+     *  species that shoots bare-handed (blaze, ghast — no held item to see). */
+    private static boolean ranged(Being being) {
+        return being.gear().ranged() || being.activity() == Being.Activity.AIMING
+                || Danger.rangedSpecies(being.species());
+    }
+
+    /** The visible-equipment story, multiplied — armored < with sword < …. */
+    private static double gearMult(Being.Gear gear) {
+        double mult = 1.0;
+        if (gear.melee()) {
+            mult *= Danger.meleeMult();
+        }
+        if (gear.ranged()) {
+            mult *= Danger.rangedMult();
+        }
+        if (gear.armored()) {
+            mult *= Danger.armoredMult();
+        }
+        if (gear.mounted()) {
+            mult *= Danger.mountedMult();
+        }
+        if (gear.baby()) {
+            mult *= Danger.babyMult();
+        }
+        return mult;
     }
 
     @Override

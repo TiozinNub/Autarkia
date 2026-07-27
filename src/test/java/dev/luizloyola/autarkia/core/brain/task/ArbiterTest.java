@@ -15,7 +15,6 @@ import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
 import dev.luizloyola.autarkia.core.brain.instinct.Instinct;
 import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.brain.sense.Threat;
 import dev.luizloyola.autarkia.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.FoodValue;
 import java.util.ArrayList;
@@ -414,7 +413,7 @@ class ArbiterTest {
         ctx.consumer.setState(ConsumeState.CONSUMING); // mid-chew, scripted like the body would report it
 
         // A threat close enough to push Flee to 0.9 -- well past PREEMPT and past Eat's 0.4.
-        ctx.percepts.threats = List.of(new Threat(new Pos(5, 64, 0), 5.2, false)); // (16-5.2)/12 = 0.9
+        ctx.percepts.beings = List.of(FakePercepts.monsterAt(new Pos(5, 64, 0), 5.2, false)); // (16-5.2)/12 = 0.9
 
         arbiter.tick(ctx); // t2: Flee preempts mid-chew
         assertEquals(1, ctx.consumer.abortCalls, "the chew was cancelled -- ConsumeItem.cancel aborts it");
@@ -423,7 +422,7 @@ class ArbiterTest {
         assertEquals(dev.luizloyola.autarkia.core.nav.Gait.SPRINT, ctx.mover.lastGait,
                 "the flee leg sprints");
 
-        ctx.percepts.threats = List.of();
+        ctx.percepts.beings = List.of();
         ctx.mover.setState(MoveState.ARRIVED);
         arbiter.tick(ctx); // t3: GoTo SUCCEEDS -> the leg (FleeStep, no Idle) ends -> boundary
         assertFalse(arbiter.executor().isBusy(),
@@ -443,14 +442,14 @@ class ArbiterTest {
         SpyingFlee flee = new SpyingFlee(new Random(11));
         Arbiter arbiter = new Arbiter(List.of(flee));
         ctx.percepts.position = new Pos(0, 64, 0);
-        ctx.percepts.threats = List.of(new Threat(new Pos(5, 64, 0), 5.0, false)); // east
+        ctx.percepts.beings = List.of(FakePercepts.monsterAt(new Pos(5, 64, 0), 5.0, false)); // east
 
         arbiter.tick(ctx); // t1: grant leg #1; its GoTo issues, aimed west
         assertEquals(1, flee.grantedRoots.size());
         assertTrue(ctx.mover.lastX < 0, "leg 1 runs west, away from the eastern threat");
 
         ctx.mover.setState(MoveState.ARRIVED); 
-        ctx.percepts.threats = List.of(new Threat(new Pos(-5, 64, 0), 5.0, false)); // now west
+        ctx.percepts.beings = List.of(FakePercepts.monsterAt(new Pos(-5, 64, 0), 5.0, false)); // now west
         arbiter.tick(ctx); // t2: GoTo #1 SUCCEEDS -> boundary; re-grant is still next tick, not this one
         assertEquals(1, flee.grantedRoots.size(), "re-grant happens on the NEXT tick, not the boundary tick itself");
 

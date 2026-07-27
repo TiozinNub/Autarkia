@@ -7,6 +7,7 @@ import dev.isxander.yacl3.api.YetAnotherConfigLib;
 import dev.isxander.yacl3.api.controller.DoubleFieldControllerBuilder;
 import dev.isxander.yacl3.api.controller.IntegerFieldControllerBuilder;
 import dev.isxander.yacl3.api.controller.TickBoxControllerBuilder;
+import dev.luizloyola.autarkia.core.brain.instinct.Danger;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.core.config.Config;
 import dev.luizloyola.autarkia.core.config.Knob;
@@ -54,13 +55,25 @@ final class YaclConfigScreen {
                             "autarkia.config.category." + section, prettify(section))))
                     .option(option(knob, live, staged));
         }
+        // The per-species flee weights ride the danger tab beside the modifier knobs. Not
+        // knobs (open key set) — each label borrows the mob's own lang entry, so nothing
+        // here ever needs a hand-written name (decision: Luiz).
+        Map<String, Double> stagedDanger = new LinkedHashMap<>();
+        ConfigCategory.Builder dangerTab = categories.get("danger");
+        if (dangerTab != null) {
+            dangerTab.option(dangerOption(Danger.DEFAULT_KEY, stagedDanger));
+            Danger.table().keySet().stream()
+                    .filter(species -> !species.equals(Danger.DEFAULT_KEY))
+                    .sorted()
+                    .forEach(species -> dangerTab.option(dangerOption(species, stagedDanger)));
+        }
 
         YetAnotherConfigLib.Builder builder = YetAnotherConfigLib.createBuilder()
                 .title(Component.literal("Autarkia"));
         for (ConfigCategory.Builder category : categories.values()) {
             builder.category(category.build());
         }
-        return builder.save(() -> apply(staged)).build().generateScreen(parent);
+        return builder.save(() -> apply(staged, stagedDanger)).build().generateScreen(parent);
     }
 
     private static Option<?> option(Knob knob, AutarkiaConfig live, Map<Knob, Double> staged) {
@@ -117,13 +130,42 @@ final class YaclConfigScreen {
                 : Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
     }
 
+    /** One species weight row — named by the mob's own lang entry, never hand-written. */
+    private static Option<Double> dangerOption(String species, Map<String, Double> staged) {
+        Component name = species.equals(Danger.DEFAULT_KEY)
+                ? Component.translatableWithFallback("autarkia.config.option.danger.default_weight",
+                        "Default (unlisted mobs)")
+                : speciesName(species);
+        return Option.<Double>createBuilder()
+                .name(name)
+                .description(OptionDescription.of(Component.literal(
+                        "danger." + species + " — flee weight, accepts 0.0 to 8.0")))
+                .binding(1.0, () -> Danger.weight(species), value -> staged.put(species, value))
+                .controller(opt -> DoubleFieldControllerBuilder.create(opt).range(0.0, 8.0))
+                .build();
+    }
+
+    /** The mob's own display name, or the raw species string for ids not in this game's registry. */
+    private static Component speciesName(String species) {
+        String id = species.contains(":") ? species : "minecraft:" + species;
+        return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                .getOptional(net.minecraft.resources.Identifier.parse(id))
+                .<Component>map(type -> Component.translatable(type.getDescriptionId()))
+                .orElse(Component.literal(prettify(species)));
+    }
+
     /** Install the edited values as one config, then persist — the same path {@code config set} takes. */
-    private static void apply(Map<Knob, Double> staged) {
+    private static void apply(Map<Knob, Double> staged, Map<String, Double> stagedDanger) {
         AutarkiaConfig updated = Config.get();
         for (Map.Entry<Knob, Double> change : staged.entrySet()) {
             updated = updated.with(change.getKey(), change.getValue());
         }
         Config.install(updated);
+        if (!stagedDanger.isEmpty()) {
+            Map<String, Double> merged = new LinkedHashMap<>(Danger.table());
+            merged.putAll(stagedDanger);
+            Danger.install(merged);
+        }
         ConfigFile.save(updated);
     }
 }

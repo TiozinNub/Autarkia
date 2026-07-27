@@ -10,7 +10,7 @@ import net.minecraft.world.entity.LivingEntity;
 /**
  * Who dealt damage lately — the observable half of "attacking": a landed hit is visible and
  * audible, so a short-lived mark on the ATTACKER is fair perception knowledge, not telepathy.
- * {@code PeerSense} reads it to split a swinging arm into FIGHTING vs MINING (decision: Luiz).
+ * {@code BeingSense} reads it to split a swinging arm into FIGHTING vs MINING (decision: Luiz).
  * Server-wide and transient, the {@code Claims} shape.
  */
 public final class DamageMarks {

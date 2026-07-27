@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.autarkia.core.brain.act.MoveState;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.brain.sense.Threat;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
 import dev.luizloyola.autarkia.core.nav.Gait;
 import java.util.List;
 import java.util.Random;
@@ -22,14 +22,14 @@ class FleeStepTest {
     private final FakeContext ctx = new FakeContext();
     private final TaskExecutor executor = new TaskExecutor();
 
-    private static Threat threatAt(int x, int z, double distance, boolean targeting) {
-        return new Threat(new Pos(x, 64, z), distance, targeting);
+    private static Being threatAt(int x, int z, double distance, boolean approaching) {
+        return FakePercepts.monsterAt(new Pos(x, 64, z), distance, approaching);
     }
 
     @Test
     void runsAwayFromASingleThreatDueEast() {
         ctx.percepts.position = new Pos(0, 64, 0);
-        ctx.percepts.threats = List.of(threatAt(10, 0, 10.0, false));
+        ctx.percepts.beings = List.of(threatAt(10, 0, 10.0, false));
         executor.run(new FleeStep(new Random(1)), ctx);
         executor.tick(ctx); // expand FleeStep -> Escape.decompose -> GoTo issues moveTo
 
@@ -45,7 +45,7 @@ class FleeStepTest {
         ctx.percepts.position = new Pos(0, 64, 0);
         // Close threat due east; far threat due north. 1/d^2 weighting should make the close
         // eastern threat dominate the centroid, so they run west and (slightly) south.
-        ctx.percepts.threats = List.of(
+        ctx.percepts.beings = List.of(
                 threatAt(4, 0, 4.0, false),
                 threatAt(0, 12, 12.0, false));
         executor.run(new FleeStep(new Random(2)), ctx);
@@ -59,7 +59,7 @@ class FleeStepTest {
     void surroundedStillProducesAFullLengthLeg() {
         ctx.percepts.position = new Pos(0, 64, 0);
         // Two threats symmetric about them -> the weighted centroid lands on that position.
-        ctx.percepts.threats = List.of(
+        ctx.percepts.beings = List.of(
                 threatAt(8, 0, 8.0, false),
                 threatAt(-8, 0, 8.0, false));
         executor.run(new FleeStep(new Random(3)), ctx);
@@ -74,7 +74,7 @@ class FleeStepTest {
     @Test
     void decomposeEmitsExactlyOneUrgentGoToAndEndsWithNoIdlePause() {
         ctx.percepts.position = new Pos(0, 64, 0);
-        ctx.percepts.threats = List.of(threatAt(10, 0, 10.0, false));
+        ctx.percepts.beings = List.of(threatAt(10, 0, 10.0, false));
         executor.run(new FleeStep(new Random(4)), ctx);
         executor.tick(ctx); // issues the one GoTo
 
@@ -91,11 +91,11 @@ class FleeStepTest {
     void decomposeReadsTheCurrentPositionAndThreatsNotTheGrantTimeOnes() {
         FleeStep step = new FleeStep(new Random(5));
         ctx.percepts.position = new Pos(0, 64, 0);
-        ctx.percepts.threats = List.of(threatAt(10, 0, 10.0, false)); // east, at grant time
+        ctx.percepts.beings = List.of(threatAt(10, 0, 10.0, false)); // east, at grant time
         executor.run(step, ctx); // installed while at spawn...
 
         ctx.percepts.position = new Pos(100, 70, 200); // ...but they walked before it expanded
-        ctx.percepts.threats = List.of(threatAt(100, 210, 10.0, false)); // and the threat moved too (now north)
+        ctx.percepts.beings = List.of(threatAt(100, 210, 10.0, false)); // and the threat moved too (now north)
 
         executor.tick(ctx); // lazy expansion reads the CURRENT percepts
         assertEquals(70, ctx.mover.lastY, "offset from the CURRENT cell");

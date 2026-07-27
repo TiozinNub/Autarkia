@@ -4,8 +4,8 @@ import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
 import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.autarkia.core.brain.knowledge.Region;
-import dev.luizloyola.autarkia.core.brain.sense.Peer;
-import dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore;
+import dev.luizloyola.autarkia.core.brain.sense.Being;
+import dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.nav.Path;
 import dev.luizloyola.autarkia.core.nav.Waypoint;
@@ -37,17 +37,18 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The in-world debug view, server half: who is watching what, and the snapshot that feeds it.
- * Unlike the chat viewers this one DRAWS, and drawing happens on the client, so each watching
- * player gets one {@link DebugViewPayload} every {@link #SEND_INTERVAL_TICKS} carrying only what
- * the client cannot already see for itself.
  *
- * <p><b>The view follows the selection, not a separate target.</b> Layers are switched per PLAYER,
- * and the Person drawn is whoever that player has pinned in {@code PersonSelection} — the slot the
- * debug wand and {@code /autarkia select} already share.
+ * <p>This viewer DRAWS rather than narrating, and drawing happens on the client, so the facts must
+ * travel: one {@link DebugViewPayload} per watching player every {@link #SEND_INTERVAL_TICKS},
+ * carrying only what the client cannot see for itself.
  *
- * <p>A player whose layers are all off, or whose pin is empty or unloaded, gets exactly one
- * {@link DebugViewPayload#clear()} and then silence — without that edge the client would keep
- * redrawing its last snapshot forever. Transient debug state, one map per server, gone on stop.
+ * <p>Layers are switched per PLAYER and the Person drawn is whoever that player has pinned in
+ * {@code PersonSelection} (the slot the debug wand and {@code /autarkia select} share), so there is
+ * no second notion of "who am I debugging" to fall out of sync.
+ *
+ * <p>All layers off, or an empty or unloaded pin, sends exactly one
+ * {@link DebugViewPayload#clear()} and then silence; without that edge the client would redraw its
+ * last snapshot forever. Transient state, one map per server, gone on stop.
  */
 public final class DebugView {
     private DebugView() {}
@@ -199,8 +200,8 @@ public final class DebugView {
                 layers.contains(DebugLayer.BRAIN) ? person.brain().describeLines() : List.of(),
                 layers.contains(DebugLayer.MEMORY) ? beliefs(server, person) : List.of(),
                 layers.contains(DebugLayer.PEERS) ? peers(person) : List.of(),
-                PeerSensorCore.coneDegrees(),
-                PeerSensorCore.radius());
+                BeingSensorCore.coneDegrees(),
+                BeingSensorCore.radius());
     }
 
     /** Everything they remember, of every kind, flattened with staleness resolved server-side. */
@@ -227,7 +228,7 @@ public final class DebugView {
     }
 
     /**
-     * The live peer reading — through the BRAIN's own eyes ({@code percepts()}), not a fresh
+     * The live being readings — through the BRAIN's own eyes ({@code percepts()}), not a fresh
      * sensor: the cache carries the movement history and the linger window, and a throwaway scan
      * would report everyone as freshly seen and standing still.
      */
@@ -236,10 +237,10 @@ public final class DebugView {
         // the watcher — the same argument the chat readouts pass.
         String pronoun = person.getGender().objectPronoun();
         List<DebugViewPayload.PeerMark> out = new ArrayList<>();
-        for (Peer peer : person.brain().percepts().peers()) {
+        for (Being being : person.brain().percepts().beings()) {
             out.add(new DebugViewPayload.PeerMark(
-                    peer.knownAs(), peer.tell(pronoun), cell(peer.pos()), bodyId(person, peer),
-                    peer.awareness().ordinal(), (float) peer.distance()));
+                    being.knownAs(), being.tell(pronoun), cell(being.pos()), bodyId(person, being),
+                    being.awareness().ordinal(), (float) being.distance()));
         }
         return out;
     }
@@ -251,11 +252,11 @@ public final class DebugView {
      * track of. For HEARD (the position of a noise) and REMEMBERED (a frozen last sighting) the
      * believed cell is the fact.
      */
-    private static int bodyId(Person person, Peer peer) {
-        if (peer.awareness() != Peer.Awareness.SEEN) {
+    private static int bodyId(Person person, Being being) {
+        if (being.awareness() != Being.Awareness.SEEN) {
             return DebugViewPayload.PeerMark.NO_BODY;
         }
-        LivingEntity body = person.peerSense().bodyOf(peer.id());
+        LivingEntity body = person.beingSense().bodyOf(being.id());
         return body == null ? DebugViewPayload.PeerMark.NO_BODY : body.getId();
     }
 

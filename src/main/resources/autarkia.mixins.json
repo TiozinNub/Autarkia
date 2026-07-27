@@ -3,6 +3,8 @@
   "package": "dev.luizloyola.autarkia.mixin",
   "compatibilityLevel": "${java}",
   "mixins": [
+    "LivingEntityHurtSoundMixin",
+    "MobAmbientSoundMixin",
     "NearestAttackableTargetGoalMixin",
     "ServerLevelCrackMixin",
     "ServerLevelGameEventMixin",

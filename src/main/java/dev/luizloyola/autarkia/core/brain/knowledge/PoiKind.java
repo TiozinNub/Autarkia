@@ -17,7 +17,15 @@ public enum PoiKind {
      * A body of surface water. Anchor = a shore-adjacent surface cell. The wide merge radius
      * coalesces partial re-discoveries of one body (a lake met from two sides) into one memory.
      */
-    WATER(8);
+    WATER(8),
+    /**
+     * Animals remembered by GENERAL LOCATION: 3+ head of one species is a herd memory (anchor =
+     * centroid, {@code units} = head count), 1–2 are individual memories of the same kind, so the
+     * brain can weigh two lone cows against a herd of six. {@code detail} carries the species and
+     * merging is detail-aware. Merge radius 0 because {@code HerdNoter} owns all matching — its
+     * expand-recenter rule needs the remembered AREA inflated 2–3×, not a fixed anchor radius.
+     */
+    HERD(0);
 
     private final int mergeRadius;
 
