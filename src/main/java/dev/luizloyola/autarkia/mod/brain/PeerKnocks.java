@@ -7,6 +7,7 @@ import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
@@ -35,8 +36,12 @@ public final class PeerKnocks {
             return;
         }
         Vec3 at = Vec3.atCenterOf(pos);
+        // A dead Person lingers as a corpse and heard() still writes to her sense table: without
+        // the alive filter she accrues peers nothing reads, since commands and @e selectors treat
+        // her as gone. Same guard the aggro mixin applies.
         for (Person listener : level.getEntitiesOfClass(Person.class,
-                AABB.ofSize(at, radius * 2.0, radius * 2.0, radius * 2.0))) {
+                AABB.ofSize(at, radius * 2.0, radius * 2.0, radius * 2.0),
+                EntitySelector.LIVING_ENTITY_STILL_ALIVE)) {
             if (listener != body && at.distanceTo(listener.getEyePosition()) <= radius) {
                 listener.peerSense().heard(body, Peer.Activity.MINING, Peer.Locomotion.STILL);
             }

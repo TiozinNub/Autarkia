@@ -39,6 +39,7 @@ import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.log.Journals;
+import dev.luizloyola.autarkia.mod.log.ThoughtBroadcast;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
@@ -77,32 +78,40 @@ import java.util.stream.Stream;
 /**
  * Developer/admin commands for inspecting Autarkia state.
  *
- * <p>{@code whois} prints a Person's identity (id + name), read straight from the server-side
- * {@link PersonDirectory}: the name is never synced to clients.
+ * <p>{@code whois [targets]} prints the full identity (id + name) of the resolved {@code Person} or
+ * of each selected entity, read from the server-side {@link PersonDirectory}: the name is never
+ * synced to clients.
  *
- * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs the same work
- * through the task machinery the arbiter feeds; {@code brain auto true | false} flips autonomy — ON
- * by default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
+ * <p>{@code nav goto <pos> | stop | status} drives the resolved Person's navigator directly —
+ * locomotion debug, usable from a headless dev server and by command blocks — while
+ * {@code brain goto <pos> | eat | status | cancel} goes through the task machinery the arbiter
+ * feeds. {@code brain auto true | false} flips the autonomy switch, which a manual {@code goto} or
+ * {@code eat} also flips off as it runs.
  *
- * <p><b>Every {@code true|false} switch reads back when you leave the value off</b>, changing
- * nothing and returning 1 for on, 0 for off — usable from a command block or an {@code execute if}
- * without parsing the chat line.
+ * <p><b>Every {@code true|false} switch reads back when you leave the value off.</b>
+ * {@code brain auto}, {@code knowledge view}, {@code peers view} and {@code debug <layer>} report
+ * their state and change nothing, returning 1 for on and 0 for off so an {@code execute if} parses
+ * no chat.
  *
- * <p>{@code log} reads the resolved Person's in-memory journal ring, all subsystems or one;
- * {@code log for <name|id>} reaches any person by directory lookup, including one whose entity is
- * unloaded (the ring is {@code PersonId}-keyed and outlives the entity). The durable per-person
- * file is separate.
+ * <p>{@code log [brain|pathfind|body|sense] [count]} prints the resolved Person's recent journal
+ * from the in-memory ring, interleaved with no subsystem and filtered with one.
+ * {@code log for <name|id> [subsystem] [count]} reaches any person by directory lookup, including
+ * one whose entity is unloaded (the ring is {@code PersonId}-keyed and outlives the entity), tagged
+ * {@code (not loaded)}. The durable per-person file is separate.
  *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
- * links it to the entity before it enters the world; a plain {@code /summon autarkia:person}
- * instead mints one on the entity's first server tick. Position mirrors {@code /summon}.
- * {@code person spawn nobrain} is that same path with autonomy off: an inert body for exercising
- * one feature at a time.
+ * links the entity to it before spawn; position mirrors {@code /summon}. A plain
+ * {@code /summon autarkia:person} is equally valid — it mints its own identity on its first server
+ * tick — so the command only adds naming and a report of where it landed. {@code person spawn
+ * nobrain} is the same path with autonomy off: an inert body to drive by hand.
  *
- * <p>Every person-scoped subcommand resolves through {@link #resolve}: the source's pin, else the
- * nearest. {@code select} pins by name or short-id, or by what a player is looking at, unpinning
- * when they look at nobody; {@code list} enumerates the loaded Persons, since names are not unique.
- * Pins live in {@link PersonSelection} — in memory, per source, gone on restart.
+ * <p>Person-scoped subcommands resolve through {@link #resolve}: the Person the command runs
+ * <em>as</em> (so {@code /execute as @e[type=autarkia:person]} addresses each in turn), else the
+ * source's pinned Person, else the nearest. {@code select <name|id>} pins by name or short-id; bare
+ * {@code select} pins the Person a player is looking at, unpins when looking at nobody, and pins the
+ * nearest from the console; {@code select clear} and {@code select show} follow. {@code list}
+ * enumerates the loaded Persons, since names are not unique. Pins live in {@link PersonSelection}
+ * (in memory, per source, gone on restart).
  */
 public final class AutarkiaCommands {
     private AutarkiaCommands() {}
@@ -135,7 +144,7 @@ public final class AutarkiaCommands {
                         .then(Commands.literal("list")
                                 .executes(ctx -> listPersons(ctx.getSource())))
                         .then(Commands.literal("whois")
-                                .executes(ctx -> whoisNearest(ctx.getSource()))
+                                .executes(ctx -> whoisResolved(ctx.getSource()))
                                 .then(Commands.argument("targets", EntityArgument.entities())
                                         .executes(ctx -> whoisTargets(ctx.getSource(),
                                                 EntityArgument.getEntities(ctx, "targets")))))
@@ -181,6 +190,10 @@ public final class AutarkiaCommands {
                                                 .executes(ctx -> brainAuto(ctx.getSource(), true)))
                                         .then(Commands.literal("false")
                                                 .executes(ctx -> brainAuto(ctx.getSource(), false)))))
+                        // Thinking out loud: forwards the resolved Person's `think` journal lines
+                        // to chat (gray italics) until toggled off.
+                        .then(Commands.literal("think")
+                                .executes(ctx -> thinkToggle(ctx.getSource())))
                         // The per-person debug journal (see the log package). Top-level, not under a
                         // subsystem group, because one Person's log interleaves brain + pathfind + body.
                         .then(Commands.literal("log")
@@ -351,7 +364,7 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** Runs a {@link GoTo} task on the nearest Person through the brain's executor — same walk
+    /** Runs a {@link GoTo} task on the resolved Person through the brain's executor — same walk
      *  as {@link #navGoto}, but through the task machinery, so the whole pipeline is exercised. */
     private static int brainGoto(CommandSourceStack source, BlockPos pos) {
         Person person = resolve(source);
@@ -747,7 +760,7 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** Runs {@link SatisfyHunger} on the nearest Person — the first COMPOUND task, and the
+    /** Runs {@link SatisfyHunger} on the resolved Person — the first COMPOUND task, and the
      *  machinery the Eat instinct also drives (autonomously) via the arbiter. */
     private static int brainEat(CommandSourceStack source) {
         Person person = resolve(source);
@@ -776,7 +789,7 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** Flips the nearest Person's autonomy switch and echoes the new describe() line (now
+    /** Flips the resolved Person's autonomy switch and echoes the new describe() line (now
      *  reporting auto|manual up front). */
     private static int brainAuto(CommandSourceStack source, boolean auto) {
         Person person = resolve(source);
@@ -788,6 +801,18 @@ public final class AutarkiaCommands {
     }
 
     /** {@code brain auto} with no {@code true|false}: reads the switch instead of flipping it. */
+    /** Toggle the thinking-out-loud chat channel for the resolved Person — see
+     *  {@link ThoughtBroadcast}. */
+    private static int thinkToggle(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        boolean on = ThoughtBroadcast.toggle(person.getPersonId());
+        source.sendSuccess(() -> Component.literal(person.getName().getString()
+                        + (on ? " is thinking out loud in chat now." : "'s thoughts are quiet again."))
+                .withStyle(ChatFormatting.AQUA), false);
+        return 1;
+    }
+
     private static int brainAutoShow(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
@@ -1051,7 +1076,7 @@ public final class AutarkiaCommands {
         };
     }
 
-    /** Prints every non-empty slot of the nearest Person's inventory (storage + equipment). */
+    /** Prints every non-empty slot of the resolved Person's inventory (storage + equipment). */
     private static int invList(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
@@ -1070,7 +1095,7 @@ public final class AutarkiaCommands {
         return occupied.size();
     }
 
-    /** Adds {@code count} of the given item to the nearest Person, reporting anything that didn't fit. */
+    /** Adds {@code count} of the given item to the resolved Person, reporting anything that didn't fit. */
     private static int invGive(CommandSourceStack source, ItemInput input, int count)
             throws CommandSyntaxException {
         Person person = resolve(source);
@@ -1230,7 +1255,7 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** Prints the nearest Person's need levels — the {@code needs().describe()} one-liner. */
+    /** Prints the resolved Person's need levels — the {@code needs().describe()} one-liner. */
     private static int personNeeds(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
@@ -1240,10 +1265,10 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * Sets the nearest Person's food level (0..20) and saturation (0.0 when omitted) and echoes
-     * the readout — the dev knob for exercising starvation and regen without waiting out the burn.
-     * Food is set before saturation, which clamps against it; exhaustion is zeroed so behaviour
-     * afterwards is deterministic.
+     * Sets the resolved Person's food level (0..20) and saturation (0.0 when omitted) and echoes the
+     * readout — the dev knob for exercising starvation, regen and the Eat instinct without waiting
+     * out the burn. Food goes first because saturation clamps against it; exhaustion is zeroed so
+     * what follows is deterministic.
      */
     private static int personSetFood(CommandSourceStack source, int food, float saturation) {
         Person person = resolve(source);
@@ -1267,11 +1292,20 @@ public final class AutarkiaCommands {
         return "offhand";
     }
 
+    /**
+     * The living Person nearest the source's position, within {@link #NEAREST_RADIUS}, or
+     * {@code null} having reported that there is none. Searches the SOURCE's dimension and
+     * position, so {@code execute at}/{@code positioned} moves the search; {@code execute as}
+     * (entity only) does not — that is {@link #resolve}'s job.
+     *
+     * <p>{@code isAlive} filters out a corpse, which lingers and would otherwise be the nearest
+     * thing to a console standing where she died — see {@link Persons#loaded}.
+     */
     private static Person nearest(CommandSourceStack source) {
         ServerLevel level = source.getLevel();
         Vec3 origin = source.getPosition();
         AABB box = AABB.ofSize(origin, NEAREST_RADIUS * 2, NEAREST_RADIUS * 2, NEAREST_RADIUS * 2);
-        Person nearest = level.getEntitiesOfClass(Person.class, box).stream()
+        Person nearest = level.getEntitiesOfClass(Person.class, box, Person::isAlive).stream()
                 .min((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .orElse(null);
         if (nearest == null) {
@@ -1282,11 +1316,28 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * The target for a person-scoped command: the source's pinned Person, else the nearest
-     * ({@link #nearest}). A pin that no longer resolves to a loaded entity is a hard failure, never
-     * a silent fall-through. Returns {@code null} having reported the reason.
+     * The target of a person-scoped command: the Person it runs <em>as</em>, else the source's
+     * pinned Person, else the nearest ({@link #nearest}). Returns {@code null} having reported why.
+     *
+     * <p>{@code as} outranks a pin because it names one Person for one invocation where a pin is a
+     * sticky default — and it is the only handle that <em>iterates</em>, so
+     * {@code /execute as @e[type=autarkia:person] run autarkia <anything>} addresses each in turn.
+     *
+     * <p>Tests the entity, not the position: {@code execute as} rebinds only the source's entity, so
+     * a position test would search from the console's spot at world origin.
+     *
+     * <p>Both non-nearest paths fail loudly rather than falling through — a pin whose entity is no
+     * longer loaded, and an {@code as} target no longer alive (a body that died mid-chain).
      */
     private static @Nullable Person resolve(CommandSourceStack source) {
+        if (source.getEntity() instanceof Person self) {
+            if (!self.isAlive()) {
+                source.sendFailure(Component.literal(
+                        self.getName().getString() + " is dead — nothing left to command."));
+                return null;
+            }
+            return self;
+        }
         Optional<PersonId> pin = PersonSelection.pinned(source);
         if (pin.isEmpty()) return nearest(source);
         PersonId id = pin.get();
@@ -1370,13 +1421,16 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** No-argument {@code select}: a player pins the Person under their crosshair, or unpins when
-     *  looking at nobody; the console (or any non-player source) pins the nearest one. */
+    /** No-argument {@code select}: running <em>as</em> a Person pins that Person
+     *  ({@code /execute as @e[…,limit=1] run autarkia select}); a player pins the Person under their
+     *  crosshair, or unpins when looking at nobody; the console pins the nearest one. */
     private static int selectHere(CommandSourceStack source) {
-        boolean fromPlayer = source.getEntity() instanceof ServerPlayer;
-        Person target = source.getEntity() instanceof ServerPlayer player ? lookedAt(player) : nearest(source);
+        Entity self = source.getEntity();
+        Person target = self instanceof Person person ? person
+                : self instanceof ServerPlayer player ? lookedAt(player)
+                : nearest(source);
         if (target == null) {
-            if (fromPlayer) {
+            if (self instanceof ServerPlayer) {
                 // Looking at nobody clears any current pin — the same as `select clear`.
                 return selectClear(source);
             }
@@ -1452,7 +1506,9 @@ public final class AutarkiaCommands {
         Vec3 far = eye.add(player.getViewVector(1.0F).scale(NEAREST_RADIUS));
         AABB search = player.getBoundingBox().expandTowards(player.getViewVector(1.0F).scale(NEAREST_RADIUS)).inflate(1.0);
         EntityHitResult hit = ProjectileUtil.getEntityHitResult(
-                player, eye, far, search, e -> e instanceof Person, NEAREST_RADIUS * NEAREST_RADIUS);
+                player, eye, far, search,
+                e -> e instanceof Person person && person.isAlive(), // never pin a corpse
+                NEAREST_RADIUS * NEAREST_RADIUS);
         return hit != null && hit.getEntity() instanceof Person person ? person : null;
     }
 
@@ -1480,7 +1536,7 @@ public final class AutarkiaCommands {
         return text.substring(0, Math.min(8, text.length()));
     }
 
-    private static int whoisNearest(CommandSourceStack source) {
+    private static int whoisResolved(CommandSourceStack source) {
         Person target = resolve(source);
         if (target == null) return 0;
         report(source, target);
