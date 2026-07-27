@@ -6,33 +6,27 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Runs one task tree at a time — the execution slot of the task layer, a recursive-HTN walker.
- * The root may be a {@link PrimitiveTask} or a {@link CompoundTask}. Ticked by the mod
- * {@code BrainDriver} from {@code serverAiStep} before the Navigator ticks, so actuator orders a
- * task issues in its tick are acted on that same tick.
+ * Runs one task tree at a time — a recursive-HTN walker whose root may be a {@link PrimitiveTask}
+ * or a {@link CompoundTask}. Ticked by the mod {@code BrainDriver} from {@code serverAiStep} before
+ * the Navigator, so actuator orders a task issues are acted on that same tick.
  *
- * <p><b>Tree execution.</b> The expansion path is a stack of frames — one per compound reached,
- * holding the chosen {@link Method}, its subtask sequence, the cursor, and the methods this
- * visit already burned. Per tick it descends from the current position, expanding compounds
- * lazily (cheapest applicable not-yet-failed method wins, ties to list order; an empty decompose
- * trivially succeeds), and ticks exactly one primitive — the deepest. Expansion is free; acting
- * is metered.
+ * <p><b>Tree execution.</b> The expansion path is a stack of frames, one per compound reached. Per
+ * tick it descends from the current position, expanding compounds lazily (cheapest applicable
+ * not-yet-failed method wins, ties to list order; an empty decompose trivially succeeds), and ticks
+ * exactly one primitive — the deepest current one. Expansion is free; acting is metered.
  *
- * <p><b>The one failure rule.</b> A subtask's FAILED fails its parent frame's method: the method
- * is marked tried and the compound re-selects among its remaining applicable methods, re-scored
- * against the fresh context. No method left → the compound FAILS and bubbles the same way; the
- * root failing is terminal and remembered.
+ * <p><b>The one failure rule.</b> A subtask's FAILED marks its parent's method tried and the
+ * compound re-selects among the rest, re-scored against the fresh context; no method left FAILS the
+ * compound, which bubbles the same way, and the root failing is terminal and remembered.
+ * <b>Achieve-frames</b> instead start a FRESH round — the attempts changed the world, so the same
+ * ways re-scored pick different targets — bounded by {@link #ACHIEVE_ROUNDS_CAP} and by an empty
+ * pool failing a fresh round too (a 2000-log stock died on its first unworkable tree, reading as
+ * frozen).
  *
- * <p>Lifecycle, all in service of "the body has one set of legs":
- * <ul>
- *   <li>{@link #run} while busy cancels the incumbent first — the deepest primitive holds the
- *       actuators — and drops the whole stack before installing the newcomer, without ticking
- *       it;</li>
- *   <li>a terminal status clears the slot and is remembered (root description + status);</li>
- *   <li>{@link #cancel} clears without recording, so a cancelled tree cannot overwrite the last
- *       real outcome. Only the deepest primitive is cancelled — compounds and methods never
- *       touch actuators.</li>
- * </ul>
+ * <p>The body has one set of legs: {@link #run} while busy cancels the incumbent first (the deepest
+ * primitive holds the actuators) without ticking; a terminal status clears the slot and is
+ * remembered (root description + status); {@link #cancel} clears without recording, so it cannot
+ * overwrite the last real outcome.
  */
 public final class TaskExecutor {
 
@@ -67,6 +61,10 @@ public final class TaskExecutor {
         int index; // invariant between ticks: < subtasks.size() (exhausted frames pop eagerly)
         /** Achieve-frames only: selection rounds burned this activation (see ACHIEVE_ROUNDS_CAP). */
         int rounds;
+
+        /** Achieve-frames only: the goal's gauge when the counter last reset — a round that
+         *  raises it is work, not a stall, and hands the budget back (see AchieveTask#progress). */
+        double lastProgress = Double.NEGATIVE_INFINITY;
 
         /** Applicable-but-priced-out count from the last {@code choose} pass — the "why" of a
          *  no-method failure: nothing fit, or nothing was affordable. */
@@ -323,6 +321,11 @@ public final class TaskExecutor {
                     stack.remove(stack.size() - 1); // achieved -> success cascades to the parent
                     continue;
                 }
+                double progress = achieve.progress(ctx);
+                if (progress > top.lastProgress) {
+                    top.lastProgress = progress;
+                    top.rounds = 0; // the cap meters STALLS, not work — earned rounds reset it
+                }
                 if (++top.rounds >= ACHIEVE_ROUNDS_CAP) {
                     noteFailure(top.compound.describe() + ": rounds cap (no progress)");
                     stack.remove(stack.size() - 1);
@@ -375,6 +378,41 @@ public final class TaskExecutor {
                 return;
             }
             Frame parent = stack.get(stack.size() - 1);
+            if (parent.compound instanceof AchieveTask achieve) {
+                // A failed WAY is not a failed GOAL: "obtain logs x2000" died on its first
+                // unworkable tree with 78 good ones remembered, reading as frozen. An exhausted
+                // round starts a FRESH one instead of failing the frame — the attempts changed the
+                // world, so the same ways re-scored rotate to different targets — bounded by the
+                // rounds cap and by a pool that empties for real.
+                if (achieve.satisfied(ctx)) {
+                    stack.remove(stack.size() - 1);
+                    succeedCurrent(ctx);
+                    return;
+                }
+                parent.tried[parent.methodIndex] = true; // this round: yield to the next way
+                double progress = achieve.progress(ctx);
+                if (progress > parent.lastProgress) {
+                    parent.lastProgress = progress;
+                    parent.rounds = 0; // partial fells count: the errand moved even as its way died
+                }
+                boolean chosen = chooseRound(parent, ctx);
+                if (!chosen && ++parent.rounds < ACHIEVE_ROUNDS_CAP) {
+                    java.util.Arrays.fill(parent.tried, false); // fresh round, fresh world
+                    chosen = chooseRound(parent, ctx);
+                }
+                if (chosen) {
+                    if (parent.subtasks.isEmpty()) {
+                        stack.remove(stack.size() - 1);
+                        succeedCurrent(ctx);
+                    }
+                    return;
+                }
+                if (parent.rounds >= ACHIEVE_ROUNDS_CAP) {
+                    noteFailure(parent.compound.describe() + ": rounds cap (no progress)");
+                }
+                stack.remove(stack.size() - 1); // nothing applicable even fresh -> bubble
+                continue;
+            }
             parent.tried[parent.methodIndex] = true; // the chosen method died with its subtask
             if (chooseRound(parent, ctx)) {
                 if (parent.subtasks.isEmpty()) {

@@ -18,4 +18,15 @@ import dev.luizloyola.autarkia.core.brain.BrainContext;
 public interface AchieveTask extends CompoundTask {
     /** Whether the goal condition currently holds — cheap, read from live percepts. */
     boolean satisfied(BrainContext ctx);
+
+    /**
+     * A monotonic gauge of how far along the goal is: the rounds cap meters STALLED rounds, not
+     * productive work, so a round that RAISED this number resets the counter. Without it an "obtain
+     * logs x10000" that had felled 39 trees was killed by the cap, its partial stumps left without
+     * return trips. {@code ObtainItem} returns the stocked count; the default constant keeps every
+     * round counting against the cap.
+     */
+    default double progress(BrainContext ctx) {
+        return 0.0;
+    }
 }

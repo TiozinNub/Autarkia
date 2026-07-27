@@ -23,13 +23,13 @@ import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The POI viewer: a watched person's <em>beliefs</em> made visible — particles over every
- * remembered anchor and bounds corner, a chat line to the watcher on each discovery. It renders the
- * knowledge store, not the world: a ghost marker over a chopped tree she has not revisited is the
- * viewer working correctly.
+ * The POI viewer: makes a watched person's <em>beliefs</em> visible — particles over every
+ * remembered anchor and bounds corner, and a chat line to the watcher on each discovery. It
+ * renders the knowledge store, not the world: a ghost marker over a chopped tree not yet revisited
+ * is it working correctly.
  *
- * <p>Transport is {@link ServerLevel#sendParticles}, broadcast to trackers, zero custom networking.
- * All state is transient debug state, one watcher map per server.
+ * <p>Transport is {@link ServerLevel#sendParticles}, no custom networking. All state is transient
+ * debug state, one watcher map per server.
  */
 public final class KnowledgeViewer {
     private KnowledgeViewer() {}
@@ -57,7 +57,7 @@ public final class KnowledgeViewer {
 
     /**
      * The player currently receiving this person's discovery chat, or {@code null} when nobody is
-     * viewing her — the read side the status readout of {@code /autarkia knowledge view} prints.
+     * viewing them — the read side the status readout of {@code /autarkia knowledge view} prints.
      */
     public static @Nullable UUID viewer(MinecraftServer server, PersonId person) {
         Map<PersonId, UUID> watched = WATCHERS.get(server);

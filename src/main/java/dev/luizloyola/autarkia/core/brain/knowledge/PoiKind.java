@@ -7,11 +7,12 @@ package dev.luizloyola.autarkia.core.brain.knowledge;
  */
 public enum PoiKind {
     /**
-     * A connected stand of logs + leaves — grove semantics: touching canopies fuse into one
-     * memory, possibly spanning several trunks. Anchor = the lowest log nearest the discovery
-     * seed.
+     * One tree, however fused its canopy is with its neighbours': the mass is scanned whole and
+     * split per trunk by {@link TreeShape}, so a grove of three is three memories. Anchor = the
+     * lowest base cell nearest the discovery seed. Merge radius is the same 1 that clusters base
+     * cells into a trunk, so a 2×2 giant re-seen from another corner re-anchors by at most 1.
      */
-    TREE(2),
+    TREE(1),
     /**
      * A body of surface water. Anchor = a shore-adjacent surface cell. The wide merge radius
      * coalesces partial re-discoveries of one body (a lake met from two sides) into one memory.
@@ -25,9 +26,8 @@ public enum PoiKind {
     }
 
     /**
-     * Chebyshev distance within which two anchors of this kind are the same memory —
-     * {@code note()} replaces rather than accumulates. Sized for 2×2 trunks re-seen from another
-     * side (TREE) and shoreline re-discoveries (WATER).
+     * Chebyshev distance (max per-axis difference) within which two anchors of this kind are the
+     * same memory — {@code note()} replaces rather than accumulates.
      */
     public int mergeRadius() {
         return this.mergeRadius;

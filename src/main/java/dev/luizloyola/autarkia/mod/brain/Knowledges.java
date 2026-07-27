@@ -4,8 +4,9 @@ import dev.luizloyola.autarkia.core.brain.knowledge.KnowledgeRegistry;
 import net.minecraft.server.MinecraftServer;
 
 /**
- * The one accessor everything reads knowledge through, over the persisted {@link KnowledgeData}.
- * Durable since perception ladder step 5: a restart hands every person her memories back.
+ * The one accessor everything reads knowledge through — a thin name over {@link KnowledgeData} so
+ * the sensor, the commands and the viewer never care where the registry lives. A restart hands
+ * every person their memories back.
  */
 public final class Knowledges {
     private Knowledges() {}

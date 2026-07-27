@@ -144,9 +144,9 @@ public class Person extends Avatar {
     private @Nullable PersonJournal journal;
 
     /**
-     * This person's passive POI perception ({@link PoiSensor}, "notice as you go"): it records what
-     * she moves past into her {@link PersonId}-keyed knowledge, the memory the brain reads instead
-     * of ever scanning the world. Transient, but the knowledge it writes outlives the entity.
+     * This person's passive POI perception ({@link PoiSensor}, "notice as you go"): it writes what
+     * they move past into their {@link PersonId}-keyed knowledge — the memory the brain reads
+     * instead of scanning the world. Transient, but the knowledge outlives the entity.
      */
     private final PoiSensor poiSensor = new PoiSensor(this);
 
@@ -304,11 +304,10 @@ public class Person extends Avatar {
         // that lands in the selected hotbar slot is held (and rendered) this same tick.
         pickUpNearbyItems((ServerLevel) level());
         syncEquipmentMirror();
-        // Metabolism runs every server tick no matter who owns the movement input below: food
-        // burns (and starvation bites) whether she is navigating, debug-sprinting, or idle.
+        // Metabolism runs every server tick, whoever owns the movement input below.
         tickNeeds();
-        // Perception before decision: the sensor notices what she moved past and writes it into
-        // her knowledge; the brain (below) reads memory, never the world.
+        // Perception before decision: the sensor notices what they moved past and writes it into
+        // their knowledge; the brain (below) reads memory, never the world.
         this.poiSensor.tick();
         // The people sense on the same beat — who is around, seen or heard or remembered.
         this.peerSense.tick();
@@ -350,7 +349,7 @@ public class Person extends Avatar {
         return this.brain;
     }
 
-    /** This person's passive POI perception — the machine that fills her knowledge. See {@link PoiSensor}. */
+    /** This person's passive POI perception — fills their knowledge. See {@link PoiSensor}. */
     public PoiSensor poiSensor() {
         return this.poiSensor;
     }
@@ -667,11 +666,11 @@ public class Person extends Avatar {
     }
 
     /**
-     * Turn the gaze onto the centre of {@code cell} — head, eyes, and, unless the cell is straight
-     * underfoot, body. The one shared answer to "look at that block" for every arm actuator
-     * (breaker, placer, scaffolder), so none re-derives the trig. A cell in her own column,
-     * underfoot or overhead, has no meaningful bearing (horizontal distance ~0), so the travel yaw
-     * is kept and only the pitch tilts.
+     * Turn the gaze onto the center of {@code cell} — head, eyes, and (unless the cell is straight
+     * underfoot) body — so the Person renders looking at what they break or place. The one shared
+     * answer to "look at that block" for every arm actuator (breaker, placer, scaffolder). A cell
+     * directly below has no meaningful bearing (horizontal distance ~0), so the travel yaw is kept
+     * and only the pitch tilts down.
      */
     public void faceBlock(BlockPos cell) {
         Vec3 center = Vec3.atCenterOf(cell);

@@ -16,11 +16,11 @@ import java.util.random.RandomGenerator;
  *
  * <p><b>Pressure.</b> Per threat, a linear ramp from {@link #range()} blocks (none) to contact (full)
  * over the last {@link #ramp()} blocks, times {@link #TARGETING_BONUS} when the threat is actively
- * hunting her ({@link Threat#targetingMe()}), capped at {@code 1.0}; the overall pressure is the MAX
+ * hunting them ({@link Threat#targetingMe()}), capped at {@code 1.0}; the overall pressure is the MAX
  * across sensed threats — danger does not stack, no threats → {@code 0.0}. At the default range
  * and ramp a passive mob crosses the arbiter's {@code PREEMPT} line (0.6) at about 8.8 blocks, one
- * hunting her at about 10.5. A threat outside {@link #range()} can still lose the bid to a starving
- * {@code Eat} — she wolfs the bread, then runs; that is intended.
+ * hunting them at about 10.5. A threat outside {@link #range()} can still lose the bid to a starving
+ * {@code Eat} — they wolf the bread, then run; that is intended.
  *
  * <p><b>The emergency {@link #failCooldown()}.</b> Ten ticks, not the {@link
  * Instinct#DEFAULT_FAIL_COOLDOWN 100} every other drive sits out: a cornered Person must retry at
@@ -38,7 +38,7 @@ public final class FleeInstinct implements Instinct {
         return Config.get().d(Knob.FLEE_RAMP);
     }
 
-    /** Multiplier applied when a threat is actively hunting her, not merely nearby; capped at {@code 1.0}. */
+    /** Multiplier when a threat is actively hunting, not merely nearby; capped at {@code 1.0}. */
     public static final double TARGETING_BONUS = 1.3;
 
     /** The emergency override of {@link Instinct#failCooldown()} — retry almost immediately. */

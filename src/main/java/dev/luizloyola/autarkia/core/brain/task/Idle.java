@@ -4,11 +4,11 @@ import dev.luizloyola.autarkia.core.brain.BrainContext;
 
 /**
  * The do-nothing primitive: hold for a fixed number of ticks, then SUCCESS. Touches no actuator —
- * pure elapsed time, the pause between wander legs (see {@link WanderStep}). Owning nothing,
- * {@link #cancel} is a genuine no-op: a preempting task can drop an Idle with no cleanup.
+ * pure elapsed time, the pause between wander legs (see {@link WanderStep}) — so {@link #cancel} is
+ * a genuine no-op.
  *
- * <p>The first {@code ticks} ticks report RUNNING and the next reports SUCCESS, so
- * {@code new Idle(40)} completes on the 41st tick; {@code new Idle(0)} succeeds on its first.
+ * <p>The first {@code ticks} ticks report RUNNING, the next SUCCESS: {@code new Idle(40)} completes
+ * on the 41st tick, {@code new Idle(0)} on its first.
  */
 public final class Idle implements PrimitiveTask {
     private final int ticks;

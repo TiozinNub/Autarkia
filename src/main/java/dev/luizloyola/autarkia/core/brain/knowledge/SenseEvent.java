@@ -3,9 +3,11 @@ package dev.luizloyola.autarkia.core.brain.knowledge;
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
 
 /**
- * Something perception just did — the sensor's tick output, for the mod layer to narrate.
- * Refreshes are not events: re-seeing what you already believe is the silent case.
- * The two decline outcomes ARE events, so "why didn't she notice that?" has a printable answer.
+ * Something perception just did — the sensor's tick output, for the mod layer to narrate
+ * (journal lines, the POI viewer's discovery chat). Refreshes are not events:
+ * re-seeing what you already believe is the common, silent case. The two decline outcomes
+ * ARE events, though — "why didn't they notice that?" must have a printable answer (the
+ * project's debuggability rule), so a blocked ray and a rejected growth both leave a line.
  *
  * @param anchor the belief's anchor for NOTED/FORGOT; the probed surface cell (hypothesis
  *               seed) for OVERLOOKED/DISMISSED
@@ -17,7 +19,7 @@ public record SenseEvent(Type type, PoiKind kind, Pos anchor, PoiMemory memory) 
         NOTED,
         /** A belief was invalidated (the world changed under its claims). */
         FORGOT,
-        /** A hypothesis died at the confirm-ray: something interesting, but she can't see it. */
+        /** A hypothesis died at the confirm-ray: something interesting, but it can't be seen. */
         OVERLOOKED,
         /** A growth completed and was rejected by its rule (a woodpile, a roofed tree). */
         DISMISSED

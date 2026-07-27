@@ -7,13 +7,11 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Chop the nearest REMEMBERED tree. Applicable exactly when her knowledge holds a TREE; priced
- * in the walk-block currency as distance plus a staleness surcharge, so a fresh grove farther
- * away can legitimately beat a stale one nearby.
+ * Chop the nearest REMEMBERED tree: applicable when knowledge holds a TREE, priced as distance
+ * plus a staleness surcharge, so a fresh tree farther off can legitimately beat a stale one nearby.
  *
- * <p>Decomposes to a single {@link ChopTree}, replant hardcoded ON. ChopTree owns its own
- * approach, so there is no GoTo sibling: the anchor is a solid trunk cell, and a separate GoTo
- * would fail on strict arrival.
+ * <p>Decomposes to a single {@link ChopTree} with replant ON. No GoTo sibling: ChopTree owns its
+ * own approach, and the anchor is a solid trunk cell that a strict arrival would fail on.
  */
 public final class ChopKnownTree implements Method {
     /** Blocks of imaginary extra walk per minute of memory age. */

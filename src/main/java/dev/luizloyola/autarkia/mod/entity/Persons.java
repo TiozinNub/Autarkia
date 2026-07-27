@@ -8,13 +8,10 @@ import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Turning a {@link PersonId} back into a live entity — the lookup the commands' resolver, the debug
- * wand and the debug view had each grown their own copy of. The id is stable, the entity behind it
- * is not, so a scan is the only sound bridge.
- *
- * <p>Dimension-wide by design: a Person who walked through a portal is still the selected one. A
- * dead or dying body (not yet swept) never counts — a stale selection must fail loudly rather than
- * resolve to a corpse.
+ * Turning a {@link PersonId} back into a live entity. Dimension-wide by design: a Person who
+ * walked through a portal is still the selected Person, and a lookup that stopped at the overworld
+ * would report them "not loaded". A dead or dying body never counts — a stale selection must fail
+ * loudly rather than resolve to a corpse.
  */
 public final class Persons {
     private Persons() {}

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Pins {@link FleeInstinct}'s pressure curve — a linear ramp from {@link FleeInstinct#RANGE} down
- * to contact, boosted (and capped at {@code 1.0}) for a threat actively targeting her, and the MAX
+ * to contact, boosted (and capped at {@code 1.0}) for a threat actively targeting them, and the MAX
  * across every currently-sensed threat — plus its emergency {@link Instinct#failCooldown()}
  * override and the fresh-root contract every instinct shares (see {@link InstinctTest}).
  */
@@ -72,7 +72,7 @@ class FleeInstinctTest {
     @Test
     void pressureIsTheMaxAcrossThreatsSoAFarTargetingThreatCanOutweighANearPassiveOne() {
         FleeInstinct flee = new FleeInstinct(new Random(0));
-        // Further away but hunting her (0.5 * 1.3 = 0.65) beats closer but merely-nearby (0.5833...).
+        // Further away but hunting (0.5 * 1.3 = 0.65) beats closer but merely-nearby (0.5833...).
         ctx.percepts.threats = List.of(threatAt(10.0, true), threatAt(9.0, false));
         assertEquals(0.65, flee.pressure(ctx), 1e-9);
     }

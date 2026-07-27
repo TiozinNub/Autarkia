@@ -9,6 +9,7 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.FluidState;
 
 /**
@@ -93,6 +94,14 @@ public final class WorldSnapshot implements NavGrid {
         if (fluid.is(FluidTags.LAVA)) {
             return CellType.DANGER;
         }
+        // Leaves need their own rule ahead of the sturdy-top check: their support shape is empty,
+        // so they would read OBSTACLE — yet a body stands on them like a player. Stable leaves are
+        // footing (persistent, or within a log's decay reach, distance <= 6); distance-7 leaves can
+        // vanish on any random tick and keep reading OBSTACLE. That is what lets a chopper walk the
+        // canopy to a far branch (Luiz's sixth chop choreography); the cell itself stays impassable.
+        if (state.is(BlockTags.LEAVES)) {
+            return isStableLeaves(state) ? CellType.GROUND : CellType.OBSTACLE;
+        }
         if (state.getCollisionShape(level, pos).isEmpty()) {
             // No collision: air-like plants — or the inside of a water column (kelp, seagrass,
             // source blocks). Waterlogged solids fall through to the sturdy-top check instead.
@@ -104,6 +113,20 @@ public final class WorldSnapshot implements NavGrid {
         // Collides but can't be stood on square: fences, walls, open trapdoors, bottom-half
         // shapes we don't model.
         return CellType.OBSTACLE;
+    }
+
+    /**
+     * Whether a leaf block is footing that will still be there next tick: persistent (placed, so
+     * decay never touches it) or fed by a log within vanilla's decay reach ({@code distance <= 6};
+     * 7 is the decaying rim). Modded leaves without the vanilla properties answer {@code false}.
+     */
+    private static boolean isStableLeaves(BlockState state) {
+        if (state.hasProperty(BlockStateProperties.PERSISTENT)
+                && state.getValue(BlockStateProperties.PERSISTENT)) {
+            return true;
+        }
+        return state.hasProperty(BlockStateProperties.DISTANCE)
+                && state.getValue(BlockStateProperties.DISTANCE) <= 6;
     }
 
     /** Blocks that hurt to touch or stand on, beyond what fluids cover. */

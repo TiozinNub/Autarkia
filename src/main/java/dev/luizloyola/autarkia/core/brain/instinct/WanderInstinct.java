@@ -8,14 +8,11 @@ import dev.luizloyola.autarkia.core.config.Knob;
 import java.util.random.RandomGenerator;
 
 /**
- * The idle-default drive. Its pressure is a constant {@link #idlePressure()} floor: low enough that any real
- * need beats it, high enough to beat doing nothing. Its root is a fresh {@link WanderStep} (roll a
- * nearby spot, walk there, pause), re-granted each time the last one finishes.
- *
- * <p>The RNG is core-pure ({@link RandomGenerator}: the mod hands in a seeded {@code
- * java.util.Random}, not an entity {@code RandomSource}) and is threaded through each
- * {@link WanderStep}, so the wander sequence is one reproducible stream per Person. Placeholder
- * gait; day/night routine and purposeful idling arrive with the {@code rest} need.
+ * The idle-default drive: pressure is the constant {@link #idlePressure()} floor, the root a fresh
+ * {@link WanderStep} re-granted each time the last one finishes. The RNG is core-pure
+ * ({@link RandomGenerator}, not an entity {@code RandomSource}) and threaded through each step, so
+ * the wander sequence is one continuous, reproducible stream per Person. A placeholder gait:
+ * day/night routine and purposeful idling arrive with the {@code rest} need.
  */
 public final class WanderInstinct implements Instinct {
 

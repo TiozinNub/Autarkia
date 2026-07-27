@@ -21,8 +21,22 @@ public enum Gender {
         return this == MALE ? ifMale : ifFemale;
     }
 
+    /**
+     * The subject pronoun for narration ("the someone he/she had heard"). Gains a "they" if the
+     * enum grows: NOTHING that narrates a person may spell a pronoun itself, or the day a third
+     * value lands it narrates a lie.
+     */
+    public String subjectPronoun() {
+        return choose("he", "she");
+    }
+
     /** The object pronoun for narration ("watching him/her"). Gains a "them" if the enum grows. */
     public String objectPronoun() {
         return choose("him", "her");
+    }
+
+    /** The possessive for narration ("his/her beliefs"). Gains a "their" if the enum grows. */
+    public String possessive() {
+        return choose("his", "her");
     }
 }

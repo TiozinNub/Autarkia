@@ -42,6 +42,25 @@ class TreeSurveyTest {
         assertTrue(tree.branches().isEmpty());
     }
 
+    /**
+     * Wood standing on a log the scan never collected is nobody's branch. A capped growth
+     * collected a neighbour's trunk from one above its base (no grounded base in the blob), so
+     * nearest-centroid adopted the column as branches, felling the neighbour mid-trunk and
+     * manufacturing the stump underneath.
+     */
+    @Test
+    void aHalfScannedNeighbourTrunkIsNotAdoptedAsBranches() {
+        trunk(10, 10, 64, 4);  // our tree, complete in blob and world
+        trunk(15, 10, 64, 4);  // the neighbour is whole IN the WORLD (probe keeps its base)...
+        blocks.remove(new Pos(15, 64, 10)); // ...but the scan's cap cut under its run
+
+        List<TreeSurvey.Tree> trees = TreeSurvey.survey(blocks, probe);
+
+        assertEquals(1, trees.size(), "one grounded base in the blob, one tree");
+        assertTrue(trees.get(0).branches().isEmpty(),
+                "the neighbour's half-scanned column is not our branches");
+    }
+
     @Test
     void aFusedPairSplitsBranchesDownTheMiddle() {
         trunk(10, 10, 64, 4);

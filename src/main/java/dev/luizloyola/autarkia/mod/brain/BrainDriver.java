@@ -22,6 +22,7 @@ import dev.luizloyola.autarkia.core.brain.task.Task;
 import dev.luizloyola.autarkia.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.log.Category;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
+import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayList;
 import java.util.List;
@@ -138,6 +139,11 @@ public final class BrainDriver {
             @Override
             public PersonJournal journal() {
                 return person.journal(); // the entity owns the one cached view; the body/nav share it
+            }
+
+            @Override
+            public Gender gender() {
+                return person.getGender(); // the narrating voice: pronouns are asked for, never spelled
             }
 
             @Override
@@ -297,13 +303,8 @@ public final class BrainDriver {
     /**
      * The whole brain as separate lines, for the stacked debug view: who is driving, every
      * instinct's pressure, the claimed work item, and the running task tree one level per line.
-     *
-     * <p>Unlike {@link #describe()}, which reports only the side that is DRIVING and suppresses the
-     * arbiter under a manual order — a view watching the machinery wants "the arbiter wanted to
-     * flee at 0.80 while a manual chop held the wheel".
-     *
-     * <p>In manual mode the arbiter does not tick, so its pressures are the last ones it computed
-     * rather than live values; the mode line says so.
+     * Unlike {@link #describe()} it shows the arbiter even while a manual order holds the wheel —
+     * where the arbiter is not ticking, so the pressures are frozen and the mode line says so.
      */
     public List<String> describeLines() {
         List<String> lines = new ArrayList<>();

@@ -4,27 +4,27 @@ import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import java.util.List;
 
 /**
- * The climb actuator port: one nerd-pole step per {@link #up} call — jump, place a carried block
- * into the cell just vacated, land on it — the body owning the jump/place timing as the breaker
- * owns crack timing. Coming down needs no port: the pillar is ordinary blocks, broken underfoot
- * with the {@link BlockBreaker} and reclaimed by walk-over pickup (decision: Luiz — a lumberjack
- * pillars on her own logs).
+ * The climb actuator port — one nerd-pole step per {@link #up} call (jump, place a carried block
+ * into the cell just vacated, land on it); the body owns the jump/place timing. Coming down needs
+ * no port: the pillar is ordinary blocks, broken underfoot with the {@link BlockBreaker}, drops
+ * reclaimed by the walk-over pickup.
  *
- * <p><b>The ledger is the body's, not the task's</b>: a mid-climb suspension cancels the task and
- * a private deque dies with it, leaving the tower standing and the body stranded on top.
- * {@link #placed()} remembers every unreclaimed cell so any later task can un-build it, and
- * {@link #up} refuses past {@link #PILLAR_MAX} standing cells, so the cap cannot be re-budgeted by
- * task churn.
+ * <p><b>The ledger is the body's, not the task's</b>: a mid-climb suspension cancels the task, and
+ * a private deque died with it — tower standing, body stranded on top. {@link #placed()} remembers
+ * every cell placed and not reclaimed, so any later task can un-build it, and {@link #up} refuses
+ * past {@link #PILLAR_MAX} so the cap cannot be re-budgeted by task churn.
  *
- * <p>Lifecycle as the siblings: after a successful {@link #up}, {@link #state()} reports RISING
- * until the step lands (RISEN) or dies (FAILED); the next {@link #up} or {@link #abort} clears it.
+ * <p>After a successful {@link #up}, {@link #state()} reports RISING until the step lands (RISEN)
+ * or dies (FAILED); the next {@link #up} or {@link #abort} clears a terminal state.
  */
 public interface Scaffolder {
     /**
-     * Standing-ledger cap — taller than any vanilla tree's working need. A hard bodily limit,
-     * not a per-task budget: while {@link #placed()} holds this many cells, {@link #up} refuses.
+     * Standing-ledger cap — taller than any vanilla trunk (a mega spruce or jungle giant runs
+     * to ~30), because a chop now climbs a whole trunk in its own column and the ledger is
+     * that climb. A hard bodily limit, not a per-task budget: while {@link #placed()} holds
+     * this many cells, {@link #up} refuses.
      */
-    int PILLAR_MAX = 12;
+    int PILLAR_MAX = 32;
 
     /**
      * Begin one pillar step using one {@code itemId} block from the carried inventory. Returns

@@ -70,8 +70,8 @@ public final class PeerEar implements GameEventListener {
 
     /**
      * What the SOUND says they're doing — ears don't run the visual classifier (a heard-only peer
-     * read "at_crafting" through the back of her head). Coarse, and kept until the ear or the eyes
-     * say otherwise.
+     * read "at_crafting" through the back of their head). The sensor keeps this reading until the
+     * ear or the eyes say otherwise.
      */
     private static Peer.Activity activityOf(Holder<GameEvent> event) {
         if (event.is(GameEvent.BLOCK_DESTROY)) {

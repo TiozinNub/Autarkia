@@ -14,11 +14,11 @@ import java.util.random.RandomGenerator;
  *
  * <p><b>The escape vector.</b> Weight every current threat by {@code 1/distance²} (closest
  * dominates) into a proximity-weighted centroid; the direction is the unit vector from that
- * centroid THROUGH her position, the target that direction times {@link #FLEE_LEG} with
+ * centroid THROUGH their position, the target that direction times {@link #FLEE_LEG} with
  * independent {@code +/-}{@link #JITTER} on each horizontal axis from the shared
  * {@link RandomGenerator}, so consecutive legs are not ruler-straight; {@code y} is unchanged —
  * the pathfinder finds the ground. No threats at decompose time, or a centroid landing exactly
- * on her (surrounded), fall back to a uniformly random heading of the same length.
+ * on them (surrounded), fall back to a uniformly random heading of the same length.
  *
  * <p>Decomposes to a single {@code [GoTo(target, Gait.SPRINT)]}, no {@link Idle}: flight does
  * not pause between legs the way a wander does.
@@ -43,7 +43,7 @@ public final class FleeStep implements CompoundTask {
     /** Below this squared magnitude the raw escape vector counts as degenerate (surrounded). */
     private static final double DEGENERATE_EPSILON = 1e-6;
 
-    /** Distance floor for the {@code 1/distance²} weighting — guards a threat standing on her. */
+    /** Distance floor for the {@code 1/distance²} weighting — guards a threat standing on them. */
     private static final double MIN_WEIGHT_DISTANCE = 0.1;
 
     private final RandomGenerator random;
@@ -100,7 +100,7 @@ public final class FleeStep implements CompoundTask {
     /**
      * The unit direction to run: away from the proximity-weighted threat centroid, or a uniformly
      * random heading when there is nothing to run from (no threats) or nowhere is better than
-     * anywhere else (surrounded — the centroid lands on her).
+     * anywhere else (surrounded — the centroid lands on them).
      */
     private double[] escapeDirection(Pos here, List<Threat> threats) {
         if (threats.isEmpty()) {

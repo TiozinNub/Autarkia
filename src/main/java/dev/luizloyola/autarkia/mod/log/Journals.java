@@ -66,6 +66,7 @@ public final class Journals {
         JournalService service = new JournalService(server.overworld()::getGameTime);
         SERVICES.put(server, service);
         SINKS.put(server, JournalFileSink.attach(server, service));
+        ThoughtBroadcast.attach(server, service); // the thinking-out-loud chat channel
         return service;
     }
 }

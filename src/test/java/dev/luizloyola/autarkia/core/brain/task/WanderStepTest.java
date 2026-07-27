@@ -83,7 +83,7 @@ class WanderStepTest {
             assertTrue(Math.abs(dx) <= RADIUS && Math.abs(dz) <= RADIUS,
                     "offset (" + dx + ", " + dz + ") must be within +/-" + RADIUS);
             assertFalse(dx == 0 && dz == 0, "a walking beat always goes somewhere");
-            assertEquals(64, beat.target().y(), "y is unchanged — she walks the ground");
+            assertEquals(64, beat.target().y(), "y is unchanged — they walk the ground");
             assertEquals(Gait.STROLL, beat.gait(), "wandering ambles; it does not march");
         }
         assertTrue(seen >= 30, "stream must produce enough walking beats to pin");

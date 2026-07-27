@@ -7,30 +7,31 @@ import dev.luizloyola.autarkia.core.person.FoodValue;
 import java.util.List;
 
 /**
- * Tier 2 of {@link SatisfyHunger}: eat food she would rather not — raw-but-cookable stock, or a
- * {@code canAlwaysEat} treat kept for emergencies. Applicable whenever such a stack is in hand
- * and she has room ({@code missing > 0}); decomposes to a single {@link ConsumeItem} on the best
- * such slot, by the same ordering as {@link EatReadyFood} (see {@link EatSelection}).
+ * Tier 2 of {@link SatisfyHunger}: eat food they would rather not — raw-but-cookable stock, or a
+ * {@code canAlwaysEat} treat. Applicable when such a stack is in hand and there is room
+ * ({@code missing > 0}); decomposes to one {@link ConsumeItem} on the best slot, ordered as in
+ * {@link EatReadyFood} (see {@link EatSelection}).
  *
- * <p><b>The desperation price.</b> {@link #estimateCost} prices what eating the stack throws
- * away, in the walk-block currency, so the arbiter's cost tolerance decides whether the current
- * hunger can afford it: a raw-but-cookable stack costs
- * {@link #OPPORTUNITY_PER_FORGONE_POINT} × (cooked − raw) nutrition, a {@code canAlwaysEat}
- * treat a flat {@link #TREAT_COST}. A raw potato (1, bakes to 5) forgoes 4 points → 80: hungry
- * ({@code ToleranceCurve} tolerance 60) prices it out, so the root FAILS with the consumer never
- * touched; starving (tolerance ∞) affords it. Manual driving runs at ∞ tolerance too, so an
- * operator-issued eat consumes anything edible.
+ * <p>Not free: {@link #estimateCost} prices what eating throws away, in the walk-block currency, so
+ * the arbiter's cost tolerance decides.
+ * <ul>
+ *   <li><b>raw-but-cookable</b>: {@link #OPPORTUNITY_PER_FORGONE_POINT} × (cooked − raw). A raw
+ *       potato (1, bakes to 5) forgoes 4 points → {@code 80}.</li>
+ *   <li><b>{@code canAlwaysEat} treat</b>: a flat {@link #TREAT_COST} ({@code 80}).</li>
+ * </ul>
  *
- * <p><b>Candidate first, price second.</b> The best candidate is picked by the ORDERING and only
- * then priced, so the cost is that of the ordering-best stack, which can differ from the
- * cheapest-to-eat one. The ordering wins, keeping selection deterministic.
+ * <p>A price, not a band-gate: at tolerance 60 the potato is priced out, the compound finds no
+ * acceptable way and the root FAILS with the consumer never touched; at ∞ — starving, and manual
+ * driving — anything edible is eaten.
+ *
+ * <p>The ordering-best stack is chosen and only then priced, so the cost can exceed the
+ * cheapest-to-eat stack's: pricing gates the chosen bite, it does not select it.
  */
 public final class EatLastResort implements Method {
 
     /**
-     * Walk-blocks of cost per point of nutrition forgone by eating a raw food instead of cooking
-     * it first. Tuned so a raw potato (4 points forgone) prices at {@code 80} — above the HUNGRY
-     * tolerance (60), below the STARVING ceiling (∞).
+     * Walk-blocks of cost per point of nutrition forgone by eating raw instead of cooking. Tuned so
+     * a raw potato (4 points forgone) prices at {@code 80} — above HUNGRY (60), below STARVING (∞).
      */
     public static final double OPPORTUNITY_PER_FORGONE_POINT = 20.0;
 

@@ -96,7 +96,7 @@ class JournalServiceTest {
         journal.sweep();
 
         assertEquals(List.of("recent"), details(journal.recent(bob, 10)));
-        assertTrue(journal.recent(alice, 10).isEmpty(), "Alice's only line aged out; she is forgotten");
+        assertTrue(journal.recent(alice, 10).isEmpty(), "Alice's only line aged out; forgotten");
     }
 
     @Test

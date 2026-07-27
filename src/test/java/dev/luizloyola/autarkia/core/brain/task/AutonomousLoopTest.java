@@ -15,15 +15,13 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 /**
- * The slice-1 loop headless: an {@link Arbiter} of {@link EatInstinct} + {@link WanderInstinct}
- * (the mod's construction order) on ticks and scripted actuator states alone. Sated she wanders in
- * cycles; hungry with bread, Eat preempts until hunger stops out-bidding idling, then wander
- * resumes.
+ * The whole slice-1 loop, headless: an {@link Arbiter} of {@link EatInstinct} + {@link WanderInstinct}
+ * in the mod's construction order, driven only by ticks and scripted actuator states.
  *
- * <p>{@link FakeConsumer} neither chews nor feeds the body, so the test does: it drives the
- * consumer to FINISHED and applies nutrition to
- * {@link dev.luizloyola.autarkia.core.person.Needs} as {@code PersonItemConsumer} does. Tolerance
- * is unbounded here (bread is free ready food); the gate is pinned in {@link EatLastResortTest}.
+ * <p>{@link FakeConsumer} neither chews nor feeds the body, so the test plays the body: consumer to
+ * FINISHED, nutrition applied to {@link dev.luizloyola.autarkia.core.person.Needs} as
+ * {@code PersonItemConsumer} does in the field. Cost tolerance stays unbounded (bread is free ready
+ * food); the gate itself is pinned in {@link EatLastResortTest}.
  */
 class AutonomousLoopTest {
 
@@ -34,7 +32,7 @@ class AutonomousLoopTest {
             new Arbiter(java.util.List.of(new EatInstinct(), new WanderInstinct(new Random(7), 8)));
 
     @Test
-    void satedWandersInCyclesThenHungerPreemptsAndSheEatsThenWanderResumes() {
+    void satedWandersInCyclesThenHungerPreemptsAndTheyEatThenWanderResumes() {
         // --- Phase 1: sated -> wander cycles ----------------------------------------------------
         assertEquals(20, ctx.percepts.needs.foodLevel(), "a fresh body spawns fed -> no eat pressure");
 
@@ -47,7 +45,7 @@ class AutonomousLoopTest {
         while (ctx.mover.moveToCalls == 0 && guard++ < 10_000) {
             arbiter.tick(ctx);
         }
-        assertEquals(1, ctx.mover.moveToCalls, "sated, she eventually strolls somewhere");
+        assertEquals(1, ctx.mover.moveToCalls, "sated, they eventually stroll somewhere");
 
         ctx.mover.setState(MoveState.ARRIVED); 
         guard = 0;
@@ -72,13 +70,13 @@ class AutonomousLoopTest {
 
         int stopsBefore = ctx.mover.stopCalls;
         arbiter.tick(ctx); // Eat (0.7) preempts the running wander leg and begins a bite
-        assertEquals(1, ctx.consumer.beginCalls, "she interrupts wandering to eat");
+        assertEquals(1, ctx.consumer.beginCalls, "they interrupt wandering to eat");
         assertEquals(stopsBefore + 1, ctx.mover.stopCalls, "the wander leg's legs were released first");
         assertTrue(arbiter.describe().contains("eat") && arbiter.describe().contains("(active)"),
                 arbiter.describe());
         ctx.percepts.needs.eat(BREAD.nutrition(), BREAD.saturation()); // body applies the first bite
 
-        // --- Phase 3: she eats until sated, then wander resumes ---------------------------------
+        // --- Phase 3: they eat until sated, then wander resumes ---------------------------------
         int begins = ctx.consumer.beginCalls;
         guard = 0;
         while (ctx.mover.moveToCalls == 2 && guard++ < 10_000) {
@@ -89,7 +87,7 @@ class AutonomousLoopTest {
             }
         }
         assertTrue(ctx.percepts.needs.foodLevel() >= 18,
-                "she ate out of the hunger band (food " + ctx.percepts.needs.foodLevel() + ")");
+                "they ate out of the hunger band (food " + ctx.percepts.needs.foodLevel() + ")");
         assertEquals(3, ctx.mover.moveToCalls, "sated again, wander takes back over — the loop closed");
         assertTrue(arbiter.describe().contains("wander 0.15 (active)"), arbiter.describe());
     }

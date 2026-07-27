@@ -27,7 +27,7 @@ class PersonalBoardTest {
     void postsOnItsSecondBeatWhenShort() {
         ticks(PersonalBoard.CHECK_INTERVAL);
         assertTrue(board.bestAvailable(ctx).isEmpty(),
-                "beat one is the warm-up: she looks before she wants");
+                "beat one is the warm-up: they look before they want");
         ticks(PersonalBoard.CHECK_INTERVAL);
         assertTrue(board.bestAvailable(ctx).isPresent(), "short on logs -> posted");
     }
@@ -80,6 +80,11 @@ class PersonalBoardTest {
         @Override
         public ActuatorAccess actuators() {
             throw new UnsupportedOperationException("the board never acts");
+        }
+
+        @Override
+        public dev.luizloyola.autarkia.core.person.Gender gender() {
+            return dev.luizloyola.autarkia.core.person.Gender.FEMALE;
         }
 
         @Override

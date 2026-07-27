@@ -33,7 +33,7 @@ class FleeStepTest {
         executor.run(new FleeStep(new Random(1)), ctx);
         executor.tick(ctx); // expand FleeStep -> Escape.decompose -> GoTo issues moveTo
 
-        assertTrue(ctx.mover.lastX < 0, "she runs west, away from the eastern threat");
+        assertTrue(ctx.mover.lastX < 0, "they run west, away from the eastern threat");
         assertEquals(64, ctx.mover.lastY, "y is unchanged");
         double length = Math.hypot(ctx.mover.lastX, ctx.mover.lastZ);
         assertTrue(Math.abs(length - FleeStep.FLEE_LEG) <= FleeStep.JITTER * Math.sqrt(2) + 1,
@@ -43,8 +43,8 @@ class FleeStepTest {
     @Test
     void escapeVectorIsDominatedByTheCloserThreat() {
         ctx.percepts.position = new Pos(0, 64, 0);
-        // Close threat east, far threat north: 1/d^2 weighting makes the close one dominate the
-        // centroid.
+        // Close threat due east; far threat due north. 1/d^2 weighting should make the close
+        // eastern threat dominate the centroid, so they run west and (slightly) south.
         ctx.percepts.threats = List.of(
                 threatAt(4, 0, 4.0, false),
                 threatAt(0, 12, 12.0, false));
@@ -58,7 +58,7 @@ class FleeStepTest {
     @Test
     void surroundedStillProducesAFullLengthLeg() {
         ctx.percepts.position = new Pos(0, 64, 0);
-        // Two threats symmetric about her -> the weighted centroid lands exactly on her position.
+        // Two threats symmetric about them -> the weighted centroid lands on that position.
         ctx.percepts.threats = List.of(
                 threatAt(8, 0, 8.0, false),
                 threatAt(-8, 0, 8.0, false));
@@ -94,7 +94,7 @@ class FleeStepTest {
         ctx.percepts.threats = List.of(threatAt(10, 0, 10.0, false)); // east, at grant time
         executor.run(step, ctx); // installed while at spawn...
 
-        ctx.percepts.position = new Pos(100, 70, 200); // ...but she walked before it expanded
+        ctx.percepts.position = new Pos(100, 70, 200); // ...but they walked before it expanded
         ctx.percepts.threats = List.of(threatAt(100, 210, 10.0, false)); // and the threat moved too (now north)
 
         executor.tick(ctx); // lazy expansion reads the CURRENT percepts

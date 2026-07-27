@@ -7,12 +7,10 @@ import java.util.List;
 
 /**
  * The perception bundle — the sense half of {@link dev.luizloyola.autarkia.core.brain.BrainContext},
- * mirroring {@link dev.luizloyola.autarkia.core.brain.act.ActuatorAccess} on the acting half:
- * core names what an NPC can perceive, the mod {@code BrainDriver} assembles it over live entity
- * state.
- *
- * <p>These are LIVE views, not snapshots — a method scoring its applicability and a task acting
- * a tick later both see the current truth.
+ * mirroring {@link dev.luizloyola.autarkia.core.brain.act.ActuatorAccess}: core names what an NPC
+ * can perceive, the mod {@code BrainDriver} assembles it over live entity state, one accessor per
+ * sense domain. These are LIVE views, not snapshots — a method scoring applicability and a task
+ * acting a tick later both see current truth.
  */
 public interface Percepts {
     /**
@@ -32,17 +30,16 @@ public interface Percepts {
     FoodLookup foods();
 
     /**
-     * Where the body stands right now — her feet cell, in whole blocks (the pathfinder/Navigator
-     * grid), read LIVE: {@code WanderStep} offsets each roam target from where she actually is,
-     * never from a stale spawn point.
+     * Where the body stands — the feet cell, in whole blocks (the pathfinder/Navigator grid). Read
+     * live, so a target offset from it ({@code WanderStep}) is never offset from a stale spawn
+     * point.
      */
     Pos position();
 
     /**
-     * Nearby hostiles, from the mod's budgeted entity queries around her. Nearest-first is not
-     * guaranteed: a consumer that cares about ordering must compute it from
-     * {@link Threat#distance()}. An empty list means no danger in range — the only signal
-     * {@code FleeInstinct} needs.
+     * Nearby hostiles, from the mod's budgeted entity queries. Nearest-first is not guaranteed:
+     * a consumer that cares about ordering must compute it from {@link Threat#distance()}. An
+     * empty list means no danger in range — the only signal {@code FleeInstinct} needs.
      */
     List<Threat> threats();
 

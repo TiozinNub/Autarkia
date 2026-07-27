@@ -40,8 +40,8 @@ public non-sealed interface PrimitiveTask extends Task {
     void cancel(BrainContext ctx);
 
     /**
-     * One-line summary for the debug readout — the "why is she doing that?" answer, surfaced by
-     * {@link TaskExecutor#describe()}. E.g. {@code "goto (12, -60, 8)"}.
+     * One-line summary for the debug readout, surfaced by {@link TaskExecutor#describe()}, e.g.
+     * {@code "goto (12, -60, 8)"}.
      */
     String describe();
 }

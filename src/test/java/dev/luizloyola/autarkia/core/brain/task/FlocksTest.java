@@ -7,7 +7,7 @@ import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Drop clustering: two piles are two flocks; she walks to the nearer pile's middle. */
+/** Drop clustering: two piles are two flocks; they walk to the nearer pile's middle. */
 class FlocksTest {
 
     @Test
@@ -18,7 +18,7 @@ class FlocksTest {
 
         assertEquals(2, Flocks.count(drops));
         assertEquals(new Pos(1, 64, 0), Flocks.nearestCentroid(drops, new Pos(-2, 64, 0)),
-                "pile A's centroid, since she stands west of it");
+                "pile A's centroid, since they stand west of it");
         assertEquals(new Pos(11, 64, 10), Flocks.nearestCentroid(drops, new Pos(14, 64, 10)),
                 "pile B's centroid from the east");
     }

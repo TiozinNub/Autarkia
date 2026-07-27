@@ -21,14 +21,18 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
 /**
- * The world-scoped, persisted home of every person's knowledge: {@code PersonId}-keyed, attached to
- * the overworld's data storage ({@code <world>/data/autarkia_knowledge.dat}), outliving every
- * entity — so what a person noticed survives chunk unloads, her death and server restarts.
+ * The world-scoped, persisted home of every person's knowledge — the {@code PersonDirectory}
+ * pattern applied to memories, exactly as the brain design's storage section prescribes:
+ * durable memory is {@code PersonId}-keyed, attached to the overworld's data storage
+ * ({@code <world>/data/autarkia_knowledge.dat}), and outlives every entity. What a person has
+ * noticed survives chunk unloads, their death (memories are not physical — the inventory drops,
+ * the knowledge doesn't), and server restarts.
  *
- * <p>Codec-based serialization lives here so {@code core} stays free of DataFixerUpper. Loading
- * replays {@code note()} to rebuild the pure {@link KnowledgeRegistry}: entries were stored
- * post-merge and insertion-ordered, so the replay reproduces the store exactly. Only the durable
- * tier is saved — claim indexes and pending queues rebuild from re-walking the world.
+ * <p>Serialization is codec-based and lives here so {@code core} stays free of DataFixerUpper.
+ * Loading rebuilds the pure {@link KnowledgeRegistry} by replaying {@code note()} — entries
+ * were stored post-merge and insertion-ordered, so the replay reproduces the store exactly.
+ * Only the durable tier is saved: the claim indexes and pending queues are per-entity sensor
+ * state and rebuild from re-walking the world.
  */
 public final class KnowledgeData extends SavedData {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "knowledge");

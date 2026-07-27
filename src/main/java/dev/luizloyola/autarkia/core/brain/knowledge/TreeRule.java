@@ -2,21 +2,26 @@ package dev.luizloyola.autarkia.core.brain.knowledge;
 
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
- * Recognizes a tree — grove semantics: the connected mass of logs and leaves, however many
- * trunks it contains. Touching canopies fuse deliberately, and the growth caps turn a
- * mega-forest into several partial groves. Only GROWN leaves count: the probe reports placed,
- * never-decaying ones as {@link BlockKind#OTHER} ({@code compat.sense.LevelProbe}), so a hedge
- * is a wall and a leaf-roofed cabin is a cabin.
+ * Recognizes trees — <b>one memory per tree</b>, however many the mass holds. Growth fuses
+ * touching canopies into a grove; the rule splits it back with {@link TreeShape}, the seam the
+ * chopper uses. Grove memories were the older design: felling one tree forgot the one memory all
+ * three had.
  *
- * <p>Accepts iff the mass holds <b>≥ 1 GROUNDED log, ≥ 1 log and ≥ 1 sunlit leaf</b> — grounded
- * means standing on a non-tree block. A roofed-over or cave structure never validates, a bare
- * log pile is a woodpile, and FLOATING WOOD IS NOT A TREE. Anchor = the lowest grounded log,
- * nearest the seed among ties. Units = log count.
+ * <p>Only GROWN leaves count — the probe reports placed, never-decaying ones as
+ * {@link BlockKind#OTHER} ({@code compat.sense.LevelProbe}), so a hedge is a wall and a
+ * leaf-roofed cabin is a cabin.
+ *
+ * <p>A trunk is a tree iff it stands on a <b>grounded base</b> (decision: Luiz — "inside the
+ * blob, locate at least one vertical log touching a non-tree block: that's your stump") and owns
+ * <b>at least one sunlit leaf</b>, so a roofed structure or a bare log pile never validates. And
+ * FLOATING WOOD is not A TREE — a chopped-out remnant in a canopy is never remembered, never
+ * targeted (the root fix for the unreachable-memory trap). Anchor = the lowest base cell, nearest
+ * the seed among ties. Units = the tree's own log count.
  */
 public final class TreeRule implements GrowthRule {
     public static final TreeRule INSTANCE = new TreeRule();
@@ -35,31 +40,41 @@ public final class TreeRule implements GrowthRule {
     }
 
     @Override
-    public Optional<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seed, BlockProbe probe) {
-        List<Pos> logs = new ArrayList<>();
-        List<Pos> grounded = new ArrayList<>();
-        boolean sunlit = false;
-        for (Map.Entry<Pos, BlockKind> entry : blocks.entrySet()) {
-            if (entry.getValue() == BlockKind.LOG) {
-                Pos log = entry.getKey();
-                logs.add(log);
-                Pos below = new Pos(log.x(), log.y() - 1, log.z());
-                if (blocks.get(below) != BlockKind.LOG
-                        && probe.at(below.x(), below.y(), below.z()) == BlockKind.OTHER) {
-                    grounded.add(log); // stands on a non-tree block: a stump candidate
-                }
-            } else if (!sunlit && entry.getValue() == BlockKind.LEAVES) {
-                Pos leaf = entry.getKey();
-                sunlit = leaf.y() >= probe.surfaceY(leaf.x(), leaf.z());
+    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seed, BlockProbe probe) {
+        List<Evaluation> trees = new ArrayList<>();
+        for (TreeShape.Trunk trunk : TreeShape.split(blocks, probe)) {
+            if (!hasSunlitLeaf(trunk.leaves(), probe)) {
+                continue; // no crown of its own: a woodpile, a stump, a growth under a roof
             }
+            Map<Pos, BlockKind> cells = new LinkedHashMap<>();
+            for (Pos log : trunk.base()) {
+                cells.put(log, BlockKind.LOG);
+            }
+            for (Pos log : trunk.column()) {
+                cells.put(log, BlockKind.LOG);
+            }
+            for (Pos log : trunk.branches()) {
+                cells.put(log, BlockKind.LOG);
+            }
+            for (Pos leaf : trunk.leaves()) {
+                cells.put(leaf, BlockKind.LEAVES);
+            }
+            trees.add(new Evaluation(anchorOf(trunk.base(), seed), trunk.logCount(), cells));
         }
-        if (grounded.isEmpty() || !sunlit) {
-            return Optional.empty(); // floating wood, woodpiles, roofed growths: not trees
-        }
-        return Optional.of(new Evaluation(anchorOf(grounded, seed), logs.size()));
+        return trees;
     }
 
-    /** The lowest log; among equally low ones, the horizontally nearest to the seed. */
+    /** Whether any of the tree's own leaves sees the sky — the outdoors test, per tree. */
+    private static boolean hasSunlitLeaf(List<Pos> leaves, BlockProbe probe) {
+        for (Pos leaf : leaves) {
+            if (leaf.y() >= probe.surfaceY(leaf.x(), leaf.z())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The lowest base cell; among equally low ones, the horizontally nearest to the seed. */
     private static Pos anchorOf(List<Pos> logs, Pos seed) {
         Pos best = null;
         long bestDist = Long.MAX_VALUE;
@@ -70,9 +85,7 @@ public final class TreeRule implements GrowthRule {
                 }
                 bestDist = Long.MAX_VALUE;
             }
-            long dx = log.x() - seed.x();
-            long dz = log.z() - seed.z();
-            long dist = dx * dx + dz * dz;
+            long dist = TreeShape.horizontalDistSq(log, seed);
             if (best == null || log.y() < best.y() || dist < bestDist) {
                 best = log;
                 bestDist = dist;

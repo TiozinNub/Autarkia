@@ -5,14 +5,14 @@ import dev.luizloyola.autarkia.core.inv.Inventory;
 import java.util.List;
 
 /**
- * Tier 1 of {@link SatisfyHunger}: eat plain food she already carries. Applicable exactly when
+ * Tier 1 of {@link SatisfyHunger}: eat plain food already carried. Applicable exactly when
  * {@link EatSelection#bestReady} finds a ready-tier stack (no strictly-better cooked form, not a
- * {@code canAlwaysEat} treat) and she has room ({@code missing > 0}); decomposes to a single
- * {@link ConsumeItem} on that stack's slot, equipment slots included.
+ * {@code canAlwaysEat} treat) and {@code missing > 0}; decomposes to one {@link ConsumeItem} on that
+ * slot, equipment slots included — offhand food is how players carry a snack.
  *
- * <p><b>Cost {@code 0.0} — the free baseline</b> every acquiring method prices itself against.
- * Cheapest-wins therefore prefers ready food whenever any is in hand, and any non-zero tolerance
- * admits it: "ready always beats resort" needs no special-casing.
+ * <p>Cost {@code 0.0}, the free baseline every acquiring method prices against (containers cost path
+ * distance, hunting distance-plus-danger), so cheapest-wins prefers ready food whenever any is in
+ * hand.
  */
 public final class EatReadyFood implements Method {
 

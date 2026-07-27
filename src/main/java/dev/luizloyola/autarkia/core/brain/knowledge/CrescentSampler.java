@@ -20,7 +20,10 @@ public final class CrescentSampler {
 
     private Column center;
 
-    /** The newly-in-range columns; empty until the feet cell changes. */
+    /**
+     * Advances to the person's current feet cell and returns the newly-in-range columns —
+     * empty when no cell boundary was crossed since the last call.
+     */
     public List<Column> advance(Pos feet) {
         Column now = new Column(feet.x(), feet.z());
         Column before = this.center;

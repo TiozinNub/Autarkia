@@ -111,16 +111,16 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
     }
 
     /**
-     * What an arm is DOING with what it holds — the one half of the humanoid render state
+     * What an arm is DOING with what it holds — the half of the humanoid render state that
      * {@link HumanoidMobRenderer#extractHumanoidRenderState} leaves alone, because vanilla fills it
      * per-renderer. Both poses default to {@link HumanoidModel.ArmPose#EMPTY}, so without this a
-     * Person eats, drinks and draws a bow with her arms idle: the item-use facts are already in the
-     * state, only the pose that reads them was missing.
+     * Person eats, drinks and draws a bow with arms swinging idly at their sides.
      *
      * <p>Mirrors {@code AvatarRenderer.getArmPose} (26.1.2 bytecode) rather than calling it: it is
-     * private static and runs in that renderer's own extraction, which a Person never reaches —
+     * private static and runs in that renderer's own extraction, which a Person never reaches, since
      * extraction is dispatched by entity type. Submission does go through {@code AvatarRenderer},
-     * which is why filling these two fields is enough.
+     * which is why filling these two fields is enough. A two-handed main hand demotes the off hand
+     * to a plain hold.
      */
     private static HumanoidModel.ArmPose armPose(Person person, HumanoidArm arm) {
         ItemStack offHand = person.getItemInHand(InteractionHand.OFF_HAND);

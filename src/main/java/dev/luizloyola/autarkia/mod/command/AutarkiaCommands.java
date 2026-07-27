@@ -282,7 +282,7 @@ public final class AutarkiaCommands {
                         // The personal board (layer 3's degenerate v1): posted/claimed/cooling.
                         .then(Commands.literal("board")
                                 .executes(ctx -> boardShow(ctx.getSource())))
-                        // Who she can currently SEE — the peers() sense: Persons and live
+                        // Who they can currently SEE — the peers() sense: Persons and live
                         // players, one seamless list, activity read off the visible body.
                         .then(Commands.literal("peers")
                                 .executes(ctx -> peersList(ctx.getSource()))
@@ -556,7 +556,7 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** {@code peers view} with no {@code true|false}: who, if anyone, is hearing her narration. */
+    /** {@code peers view} with no {@code true|false}: who, if anyone, hears the narration. */
     private static int peersViewShow(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
@@ -597,7 +597,7 @@ public final class AutarkiaCommands {
                 : other.getName().getString() + "'s chat.";
     }
 
-    /** The resolved Person's live {@code peers()} reading — who she sees, and what they're visibly doing. */
+    /** The resolved Person's live {@code peers()} reading — who they see, doing what. */
     private static int peersList(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
@@ -749,7 +749,7 @@ public final class AutarkiaCommands {
     }
 
     /** Runs {@link ChopNearestTree} on the resolved Person — the full chop choreography against
-     *  her nearest REMEMBERED grove (knowledge-driven: no memory of a tree, no chop). */
+     *  their nearest REMEMBERED grove (knowledge-driven: no memory of a tree, no chop). */
     private static int brainChop(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
@@ -1041,7 +1041,7 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * {@code knowledge view} with no {@code true|false}: whether her beliefs are on screen, and
+     * {@code knowledge view} with no {@code true|false}: whether their beliefs are on screen, and
      * whose. Unlike switching it on, asking works from the console — the answer is a chat line
      * here, not particles over there.
      */
@@ -1061,7 +1061,8 @@ public final class AutarkiaCommands {
             return 0;
         }
         source.sendSuccess(() -> Component.literal(name + "'s knowledge view is true — "
-                        + "particles mark her beliefs, discoveries land in " + describeViewer(source, viewer))
+                        + "particles mark " + person.getGender().possessive() + " beliefs, "
+                        + "discoveries land in " + describeViewer(source, viewer))
                 .withStyle(ChatFormatting.GREEN), false);
         return 1;
     }
@@ -1294,12 +1295,10 @@ public final class AutarkiaCommands {
 
     /**
      * The living Person nearest the source's position, within {@link #NEAREST_RADIUS}, or
-     * {@code null} having reported that there is none. Searches the SOURCE's dimension and
-     * position, so {@code execute at}/{@code positioned} moves the search; {@code execute as}
-     * (entity only) does not — that is {@link #resolve}'s job.
-     *
-     * <p>{@code isAlive} filters out a corpse, which lingers and would otherwise be the nearest
-     * thing to a console standing where she died — see {@link Persons#loaded}.
+     * {@code null} having reported that there is none. Searches the SOURCE's dimension and position,
+     * so {@code execute at}/{@code positioned} moves the search and {@code execute as} does not —
+     * that one is {@link #resolve}'s job. {@code isAlive} is filtered on, like {@link Persons#loaded}:
+     * a corpse would otherwise be the nearest thing to a console standing where they died.
      */
     private static Person nearest(CommandSourceStack source) {
         ServerLevel level = source.getLevel();

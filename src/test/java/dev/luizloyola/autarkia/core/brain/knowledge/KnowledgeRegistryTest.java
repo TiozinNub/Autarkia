@@ -35,6 +35,6 @@ class KnowledgeRegistryTest {
 
         assertEquals(1, registry.forPerson(person(1)).size());
         assertEquals(0, registry.forPerson(person(2)).size(),
-                "no ESP between persons either: each must see it herself");
+                "no ESP between persons either: each must see it themselves");
     }
 }

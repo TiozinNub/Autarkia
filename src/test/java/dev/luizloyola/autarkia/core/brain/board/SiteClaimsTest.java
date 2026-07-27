@@ -25,7 +25,7 @@ class SiteClaimsTest {
         assertTrue(claims.claim(PoiKind.TREE, anchor, alice, 0));
         assertFalse(claims.claim(PoiKind.TREE, anchor, bob, 1), "bob can't take alice's site");
         assertFalse(claims.availableTo(PoiKind.TREE, anchor, bob, 1));
-        assertTrue(claims.availableTo(PoiKind.TREE, anchor, alice, 1), "hers stays hers");
+        assertTrue(claims.availableTo(PoiKind.TREE, anchor, alice, 1), "theirs stays theirs");
         assertTrue(claims.claim(PoiKind.TREE, anchor, alice, 1), "re-claiming your own succeeds");
     }
 
@@ -58,12 +58,12 @@ class SiteClaimsTest {
 
     @Test
     void thePersonBoundViewSpeaksForItsPerson() {
-        PersonClaims hers = claims.forPerson(alice);
+        PersonClaims theirs = claims.forPerson(alice);
         PersonClaims his = claims.forPerson(bob);
-        assertTrue(hers.claim(PoiKind.TREE, anchor, 0));
+        assertTrue(theirs.claim(PoiKind.TREE, anchor, 0));
         assertFalse(his.claim(PoiKind.TREE, anchor, 1));
         assertFalse(his.availableTo(PoiKind.TREE, anchor, 1));
-        hers.release(PoiKind.TREE, anchor);
+        theirs.release(PoiKind.TREE, anchor);
         assertTrue(his.availableTo(PoiKind.TREE, anchor, 2));
     }
 }

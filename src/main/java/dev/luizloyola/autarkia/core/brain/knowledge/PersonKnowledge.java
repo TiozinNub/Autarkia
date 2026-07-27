@@ -11,21 +11,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * One person's remembered POIs: per kind, an anchor-keyed map with {@link #note},
- * {@link #refresh} and {@link #forget}. No clock of its own — callers stamp game time into the
- * {@link PoiMemory} they pass.
+ * One person's remembered POIs: per kind, an anchor-keyed map with {@link #note} (I saw something),
+ * {@link #refresh} (still there) and {@link #forget} (gone). No clock of its own — callers stamp
+ * game time into the {@link PoiMemory} they pass.
  *
- * <p><b>Bounded like a memory, not a database.</b> Each kind keeps at most
- * {@link #MAX_PER_KIND} entries; noting one more evicts the <em>stalest</em> (oldest
- * {@code lastSeenTick}).
+ * <p>Bounded like a memory: each kind keeps at most {@link #maxPerKind()} entries, and noting one
+ * more evicts the stalest (oldest {@code lastSeenTick}).
  *
- * <p><b>Noting merges, never duplicates.</b> A new memory within its kind's
- * {@link PoiKind#mergeRadius()} (Chebyshev) of an existing one <em>replaces</em> it: the fresher
- * scan knows the current shape, and keeping both would count the wood twice. Insertion order is
- * preserved for deterministic iteration.
+ * <p>Noting merges rather than duplicating: a new memory within its kind's
+ * {@link PoiKind#mergeRadius()} (Chebyshev) of an existing one <em>replaces</em> it, the fresher
+ * expansion knowing the current shape better. Insertion order is preserved for deterministic
+ * iteration.
  */
 public final class PersonKnowledge {
-    public static final int MAX_PER_KIND = 64;
+    /**
+     * Memory capacity per {@link PoiKind} — {@code perception.knowledge_max_per_kind}, read
+     * through the config on every use so {@code reload} retunes live Persons. Must sit ABOVE the
+     * trees a person works among: at 64, an 81-tree grid churned its far corners between forget
+     * and rediscover (2026-07-27: 56 notice events for one tree).
+     */
+    public static int maxPerKind() {
+        return dev.luizloyola.autarkia.core.config.Config.get()
+                .i(dev.luizloyola.autarkia.core.config.Knob.KNOWLEDGE_MAX_PER_KIND);
+    }
 
     private final Map<PoiKind, Map<Pos, PoiMemory>> byKind = new EnumMap<>(PoiKind.class);
     /**
@@ -46,7 +54,7 @@ public final class PersonKnowledge {
         Pos merged = findWithin(entries, memory.anchor(), memory.kind().mergeRadius());
         if (merged != null) {
             entries.remove(merged);
-        } else if (entries.size() >= MAX_PER_KIND) {
+        } else if (entries.size() >= maxPerKind()) {
             evictStalest(entries);
         }
         entries.put(memory.anchor(), memory);

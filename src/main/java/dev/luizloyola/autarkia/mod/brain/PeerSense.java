@@ -44,8 +44,9 @@ public final class PeerSense {
     private static final int FIGHT_MARK_TICKS = 100;
     /** How long a place-mark keeps a body classified as BUILDING between placements. */
     private static final int BUILD_MARK_TICKS = 60;
-    /** How tightly a drawn bow's view must align on her to read "aiming at" (cos ~15°,
-     *  not exact). No dwell: a bow crossing you alarms immediately. */
+    /** How tightly a drawn bow's view must align on them to read "aiming at" (cos ~15° — a
+     *  tight cone, deliberately not exact; decision: Luiz). Instant, no dwell: a bow
+     *  crossing you should alarm immediately. */
     private static final double AIM_ALIGN = 0.966;
     /**
      * Blocks-per-tick above which feet count as moving — walking is ~0.21, sneak-walking ~0.065,
@@ -69,8 +70,8 @@ public final class PeerSense {
      *  an interaction — caught live: opening a chest blipped "mining" on the way). */
     private static final int MINING_STREAK = 2;
 
-    /** Ticks a gaze must dwell before it counts — a passing glance at a table (or at HER)
-     *  must not trigger. */
+    /** Ticks a gaze must dwell before it counts — a passing glance at a table (or at THEM)
+     *  must not trigger (decision: Luiz: "only after looking for a determinate amount"). */
     private static final int GAZE_CONFIRM_TICKS = 20;
     /** Ticks a confirmed gaze survives a break — head-bobs must not untrigger it. */
     private static final int GAZE_GRACE_TICKS = 10;
@@ -81,7 +82,7 @@ public final class PeerSense {
     private final Map<PersonId, LivingEntity> bodies = new HashMap<>();
     /** Each body's movement anchor and swing streak — the windowed observable signals. */
     private final Map<Integer, MoveTrack> moveTracks = new HashMap<>();
-    /** Each body's gaze dwell state (on HER, on a station) — the confirm-time filters. */
+    /** Each body's gaze dwell state (on THEM, on a station) — the confirm-time filters. */
     private final Map<Integer, GazeTrack> gazeTracks = new HashMap<>();
     /** When each body's chest menu was last seen open — the station exit grace. */
     private final Map<Integer, Long> chestLastOpenAt = new HashMap<>();
@@ -121,7 +122,7 @@ public final class PeerSense {
             PersonId self = person.getPersonId();
             if (self != null && person.level().getServer() != null) {
                 PeerViewer.onEvent(person.level().getServer(), self,
-                        person.getName().getString(), person.getGender().objectPronoun(), event);
+                        person.getName().getString(), person.getGender(), event);
             }
         }
     }
@@ -134,11 +135,13 @@ public final class PeerSense {
     /**
      * The live body behind a perceived peer, or {@code null} when none is tracked.
      *
-     * <p>DEBUG VIEW only, and only for a {@link Peer.Awareness#SEEN} peer: the sensor's cell
-     * reading snaps from cell to cell on its attention cadence, and the body lets the client
-     * interpolate instead. The map keeps a body while the peer is only remembered, so following it
-     * for a HEARD or REMEMBERED peer would draw where the body is, not where she believes it to be.
-     * The caller gates on awareness; see {@code DebugView.peers}.
+     * <p>For the DEBUG VIEW only, and only for a {@link Peer.Awareness#SEEN} peer, whose reading is
+     * a block cell sampled on the attention cadence — the body lets the client interpolate instead
+     * of snapping cell to cell.
+     *
+     * <p>The map holds a body while the sensor tracks the id, INCLUDING while the peer is only
+     * remembered: following it for a HEARD or REMEMBERED peer would draw where that body is rather
+     * than where they believe it to be. The caller gates on awareness; see {@code DebugView.peers}.
      */
     public @Nullable LivingEntity bodyOf(PersonId id) {
         return bodies.get(id);
@@ -274,7 +277,7 @@ public final class PeerSense {
                 activity);
     }
 
-    /** Whether their gaze is ON her within {@code minDot} — watching's raw signal, aiming's cone. */
+    /** Whether their gaze is ON them within {@code minDot} — watching's signal, aiming's cone. */
     private boolean gazeOnHer(LivingEntity body, double minDot) {
         Vec3 toHer = person.getEyePosition().subtract(body.getEyePosition());
         double length = toHer.length();
@@ -355,7 +358,8 @@ public final class PeerSense {
             case LOST -> "lost track of " + event.peer().knownAs();
             case READING_CHANGED -> event.peer().knownAs() + " now "
                     + describe(event.peer()) + " (was " + describe(event.was()) + ")";
-            case RECOGNIZED -> "recognized " + event.peer().name() + " — the someone she'd heard";
+            case RECOGNIZED -> "recognized " + event.peer().name() + " — the someone "
+                    + person.getGender().subjectPronoun() + "'d heard";
         };
         person.journal().record(Category.SENSE, "peer", what);
     }

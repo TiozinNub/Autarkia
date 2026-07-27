@@ -4,14 +4,11 @@ import dev.luizloyola.autarkia.core.brain.BrainContext;
 import dev.luizloyola.autarkia.core.brain.task.Task;
 
 /**
- * Layer 1 of the brain — a reactive drive bidding, every tick, to be what she does right now (see
- * the brain design doc): each instinct reports a scalar {@code pressure} the
- * {@link dev.luizloyola.autarkia.core.brain.Arbiter} compares against every other's, and the winner
- * supplies a {@code root} task tree. An instinct never touches actuators and never runs a task — it
- * names a want and its strength; the task layer does the doing.
- *
- * <p>The set is fixed and small (Eat + Wander today; Flee, Fight, Grab-loot, Stock-up later): the
- * arbiter needs nothing from an instinct but these three methods.
+ * Layer 1 of the brain — a reactive drive that bids, every tick, to be what they do right now: each
+ * instinct reports a scalar {@code pressure} the {@link dev.luizloyola.autarkia.core.brain.Arbiter}
+ * compares against every other's, and the winner supplies a {@code root} task tree for the executor
+ * to run. An instinct never touches actuators and never runs a task itself — it names a want and
+ * how strongly it wants it; the task layer does the doing.
  */
 public interface Instinct {
 

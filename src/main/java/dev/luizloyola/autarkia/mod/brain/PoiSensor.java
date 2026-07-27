@@ -14,14 +14,14 @@ import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Mounts the pure {@link PoiSensorCore} pipeline on a {@link Person} — the mounting bracket and the
- * Minecraft boundary (feet position, game time, a {@link LevelProbe} over her level and eyes). A
- * <em>body</em> sense: it runs beside the brain in {@code serverAiStep} and writes into her
- * knowledge, and the brain reads memory, never the world.
+ * Mounts the pure {@link PoiSensorCore} pipeline on a {@link Person}: only a mounting bracket and
+ * the Minecraft boundary. A <em>body</em> sense, not a brain organ — it runs beside the brain in
+ * {@code serverAiStep} and writes into the person's knowledge; the brain reads memory, never the
+ * world.
  *
- * <p>Resolved lazily on first tick ({@link BrainDriver}'s pattern): the {@code PersonId} and the
- * running server are absent at construction but guaranteed by the top of {@code Person.tick()}.
- * What perception learns is narrated to the journal ({@link Category#SENSE}).
+ * <p>Resolved lazily on first tick: the {@code PersonId} and the running server are absent at
+ * construction but guaranteed by the top of {@code Person.tick()}. What it learns is narrated to the
+ * journal ({@link Category#SENSE}), the same events the POI viewer's discovery chat hooks.
  */
 public final class PoiSensor {
     private final Person person;
@@ -65,7 +65,7 @@ public final class PoiSensor {
         };
     }
 
-    /** Transient claim count — the debug command's "how full is her dismissal index" line. */
+    /** Transient claim count — the debug command's "how full is the dismissal index" line. */
     public int claimCount() {
         return this.core == null ? 0 : this.core.claimCount();
     }

@@ -14,15 +14,16 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@link BlockBreaker} port over a live {@link Person} — vanilla-fidelity block breaking
- * without a {@code Player}: the survival progress formula (block hardness, the HELD stack's
- * destroy speed, the correct-tool divisor — a bare hand takes ~3s on a log), the shared crack
- * animation, real drops, and 0.005 exhaustion per broken block onto {@link Person#needs()}.
+ * The {@link BlockBreaker} port over a live {@link Person} — vanilla-fidelity breaking without a
+ * {@code Player}: the survival progress formula (hardness, the HELD stack's destroy speed, the
+ * correct-tool divisor — a bare hand takes ~3s on a log), the shared crack animation
+ * ({@code destroyBlockProgress}), a real swing, real drops, and the player's 0.005 exhaustion per
+ * block onto {@link Person#needs()}.
  *
- * <p>Owned and ticked by the body ({@link Person#serverAiStep()}), exposed to the brain as a port:
- * the machine lives with the body, the brain only holds intent. Every mid-break tick re-validates
- * — a swapped block or a body out of reach fails the break, and the held item is re-read, so a
- * mid-break tool swap changes speed.
+ * <p>Owned and ticked by the body ({@link Person#serverAiStep()}), exposed to the brain as a port by
+ * the {@link BrainDriver}. Every tick mid-break re-validates the world, so a swapped block or a
+ * drift out of reach fails the break, and the held item is re-read — a mid-break tool swap changes
+ * speed exactly like a player's.
  */
 public final class PersonBlockBreaker implements BlockBreaker {
     /** Arm's reach in blocks (eye to block center) — the survival player's block-interaction range. */

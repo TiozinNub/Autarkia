@@ -36,9 +36,9 @@ public final class PeerKnocks {
             return;
         }
         Vec3 at = Vec3.atCenterOf(pos);
-        // A dead Person lingers as a corpse and heard() still writes to her sense table: without
-        // the alive filter she accrues peers nothing reads, since commands and @e selectors treat
-        // her as gone. Same guard the aggro mixin applies.
+        // Ears belong to the living: a killed Person lingers as a corpse and heard() writes
+        // synchronously, so without this filter it accrues peers nothing ever reads. Same guard
+        // the aggro mixin applies to its Person scan.
         for (Person listener : level.getEntitiesOfClass(Person.class,
                 AABB.ofSize(at, radius * 2.0, radius * 2.0, radius * 2.0),
                 EntitySelector.LIVING_ENTITY_STILL_ALIVE)) {

@@ -96,6 +96,11 @@ class AchieveTaskTest {
             }
 
             @Override
+            public double progress(BrainContext c) {
+                return stock; // like ObtainItem: rounds that grow the pile refund the cap
+            }
+
+            @Override
             public List<Method> methods() {
                 return List.of(methods);
             }
@@ -150,6 +155,23 @@ class AchieveTaskTest {
                 "cheapest wins each FRESH round, burns, and the fallback finishes it — twice");
     }
 
+    /**
+     * The cap meters STALLS, not work: 39 trees felled flawlessly were killed by the
+     * zero-progress backstop at round 32. A round that raises {@link AchieveTask#progress}
+     * hands the budget back.
+     */
+    @Test
+    void anHonestGrindLongerThanTheCapOutlivesIt() {
+        int target = TaskExecutor.ACHIEVE_ROUNDS_CAP + 8;
+        Produce one = new Produce(1);
+        Optional<TaskStatus> status = drive(goal(target, way("make one", 1, () -> List.of(one))),
+                target * 3);
+
+        assertEquals(Optional.of(TaskStatus.SUCCESS), status,
+                "every round earned its keep — the stall cap must not end productive work");
+        assertEquals(target, one.runs);
+    }
+
     @Test
     void zeroProgressHitsTheRoundsCapAndFails() {
         Produce nothing = new Produce(0);
@@ -172,18 +194,58 @@ class AchieveTaskTest {
         assertEquals(2, one.runs);
     }
 
+    /**
+     * A dying way keeps getting fresh rounds (the world may have changed) until the rounds cap
+     * ends the frame. Failing on the first death froze a 2000-log stock on one unworkable tree.
+     */
     @Test
-    void methodExhaustionWhileUnsatisfiedFails() {
+    void aWayThatOnlyEverDiesFailsAtTheRoundsCapNotTheFirstDeath() {
         Fail broken = new Fail();
-        Optional<TaskStatus> status = drive(goal(1, way("broken", 1, () -> List.of(broken))), 10);
+        Optional<TaskStatus> status = drive(goal(1, way("broken", 1, () -> List.of(broken))), 200);
 
         assertEquals(Optional.of(TaskStatus.FAILED), status);
+        assertTrue(broken.runs > 1, "the first death alone no longer ends the goal");
+        assertTrue(broken.runs <= TaskExecutor.ACHIEVE_ROUNDS_CAP + 1, "the cap bounded it");
+    }
+
+    /**
+     * The freeze, closed: "obtain logs x2000" died on its first unworkable tree with 78 good ones
+     * remembered. A way that fails and later works finishes the stock.
+     */
+    @Test
+    void aFailedWayGetsFreshRoundsWhileTheWorldChanges() {
+        var flaky = new PrimitiveTask() {
+            int runs;
+
+            @Override
+            public TaskStatus tick(BrainContext c) {
+                runs++;
+                if (runs <= 2) {
+                    return TaskStatus.FAILED; // two unworkable trees, failed outright
+                }
+                stock += 1;
+                return TaskStatus.SUCCESS; // the third tree pays
+            }
+
+            @Override
+            public void cancel(BrainContext c) {
+            }
+
+            @Override
+            public String describe() {
+                return "flaky chop";
+            }
+        };
+        Optional<TaskStatus> status = drive(goal(1, way("chop", 1, () -> List.of(flaky))), 30);
+
+        assertEquals(Optional.of(TaskStatus.SUCCESS), status);
+        assertEquals(3, flaky.runs, "two dead trees, then the third one pays the stock");
     }
 
     @Test
     void failuresCarryTheirDeepestCause() {
-        // A failing primitive: the origin survives the bubble.
-        drive(goal(1, way("broken", 1, () -> List.of(new Fail()))), 10);
+        // A failing primitive: the origin survives the bubble (and the retry rounds).
+        drive(goal(1, way("broken", 1, () -> List.of(new Fail()))), 200);
         assertTrue(executor.failureReason().orElseThrow().contains("fail failed"),
                 "the deepest failing node names itself");
 

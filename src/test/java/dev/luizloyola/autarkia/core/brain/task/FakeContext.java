@@ -13,6 +13,7 @@ import dev.luizloyola.autarkia.core.brain.act.Mover;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.log.JournalService;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
+import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.PersonId;
 
 /**
@@ -30,6 +31,8 @@ final class FakeContext implements BrainContext {
     final PersonKnowledge knowledge = new PersonKnowledge();
     /** This fake person's identity — what its claims are held under. */
     final PersonId self = PersonId.random();
+    /** The narrating voice behind journal pronouns — settable so a test can assert either one. */
+    Gender gender = Gender.FEMALE;
     /**
      * A real claim registry (pure anyway), private by default so solo tests behave as before;
      * contention tests point two contexts at one shared instance to simulate a settlement.
@@ -86,6 +89,11 @@ final class FakeContext implements BrainContext {
     @Override
     public PersonJournal journal() {
         return journal;
+    }
+
+    @Override
+    public Gender gender() {
+        return gender;
     }
 
     @Override

@@ -8,7 +8,7 @@ import dev.luizloyola.autarkia.core.brain.sense.Pos;
  * ({@link #units}, {@link #lastSeenTick}). A task re-reads the actual blocks, so a wrong memory
  * produces a failed step and an update, never a crash.
  *
- * @param kind         what she believe this is
+ * @param kind         what they believe this is
  * @param anchor       the cell to walk to — a grove's lowest trunk log, water's shore cell
  * @param bounds       the inclusive box the region occupied when last seen
  * @param units        kind-specific size: logs in a grove, surface cells of a water body —

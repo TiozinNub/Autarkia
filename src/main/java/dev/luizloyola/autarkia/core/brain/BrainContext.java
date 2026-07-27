@@ -5,6 +5,7 @@ import dev.luizloyola.autarkia.core.brain.board.PersonClaims;
 import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
 import dev.luizloyola.autarkia.core.brain.sense.Percepts;
 import dev.luizloyola.autarkia.core.log.PersonJournal;
+import dev.luizloyola.autarkia.core.person.Gender;
 
 /**
  * Everything the task machinery is handed per call: the body's controls ({@link #actuators()}) and
@@ -18,16 +19,21 @@ public interface BrainContext {
     /** The body's controls — one port per actuator domain (legs, gullet, ...). */
     ActuatorAccess actuators();
 
-    /** The brain's senses — what she can currently perceive of herself and the world. */
     Percepts percepts();
 
     /**
-     * This person's debug journal — the per-person log view ({@link PersonJournal}) tasks and
-     * instincts narrate to. One-way, unlike {@link #actuators()} and {@link #percepts()}: recording
-     * has no effect on the simulation. Bound to this person's {@code PersonId}, so an
-     * offline-simulated person (with no entity at all) logs through the very same call.
+     * This person's debug journal ({@link PersonJournal}), written by tasks and instincts. One-way
+     * (recording cannot affect the simulation), and bound to the {@code PersonId}, so an
+     * offline-simulated person with no entity logs through the same call.
      */
     PersonJournal journal();
+
+    /**
+     * Whose brain this is — the one place a core task may get a pronoun from
+     * ({@code ctx.gender().objectPronoun()}). Journal lines reach chat, so a hardcoded "her"
+     * misgenders half the settlement, and asking here survives a third {@link Gender} value.
+     */
+    Gender gender();
 
     /**
      * This person's remembered POIs — memory, not perception: the same object the "notice as you
@@ -49,10 +55,9 @@ public interface BrainContext {
 
     /**
      * The maximum method cost currently acceptable, in the walk-block currency methods price
-     * themselves in — the executor treats any applicable method costing more than this as if it
-     * were inapplicable. Set by the arbiter from the active instinct's pressure through
-     * {@link ToleranceCurve}. {@link Double#POSITIVE_INFINITY} means unbounded: the STARVING
-     * plateau, and how manual/debug driving runs.
+     * themselves in — a costlier applicable method is treated as inapplicable. Set by the arbiter
+     * from the active instinct's pressure through {@link ToleranceCurve};
+     * {@link Double#POSITIVE_INFINITY} is unbounded — the STARVING plateau, and manual driving.
      */
     double costTolerance();
 }

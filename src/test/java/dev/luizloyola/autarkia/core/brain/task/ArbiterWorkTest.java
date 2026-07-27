@@ -163,7 +163,7 @@ class ArbiterWorkTest {
         ticks(2);
         eat.pressure = 0.30; // peckish: below PREEMPT and below the running errand's stickiness
         ticks(5);
-        assertTrue(arbiter.describe().contains("(active)"), "she finishes the errand while peckish");
+        assertTrue(arbiter.describe().contains("(active)"), "the errand finishes while peckish");
 
         eat.pressure = 0.65; // hungry: past the preempt bar
         ticks(1);

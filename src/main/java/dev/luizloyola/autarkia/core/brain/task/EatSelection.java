@@ -8,22 +8,20 @@ import dev.luizloyola.autarkia.core.person.Needs;
 import java.util.Optional;
 
 /**
- * The shared "which carried stack should she bite?" policy behind {@link EatReadyFood} and
- * {@link EatLastResort}. Package-private and stateless: both call it against fresh percepts
- * every expansion.
+ * The shared bite-selection policy behind {@link EatReadyFood} and {@link EatLastResort}. Stateless:
+ * fresh percepts every expansion.
  *
  * <p><b>The two tiers</b> (a carried food is in exactly one):
  * <ul>
- *   <li><b>ready</b> — no strictly-better cooked form and not a {@code canAlwaysEat} treat;</li>
- *   <li><b>last resort</b> — a better cooked form (raw-but-cookable) OR a {@code canAlwaysEat}
- *       treat, whose opportunity cost {@link EatLastResort} prices.</li>
+ *   <li><b>ready</b> — no strictly-better cooked form and not a {@code canAlwaysEat} treat; free to
+ *       eat now ({@link EatReadyFood}).</li>
+ *   <li><b>last resort</b> — a better cooked form OR a treat; priced by {@link EatLastResort}.</li>
  * </ul>
  *
- * <p><b>Within-tier ordering</b>: least {@code waste}, then highest {@code nutrition}, then
- * lowest slot, where {@code missing = MAX_FOOD - foodLevel} and
- * {@code waste = max(0, nutrition - missing)}. Least waste first is why at food 18 a 1-point
- * potato beats an 8-point steak. The lowest-slot tie-break falls out of strictly-better
- * comparison plus {@link Inventory#occupied()}'s ascending-slot iteration.
+ * <p><b>Ordering</b>: least {@code waste}, then highest {@code nutrition}, then lowest slot, where
+ * {@code missing = MAX_FOOD - foodLevel} and {@code waste = max(0, nutrition - missing)} — at food
+ * 18 a 1-point potato beats an 8-point steak (6 spilled). Lowest slot falls out of strictly-better
+ * comparison over {@link Inventory#occupied()}'s ascending iteration.
  */
 final class EatSelection {
 

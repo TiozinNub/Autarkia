@@ -18,7 +18,7 @@ class CrescentSamplerTest {
         CrescentSampler sampler = new CrescentSampler();
         List<Column> disc = sampler.advance(new Pos(0, 64, 0));
 
-        assertTrue(disc.contains(new Column(0, 0)), "her own column");
+        assertTrue(disc.contains(new Column(0, 0)), "their own column");
         assertTrue(disc.contains(new Column(R, 0)), "rim");
         assertFalse(disc.contains(new Column(R + 1, 0)), "beyond the rim");
         assertTrue(disc.size() > 400 && disc.size() < 470, "≈ πR² = ~452, got " + disc.size());

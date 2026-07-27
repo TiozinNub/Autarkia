@@ -6,23 +6,22 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The independently switchable halves of the in-world debug view ({@link DebugView}) — what gets
- * drawn over the selected Person as gizmo lines, boxes and floating text. Each layer answers a
- * different question and never implies another: chasing a pathfinding bug with the peer lines on
- * is noise.
+ * The independently switchable halves of the in-world debug view ({@link DebugView}), drawn over the
+ * selected Person as gizmo lines, boxes and floating text. No layer implies another: chasing a
+ * pathfinding bug with the peer lines on is noise.
  *
- * <p>Declaration order is load-bearing twice over: it is the debug wand's cycle order (see
- * {@link #next}) and the wire bit order ({@link #bit}), so a client and server that disagree about
- * it disagree about everything. Adding a layer therefore goes at the END.
+ * <p>Declaration order is load-bearing twice — it is the debug wand's cycle order ({@link #next})
+ * and the wire bit order ({@link #bit}), so a client and server that disagree about it disagree
+ * about everything. Add a layer at the END.
  */
 public enum DebugLayer {
     /** Waypoint polyline coloured by move type, the current leg highlighted, and the goal cell. */
     PATH,
-    /** The arbiter's pressures and the running task, stacked as floating text over her head. */
+    /** The arbiter's pressures and the running task, stacked as floating text over their head. */
     BRAIN,
-    /** Remembered points of interest: an anchor marker and the bounds box she believes in. */
+    /** Remembered points of interest: an anchor marker and the bounds box they believe in. */
     MEMORY,
-    /** Her view cone, and a line to everyone she currently perceives, coloured by channel. */
+    /** The view cone, and a line to everyone currently perceived, coloured by channel. */
     PEERS;
 
     /** The command literal and config-facing name — lower case, no underscores in v1. */

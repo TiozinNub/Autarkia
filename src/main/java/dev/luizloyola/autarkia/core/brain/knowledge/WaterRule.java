@@ -1,16 +1,17 @@
 package dev.luizloyola.autarkia.core.brain.knowledge;
 
 import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
- * Recognizes a body of surface water: the connected sheet of water cells sitting at their own
- * columns' surface, so submerged water under ice or inside a cave does not count. A stepped
- * river splits into reaches at each fall — acceptable, they are different places to fetch from.
+ * Recognizes a body of surface water: the connected sheet of water cells at their own columns'
+ * surface — water under ice or in a cave is not "water in sight", the same evidence rule as the
+ * tree's sunlit leaf. A stepped river splits into reaches at each fall, which is acceptable v1:
+ * different places to fetch from anyway.
  *
- * <p>Always accepts. Anchor = the water cell nearest the seed, roughly the near shore. Units =
- * surface cell count.
+ * <p>Always accepts, as one body — nothing here individuates the way a grove holds trees. Anchor
+ * = the water cell nearest the seed, roughly the near shore. Units = surface cell count.
  */
 public final class WaterRule implements GrowthRule {
     public static final WaterRule INSTANCE = new WaterRule();
@@ -29,7 +30,7 @@ public final class WaterRule implements GrowthRule {
     }
 
     @Override
-    public Optional<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seed, BlockProbe probe) {
+    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seed, BlockProbe probe) {
         Pos anchor = null;
         long bestDist = Long.MAX_VALUE;
         for (Pos cell : blocks.keySet()) {
@@ -42,6 +43,6 @@ public final class WaterRule implements GrowthRule {
                 anchor = cell;
             }
         }
-        return Optional.of(new Evaluation(anchor, blocks.size()));
+        return List.of(new Evaluation(anchor, blocks.size(), blocks));
     }
 }

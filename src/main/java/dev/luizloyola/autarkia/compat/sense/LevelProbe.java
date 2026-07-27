@@ -65,10 +65,13 @@ public final class LevelProbe implements BlockProbe {
             // A missing property (a modded canopy) is assumed to decay — only proof demotes. The
             // eye still sees through leaves (sightClear below).
             boolean built = state.getOptionalValue(BlockStateProperties.PERSISTENT).orElse(false);
-            return built ? BlockKind.OTHER : BlockKind.LEAVES;
+            // The decay rim (distance 7 — no log within reach) is a canopy DYING, usually one a
+            // chop just orphaned. Counting it kept hypothesizing "trees" out of vanishing remnants
+            // and fed dying cells into blobs and fishing menus (decision: Luiz, 2026-07-27).
+            boolean dying = state.getOptionalValue(BlockStateProperties.DISTANCE).orElse(1) > 6;
+            return built || dying ? BlockKind.OTHER : BlockKind.LEAVES;
         }
-        // Open water only (a collision-free cell whose fluid is water): a waterlogged fence is a
-        // fence to her, not something to drink from.
+        // Open water only: a waterlogged fence is a fence to them, not something to drink from.
         if (state.getFluidState().is(FluidTags.WATER)
                 && state.getCollisionShape(this.level, pos).isEmpty()) {
             return BlockKind.WATER;
@@ -139,9 +142,9 @@ public final class LevelProbe implements BlockProbe {
             if (cell.equals(targetCell) || !level.isLoaded(cell)) {
                 continue;
             }
-            // The ray needs FINER transparency than the BlockKind vocabulary: grass blades,
-            // flowers, ferns (anything without a collision shape) are see-through (a meadow
-            // must not blind her; caught live on real worldgen), as are leaves and water.
+            // The ray needs FINER transparency than the BlockKind vocabulary: anything without a
+            // collision shape is see-through (a meadow must not blind them), as are leaves and
+            // water.
             BlockState state = level.getBlockState(cell);
             boolean transparent = state.isAir()
                     || state.is(BlockTags.LEAVES)

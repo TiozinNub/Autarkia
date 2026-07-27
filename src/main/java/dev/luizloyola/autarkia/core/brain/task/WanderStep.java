@@ -8,20 +8,22 @@ import java.util.List;
 import java.util.random.RandomGenerator;
 
 /**
- * One beat of a wander: mostly stand, sometimes amble nearby. A {@link CompoundTask} with a single
- * always-applicable, cost-{@code 0} method, so the roll happens at DECOMPOSE time against fresh
- * percepts — offset from where she actually stands when the executor reaches this node.
+ * One beat of a wander: usually just stand around; sometimes amble somewhere nearby. A
+ * {@link CompoundTask} rather than a bare primitive so the roll happens at DECOMPOSE time against
+ * fresh percepts — offset from where they ACTUALLY stand when the executor reaches this node.
  *
- * <p>The roll (draw order is part of the test contract: walk-roll, pause, target): with probability
- * {@link #WALK_CHANCE}, {@code (dx, dz)} each uniform in {@code [-radius, radius]}, re-rolled while
- * Both are zero, {@code y} unchanged, decomposing to {@code [GoTo(target, STROLL), Idle(pause)]};
- * otherwise JUST {@code [Idle(pause)]}. Pauses run {@code IDLE_MIN + [0, IDLE_RANGE)} either way.
+ * <p>The roll (draw order is part of the test contract: walk-roll, then pause, then target): with
+ * probability {@link #WALK_CHANCE} a random {@code (dx, dz)} each uniform in
+ * {@code [-radius, radius]}, re-rolled while both are zero, {@code y} unchanged, decomposing to
+ * {@code [GoTo(target, STROLL), Idle(pause)]}; otherwise just {@code [Idle(pause)]}. Pauses run
+ * {@code IDLE_MIN + [0, IDLE_RANGE)} ticks either way.
  *
- * <p>Tuned down deliberately (Luiz: "wandering too often"): idling is the default, walking the
- * exception, and the walk is a {@link Gait#STROLL}.
+ * <p>Tuned down deliberately (Luiz): idling is the default, walking the exception, the walk a
+ * {@link Gait#STROLL}.
  *
- * <p>Failure self-heals: an unreachable roll FAILS the {@link GoTo}, the method and the step; the
- * arbiter re-grants and a fresh {@link WanderStep} rolls again. The grant loop is the retry.
+ * <p><b>Failure self-heals.</b> An unreachable roll fails the {@link GoTo} and so the step; the
+ * arbiter re-grants wander and a fresh {@link WanderStep} rolls a new target. The grant loop is the
+ * retry — re-plan on surprise, never patch mid-plan.
  */
 public final class WanderStep implements CompoundTask {
     /** Fraction of wander beats that actually go anywhere; the rest just stand. */
@@ -85,7 +87,8 @@ public final class WanderStep implements CompoundTask {
             int tx = here.x() + dx;
             int ty = here.y();
             int tz = here.z() + dz;
-            // Written as she commits; the pathfind line for the same cell follows.
+            // BRAIN log: the "wander (10, 10, 10) - start" line — the drive plus the spot picked,
+            // written on commitment to walking there (the pathfind line for that cell follows).
             ctx.journal().record(Category.BRAIN, "wander (" + tx + ", " + ty + ", " + tz + ")", "start");
             return List.of(new GoTo(tx, ty, tz, Gait.STROLL), new Idle(pause));
         }

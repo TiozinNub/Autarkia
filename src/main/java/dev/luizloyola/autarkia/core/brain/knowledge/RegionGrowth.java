@@ -4,23 +4,28 @@ import dev.luizloyola.autarkia.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.config.Config;
 import dev.luizloyola.autarkia.core.config.Knob;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
- * One in-flight structure scan: an incremental, budgeted BFS. An unfinished scan keeps its
- * frontier and resumes next tick, so an oak (~400 reads) completes across a handful of ticks
- * while the person keeps walking. It only collects; the sensor decides what a finished
- * {@link GrownRegion} becomes.
+ * One in-flight structure scan — an incremental, budgeted BFS. Give it reads via {@link #step}
+ * until {@link #isDone()}; an unfinished scan keeps its frontier and resumes next tick, so an oak
+ * (~400 reads) completes across a handful of ticks while the person walks. It never touches the
+ * store; the sensor decides what a finished {@link GrownRegion} becomes.
+ *
+ * <p>Connectivity is <b>26-way</b> (see {@link #NEIGHBORS}), because worldgen hangs branches off
+ * trunks diagonally and a face-only walk loses them silently. It costs roughly four times the probe
+ * reads, and groves touching at a corner fuse into one region — which is why the rule individuates
+ * what the growth fused ({@link GrowthRule#evaluate}).
  *
  * <p>Bounded three ways, each marking the result {@code partial}: the block cap, the spread cap
- * (Chebyshev from seed — a fused mega-forest becomes several partial groves), and unloaded
- * borders ({@link BlockKind#UNKNOWN}).
+ * (Chebyshev from seed), and unloaded borders ({@link BlockKind#UNKNOWN}).
  */
 public final class RegionGrowth {
     /** Block cap on one scan — hitting it marks the region partial. */
@@ -33,8 +38,34 @@ public final class RegionGrowth {
         return Config.get().i(Knob.REGION_MAX_SPREAD);
     }
 
-    private static final int[][] NEIGHBORS =
-            {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    /**
+     * The 26 cells touching a cell — faces first, then edges and corners. Diagonals are
+     * load-bearing: worldgen attaches branches to a trunk at a CORNER, and a face-only walk does
+     * not see them. Measured on a saved fancy oak (2026-07-26): of 28 logs a 6-neighbour fill
+     * from the stump reached 24, and the 4 it missed are the 4 the chopper left standing.
+     *
+     * <p>Faces first so that a scan out of budget or at {@link #maxBlocks()} has collected as
+     * close as possible to the old face-first shape.
+     */
+    private static final int[][] NEIGHBORS = touchingCells();
+
+    private static int[][] touchingCells() {
+        int[][] faces = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+        int[][] all = new int[26][];
+        System.arraycopy(faces, 0, all, 0, faces.length);
+        int i = faces.length;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    int touched = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+                    if (touched > 1) { // 0 is the cell itself, 1 is a face — already listed
+                        all[i++] = new int[] {dx, dy, dz};
+                    }
+                }
+            }
+        }
+        return all;
+    }
 
     private final GrowthRule rule;
     private final Pos seed;
@@ -123,16 +154,22 @@ public final class RegionGrowth {
     }
 
     private void finish(BlockProbe probe) {
+        List<GrownRegion.Part> parts = new ArrayList<>();
+        for (GrowthRule.Evaluation eval : rule.evaluate(blocks, seed, probe)) {
+            parts.add(new GrownRegion.Part(eval.anchor(), boundsOf(eval.blocks().keySet()),
+                    eval.units(), Collections.unmodifiableMap(eval.blocks())));
+        }
+        this.result = new GrownRegion(rule.kind(), partial, Collections.unmodifiableMap(blocks),
+                List.copyOf(parts));
+    }
+
+    /** The smallest box holding every cell — a part's "where", folded once at the end. */
+    private static Region boundsOf(Iterable<Pos> cells) {
         Region folded = null;
-        for (Pos p : blocks.keySet()) {
+        for (Pos p : cells) {
             folded = folded == null ? Region.of(p) : folded.including(p);
         }
-        Region bounds = folded;
-        Optional<GrowthRule.Evaluation> eval = rule.evaluate(blocks, seed, probe);
-        Map<Pos, BlockKind> payload = Collections.unmodifiableMap(blocks);
-        this.result = eval
-                .map(e -> new GrownRegion(rule.kind(), true, e.anchor(), bounds, e.units(), partial, payload))
-                .orElseGet(() -> new GrownRegion(rule.kind(), false, null, bounds, 0, partial, payload));
+        return folded;
     }
 
     private static int chebyshev(Pos a, Pos b) {

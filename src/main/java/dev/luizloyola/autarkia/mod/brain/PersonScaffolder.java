@@ -22,19 +22,18 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@link Scaffolder} port over a live {@link Person} — one nerd-pole step: jump, place a
- * carried block into the cell just vacated while airborne past block height, land on it. The body
- * owns the jump/place timing (ticked from {@link Person#serverAiStep()}); the brain only asks for
- * steps.
+ * The {@link Scaffolder} port over a live {@link Person} — one nerd-pole step: jump, place a carried
+ * block into the just-vacated cell while airborne past block height, land on it. Ticked from
+ * {@link Person#serverAiStep()}; one item leaves the carried inventory and the mirror follows.
  *
- * <p>Refusals are free, including the ledger at {@link Scaffolder#PILLAR_MAX} and a cell that has
- * already beaten her {@link #ATTEMPTS_PER_CELL} times; a step that never clears block height
- * within {@link #STEP_TIMEOUT_TICKS} FAILS with nothing consumed.
+ * <p>Refusals are free: no such item, no headroom two above the feet, a step in flight, the ledger
+ * at {@link Scaffolder#PILLAR_MAX}, or a cell that has beaten them {@link #ATTEMPTS_PER_CELL} times.
+ * A step that never clears block height within {@link #STEP_TIMEOUT_TICKS} FAILS, nothing consumed.
  *
- * <p><b>She steps to the middle of her cell before jumping.</b> The headroom check reads one
- * column ({@code feet.above(2)}) but her box is 0.6 wide, so off-centre she bonks a block that
- * check never looked at. Caught live: a leaf one cell over, her box 0.182 into that column, 95
- * dead jumps and no block placed.
+ * <p><b>The body steps to the middle of its cell before jumping.</b> The headroom check reads one
+ * column ({@code feet.above(2)}) but the box is 0.6 wide, so off-centre it bonks a block that check
+ * never looked at; centring makes the cheap check sound (decision: Luiz). The live case: a leaf one
+ * cell over, the box 0.182 into that column, 95 dead jumps in a row.
  */
 public final class PersonScaffolder implements Scaffolder {
     /** Ticks a step may take before it is declared dead — a clean jump lands in ~12. */
@@ -43,23 +42,18 @@ public final class PersonScaffolder implements Scaffolder {
     /** Ticks the centring shuffle may take before the step dies — a worst-case corner needs ~5. */
     private static final int CENTRE_TIMEOUT_TICKS = 12;
 
-    /**
-     * How close to the middle of the feet cell counts as centred, per axis. Her box is 0.6
-     * wide, so any offset up to 0.2 already keeps it wholly inside the cell; this leaves a
-     * 0.05 margin for the tick that lands her there.
-     */
+    /** Centred, per axis: the 0.6-wide box fits wholly inside up to 0.2, leaving 0.05 of margin. */
     private static final double CENTRE_TOLERANCE = 0.15;
 
-    /**
-     * Forward input for the shuffle — ~0.1 of a block per tick, too slow to cross the tolerance in
-     * one step, so she settles in the middle instead of wobbling past it.
-     */
+    /** Half-throttle scuff: at ~0.1 of a block per tick the body cannot cross from outside the
+     *  tolerance on one side to outside it on the other, so it settles in the middle. */
     private static final float CENTRE_THROTTLE = 0.5F;
 
     /**
-     * Consecutive dead steps from the same cell before {@link #up} starts refusing. Recentring
-     * fixes the common cause, but a cobweb overhead, a neighbour shoving her or honey underfoot
-     * defeat it, and without a bound the caller re-asks forever — the jump loop this class fixed.
+     * Consecutive dead steps from the same cell before {@link #up} refuses, routing the caller
+     * into its give-up branch. Recentring fixes the common cause; a cobweb overhead, a shoving
+     * neighbour or honey underfoot defeat it, and unbounded the caller re-asks forever (the
+     * 16-tick jump loop this class was fixed for).
      */
     private static final int ATTEMPTS_PER_CELL = 3;
 
@@ -75,9 +69,9 @@ public final class PersonScaffolder implements Scaffolder {
     /** True while this step is still walking to the middle of {@link #base} — see the class doc. */
     private boolean centring;
     /**
-     * The cell of the last dead step, and how many died there back to back. Body state, not task
-     * state: it survives task churn and a mid-climb suspension. Cleared by succeeding, or by
-     * asking from anywhere else.
+     * Body state beside the ledger and for the same reason: a cell that keeps beating them is
+     * about this body's situation, not the task that asked, so the streak survives task churn and
+     * a mid-climb suspension. Cleared by succeeding, or by asking from anywhere else.
      */
     private @Nullable BlockPos failedCell;
     private int failedStreak;
@@ -109,7 +103,7 @@ public final class PersonScaffolder implements Scaffolder {
             failedCell = null; // asked from somewhere else — a different spot is a different problem
             failedStreak = 0;
         } else if (failedStreak >= ATTEMPTS_PER_CELL) {
-            return false; // stop feeding the caller's retry loop
+            return false; // stop feeding the loop
         }
         BlockPos headroom = feet.above(2);
         if (!level.getBlockState(headroom).getCollisionShape(level, headroom).isEmpty()
@@ -127,7 +121,7 @@ public final class PersonScaffolder implements Scaffolder {
     }
 
     /**
-     * True when her box sits wholly inside {@code cell} — the stance the single-column headroom
+     * True when the box sits wholly inside {@code cell} — the stance the single-column headroom
      * check in {@link #up} assumes. Per axis, because the box is axis-aligned.
      */
     private boolean centred(BlockPos cell) {
@@ -144,7 +138,7 @@ public final class PersonScaffolder implements Scaffolder {
             return; // still shuffling (or the step just died trying) — no jump input this tick
         }
         person.faceBlock(base); 
-        person.setJumping(true); // held-space semantics: aiStep jumps her when grounded
+        person.setJumping(true); // held-space semantics: aiStep jumps them when grounded
         if (person.getY() >= base.getY() + 1.0) {
             person.setJumping(false);
             Level level = person.level();
@@ -177,9 +171,8 @@ public final class PersonScaffolder implements Scaffolder {
     }
 
     /**
-     * One tick of the centring shuffle — walk to the middle of the feet cell so the whole box
-     * sits inside the column the headroom check cleared (see the class doc). Returns true the
-     * moment she is centred, so the jump goes on that same tick.
+     * One tick of the centring shuffle toward the middle of the feet cell (see the class doc).
+     * Returns true the moment the body is centred, so the jump goes on that same tick.
      */
     private boolean stepToMiddle() {
         if (centred(base)) {
@@ -193,8 +186,7 @@ public final class PersonScaffolder implements Scaffolder {
         double dx = base.getX() + 0.5 - person.getX();
         double dz = base.getZ() + 0.5 - person.getZ();
         // Minecraft yaw: 0 faces +Z and increases clockwise, so facing a point is atan2(dz, dx)
-        // offset by -90 — the Navigator's convention. driveForward clears the jump input, which
-        // is what we want: she is walking this tick, not jumping.
+        // offset by -90 — the Navigator's convention. driveForward also clears the jump input.
         person.driveForward((float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F, CENTRE_THROTTLE);
         return false;
     }

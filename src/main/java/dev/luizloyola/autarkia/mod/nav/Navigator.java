@@ -160,14 +160,13 @@ public final class Navigator {
     /** FOLLOWING ticks left before another proactive re-path may fire (see {@link #PROACTIVE_REPATH_COOLDOWN}). */
     private int proactiveRepathCooldown;
     /**
-     * Requested pace for the current order, set by {@link #pathTo(BlockPos, Gait)}: SPRINT (flee)
-     * on open, safe stretches, STROLL (wander) throttled to {@link #STROLL_THROTTLE}. Terrain
-     * overrides mood both ways — careful mode beats SPRINT at cliff edges and narrow landings, and
-     * a LEAP leg ignores STROLL because the gap needs its run-up.
-     *
-     * <p>Two intended consequences of SPRINT: the food&le;6 gate in {@link Person#driveSprint}
-     * degrades an exhausted flee to a walk, and every sprinting metre banks exhaustion in
-     * {@code tickNeeds}. Reset to WALK in {@link #stop()}.
+     * Requested pace for the current order, set by {@link #pathTo(BlockPos, Gait)}. SPRINT (flee)
+     * sprints on open, SAFE stretches; STROLL (wander) throttles the walk to
+     * {@link #STROLL_THROTTLE}. Terrain overrides mood both ways: careful mode still wins over
+     * SPRINT, and a LEAP leg ignores STROLL because the gap needs its run-up speed. Two SPRINT side
+     * effects are intended: the food&le;6 gate in {@link Person#driveSprint} degrades an exhausted
+     * flee to a walk, and every sprinting metre banks exhaustion in {@code tickNeeds}. Reset to WALK
+     * in {@link #stop()}.
      */
     private Gait gait = Gait.WALK;
     private @Nullable CompletableFuture<Path> pending;
@@ -231,7 +230,7 @@ public final class Navigator {
         return this.path;
     }
 
-    /** Which waypoint of {@link #path()} she is walking toward. */
+    /** Which waypoint of {@link #path()} is being walked toward. */
     public int pathIndex() {
         return this.index;
     }
@@ -480,12 +479,11 @@ public final class Navigator {
                 ? this.person.getYRot()
                 : (float) (Mth.atan2(aimZ, aimX) * Mth.RAD_TO_DEG) - 90.0F;
         // Gait before forward input: driveForward reads the speed attribute, which sprinting
-        // modifies. A 2+ gap (span-3+) leap approach/flight sprints — a walking jump falls ~0.4
-        // short and drops into the gap; everything else walks, slowly near a drop. (Sprint
-        // overshoots a 1-wide landing pillar, so chaining across those is marginal — see the
-        // flight-throttle trim below.) A DROP into the final waypoint takes the careful speed even
-        // on safe ground: the glide through a 3-block fall is ~1.5 blocks at full walk, ~0.6 at
-        // 0.45.
+        // modifies. A span-3+ (2-block gap) leap approach and flight sprint — a walking jump falls
+        // ~0.4 short into the gap — though sprint slightly overshoots a 1-wide landing pillar, which
+        // is why chaining across them is marginal. A DROP into the final waypoint takes the careful
+        // speed even on safe ground: at full walk the glide through a 3-block fall is ~1.5 blocks
+        // and overshoots, at 0.45 it is ~0.6.
         boolean precisionFinal = isLast && waypoint.move() == MoveType.DROP;
         // Sprint when a 2+ gap leap needs the takeoff speed, or (when fleeing) on any open safe
         // stretch. careful and precisionFinal (both computed just above) still veto it, so a flee
@@ -497,9 +495,8 @@ public final class Navigator {
         // instead of skidding onto the far rim (see LEAP_AIR_THROTTLE). A 3-gap leap (span 4) has
         // no distance to spare and keeps full air control; ground ticks always drive at full 1.0.
         boolean leapFlightTrim = committedFlight && leapSpan > 2.5 && leapSpan < 3.5;
-        // STROLL eases the open-ground walk to its amble — but never a LEAP leg (approach and
-        // flight need the full run-up), and the careful throttle (0.45, below the stroll's 0.55)
-        // still takes precedence via its earlier branch.
+        // STROLL eases the open-ground walk to its amble, but never a LEAP leg, and the careful
+        // throttle (0.45, below the stroll's 0.55) still wins via its earlier branch.
         boolean stroll = this.gait == Gait.STROLL && waypoint.move() != MoveType.LEAP;
         this.person.driveForward(heading,
                 coastToLanding ? 0.0F
@@ -514,15 +511,12 @@ public final class Navigator {
             // we are still BELOW the ledge — a re-press from on top would launch us off the far side.
             this.person.driveJump();
         } else if (waypoint.move() == MoveType.LEAP && this.person.onGround()) {
-            // Leap: run (or sprint) at the gap and press jump right at the edge. The takeoff cell's
-            // far rim sits at span−0.5 from the landing center, so pressing inside span−0.2 launches
-            // within a step of it; the band FLOOR (span−1.2) confines the press to the takeoff side,
-            // where a plain <= check stayed true after touchdown and hopped her in place.
-            // The once-per-index guard (lastLeapPressIndex) replaces an older "wait ≥3 grounded
-            // ticks" gate that never fired in a chain: each span-3 leap lands on the FAR rim of the
-            // 1-wide next takeoff, grounded for barely a tick, so she walked into the gap. Pressing
-            // on the first in-band grounded tick carries the momentum into the next leap; once per
-            // waypoint stops the in-place re-hop.
+            // Leap: run at the gap and press jump right at the edge. The takeoff cell's far rim is
+            // span−0.5 from the landing centre, so pressing inside span−0.2 launches within a step
+            // of it; the FLOOR (span−1.2) confines the press to the takeoff side, since a plain <=
+            // stayed true after touchdown and hopped them in place. The once-per-index guard
+            // replaces a "wait ≥3 grounded ticks" gate — a chained span-3 leap is grounded on the
+            // far rim for barely a tick, so a settle-first gate never fired and the body walked in.
             double press = leapSpan - 0.2;
             double pressFloor = leapSpan - 1.2;
             if (horizontalSq <= press * press && horizontalSq > pressFloor * pressFloor

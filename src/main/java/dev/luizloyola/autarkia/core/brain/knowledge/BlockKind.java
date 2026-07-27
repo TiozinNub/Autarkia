@@ -19,8 +19,8 @@ public enum BlockKind {
     /** Everything else — stone, dirt, crops, chests… nothing perception reacts to yet. */
     OTHER,
     /**
-     * Out of reach — unloaded chunk or outside the world. Growth stops here and marks the
-     * region {@code partial}: there may be more beyond what she could see.
+     * Out of reach — unloaded chunk or outside the world. Growth stops here and marks the region
+     * {@code partial}.
      */
     UNKNOWN;
 }

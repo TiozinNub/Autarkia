@@ -55,6 +55,29 @@ class PoiSensorCoreTest {
         assertEquals(21, sensor.claimCount(), "the grove's blocks are claimed");
     }
 
+    /**
+     * One walk past a fused pair leaves TWO beliefs, and a forget on a clean fell takes exactly
+     * one of them with it — the point of splitting a mass per trunk.
+     */
+    @Test
+    void fellingOneOfAFusedPairLeavesTheOtherRemembered() {
+        FakeProbe probe = new FakeProbe();
+        probe.placeOak(8, 0);
+        probe.placeOak(10, 0); // canopies overlap along x = 9: One connected mass, two trees
+        List<SenseEvent> events = tickUntilQuiet(probe, new Pos(0, 64, 0));
+
+        assertEquals(2, events.stream().filter(e -> e.type() == SenseEvent.Type.NOTED).count(),
+                "two trunks in the mass, two things noticed");
+        assertEquals(2, knowledge.size());
+
+        // ChopTree.finish on the near one: its memory goes, and only its memory.
+        knowledge.forget(PoiKind.TREE, new Pos(8, 64, 0));
+
+        assertEquals(1, knowledge.size(), "the neighbour is still theirs to walk to");
+        assertEquals(new Pos(10, 64, 0),
+                knowledge.nearest(PoiKind.TREE, new Pos(0, 64, 0)).orElseThrow().anchor());
+    }
+
     @Test
     void standingStillCostsExactlyNothing() {
         FakeProbe probe = new FakeProbe();
@@ -97,15 +120,41 @@ class PoiSensorCoreTest {
         assertEquals(1, onReturn.size());
         assertEquals(SenseEvent.Type.FORGOT, onReturn.get(0).type());
         assertEquals(new Pos(8, 64, 0), onReturn.get(0).anchor());
-        assertEquals(0, knowledge.size(), "the ghost tree is gone from her map");
+        assertEquals(0, knowledge.size(), "the ghost tree is gone from their map");
         assertEquals(0, sensor.claimCount(), "and its claims swept with it");
+    }
+
+    /**
+     * A memory whose ANCHOR still stands is stale, not wrong: the claims drop and re-learn, the
+     * belief stays theirs. The sensor used to forget the shrunken column instead, and the bare
+     * remnant then failed the sunlit-leaf test and was unfindable forever.
+     */
+    @Test
+    void aHalfFelledTreeKeepsItsMemoryWhileTheStumpStands() {
+        FakeProbe probe = new FakeProbe();
+        probe.placeOak(8, 0);
+        tickUntilQuiet(probe, new Pos(0, 64, 0));
+        // The crown and upper trunk go; the world now holds only the stump — the anchor cell.
+        for (int y = 65; y <= 68; y++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    probe.clear(8 + dx, y, dz);
+                }
+            }
+        }
+        tickUntilQuiet(probe, new Pos(200, 64, 0));
+        List<SenseEvent> onReturn = tickUntilQuiet(probe, new Pos(0, 64, 0));
+
+        assertTrue(onReturn.stream().noneMatch(e -> e.type() == SenseEvent.Type.FORGOT),
+                "the stump IS the anchor and it still stands — a kept partial is not a ghost");
+        assertEquals(1, knowledge.size(), "the tree stays theirs to come back and finish");
     }
 
     @Test
     void aHiddenCanopyIsNeverNoticed() {
         FakeProbe probe = new FakeProbe();
         probe.placeOak(8, 0);
-        // A wall she can't see past: every canopy surface cell is ray-blocked.
+        // A wall nothing can see past: every canopy surface cell is ray-blocked.
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 probe.hide(new Pos(8 + dx, 68, dz));
@@ -117,11 +166,11 @@ class PoiSensorCoreTest {
                 "every canopy hypothesis died at the ray — and each left a debug event");
         assertFalse(events.isEmpty(), "the declines are narrated, not silent");
         assertEquals(0, knowledge.size(), "no ray, no belief — the evidence gate");
-        assertEquals(0, sensor.claimCount(), "and no claims either: worth a look if she gets closer");
+        assertEquals(0, sensor.claimCount(), "and no claims either: worth a look from closer in");
     }
 
     @Test
-    void aTaskSideForgetDoesNotLeaveHerBlindToTheRegrownTree() {
+    void aTaskSideForgetDoesNotLeaveThemBlindToTheRegrownTree() {
         FakeProbe probe = new FakeProbe();
         probe.placeOak(8, 0);
         tickUntilQuiet(probe, new Pos(0, 64, 0));
@@ -201,7 +250,7 @@ class PoiSensorCoreTest {
         tickUntilQuiet(probe, new Pos(0, 64, 0));
         assertEquals(0, knowledge.size(), "overlooked — the tree-behind-tree blindness");
 
-        // The occluder clears (the front tree gets chopped) while she stays right HERE — no
+        // The occluder clears (the front tree gets chopped) while they stay right HERE — no
         // crescent will ever re-emit these columns. The booked retry must do it.
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
@@ -212,7 +261,7 @@ class PoiSensorCoreTest {
         for (int i = 0; i < PoiSensorCore.RAY_RETRY_DELAY_TICKS + 40; i++) {
             events.addAll(sensor.tick(new Pos(0, 64, 0), now++, probe));
         }
-        assertEquals(1, knowledge.size(), "the retry found it without her moving an inch");
+        assertEquals(1, knowledge.size(), "the retry found it without them moving an inch");
         assertTrue(events.stream().anyMatch(e -> e.type() == SenseEvent.Type.NOTED));
     }
 

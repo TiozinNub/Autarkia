@@ -9,23 +9,22 @@ import java.util.Deque;
 import java.util.List;
 
 /**
- * The "notice as you go" pipeline: one per person, pure core; the mod-layer {@code PoiSensor}
+ * The whole "notice as you go" pipeline: one per person, pure core; the mod-layer {@code PoiSensor}
  * hands it the person's feet, the game time and a live {@link BlockProbe} each tick. Crescent →
  * pending queue → probe → (confirm-ray → growth) → store + claims, all inside one per-tick read
  * wallet, so the cost ceiling is constant.
  *
  * <p>Per probed column the claims answer first (the O(1) fast path):
  * <ul>
- *   <li>a claim <em>above</em> the current surface — that block is gone, the heightmap having no
- *       other way to say so: the region's belief is invalidated;</li>
- *   <li>surface claimed and matching — refreshed; mismatching — invalidated (a negative claim is
- *       just cleared);</li>
- *   <li>claims only <em>below</em> the surface — something new on an investigated footprint, so
- *       a fresh hypothesis. Interiors never fire this arm (a live region's interior sits under a
- *       claimed surface), and skipping it made taller rebuilds invisible forever;</li>
- *   <li>no claims — hypothesis: leaves/log grow a {@link TreeRule} scan, water a
- *       {@link WaterRule} one, gated by the confirm-ray ({@code visibleFromEyes}). One growth
- *       runs at a time.</li>
+ *   <li>a claim <em>above</em> the surface — that block is gone: the region's belief is invalidated
+ *       and the remains re-discover on later crescents;</li>
+ *   <li>the surface cell claimed and matching — refreshed; mismatching — invalidated (a negative
+ *       claim is just cleared);</li>
+ *   <li>claims only <em>below</em> the surface — something new on an investigated footprint, so a
+ *       fresh hypothesis. A live region's interior always sits under a claimed surface; skipping
+ *       this arm made any taller rebuild invisible forever (live-caught);</li>
+ *   <li>no claims — hypothesis: leaves/log grow a {@link TreeRule} scan, water a {@link WaterRule}
+ *       one, gated by the confirm-ray. One growth runs at a time.</li>
  * </ul>
  */
 public final class PoiSensorCore {
@@ -39,12 +38,10 @@ public final class PoiSensorCore {
     }
 
     /**
-     * Pending-column capacity, sized to hold a FULL disc (~450 columns at R=12): a spawn or
-     * teleport glance that drops columns biases the initial sweep toward whichever side
-     * enumerates last. Overflow drops the oldest.
-     *
-     * <p>Keep the cap at or above the disc area, roughly {@code 3.2 * R * R}, when raising
-     * {@code perception.sense_radius}, or that bias returns.
+     * Pending-column capacity, sized to hold a FULL disc (~450 columns at R=12), not just a
+     * crescent: dropping columns after a spawn/teleport glance biases the initial sweep toward
+     * whichever side enumerates last. Overflow drops the oldest. Raise it with
+     * {@code perception.sense_radius} — at or above the disc area, roughly {@code 3.2 * R * R}.
      */
     public static int queueCap() {
         return Config.get().i(Knob.QUEUE_CAP);
@@ -52,13 +49,14 @@ public final class PoiSensorCore {
     /** Flat wallet charge for one confirm-ray (a ~R-block voxel walk). Tuning knob. */
     public static final int RAY_COST = 8;
     /**
-     * A ray-blocked hypothesis retries after this many ticks, by when she or the occluder has
-     * moved and the geometry differs. Without it a column consumed by one failed ray stays
-     * invisible for as long as she remains in sense range — tree-behind-tree blindness.
+     * A ray-blocked hypothesis retries after this many ticks — by then they or the occluder have
+     * moved, so the geometry differs. Without it a column consumed by one failed ray stays
+     * invisible while they remain in sense range: tree-behind-tree blindness. Tuning knob.
      */
     public static final int RAY_RETRY_DELAY_TICKS = 60;
-    /** Retries per stay-in-range; re-entering range starts a fresh cycle. MAX × DELAY (~30s)
-     *  outlives the commonest occluder — the tree she is felling. */
+    /** Retries per stay-in-range; leaving and re-entering starts a fresh cycle. Sized so the
+     *  window (MAX × DELAY = ~30s) outlives the commonest occluder — the front tree they are
+     *  busy felling. Tuning knob. */
     public static final int RAY_RETRY_MAX = 10;
 
     private final PersonKnowledge knowledge;
@@ -84,8 +82,9 @@ public final class PoiSensorCore {
             }
             pending.addLast(column);
         }
-        // Due retries jump the queue: near her and already half-investigated. A spent entry
-        // (attempts at cap) stays PARKED — it blocks a fresh cycle until she re-enters range.
+        // Due retries jump the queue — near, and already half-investigated. A spent entry
+        // (attempts at cap) stays PARKED in the map, blocking a fresh cycle until they leave and
+        // re-enter range.
         for (var entry : rayRetries.entrySet()) {
             if (entry.getValue()[0] <= now) {
                 pending.addFirst(entry.getKey());
@@ -130,7 +129,7 @@ public final class PoiSensorCore {
         Pos surface = new Pos(column.x(), top, column.z());
         if (highestClaim != null) {
             if (highestClaim.y() > top) {
-                invalidate(highestClaim, claims.get(highestClaim), events);
+                reads += invalidate(highestClaim, claims.get(highestClaim), probe, events);
                 return reads;
             }
             ClaimIndex.Claim exact = claims.get(surface);
@@ -146,7 +145,7 @@ public final class PoiSensorCore {
                         claims.dropRegion(exact.kind(), exact.anchor());
                     }
                 } else {
-                    invalidate(surface, exact, events);
+                    reads += invalidate(surface, exact, probe, events);
                 }
                 return reads;
             }
@@ -162,7 +161,7 @@ public final class PoiSensorCore {
         reads += RAY_COST;
         if (!probe.visibleFromEyes(surface)) {
             events.add(SenseEvent.overlooked(rule.kind(), surface));
-            // The geometry will differ once she (or the occluder) moves.
+            // Book another look: the geometry will differ once they (or the occluder) move.
             long[] retry = rayRetries.computeIfAbsent(column, c -> new long[]{0, 0});
             if (retry[1] < RAY_RETRY_MAX) {
                 retry[0] = now + RAY_RETRY_DELAY_TICKS;
@@ -177,25 +176,50 @@ public final class PoiSensorCore {
     }
 
     private void finish(GrownRegion region, long now, List<SenseEvent> events) {
-        if (region.accepted()) {
-            PoiMemory memory = knowledge.note(region.toMemory(now));
-            claims.claimRegion(region.kind(), memory.anchor(), region.blocks());
-            events.add(SenseEvent.noted(memory));
-        } else {
+        if (!region.accepted()) {
             claims.claimNegative(region.kind(), region.blocks());
             events.add(SenseEvent.dismissed(region.kind(), activeSeed));
+            return;
+        }
+        java.util.Set<Pos> spoken = new java.util.HashSet<>();
+        for (GrownRegion.Part part : region.parts()) {
+            PoiMemory memory = knowledge.note(region.toMemory(part, now));
+            claims.claimRegion(region.kind(), memory.anchor(), part.blocks());
+            spoken.addAll(part.blocks().keySet());
+            events.add(SenseEvent.noted(memory));
+        }
+        if (spoken.size() < region.blocks().size()) {
+            java.util.Map<Pos, BlockKind> leftovers = new java.util.LinkedHashMap<>();
+            for (var entry : region.blocks().entrySet()) {
+                if (!spoken.contains(entry.getKey())) {
+                    leftovers.put(entry.getKey(), entry.getValue());
+                }
+            }
+            claims.claimNegative(region.kind(), leftovers);
         }
     }
 
-    private void invalidate(Pos at, ClaimIndex.Claim claim, List<SenseEvent> events) {
+    /**
+     * A claimed cell stopped matching the world. The claims drop either way, but the MEMORY is only
+     * wrong when its anchor is gone: a half-felled tree still stands on its stump, the cell its
+     * anchor names and the one the chop's partial exit means to come back for. Forgetting it here
+     * was the lone-stump factory — the bare stump then failed {@link TreeRule}'s sunlit-leaf test
+     * and was negative-claimed, findable by nobody. Costs one probe read.
+     */
+    private int invalidate(Pos at, ClaimIndex.Claim claim, BlockProbe probe, List<SenseEvent> events) {
         if (claim.anchor() == null) {
             claims.remove(at);
-            return;
+            return 0;
         }
-        if (knowledge.forget(claim.kind(), claim.anchor())) {
+        ClaimIndex.Claim anchorClaim = claims.get(claim.anchor());
+        boolean anchorStands = anchorClaim != null
+                && probe.at(claim.anchor().x(), claim.anchor().y(), claim.anchor().z())
+                        == anchorClaim.expected();
+        if (!anchorStands && knowledge.forget(claim.kind(), claim.anchor())) {
             events.add(SenseEvent.forgot(claim.kind(), claim.anchor()));
         }
         claims.dropRegion(claim.kind(), claim.anchor());
+        return 1;
     }
 
     private static GrowthRule ruleFor(BlockKind kind) {

@@ -14,21 +14,18 @@ import net.minecraft.world.entity.LivingEntity;
  * href="https://github.com/tr7zw/NotEnoughAnimations">NotEnoughAnimations</a>, so a Person animates
  * with the same animations NEA gives players.
  *
- * <p>NEA already runs on our Persons: its {@code LivingEntityRendererMixin} records the entity on
- * the render state at the HEAD of {@code LivingEntityRenderer.extractRenderState} (which
- * {@code PersonRenderer} calls through {@code super}), and its {@code PlayerModel.setupAnim} hooks
- * read it back. They decline a Person because NEA is typed to {@code AbstractClientPlayer} all the
- * way down, and that type is in the METHOD DESCRIPTORS, which no mixin widens: Mixin rewrites
- * bodies, not signatures.
+ * <p>NEA already runs on our Persons — its {@code LivingEntityRendererMixin} records the entity on
+ * the render state at the HEAD of {@code LivingEntityRenderer.extractRenderState}, which
+ * {@code PersonRenderer} calls through {@code super} — but declines them: it is typed to
+ * {@code AbstractClientPlayer} all the way down, and that type is in the METHOD DESCRIPTORS, which
+ * no mixin widens, since Mixin rewrites method bodies, not signatures. So this swaps the one value
+ * NEA keys off: right after extraction records the Person, it is replaced with the Person's
+ * {@link ShadowPlayer}, a real, inert {@code AbstractClientPlayer}.
  *
- * <p>So this swaps the one value NEA keys off — right after extraction records the Person, it
- * writes her {@link ShadowPlayer}, a real, inert {@code AbstractClientPlayer} — and NEA does the
- * rest through its own hooks.
- *
- * <p><b>Soft in every direction.</b> Nothing here is compiled against NEA; the surface is a single
- * reflective handle on {@code ExtendedLivingRenderState.setEntity}, resolved once. NEA absent, an
- * unexpected version, a renamed interface or a throw from inside disables the bridge permanently
- * after one warning, and a Person falls back to vanilla arm poses.
+ * <p><b>Soft in every direction.</b> Nothing is compiled against NEA; the surface is one reflective
+ * handle on {@code ExtendedLivingRenderState.setEntity}, resolved once. NEA absent, an unexpected
+ * version, a renamed interface or a throw from inside disables the bridge permanently after one
+ * warning, and the Person falls back to vanilla arm poses. Treat a break as expected wear.
  */
 @Environment(EnvType.CLIENT)
 public final class NeaBridge {

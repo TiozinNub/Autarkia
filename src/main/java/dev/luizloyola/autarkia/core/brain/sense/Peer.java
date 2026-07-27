@@ -4,31 +4,31 @@ import dev.luizloyola.autarkia.core.person.PersonId;
 import java.util.Locale;
 
 /**
- * A nearby person-shaped someone, as one perception — another Person or a live PLAYER,
- * indistinguishable; a player's {@link #id} is minted from the account UUID, so it
- * is as stable across sessions as a Person's own.
+ * A nearby person-shaped someone, as one perception — another Person or a live PLAYER, deliberately
+ * indistinguishable, so nothing downstream can special-case one. A player's {@link #id} is minted
+ * from the account UUID, as stable across sessions as a Person's own.
  *
- * <p>{@link #awareness} says which channel produced it: SEEN through the vision cone with line
- * of sight, HEARD making noise inside the hearing bubble, REMEMBERED for the linger window after
- * every channel went dark. A REMEMBERED reading is frozen at its last live values; consumers
- * wanting only live truth filter on awareness.
+ * <p>{@link #awareness} says which channel produced it: SEEN through the vision cone with line of
+ * sight, HEARD inside the hearing bubble, REMEMBERED for the linger window after every channel went
+ * dark — its reading frozen at the last live values, so consumers wanting live truth filter on it.
  *
- * <p><b>The reading decomposes along the body's independent axes</b>: {@link #activity} the
- * ARMS/ATTENTION occupation, one value off the classifier's ladder; {@link #locomotion} the
- * LEGS, from measured speed; {@link #sneaking} posture; {@link #watching} gaze dwelling on the
- * observer, never a passing glance. All are OBSERVABLE body signals, never a peek into another
- * brain, and sound carries fewer of them: place, doing and moving feet, but not gaze or posture.
+ * <p><b>The reading decomposes along independent axes</b>, all OBSERVABLE body signals rather than
+ * a peek into another brain: {@link #activity} (ARMS/ATTENTION, one value off the classifier's
+ * ladder), {@link #locomotion} (LEGS, from measured speed), {@link #sneaking} (posture),
+ * {@link #watching} (gaze dwelling on the observer, never a passing glance). Every combination
+ * coexists, and non-visual channels carry fewer: sound tells place, doing and moving feet, never
+ * gaze or posture.
  *
- * <p>{@link #identified} carries the ear's limit: SOUND DOESN'T SAY WHO. A heard-never-seen
- * peer is "someone" ({@link #knownAs}); the first clear look flips it, marked by
- * {@link PeerEvent.Type#RECOGNIZED}. The {@link #id} stays stable either way, but
+ * <p>{@link #identified} carries the ear's limit: SOUND DOESN'T SAY WHO. A heard-never-seen peer
+ * is "someone" ({@link #knownAs}) until the first clear look, marked by
+ * {@link PeerEvent.Type#RECOGNIZED}. The {@link #id} is stable either way (spatial continuity), so
  * identity-dependent behavior must gate on {@code identified}, never on the id existing.
  */
 public record Peer(PersonId id, String name, Pos pos, double distance, Activity activity,
                    Locomotion locomotion, boolean sneaking, boolean watching, boolean aimedAt,
                    boolean identified, Awareness awareness) {
 
-    /** The name she'd use — sound doesn't identify: unseen means "someone". */
+    /** The name they'd use — sound doesn't identify (decision: Luiz): unseen means "someone". */
     public String knownAs() {
         return identified ? name : "someone";
     }

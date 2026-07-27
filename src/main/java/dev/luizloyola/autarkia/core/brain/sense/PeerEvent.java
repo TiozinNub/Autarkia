@@ -3,13 +3,13 @@ package dev.luizloyola.autarkia.core.brain.sense;
 import org.jspecify.annotations.Nullable;
 
 /**
- * One change in who-she-perceives — the peer sensor's output beside the list itself, so
- * downstream behavior can REACT instead of polling and diffing. Journaled as SENSE lines, same
- * as the POI sensor's noticed/forgot.
+ * One change in who-is-perceived — the peer sensor's output beside the list itself, so downstream
+ * behavior can REACT instead of polling and diffing. Journaled as SENSE lines, like the POI
+ * sensor's noticed/forgot.
  *
  * <p>{@link Type#READING_CHANGED} fires whenever ANY rendered axis of a tracked peer flips —
- * occupation, legs, posture, gaze, or the awareness tag; {@link #was} carries the full previous
- * reading.
+ * occupation, legs, posture, gaze, or the awareness tag; eventing only occupation lost most changes
+ * (caught live). {@link #was} carries the full previous reading.
  */
 public record PeerEvent(Type type, Peer peer, @Nullable Peer was) {
 
@@ -20,7 +20,7 @@ public record PeerEvent(Type type, Peer peer, @Nullable Peer was) {
         LOST,
         /** Some axis of a tracked peer's reading flipped; {@code was} is the previous reading. */
         READING_CHANGED,
-        /** A heard-only "someone" finally got SEEN — now she knows who it was all along. */
+        /** A heard-only "someone" finally got SEEN — now they know who it was all along. */
         RECOGNIZED
     }
 

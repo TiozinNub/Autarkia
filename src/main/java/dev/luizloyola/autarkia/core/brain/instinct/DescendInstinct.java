@@ -7,18 +7,17 @@ import dev.luizloyola.autarkia.core.config.Config;
 import dev.luizloyola.autarkia.core.config.Knob;
 
 /**
- * The strand-recovery drive: whenever the standing ledger holds pillar cells and nothing is
- * climbing, she wants down — the safety net under every path the chop's own descend-first gates do
- * not cover (a task cancelled mid-climb, a flee off the pole, a dev command).
+ * The strand-recovery drive: whenever the body's standing ledger holds pillar cells and nothing is
+ * actively climbing, they want down — the safety net under every path the chop's own descend-first
+ * gates miss.
  *
- * <p>Its pressure sits between mild hunger (0.30) and the preempt bar (0.60): it outranks drifting
- * and a peckish stomach, a real emergency still eats or flees first, and it can never preempt a
- * RUNNING task (0.45 &lt; PREEMPT) — a chop mid-climb is never interrupted, so the instinct only
+ * <p>Its pressure sits between mild hunger (0.30) and the preempt bar (0.60), so a real emergency
+ * still eats or flees first and it can never preempt a RUNNING task (0.45 &lt; PREEMPT): it only
  * wins at task boundaries.
  *
- * <p>Both ends are configurable ({@code instincts.descend_pressure}, {@code brain.preempt}), and
- * it is the <em>relationship</em> that carries the behavior: above the preempt bar she abandons a
- * legitimate mid-climb chop just to get her feet back on the ground.
+ * <p>Both ends are configurable ({@code instincts.descend_pressure} and {@code brain.preempt}) and
+ * it is the <em>relationship</em> that carries the behavior — push this above the preempt bar and
+ * they abandon a legitimate mid-climb chop.
  */
 public final class DescendInstinct implements Instinct {
 

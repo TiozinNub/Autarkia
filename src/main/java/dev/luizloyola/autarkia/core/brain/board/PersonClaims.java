@@ -15,20 +15,20 @@ public interface PersonClaims {
     /**
      * Claim (or re-heartbeat) the site for this person until {@code now + }{@link
      * SiteClaims#ttlTicks()}. Returns {@code false} when someone else's live claim holds it —
-     * in which case nothing changed and the site is not hers to work.
+     * in which case nothing changed and the site is not theirs to work.
      */
     boolean claim(PoiKind kind, Pos anchor, long now);
 
     /** Release the site if this person holds it; anyone else's claim is left untouched. */
     void release(PoiKind kind, Pos anchor);
 
-    /** Whether the site is workable for this person: unclaimed, expired, or already hers. */
+    /** Whether the site is workable for this person: unclaimed, expired, or already theirs. */
     boolean availableTo(PoiKind kind, Pos anchor, long now);
 
     /**
-     * The loner's view — everything is hers, claims always succeed, releases are no-ops. The
-     * default for a {@link dev.luizloyola.autarkia.core.brain.BrainContext} assembled without a
-     * shared registry (tests, minimal rigs): a person with no group is a group of one.
+     * The loner's view — everything is theirs to take, claims always succeed, releases are no-ops.
+     * The default for a {@link dev.luizloyola.autarkia.core.brain.BrainContext} assembled without a
+     * shared registry: a person with no group is a group of one.
      */
     PersonClaims SOLO = new PersonClaims() {
         @Override

@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
  */
 class PeerSensorCoreTest {
 
-    /** She stands at origin facing +Z (yaw 0); the cone default is 200°, radius 24. */
+    /** The observer stands at origin facing +Z (yaw 0); the cone default is 200°, radius 24. */
     private final Pos self = new Pos(0, 64, 0);
     private final PeerSensorCore sensor = new PeerSensorCore();
     private final FakePeerWorld world = new FakePeerWorld();
@@ -46,7 +46,7 @@ class PeerSensorCoreTest {
     }
 
     @Test
-    void behindHerBackSpotsNothingAndSpendsNoRays() {
+    void behindTheirBackSpotsNothingAndSpendsNoRays() {
         world.add("Lurker", new Pos(0, 64, -5), 5.0, Peer.Activity.IDLE);
         List<PeerEvent> events = tickN(30);
 
@@ -67,7 +67,7 @@ class PeerSensorCoreTest {
     @Test
     void soundShortCircuitsConeAndWalls() {
         PersonId noisy = world.add("Noisy", new Pos(0, 64, -5), 5.0, Peer.Activity.MINING);
-        world.hidden.add(noisy); // behind her and walled off — only the ears can find this one
+        world.hidden.add(noisy); // behind them and walled off — only the ears can find this one
         sensor.heard(world.bodies.get(noisy), now);
         List<PeerEvent> events = tickN(1);
 
@@ -94,7 +94,7 @@ class PeerSensorCoreTest {
         world.hidden.remove(walker); // steps out the other side
         List<PeerEvent> after = tickN(30);
         assertTrue(after.stream().noneMatch(e -> e.type() == PeerEvent.Type.SPOTTED),
-                "she never thought they left, so no re-spot either");
+                "the observer never thought they left, so no re-spot either");
         assertEquals(Peer.Awareness.SEEN, sensor.peers().get(0).awareness());
     }
 
@@ -134,16 +134,15 @@ class PeerSensorCoreTest {
 
         assertTrue(events.stream().noneMatch(e -> e.type() == PeerEvent.Type.READING_CHANGED
                         && e.peer().activity() != Peer.Activity.MINING),
-                "nothing announces an activity she can't see");
+                "nothing announces an activity that cannot be seen");
         assertEquals(Peer.Activity.MINING, sensor.peers().get(0).activity(),
                 "the remembered reading is the LAST LIVE one, frozen");
     }
 
     @Test
     void earsDoNotReadTheUnseenBodysActivity() {
-        // Behind her and walled: the ear is the only channel. The visual classifier says
-        // AT_CRAFTING, the sound said moving, and sound is all she has — a heard-only peer once
-        // read "at_crafting" through the back of her head.
+        // Behind them and walled, so the ear is the only channel: the visual classifier's
+        // AT_CRAFTING must not reach the reading. Caught live, read through the back of the head.
         PersonId noisy = world.add("Rustler", new Pos(0, 64, -5), 5.0, Peer.Activity.AT_CRAFTING);
         world.hidden.add(noisy);
         PeerReading heard = new PeerReading(noisy, "Rustler", new Pos(0, 64, -5), 5.0,
@@ -163,9 +162,8 @@ class PeerSensorCoreTest {
 
     @Test
     void earsCannotSeeAGazeOrACrouch() {
-        // A sneaking someone behind her back, staring, making one loud noise: sound places them and
-        // says what they did, never that they are watching or crouching — "watching her" was once
-        // reported from behind her back.
+        // A sneaker behind their back: the sound places them and says what they did, never that
+        // they are watching or crouching — caught live as a watching-report from behind the head.
         PersonId starer = world.add("Starer", new Pos(0, 64, -5), 5.0, Peer.Activity.MINING);
         world.hidden.add(starer);
         sensor.heard(new PeerReading(starer, "Starer", new Pos(0, 64, -5), 5.0,

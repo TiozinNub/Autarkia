@@ -61,9 +61,8 @@ public final class DebugView {
 
     /**
      * How long a belief may go unconfirmed before the view draws it as a GHOST — five minutes of
-     * game time, long enough that walking a lap around a grove doesn't grey it out. A rendering
-     * threshold only: the knowledge store has no such cliff, and the brain prices staleness on a
-     * continuous curve.
+     * game time. A rendering threshold only: the knowledge store has no such cliff, and the brain
+     * prices staleness on a continuous curve.
      */
     private static final long STALE_AFTER_TICKS = 6000L;
 
@@ -204,7 +203,7 @@ public final class DebugView {
                 PeerSensorCore.radius());
     }
 
-    /** Everything she remembers, of every kind, flattened with staleness resolved server-side. */
+    /** Everything they remember, of every kind, flattened with staleness resolved server-side. */
     private static List<DebugViewPayload.Belief> beliefs(MinecraftServer server, Person person) {
         PersonId id = person.getPersonId();
         if (id == null) {
@@ -228,13 +227,13 @@ public final class DebugView {
     }
 
     /**
-     * Her live peer reading — through the BRAIN's own eyes ({@code percepts()}), not a fresh
+     * The live peer reading — through the BRAIN's own eyes ({@code percepts()}), not a fresh
      * sensor: the cache carries the movement history and the linger window, and a throwaway scan
      * would report everyone as freshly seen and standing still.
      */
     private static List<DebugViewPayload.PeerMark> peers(Person person) {
-        // Her pronoun, not the peer's: tell() ends with "watching him/her" about the OBSERVER,
-        // which is her — the same argument the chat readouts pass.
+        // The observer's pronoun, not the peer's: tell() ends with "watching him/her" about
+        // the watcher — the same argument the chat readouts pass.
         String pronoun = person.getGender().objectPronoun();
         List<DebugViewPayload.PeerMark> out = new ArrayList<>();
         for (Peer peer : person.brain().percepts().peers()) {
@@ -248,10 +247,9 @@ public final class DebugView {
     /**
      * The entity to interpolate a peer's mark from, or {@link DebugViewPayload.PeerMark#NO_BODY}.
      *
-     * <p>SEEN only, and the gate is here rather than on the client so no client can follow a body
-     * she has lost track of. A seen peer's cell is a live sample taken on the sensor's attention
-     * cadence, so following the body draws the same truth more smoothly; for HEARD and REMEMBERED
-     * the believed cell is the fact.
+     * <p>SEEN only, gated here rather than on the client so no client can follow a body it has lost
+     * track of. For HEARD (the position of a noise) and REMEMBERED (a frozen last sighting) the
+     * believed cell is the fact.
      */
     private static int bodyId(Person person, Peer peer) {
         if (peer.awareness() != Peer.Awareness.SEEN) {

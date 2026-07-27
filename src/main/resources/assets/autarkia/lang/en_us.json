@@ -31,6 +31,7 @@
   "autarkia.config.option.perception.queue_cap": "Sighting queue cap",
   "autarkia.config.option.perception.region_max_blocks": "Scan block cap",
   "autarkia.config.option.perception.region_max_spread": "Scan spread cap",
+  "autarkia.config.option.perception.knowledge_max_per_kind": "Memories kept per kind",
 
   "autarkia.config.option.peers.radius": "Notice range",
   "autarkia.config.option.peers.sneak_range_mult": "Sneak range multiplier",

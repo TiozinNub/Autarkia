@@ -14,18 +14,17 @@ import net.minecraft.resources.Identifier;
  * player's selected Person. Sent on a slow cadence by {@code mod.debug.DebugView}, drawn every
  * frame by {@code mod.client.DebugViewRenderer}.
  *
- * <p>A snapshot rather than a query because every fact here is server-side with no client
- * counterpart. What the client can already see is absent: her position, facing and eye
- * height come off the local entity ({@link #entityId}), so the lines track her smoothly between
- * snapshots.
+ * <p>A snapshot rather than a query because every fact here lives on the server with no
+ * client-side counterpart. What the client can already see is absent: position,
+ * facing and eye height come off the local entity ({@link #entityId}), so the lines track it
+ * smoothly instead of stuttering at the send cadence.
  *
- * <p>{@link #layers} is the authoritative bit mask of what is switched on; an off layer's
- * collections arrive empty, so the renderer checks the mask instead of guessing. A payload with no
- * layers is the explicit clear sent when the last one goes off or the selection goes away — without
- * it the client would keep drawing the final frame forever.
+ * <p>{@link #layers} is the authoritative {@code DebugLayer} bit mask; an off layer's collections
+ * arrive empty, so the renderer checks the mask rather than guessing what empty means. A payload
+ * with no layers is the explicit clear — without it the client would redraw the final frame
+ * forever.
  *
- * <p>Debug traffic, dev-server scale: never batched, never persisted, only sent to a player who
- * asked.
+ * <p>Debug traffic: never batched, never persisted, only sent to a player who asked by name.
  */
 public record DebugViewPayload(
         int entityId,
@@ -44,8 +43,8 @@ public record DebugViewPayload(
             new Type<>(Identifier.fromNamespaceAndPath("autarkia", "debug_view"));
 
     /**
-     * One leg of the walked path: the cell, and how she means to get into it. The renderer colours
-     * by the move type — a leap and a stroll are identical as bare coordinates.
+     * One leg of the walked path: the cell, and how they mean to get into it. The renderer colours
+     * by move type.
      */
     public record Step(BlockPos pos, int move) {
         public static final StreamCodec<RegistryFriendlyByteBuf, Step> CODEC =
@@ -56,9 +55,9 @@ public record DebugViewPayload(
     }
 
     /**
-     * One remembered point of interest: what she thinks it is, where she'd walk to, the box she
-     * believes it fills, and whether the belief has gone stale. Stale is computed server-side
-     * against her last sighting, because the client has no game time she trusts.
+     * One remembered point of interest: what they think it is, where they'd walk to, the box
+     * they believe it fills, and whether the belief has gone stale. Stale is computed server-side
+     * against the last sighting, because the client has no game time it can trust.
      */
     public record Belief(int kind, BlockPos anchor, BlockPos min, BlockPos max, boolean stale) {
         public static final StreamCodec<RegistryFriendlyByteBuf, Belief> CODEC =
@@ -72,20 +71,20 @@ public record DebugViewPayload(
     }
 
     /**
-     * One perceived someone, as SHE has them: the name she'd use, the whole reading in words, the
+     * One perceived someone, as THEY have them: the name they would use, the reading in words, the
      * believed cell, and (only when that belief is live) the body to interpolate it from.
      *
-     * <p>{@link #name} is {@code Peer.knownAs()}, not the account name: sound does not identify, so
-     * an unseen someone reads as "someone". {@link #tell} is {@code Peer.tell()} composed
-     * server-side with her own pronoun — every observable axis (arm, legs, sneak, gaze) in one
-     * phrase, composed there so there is one description of a peer, the same one the chat readouts
-     * print.
+     * <p>{@link #name} is {@code Peer.knownAs()}, not the account name: sound does not identify,
+     * so an unseen someone reads as "someone". {@link #tell} is {@code Peer.tell()} composed
+     * server-side — every observable axis (arm, legs, sneak, gaze) in one phrase, so there is one
+     * description of a peer in the codebase and no copy here to drift when the sense grows an
+     * axis.
      *
-     * <p>{@link #pos} is always what she BELIEVES: a REMEMBERED peer's position is frozen at her
+     * <p>{@link #pos} is always what they BELIEVE: a REMEMBERED peer's position is frozen at the
      * last live reading and a HEARD one is where the noise came from, so drawing the live entity
-     * would erase the discrepancy the layer exists to show. {@link #entityId} is therefore
-     * {@link #NO_BODY} for every awareness but SEEN, where the cell is a live sample on the
-     * sensor's attention cadence. The gate is server-side so a client cannot follow a ghost.
+     * would erase the discrepancy this layer exists to show. {@link #entityId} is therefore
+     * {@link #NO_BODY} for every awareness but SEEN; the gate is server-side so a client cannot
+     * follow a ghost by mistake.
      */
     public record PeerMark(String name, String tell, BlockPos pos, int entityId,
                            int awareness, float distance) {

@@ -89,10 +89,11 @@ class PersonKnowledgeTest {
         PersonKnowledge knowledge = new PersonKnowledge();
         knowledge.note(tree(10, 64, 10, 6, 100));
         knowledge.note(water(11, 64, 11, 100));
-        knowledge.note(tree(13, 64, 10, 4, 100));
+        knowledge.note(tree(12, 64, 10, 4, 100));
 
         assertEquals(3, knowledge.size(),
-                "water beside a tree is not the tree; 3 apart exceeds TREE's radius of 2");
+                "water beside a tree is not the tree; and two trunks two apart are two trees — "
+                        + "TREE's radius merges only what the shape would call one trunk");
     }
 
     @Test
@@ -109,15 +110,15 @@ class PersonKnowledgeTest {
         PersonKnowledge knowledge = new PersonKnowledge();
         // Fill to cap with well-separated groves; entry i was last seen at tick i+1, except
         // entry 20 which is the stalest of all.
-        for (int i = 0; i < PersonKnowledge.MAX_PER_KIND; i++) {
+        for (int i = 0; i < PersonKnowledge.maxPerKind(); i++) {
             long seen = (i == 20) ? 0 : i + 1;
             knowledge.note(tree(i * 10, 64, 0, 5, seen));
         }
-        assertEquals(PersonKnowledge.MAX_PER_KIND, knowledge.size());
+        assertEquals(PersonKnowledge.maxPerKind(), knowledge.size());
 
         knowledge.note(tree(0, 64, 500, 5, 5000));
 
-        assertEquals(PersonKnowledge.MAX_PER_KIND, knowledge.size(), "capacity holds");
+        assertEquals(PersonKnowledge.maxPerKind(), knowledge.size(), "capacity holds");
         assertFalse(knowledge.forget(PoiKind.TREE, new Pos(200, 64, 0)),
                 "the stalest entry (i=20, seen at tick 0) was the one evicted");
         assertTrue(knowledge.forget(PoiKind.TREE, new Pos(0, 64, 500)), "newcomer is in");

@@ -27,7 +27,7 @@ import java.util.Optional;
 final class FakePercepts implements Percepts {
     final Inventory inventory = new Inventory();
     final Needs needs = new Needs();
-    /** Her feet cell; the default is a surface stance so wander targets are sane. */
+    /** The feet cell — settable; defaults to a plausible stance so wander targets are sane. */
     Pos position = new Pos(0, 64, 0);
     List<Threat> threats = List.of();
     /** The block world — a real {@link FakeProbe} (flat ground at y 63, sparse blocks on top). */

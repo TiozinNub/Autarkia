@@ -36,6 +36,12 @@ public final class ObtainItem implements AchieveTask {
         return ctx.percepts().inventory().count(spec.matcher()) >= count;
     }
 
+    /** The stocked count: rounds that grow the pile never count against the rounds cap. */
+    @Override
+    public double progress(BrainContext ctx) {
+        return ctx.percepts().inventory().count(spec.matcher());
+    }
+
     @Override
     public List<Method> methods() {
         return methods;

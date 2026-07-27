@@ -9,14 +9,14 @@ import java.util.Optional;
 
 /**
  * Layer 3's first, degenerate incarnation: a personal board with one hardcoded stock
- * rule — keep {@code target} of {@code spec} in the pack (decision: Luiz — universal, visible, a
- * natural stress test). Real demand is DERIVED, a project computing a bill of materials and
- * posting this same item shape; the first real project retires this generator. Pure core.
+ * rule — keep {@code target} of {@code spec} in the pack ("keep 16 logs"). Real demand is DERIVED
+ * from a bill of materials posting this same item shape, and this generator retires with the first
+ * real project. Pure core.
  *
  * <p>Re-evaluated every {@link #CHECK_INTERVAL} ticks, offset per person so a settlement does not
- * think in lockstep. Posts when short and idle, withdraws an unclaimed item gone moot, and paces a
- * failure with {@link #FAIL_COOLDOWN} — five times an instinct's, and the pause is not dead time:
- * wandering fills the knowledge the retry needs.
+ * think in lockstep. Posts when short and idle; withdraws an unclaimed item that became moot; a
+ * failure unclaims and paces the retry with {@link #FAIL_COOLDOWN}, five times an instinct's reflex
+ * cooldown — the pause is not dead time, since wandering fills the knowledge the retry needs.
  */
 public final class PersonalBoard implements WorkSource {
     /** Ticks between board re-evaluations. Tuning knob. */

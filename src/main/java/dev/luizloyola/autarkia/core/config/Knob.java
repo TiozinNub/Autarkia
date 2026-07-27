@@ -66,6 +66,11 @@ public enum Knob {
     REGION_MAX_SPREAD("perception.region_max_spread", Kind.INT, 24, 1, 128,
             "Chebyshev spread cap from the seed — what splits a fused mega-forest into groves."),
 
+    KNOWLEDGE_MAX_PER_KIND("perception.knowledge_max_per_kind", Kind.INT, 160, 8, 1024,
+            "POI memories kept per kind before the stalest is evicted. Must exceed the trees"
+                    + " a person works among, or edge trees churn forget/rediscover forever"
+                    + " (an 81-tree grid starved the far corners at 64)."),
+
     // --- peers (the people sense) -----------------------------------------------------------
 
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#radius() */
@@ -83,10 +88,10 @@ public enum Knob {
     PEERS_VERTICAL_DEGREES("peers.vertical_degrees", Kind.INT, 60, 5, 90,
             "Vertical field HALF-angle (degrees) around gaze pitch — human vision is wide "
                     + "across but flat; 90 removes the up/down limit."),
-    /** Read by the mod-side ear when deciding which sounds reach her. */
+    /** Read by the mod-side ear when deciding which sounds reach a listener. */
     PEERS_HEARING_RADIUS("peers.hearing_radius", Kind.INT, 12, 0, 32,
             "How far (blocks) sound-makers are noticed regardless of the view cone. Sneaking "
-                    + "people are silent (vanilla's own rule); 0 makes her deaf."),
+                    + "people are silent (vanilla's own rule); 0 makes a person deaf."),
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#lingerTicks() */
     PEERS_LINGER_TICKS("peers.linger_ticks", Kind.INT, 100, 0, 1200,
             "Object permanence: how long a peer stays perceived (frozen, as remembered) after "
@@ -94,10 +99,10 @@ public enum Knob {
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#heardActivityDecayTicks() */
     PEERS_HEARD_DECAY_TICKS("peers.heard_activity_decay_ticks", Kind.INT, 60, 0, 1200,
             "How long a sound-told activity (heard mining, a heard scuffle) stays believed "
-                    + "after the sound stops — then she just knows someone is there."),
+                    + "after the sound stops — then only the bare presence is left."),
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#nearIntervalTicks() */
     PEERS_NEAR_INTERVAL("peers.near_interval_ticks", Kind.INT, 1, 1, 100,
-            "Attention at point-blank: re-check interval (ticks) for a peer right next to her."),
+            "Attention at point-blank: re-check interval (ticks) for a peer standing right there."),
     /** @see dev.luizloyola.autarkia.core.brain.sense.PeerSensorCore#farIntervalTicks() */
     PEERS_FAR_INTERVAL("peers.far_interval_ticks", Kind.INT, 20, 1, 400,
             "Attention at the edge: re-check interval (ticks) for a peer at max range; "

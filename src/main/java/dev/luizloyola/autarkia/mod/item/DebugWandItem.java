@@ -55,8 +55,8 @@ public class DebugWandItem extends Item {
         }
         // Stand on top of the clicked face.
         Vec3 target = Vec3.atBottomCenterOf(context.getClickedPos().relative(context.getClickedFace()));
-        // Shift sends her at a run. The gait is advisory all the way down — the follower still
-        // slows for careful ground and still takes a leap's run-up at full speed.
+        // The gait is advisory all the way down — the follower still slows for careful ground and
+        // still takes a leap's run-up at full speed — so a run is a request, not a cliff dive.
         boolean hurry = player.isSecondaryUseActive();
         person.navigateTo(target, hurry ? Gait.SPRINT : Gait.WALK);
         Players.overlay(player, Component.translatable(
@@ -93,10 +93,12 @@ public class DebugWandItem extends Item {
     }
 
     /**
-     * The wand's debug-view cycle: shift-click a Person to walk her debug layers one at a time —
-     * path, brain, memory, peers, then off. It REPLACES the layer set rather than adding to it; the
-     * command is the only way to have several up at once (decision: Luiz). Clicking also pins her,
-     * so a shift-click on someone new both selects her and starts her cycle.
+     * The wand's debug-view cycle: shift-click a Person to walk their debug layers one at a time —
+     * path, brain, memory, peers, then off again. It REPLACES the layer set rather than adding to it
+     * (decision: Luiz); {@code /autarkia debug} is the only way to have several layers up at once.
+     *
+     * <p>Clicking a Person pins them first, so a shift-click on someone new both selects them and
+     * restarts the cycle — the view always draws whoever was last clicked, never a stale pin.
      */
     private static void cycleDebugLayer(ServerPlayer player, Person person) {
         PersonId id = person.getPersonId();

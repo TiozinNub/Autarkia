@@ -10,19 +10,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The people sense — one per person, pure core; the {@code PoiSensorCore} pattern reapplied to
- * entities (spec: {@code 2026-07-26-peer-sensor-design.md}). EYES (a view cone plus
- * eye-to-hitbox line of sight), EARS (a push-based {@link #heard} channel fed from world sound
- * events), ATTENTION (per-peer cadence scaling with proximity) and OBJECT PERMANENCE (a linger
- * window), in place of a flat omniscient radius dump.
+ * The people sense, assembled — one per person, pure core; the {@code PoiSensorCore} pattern
+ * reapplied to entities (spec: {@code 2026-07-26-peer-sensor-design.md}). It has EYES (a view cone
+ * plus eye-to-hitbox line of sight), EARS (the push {@link #heard} channel), ATTENTION (per-peer
+ * re-check cadence scaling with proximity) and OBJECT PERMANENCE (a linger window).
  *
- * <p>The cascade runs cheapest-first, stopping at the first failure: in radius (the query
- * itself, sneak-shrunk per target) → in cone (arithmetic only) → in sight (the rays). Sound
- * short-circuits all of it: a heard body is perceived, cone and walls be damned.
+ * <p>Per candidate the cascade runs cheapest-first, stopping at the first failure: in radius (the
+ * query itself, sneak-shrunk per target) → in cone (arithmetic) → in sight (the rays). Sound
+ * short-circuits all of it.
  *
- * <p>A track is LIVE (seen or heard fresh — the reading updates on its cadence, changes emit
- * events) or REMEMBERED (all channels dark — the last live reading FROZEN, still listed, until
- * {@link #lingerTicks()} expires and the peer is LOST). Re-acquiring one emits nothing.
+ * <p>Tracks are LIVE (seen or heard fresh, updating on cadence and emitting change events) or
+ * REMEMBERED (all channels dark, the last live reading FROZEN and still listed until
+ * {@link #lingerTicks()} expires and the peer is LOST). Re-acquiring a remembered peer emits
+ * nothing.
  */
 public final class PeerSensorCore {
     /** Ticks between candidate sweeps — discovery cadence; monitored peers have their own. */
@@ -71,7 +71,7 @@ public final class PeerSensorCore {
         /** When {@link #last}'s ACTIVITY was actually witnessed (seen live, or told by a
          *  sound) — sound-told activities decay against this; see {@code decayActivities}. */
         long activityAt = Long.MIN_VALUE / 2;
-        /** Whether she has ever SEEN this one — sound doesn't say who. */
+        /** Whether this one was ever SEEN — sound doesn't say who (decision: Luiz). */
         boolean identified;
     }
 
@@ -122,9 +122,9 @@ public final class PeerSensorCore {
             if (seen || heardFresh) {
                 Peer before = peer(track);
                 boolean recognizedNow = false;
-                // Ears carry position but not the visual reads: a heard-only track keeps
-                // what the SOUND said (occupation and legs) until the ear or the eyes say
-                // otherwise. No "at_crafting" through the back of her head, no gaze, no crouch.
+                // Ears carry position but not the visual reads: a heard-only track keeps whatever
+                // the SOUND said (occupation and legs) until the ear or the eyes say otherwise.
+                // No gaze, no crouch (caught live: "watching him/her" from behind the back).
                 track.last = seen ? fresh : heardFacts(fresh, track.last);
                 track.awareness = seen ? Peer.Awareness.SEEN : Peer.Awareness.HEARD;
                 track.lastLiveAt = now;
@@ -170,10 +170,11 @@ public final class PeerSensorCore {
     }
 
     /**
-     * The ear's push channel: this body just made a sound she can hear (the mod's listener has
-     * applied the hearing radius and vanilla's sneak-silence). Sound places its source, so a
-     * never-seen someone is SPOTTED sight unseen and a remembered one snaps back without being
-     * lost. Fresh vision outranks: a SEEN track only refreshes its heard-clock.
+     * The ear's push channel: this body just made a sound they can hear (the mod's listener
+     * already applied the hearing radius and vanilla's sneak-silence). Sound places its source,
+     * so the reading is live — a never-seen someone is SPOTTED sight unseen; a remembered one
+     * snaps back to live without ever having been lost. Vision, when fresh, outranks: a SEEN
+     * track just refreshes its heard-clock.
      */
     public void heard(PeerReading who, long now) {
         Track track = tracks.get(who.id());
@@ -260,8 +261,9 @@ public final class PeerSensorCore {
 
     /**
      * The view volume: the horizontal cone (yaw against half of {@link #coneDegrees()}) PLUS a
-     * ±{@link #verticalHalfDegrees()} elevation band around gaze pitch. Someone within arm's
-     * touch is trivially in view. Minecraft convention: yaw 0° = +Z, pitch −90° = straight up.
+     * ±{@link #verticalHalfDegrees()} band around gaze pitch — someone overhead is unseen until
+     * they crane up. Someone within arm's touch is trivially in view. Yaw/pitch follow the
+     * Minecraft convention (yaw 0° = +Z; pitch −90° = straight up).
      */
     private static boolean inCone(Pos feet, double yawDegrees, double pitchDegrees, Pos target) {
         double dx = target.x() - feet.x();
@@ -290,8 +292,8 @@ public final class PeerSensorCore {
     }
 
     /**
-     * What a SOUND can carry: place, doing and moving feet — never gaze or posture. Place comes
-     * from {@code placed}, occupation and legs from {@code told}.
+     * What a SOUND can carry: place, doing and moving feet — never gaze or posture (eyes-only
+     * reads). Place comes from {@code placed}, occupation and legs from {@code told}.
      */
     private static PeerReading heardFacts(PeerReading placed, PeerReading told) {
         return new PeerReading(placed.id(), placed.name(), placed.pos(), placed.distance(),

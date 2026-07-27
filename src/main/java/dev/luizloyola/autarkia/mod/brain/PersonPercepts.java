@@ -104,9 +104,8 @@ public final class PersonPercepts implements Percepts {
      * Nearby hostiles as version-neutral {@link Threat}s — what the Flee instinct reads. Budgeted:
      * the scan runs at most once per {@link #CACHE_TICKS} ticks (the brain and every instinct may
      * ask each tick) and the same immutable list is returned in between. A hostile is any
-     * {@link Monster} in a 16×8×16-inflated box, matching what the aggro slice attacks; broader
-     * categories (the {@code Enemy} marker) cannot be asked of {@code getEntitiesOfClass} and
-     * aren't worth a Mob-wide scan plus filter yet.
+     * {@link Monster} in a 16×8×16-inflated box; broader categories ({@code Enemy}) cannot be asked
+     * of {@code getEntitiesOfClass} and aren't worth a Mob-wide scan plus filter yet.
      */
     @Override
     public List<Threat> threats() {

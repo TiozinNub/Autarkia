@@ -27,15 +27,14 @@ import org.jspecify.annotations.Nullable;
  * the same {@code net.minecraft.gizmos} API vanilla's hitbox view uses, so it depth-sorts like the
  * game's own.
  *
- * <p>Hooked through {@link GizmoFrame}, which fires while the level renderer's gizmo collector is
- * installed: the collector is a thread-local, and outside that window every {@code Gizmos} call is
- * silently discarded. Which Fabric event that is differs by version, so the hook lives in
- * {@code compat} and none of the drawing does. Immediate mode — everything is re-emitted every
- * frame, so a dropped payload redraws the previous truth.
+ * <p>Hooked through {@link GizmoFrame}: the gizmo collector is a thread-local the level renderer
+ * installs, and outside its window every static {@code Gizmos} call is silently discarded. Which
+ * Fabric event that is differs by version, so the hook lives in {@code compat} and none of the
+ * drawing does. Immediate mode — a dropped payload redraws the previous truth.
  *
  * <p><b>Snapshot facts and live facts are mixed.</b> Waypoints, beliefs and peer
- * positions come off the wire; her position and head yaw are read from the LOCAL entity every
- * frame, so the first leg stays glued to her feet and the cone turns as she looks, between
+ * positions come off the wire; their own position and head yaw are read from the LOCAL entity every
+ * frame, so the first leg stays glued to their feet and the cone turns as they look, between
  * four-tick snapshots.
  */
 @Environment(EnvType.CLIENT)
@@ -62,7 +61,7 @@ public final class DebugViewRenderer {
     private static final int NAV_TEXT_COLOR = 0xFFB0C4FF;
     private static final int BRAIN_TEXT_COLOR = 0xFFFFFFFF;
 
-    /** Line widths: the leg she is walking now is drawn heavier than the rest of the plan. */
+    /** Line widths: the leg being walked now is drawn heavier than the rest of the plan. */
     private static final float PATH_WIDTH = 2.5F;
     private static final float CURRENT_LEG_WIDTH = 5.0F;
     private static final float THIN = 1.5F;
@@ -76,7 +75,7 @@ public final class DebugViewRenderer {
 
     /** Vertical gap between stacked text lines — vanilla's spacing, kept so the stack reads the same. */
     private static final double TEXT_LINE_STEP = 0.25;
-    /** How far above her head the stack starts: enough to clear the always-visible name tag. */
+    /** How far above their head the stack starts: enough to clear the always-visible name tag. */
     private static final double NAME_TAG_CLEARANCE = 0.9;
     /** Vanilla's left-alignment nudge for stacked debug text. */
     private static final float TEXT_LEFT_ALIGN = 0.5F;
@@ -97,12 +96,13 @@ public final class DebugViewRenderer {
         if (view == null || view.isEmpty() || level == null) {
             return;
         }
-        // Out of client render distance the Person is null, but path and beliefs are
-        // world-anchored and still draw; only the head text and the cone need a body.
+        // The Person may be out of client render distance while their path and beliefs are still
+        // perfectly drawable — those are world-anchored. Only the head-mounted text and the cone
+        // need a body, and they check for one.
         Entity person = level.getEntity(view.entityId());
         float partialTick = client.getDeltaTracker().getGameTimeDeltaPartialTick(false);
 
-        // One shared counter so PATH's status line and BRAIN's stack pile up over her head in
+        // One shared counter so PATH's status line and BRAIN's stack pile up over their head in
         // registration order instead of overprinting each other.
         int[] line = {0};
 
@@ -124,9 +124,9 @@ public final class DebugViewRenderer {
     }
 
     /**
-     * The walked plan: a polyline from her feet through every remaining waypoint, each leg
-     * coloured by how she means to enter it. Legs already behind her are drawn faint rather than
-     * dropped — seeing where she came from is half of reading a path that went wrong.
+     * The walked plan: a polyline from their feet through every remaining waypoint, each leg
+     * coloured by how they mean to enter it. Legs already behind are drawn faint rather than
+     * dropped — seeing where they came from is half of reading a path that went wrong.
      */
     private static void drawPath(DebugViewPayload view, @Nullable Entity person, float partialTick) {
         List<DebugViewPayload.Step> path = view.path();
@@ -136,17 +136,19 @@ public final class DebugViewRenderer {
             return;
         }
         int index = Mth.clamp(view.pathIndex(), 0, path.size());
-        // Behind her: waypoint to waypoint, faded. Not chained through her current
-        // position — that would draw a long line backwards to the start of the path.
+        // Behind them: waypoint to waypoint, faded. Not chained through the current
+        // position — those cells are left behind, and hanging them off the feet would draw a long
+        // line backwards to the start of the path.
         for (int i = 1; i < index; i++) {
             leg(centre(path.get(i - 1).pos()), path.get(i), true, false);
         }
         if (index >= path.size()) {
-            return; // arrived: the whole plan is behind her
+            return; // arrived: the whole plan is behind them
         }
-        // The current leg starts at her actual feet, so it tracks her between snapshots instead
-        // of jumping cell to cell at the send cadence. With no body (outside render distance), fall
-        // back to the previous waypoint.
+        // The leg being walked NOW starts at the actual feet, so it tracks them between
+        // snapshots instead of jumping cell to cell at the send cadence.
+        // With no body to anchor to (they are outside render distance), fall back to the waypoint
+        // before this one so the leg still has a direction to show.
         Vec3 from = person != null
                 ? person.getPosition(partialTick).add(0.0, PATH_Y, 0.0)
                 : centre(path.get(index > 0 ? index - 1 : index).pos());
@@ -156,7 +158,7 @@ public final class DebugViewRenderer {
         }
     }
 
-    /** One leg of the path: the line into {@code step}, coloured by how she means to enter it. */
+    /** One leg of the path: the line into {@code step}, coloured by how they mean to enter it. */
     private static void leg(Vec3 from, DebugViewPayload.Step step, boolean walked, boolean current) {
         Vec3 to = centre(step.pos());
         int color = fade(moveColor(step.move()), walked);
@@ -165,11 +167,12 @@ public final class DebugViewRenderer {
     }
 
     /**
-     * The arbiter's reasoning, stacked over her head — one gizmo per line.
+     * The arbiter's reasoning, stacked over their head — one gizmo per line.
      *
-     * <p>A text gizmo is a SINGLE line: an embedded newline renders as nothing. The server
-     * therefore sends the readout already split ({@code BrainDriver.describeLines}); parsing a
-     * chat format's separators back out here made the view quietly wrong whenever it changed.
+     * <p>A text gizmo is a SINGLE line: an embedded newline renders as nothing. The server sends
+     * the readout already split ({@code BrainDriver.describeLines}) rather than a joined string,
+     * because the separators are a chat format's detail and parsing them back out here went
+     * quietly wrong whenever that format changed.
      */
     private static void drawBrain(
             DebugViewPayload view, Entity person, float partialTick, int[] line) {
@@ -188,13 +191,13 @@ public final class DebugViewRenderer {
     /**
      * One stacked line of floating text above a Person's head.
      *
-     * <p>Not {@code Gizmos.billboardTextOverMob}, which anchors at block centre and
-     * the raw {@code getY()}: over a WALKING Person that snaps from block centre to block centre.
-     * Same layout as vanilla's (spacing, left alignment, always-on-top) off her interpolated
-     * position instead.
+     * <p>Not {@code Gizmos.billboardTextOverMob}, which anchors at
+     * {@code getBlockX() + 0.5} / {@code getBlockZ() + 0.5} and the raw {@code getY()}: over a
+     * WALKING Person that snaps from block centre to block centre. This keeps vanilla's layout —
+     * spacing, left alignment, always-on-top — off their interpolated position instead.
      *
-     * <p>Height comes from her bounding box, not vanilla's flat {@code 2.4}, so it follows a crouch
-     * and clears the name tag every Person carries (vanilla's debug targets have none).
+     * <p>Height comes from the body's own box, not vanilla's flat {@code 2.4}, so it follows a
+     * crouch and clears the name tag every Person carries (vanilla's debug targets have none).
      */
     private static void overhead(Entity person, float partialTick, int line,
                                  String text, int color, float scale) {
@@ -219,8 +222,9 @@ public final class DebugViewRenderer {
     }
 
     /**
-     * What she believes is out there: the remembered bounds box and a marker on the anchor she
-     * would walk to. A stale belief greys out — the ghost of a grove she has since chopped down.
+     * What they believe is out there: the bounds box they remember and a marker on the anchor they
+     * would actually walk to. A stale belief greys out — the ghost of a grove since chopped down is
+     * the knowledge store working correctly.
      */
     private static void drawBeliefs(DebugViewPayload view) {
         for (DebugViewPayload.Belief belief : view.beliefs()) {
@@ -235,9 +239,9 @@ public final class DebugViewRenderer {
     }
 
     /**
-     * Who she knows about, and the eyes that found them: a line per peer from her own eyes,
-     * coloured by the channel carrying the perception, plus the view cone at its configured angle
-     * and range. A REMEMBERED peer's line points where she last SAW them.
+     * Who they know about, and the eyes that found them: a line per peer from their own eyes,
+     * coloured by which channel is carrying the perception, plus the view cone at its configured
+     * angle and range. A REMEMBERED peer's line points at where they last SAW them.
      */
     private static void drawPeers(DebugViewPayload view, @Nullable Entity person,
                                   ClientLevel level, float partialTick) {
@@ -260,6 +264,8 @@ public final class DebugViewRenderer {
             // someone — but the LABEL goes above the head, clear of the skin it describes, with
             // the same clearance the selected Person's own stack uses.
             Gizmos.line(eye, feet.add(0.0, height * 0.5, 0.0), color, PATH_WIDTH).setAlwaysOnTop();
+            // Two lines: who they think it is, then the whole reading — the name alone answers
+            // only "is someone there".
             peerText(peer.name(), above(feet, height, 1), color, TITLE_SCALE);
             peerText(detail(peer), above(feet, height, 0), color, DETAIL_SCALE);
         }
@@ -299,11 +305,11 @@ public final class DebugViewRenderer {
     }
 
     /**
-     * The reading under a peer's name: everything she has on them, then how she has it.
+     * The reading under a peer's name: everything they have on them, then how they have it.
      *
-     * <p>Awareness follows the chat readouts' convention — SEEN unmarked, {@code [heard]} and
-     * {@code [remembered]} called out because those readings can be wrong. Spelled out as well as
-     * colour-coded: a grey line reads as stale only beside a green one.
+     * <p>The awareness tag follows the chat readouts' convention: SEEN is unmarked, {@code [heard]}
+     * and {@code [remembered]} are called out, because those are the readings that can be wrong.
+     * Spelled out as well as colour-coded: a grey line reads as stale only beside a green one.
      */
     private static String detail(DebugViewPayload.PeerMark peer) {
         Peer.Awareness[] values = Peer.Awareness.values();

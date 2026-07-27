@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.core.brain.sense.Peer;
 import dev.luizloyola.autarkia.core.brain.sense.PeerEvent;
+import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.PersonId;
 import java.util.HashMap;
 import java.util.Locale;
@@ -15,13 +16,12 @@ import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The peer viewer — {@code KnowledgeViewer}'s sibling for the people sense: {@code /autarkia
- * peers view true} narrates every {@link PeerEvent} a person perceives to chat. Her PERCEPTION,
- * not the world: losing track of someone standing behind her back is the viewer working.
+ * {@code KnowledgeViewer}'s sibling for the people sense: {@code /autarkia peers view true} narrates
+ * every {@link PeerEvent} a person perceives to chat. Renders their PERCEPTION, not the world —
+ * losing track of someone in plain sight behind their back is the viewer working.
  *
- * <p>A player's toggle whispers to that player; a CONSOLE toggle broadcasts, reaching the server
- * log — which is what makes the viewer usable from the headless harness. Transient debug state,
- * one watcher map per server, gone on stop.
+ * <p>A player's toggle whispers to that player; a CONSOLE toggle broadcasts to everyone and thus the
+ * server log, which makes it usable from the headless harness. Transient, one map per server.
  */
 public final class PeerViewer {
     private PeerViewer() {}
@@ -49,7 +49,7 @@ public final class PeerViewer {
 
     /**
      * Who this person's narration currently goes to — a player's UUID, {@link #EVERYONE} for a
-     * console toggle, or {@code null} when she isn't being narrated at all. The read side the
+     * console toggle, or {@code null} when they aren't being narrated at all. The read side the
      * status readout of {@code /autarkia peers view} prints.
      */
     public static @Nullable UUID viewer(MinecraftServer server, PersonId person) {
@@ -63,15 +63,19 @@ public final class PeerViewer {
         return watched != null && watched.remove(person) != null;
     }
 
-    /** A peer event from a possibly-watched person — narrate it to whoever toggled the view. */
+    /**
+     * A peer event from a possibly-watched person — narrated to whoever toggled the view. Takes
+     * {@link Gender} rather than a pre-picked pronoun: the lines need both cases ("watching
+     * him/her", "the someone he/she'd heard").
+     */
     static void onEvent(MinecraftServer server, PersonId person, String personName,
-                        String pronoun, PeerEvent event) {
+                        Gender gender, PeerEvent event) {
         Map<PersonId, UUID> watched = WATCHERS.get(server);
         UUID viewer = watched == null ? null : watched.get(person);
         if (viewer == null) {
             return;
         }
-        Component line = line(personName, pronoun, event);
+        Component line = line(personName, gender, event);
         if (EVERYONE.equals(viewer)) {
             server.getPlayerList().broadcastSystemMessage(line, false);
             return;
@@ -82,9 +86,9 @@ public final class PeerViewer {
         }
     }
 
-    private static Component line(String personName, String pronoun, PeerEvent event) {
+    private static Component line(String personName, Gender gender, PeerEvent event) {
         Peer peer = event.peer();
-        String detail = peer.tell(pronoun)
+        String detail = peer.tell(gender.objectPronoun())
                 + (peer.awareness() == Peer.Awareness.SEEN
                         ? "" : " [" + peer.awareness().name().toLowerCase(Locale.ROOT) + "]");
         return switch (event.type()) {
@@ -99,7 +103,8 @@ public final class PeerViewer {
                     .withStyle(ChatFormatting.YELLOW);
             case RECOGNIZED -> Component.literal(
                             "[" + personName + "] recognized " + peer.name()
-                                    + " — the someone she'd been hearing, now " + detail)
+                                    + " — the someone " + gender.subjectPronoun()
+                                    + "'d been hearing, now " + detail)
                     .withStyle(ChatFormatting.AQUA);
         };
     }

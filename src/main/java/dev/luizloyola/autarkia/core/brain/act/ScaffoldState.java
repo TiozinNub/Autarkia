@@ -8,7 +8,7 @@ public enum ScaffoldState {
     IDLE,
     /** Mid-step: jumping, placing the block underneath, landing. */
     RISING,
-    /** The last step landed: she stands one block higher, on a block from her own pack. */
+    /** The last step landed: they stand one block higher, on a block from their own pack. */
     RISEN,
     /** The last step died: no headroom, the jump never cleared, or the placement failed. */
     FAILED

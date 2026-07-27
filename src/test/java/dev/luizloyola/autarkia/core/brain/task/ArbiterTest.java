@@ -198,7 +198,7 @@ class ArbiterTest {
     }
 
     @Test
-    void aCoolingWanderLeavesHerStandingNotScatterFleeing() {
+    void aCoolingWanderLeavesThemStandingNotScatterFleeing() {
         // Live-caught: wander fails, cools down, and zero-pressure flee won the all-zero tie by
         // list order — a sprint at nothing, clean out of the loaded world.
         FakeInstinct flee = new FakeInstinct("flee", 0.0, forever("scatter"));
@@ -209,7 +209,7 @@ class ArbiterTest {
             arbiter.tick(ctx); // grant, fail, and then the whole cooldown stretch
         }
         assertTrue(flee.grantedRoots.isEmpty(),
-                "flee at 0.00 never inherits the wheel — she stands out the cooldown");
+                "flee at 0.00 never inherits the wheel — they stand out the cooldown");
     }
 
     // --- stickiness ------------------------------------------------------------------------------
@@ -435,23 +435,22 @@ class ArbiterTest {
     }
 
     /**
-     * With nothing to out-bid it, {@link FleeInstinct} wins every re-arbitration, and each leg's
-     * re-grant builds a FRESH {@code FleeStep} (never a cached tree) aimed at the threat's position
-     * NOW — so a threat crossing sides between legs flips the next leg's target.
+     * Nothing out-bids {@link FleeInstinct}, so it wins every re-arbitration; each re-grant builds
+     * a FRESH {@code FleeStep} (never a cached tree), re-aimed at the threat's position NOW.
      */
     @Test
     void fleeChainsFreshReaimedLegsAsTheThreatMovesWhilePressureStaysHigh() {
         SpyingFlee flee = new SpyingFlee(new Random(11));
         Arbiter arbiter = new Arbiter(List.of(flee));
         ctx.percepts.position = new Pos(0, 64, 0);
-        ctx.percepts.threats = List.of(new Threat(new Pos(5, 64, 0), 5.0, false)); // east -> she runs west
+        ctx.percepts.threats = List.of(new Threat(new Pos(5, 64, 0), 5.0, false)); // east
 
         arbiter.tick(ctx); // t1: grant leg #1; its GoTo issues, aimed west
         assertEquals(1, flee.grantedRoots.size());
         assertTrue(ctx.mover.lastX < 0, "leg 1 runs west, away from the eastern threat");
 
         ctx.mover.setState(MoveState.ARRIVED); 
-        ctx.percepts.threats = List.of(new Threat(new Pos(-5, 64, 0), 5.0, false)); // now west of her
+        ctx.percepts.threats = List.of(new Threat(new Pos(-5, 64, 0), 5.0, false)); // now west
         arbiter.tick(ctx); // t2: GoTo #1 SUCCEEDS -> boundary; re-grant is still next tick, not this one
         assertEquals(1, flee.grantedRoots.size(), "re-grant happens on the NEXT tick, not the boundary tick itself");
 

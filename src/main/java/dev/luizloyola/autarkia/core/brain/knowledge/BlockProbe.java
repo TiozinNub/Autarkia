@@ -19,8 +19,9 @@ public interface BlockProbe {
     BlockKind at(int x, int y, int z);
 
     /**
-     * Can the person see this cell from her eyes? One voxel walk, air/leaves/water transparent;
-     * fired once per <em>discovery</em>, never per column.
+     * The confirm-ray: can the person currently see this cell from their eyes? One voxel walk,
+     * air/leaves/water transparent — fired once per <em>discovery</em> (before an expansion is
+     * spent on a hypothesis), never per column, so the proof costs almost nothing.
      */
     boolean visibleFromEyes(Pos target);
 }

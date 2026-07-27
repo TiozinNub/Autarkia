@@ -13,36 +13,33 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The always-on "what am I doing right now" component (brain design doc): every tick it reads each
- * {@link Instinct}'s pressure, picks the winner, and keeps its one {@link TaskExecutor} running
- * that winner's task tree. It also publishes the cost tolerance the executor gates methods by
- * ({@link #costTolerance()}), taken from the active drive's pressure through
- * {@link ToleranceCurve}. The executor is the arbiter's — {@link #executor()} is the mod driver's
- * manual entry point — and {@code active} names the instinct whose root is running ({@code null}
- * for idle or a manually-installed task).
+ * The always-on "what am I doing right now" component: each tick it reads every {@link Instinct}'s
+ * pressure, picks a winner, and keeps its one {@link TaskExecutor} running that winner's task tree.
+ * It publishes the cost tolerance the executor gates methods by ({@link #costTolerance()}), taken
+ * from the active drive's pressure through {@link ToleranceCurve}. The arbiter alone grants
+ * instinct-driven work, so {@code active} always names the instinct whose root is running, and is
+ * {@code null} for idle or a manually-installed task.
  *
  * <h2>Per-tick arbitration ({@link #tick})</h2>
  * <ol>
- *   <li>Pressures are read once. An instinct sitting out the ticks its own
- *       {@link Instinct#failCooldown()} set after a FAILED root is INELIGIBLE, and its cooldown
- *       then ticks down by one.</li>
+ *   <li>Pressures are read once. An instinct sitting out the ticks its
+ *       {@link Instinct#failCooldown()} set after a FAILED root is ineligible this tick; its
+ *       cooldown then drops by one.</li>
  *   <li>Top eligible bidder by EFFECTIVE pressure — the incumbent gets a {@link #stickiness()}
- *       bonus, and ties go to the earlier instinct in the constructor list.
- *       <b>Zero raw pressure is not a bid</b>: with every drive at zero the executor idles
- *       rather than granting by list order, which once sprinted a zero-pressure Flee at
- *       nothing, out of the loaded world. Wander's {@code IDLE_PRESSURE} is the explicit
- *       do-something floor.</li>
- *   <li><b>Executor idle</b> → grant the top bidder; re-granting the incumbent after a SUCCESS is
- *       the continuous-behavior loop, {@code root()} called anew each time.</li>
- *   <li><b>Executor busy</b> → switch only if the top bidder is not the incumbent, beats it on
- *       effective pressure, and has RAW pressure at least {@link #preempt()}; below that it
- *       waits for the task boundary. Switching cancels the incumbent's task.</li>
- *   <li>The executor ticks once. On a boundary (busy before, idle after) a FAILED root sets its
- *       instinct's {@link #FAIL_COOLDOWN}, and {@code active} clears so the next tick's idle-grant
- *       re-arbitrates from scratch.</li>
+ *       bonus, ties go to the earlier instinct in the constructor list. <b>Zero raw pressure is not
+ *       a bid</b>: with every drive at zero the executor idles, nobody is granted by default.
+ *       (Live-caught: zero-pressure Flee won an all-zero tie by list order and sprinted them out of
+ *       the loaded world.)</li>
+ *   <li><b>Idle</b> → grant the top bidder a fresh {@code root()}; re-granting the incumbent after
+ *       SUCCESS is the continuous-behavior loop.</li>
+ *   <li><b>Busy</b> → switch only if the top bidder is not the incumbent, beats it on effective
+ *       pressure, and its RAW pressure is at least {@link #preempt()}; below that it waits for the
+ *       task boundary. Switching cancels the incumbent's task first.</li>
+ *   <li>On a boundary crossed this tick (busy before, idle after), a FAILED root puts its instinct
+ *       on cooldown; either way {@code active} clears and the next tick re-arbitrates.</li>
  * </ol>
  * With no instincts, or none eligible, the executor still ticks — a manually-installed task must
- * keep running even under an all-cooling arbiter.
+ * keep running.
  */
 public final class Arbiter {
 
@@ -180,9 +177,8 @@ public final class Arbiter {
                 claimedItem = null;
                 workRunning = false;
             } else if (active != null && executor.lastStatus().orElse(null) == TaskStatus.FAILED) {
-                // BRAIN log: failures only — an unsatisfiable drive is the signal, and every
-                // wander SUCCESS would be noise. The switch/take-over lines already mark what she
-                // started.
+                // BRAIN log: failures only — every wander SUCCESS would be noise, and the
+                // take-over lines already mark what they started.
                 ctx.journal().record(Category.BRAIN, active.describe(), "failed"
                         + executor.failureReason().map(r -> " — " + r).orElse(""));
                 cooldowns[indexOf(active)] = active.failCooldown();
@@ -210,9 +206,8 @@ public final class Arbiter {
     }
 
     /**
-     * One line per instinct — name, last-tick pressure to 2dp, and a tag: {@code (active)} for the
-     * running drive, {@code (cooldown Nt)} for one sitting out — then the executor's own describe.
-     * The brain's "why is she doing that?" answer, ctx-less so a command can print it any time.
+     * One line per instinct — name, pressure to 2dp, {@code (active)} or {@code (cooldown Nt)} —
+     * then the executor's describe. Ctx-less, printable any time.
      */
     public String describe() {
         StringBuilder sb = new StringBuilder();
@@ -271,8 +266,7 @@ public final class Arbiter {
     private void grant(int i, BrainContext ctx) {
         Instinct instinct = instincts.get(i);
         // BRAIN log: only a genuine change of drive, not the incumbent re-granting itself after
-        // each SUCCESS — that would swamp the ring with wander re-rolls. A preempt is a switch
-        // that cut a still-running task off.
+        // each SUCCESS — an idle Person's wander re-rolls would swamp the ring.
         if (instinct != lastGranted) {
             boolean preempt = executor.isBusy() && active != null && active != instinct;
             ctx.journal().record(Category.BRAIN, instinct.describe(), String.format(Locale.ROOT,
