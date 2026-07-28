@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.mod.command;
 
+import dev.luizloyola.anima.mod.body.AgentBodies;
+import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.command.AgentSelection;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -61,6 +63,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
@@ -332,27 +335,27 @@ public final class AutarkiaCommands {
     }
 
     private static int navGoto(CommandSourceStack source, BlockPos pos) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         person.navigateTo(Vec3.atBottomCenterOf(pos));
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " -> "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " -> "
                 + pos.toShortString()).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
     private static int navStop(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         person.navigator().stop();
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " stopped.")
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " stopped.")
                 .withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
     private static int navStatus(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + ": "
                 + person.navigator().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
@@ -360,11 +363,11 @@ public final class AutarkiaCommands {
     /** Runs a {@link GoTo} task on the resolved Person through the brain's executor — same walk
      *  as {@link #navGoto}, but through the task machinery, so the whole pipeline is exercised. */
     private static int brainGoto(CommandSourceStack source, BlockPos pos) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new GoTo(pos.getX(), pos.getY(), pos.getZ()));
         String suffix = autoDisabledSuffix(autoDisabled);
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
@@ -372,11 +375,11 @@ public final class AutarkiaCommands {
     /** Runs a {@link BreakBlock} on the resolved Person — the working arm's debug leaf (slice-2
      *  ladder step 1): reach-checked, vanilla break time for the held stack, real drops. */
     private static int brainBreak(CommandSourceStack source, BlockPos pos) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new BreakBlock(pos.getX(), pos.getY(), pos.getZ()));
         String suffix = autoDisabledSuffix(autoDisabled);
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
@@ -387,8 +390,8 @@ public final class AutarkiaCommands {
         PersonDirectory directory = PersonDirectory.get(server);
         java.util.Set<AgentId> loaded = new java.util.HashSet<>();
         for (Person person : loadedPersons(server)) {
-            if (person.getAgentId() != null) {
-                loaded.add(person.getAgentId());
+            if (person.agentId() != null) {
+                loaded.add(person.agentId());
             }
         }
         List<AgentId> dead = new ArrayList<>();
@@ -524,14 +527,14 @@ public final class AutarkiaCommands {
      * makes the toggle usable headlessly.
      */
     private static int peersView(CommandSourceStack source, boolean on) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        AgentId id = person.getAgentId();
+        AgentId id = person.agentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        String name = person.getName().getString();
+        String name = person.entity().getName().getString();
         if (on) {
             ServerPlayer player = source.getPlayer();
             BeingViewer.watch(source.getServer(), id, player == null ? null : player.getUUID());
@@ -551,14 +554,14 @@ public final class AutarkiaCommands {
 
     /** {@code peers view} with no {@code true|false}: who, if anyone, hears the narration. */
     private static int peersViewShow(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        AgentId id = person.getAgentId();
+        AgentId id = person.agentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        String name = person.getName().getString();
+        String name = person.entity().getName().getString();
         UUID viewer = BeingViewer.viewer(source.getServer(), id);
         if (viewer == null) {
             source.sendSuccess(() -> Component.literal(name + "'s peers view is false.")
@@ -592,10 +595,10 @@ public final class AutarkiaCommands {
 
     /** The resolved Person's live {@code beings()} reading — everything they make out. */
     private static int peersList(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         List<Being> beings = person.brain().percepts().beings();
-        String name = person.getName().getString();
+        String name = person.entity().getName().getString();
         if (beings.isEmpty()) {
             source.sendSuccess(() -> Component.literal(name + " sees nobody around.")
                     .withStyle(ChatFormatting.GRAY), false);
@@ -603,7 +606,7 @@ public final class AutarkiaCommands {
         }
         source.sendSuccess(() -> Component.literal(name + " — " + beings.size() + " perceived")
                 .withStyle(ChatFormatting.AQUA), false);
-        String pronoun = person.getGender().object();
+        String pronoun = person.pronouns().object();
         for (Being being : beings) {
             String kind = being.kind() == Being.Kind.AGENT || being.kind() == Being.Kind.UNKNOWN
                     ? "" : " [" + being.kind().name().toLowerCase(Locale.ROOT)
@@ -647,28 +650,28 @@ public final class AutarkiaCommands {
     /** Runs {@link SatisfyHunger} on the resolved Person — the first COMPOUND task, and the
      *  machinery the Eat instinct also drives (autonomously) via the arbiter. */
     private static int brainEat(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new SatisfyHunger());
         String suffix = autoDisabledSuffix(autoDisabled);
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
     private static int brainStatus(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + ": "
                 + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
     private static int brainCancel(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         person.brain().cancel();
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " task cancelled; "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " task cancelled; "
                 + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
@@ -676,10 +679,10 @@ public final class AutarkiaCommands {
     /** Flips the resolved Person's autonomy switch and echoes the new describe() line (now
      *  reporting auto|manual up front). */
     private static int brainAuto(CommandSourceStack source, boolean auto) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         person.brain().setAuto(auto);
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + ": "
                 + person.brain().describe()).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
@@ -688,20 +691,20 @@ public final class AutarkiaCommands {
     /** Toggle the thinking-out-loud chat channel for the resolved Person — see
      *  {@link ThoughtBroadcast}. */
     private static int thinkToggle(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        boolean on = ThoughtBroadcast.toggle(person.getAgentId());
-        source.sendSuccess(() -> Component.literal(person.getName().getString()
+        boolean on = ThoughtBroadcast.toggle(person.agentId());
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString()
                         + (on ? " is thinking out loud in chat now." : "'s thoughts are quiet again."))
                 .withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
     private static int brainAutoShow(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         boolean auto = person.brain().isAuto();
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + "'s brain auto is "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + "'s brain auto is "
                         + auto + " — " + (auto
                                 ? "the arbiter is deciding."
                                 : "manual; hand it back with /autarkia brain auto true."))
@@ -741,14 +744,14 @@ public final class AutarkiaCommands {
      * variant that reaches an unloaded one.
      */
     private static int logDump(CommandSourceStack source, @Nullable Category category, int count) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        AgentId id = person.getAgentId();
+        AgentId id = person.agentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        return dumpJournal(source, id, person.getName().getString(), true, category, count);
+        return dumpJournal(source, id, person.entity().getName().getString(), true, category, count);
     }
 
     /**
@@ -842,15 +845,15 @@ public final class AutarkiaCommands {
      * the store is designed around), and "claimed blocks" is the transient dismissal index.
      */
     private static int knowledgeList(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        AgentId id = person.getAgentId();
+        AgentId id = person.agentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
         AgentKnowledge knowledge = Knowledges.of(source.getServer()).forPerson(id);
-        String name = person.getName().getString();
+        String name = person.entity().getName().getString();
         if (knowledge.size() == 0) {
             source.sendSuccess(() -> Component.literal(name + " remembers no POIs yet.")
                     .withStyle(ChatFormatting.GRAY), false);
@@ -871,8 +874,8 @@ public final class AutarkiaCommands {
     }
 
     /** One belief line: {@code TREE (10, 64, 8) - 14 blocks away, 4 logs, seen 32s ago, partial}. */
-    private static String formatPoi(Person person, PoiMemory memory, long now) {
-        double distance = Math.sqrt(person.distanceToSqr(
+    private static String formatPoi(AgentBody person, PoiMemory memory, long now) {
+        double distance = Math.sqrt(person.entity().distanceToSqr(
                 memory.anchor().x() + 0.5, memory.anchor().y() + 0.5, memory.anchor().z() + 0.5));
         long ageSeconds = memory.age(now) / 20;
         String age = ageSeconds < 2 ? "just now"
@@ -899,14 +902,14 @@ public final class AutarkiaCommands {
      * a player source; "false" works from anywhere).
      */
     private static int knowledgeView(CommandSourceStack source, boolean on) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        AgentId id = person.getAgentId();
+        AgentId id = person.agentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        String name = person.getName().getString();
+        String name = person.entity().getName().getString();
         if (on) {
             ServerPlayer player = source.getPlayer();
             if (player == null) {
@@ -934,14 +937,14 @@ public final class AutarkiaCommands {
      * here, not particles over there.
      */
     private static int knowledgeViewShow(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
-        AgentId id = person.getAgentId();
+        AgentId id = person.agentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        String name = person.getName().getString();
+        String name = person.entity().getName().getString();
         UUID viewer = KnowledgeViewer.viewer(source.getServer(), id);
         if (viewer == null) {
             source.sendSuccess(() -> Component.literal(name + "'s knowledge view is false.")
@@ -949,7 +952,7 @@ public final class AutarkiaCommands {
             return 0;
         }
         source.sendSuccess(() -> Component.literal(name + "'s knowledge view is true — "
-                        + "particles mark " + person.getGender().possessive() + " beliefs, "
+                        + "particles mark " + person.pronouns().possessive() + " beliefs, "
                         + "discoveries land in " + describeViewer(source, viewer))
                 .withStyle(ChatFormatting.GREEN), false);
         return 1;
@@ -967,15 +970,15 @@ public final class AutarkiaCommands {
 
     /** Prints every non-empty slot of the resolved Person's inventory (storage + equipment). */
     private static int invList(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         List<Inventory.Entry> occupied = person.inventory().occupied();
         if (occupied.isEmpty()) {
-            source.sendSuccess(() -> Component.literal(person.getName().getString() + " carries nothing.")
+            source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " carries nothing.")
                     .withStyle(ChatFormatting.GRAY), false);
             return 0;
         }
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " carries:")
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " carries:")
                 .withStyle(ChatFormatting.AQUA), false);
         for (Inventory.Entry entry : occupied) {
             String line = "  " + slotLabel(entry.slot()) + "  " + entry.stack().id() + " x" + entry.stack().count();
@@ -987,7 +990,7 @@ public final class AutarkiaCommands {
     /** Adds {@code count} of the given item to the resolved Person, reporting anything that didn't fit. */
     private static int invGive(CommandSourceStack source, ItemInput input, int count)
             throws CommandSyntaxException {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         // A count-1 template never trips the item argument's stack-size guard; the real count is set
         // in the core layer, which splits it across slots at the item's own cap. Components (from any
@@ -996,7 +999,7 @@ public final class AutarkiaCommands {
                 ItemStacks.templateOf(input, source.registryAccess());
         dev.luizloyola.anima.core.inv.ItemStack remainder = person.inventory().add(template.withCount(count));
         int placed = count - remainder.count();
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " +" + placed + " "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " +" + placed + " "
                 + template.id() + (remainder.isEmpty() ? "" : "  (" + remainder.count() + " didn't fit)"))
                 .withStyle(ChatFormatting.AQUA), false);
         return placed;
@@ -1008,7 +1011,7 @@ public final class AutarkiaCommands {
      * {@code nav goto} is for walking.
      */
     private static int invEquip(CommandSourceStack source, ItemInput input) throws CommandSyntaxException {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         // The template resolves the kind + its natural slot only; the piece actually equipped is
         // pulled from storage below, so its own components (enchants, damage, …) are preserved.
@@ -1026,12 +1029,12 @@ public final class AutarkiaCommands {
         Inventory inv = person.inventory();
         dev.luizloyola.anima.core.inv.ItemStack piece = inv.takeOne(want.id());
         if (piece.isEmpty()) {
-            source.sendFailure(Component.literal(person.getName().getString() + " has no " + want.id() + " to equip."));
+            source.sendFailure(Component.literal(person.entity().getName().getString() + " has no " + want.id() + " to equip."));
             return 0;
         }
         dev.luizloyola.anima.core.inv.ItemStack displaced = placeEquipment(inv, slot, piece);
         if (!displaced.isEmpty()) inv.add(displaced); // whatever was worn there goes back to storage
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " equipped "
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " equipped "
                 + want.id() + " (" + slot.getName() + ")").withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
@@ -1060,10 +1063,10 @@ public final class AutarkiaCommands {
     }
 
     private static int invClear(CommandSourceStack source) {
-        Person person = resolve(source);
+        AgentBody person = resolveBody(source);
         if (person == null) return 0;
         person.inventory().clear();
-        source.sendSuccess(() -> Component.literal(person.getName().getString() + " inventory cleared.")
+        source.sendSuccess(() -> Component.literal(person.entity().getName().getString() + " inventory cleared.")
                 .withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
@@ -1188,6 +1191,23 @@ public final class AutarkiaCommands {
      * that one is {@link #resolve}'s job. {@code isAlive} is filtered on, like {@link Persons#loaded}:
      * a corpse would otherwise be the nearest thing to a console standing where they died.
      */
+    /** The nearest live agent body of any kind — the generic half of the resolve ladder. */
+    private static @Nullable AgentBody nearestBody(CommandSourceStack source) {
+        ServerLevel level = source.getLevel();
+        Vec3 origin = source.getPosition();
+        AABB box = AABB.ofSize(origin, NEAREST_RADIUS * 2, NEAREST_RADIUS * 2, NEAREST_RADIUS * 2);
+        AgentBody nearest = level.getEntitiesOfClass(LivingEntity.class, box,
+                        e -> e.isAlive() && e instanceof AgentBody).stream()
+                .min((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
+                .map(AgentBody.class::cast)
+                .orElse(null);
+        if (nearest == null) {
+            source.sendFailure(Component.literal(
+                    "Nobody with a mind within " + (int) NEAREST_RADIUS + " blocks."));
+        }
+        return nearest;
+    }
+
     private static Person nearest(CommandSourceStack source) {
         ServerLevel level = source.getLevel();
         Vec3 origin = source.getPosition();
@@ -1216,24 +1236,43 @@ public final class AutarkiaCommands {
      * <p>Both non-nearest paths fail loudly rather than falling through — a pin whose entity is no
      * longer loaded, and an {@code as} target no longer alive (a body that died mid-chain).
      */
-    private static @Nullable Person resolve(CommandSourceStack source) {
-        if (source.getEntity() instanceof Person self) {
-            if (!self.isAlive()) {
+    /**
+     * The target for an agent-scoped command, in precedence order: the body this command runs
+     * <em>as</em>, else the source's pin, else the nearest body. Reports the reason and returns
+     * {@code null} when nothing resolves.
+     */
+    private static @Nullable AgentBody resolveBody(CommandSourceStack source) {
+        if (source.getEntity() instanceof AgentBody self) {
+            if (!self.entity().isAlive()) {
                 source.sendFailure(Component.literal(
-                        self.getName().getString() + " is dead — nothing left to command."));
+                        self.entity().getName().getString() + " is dead — nothing left to command."));
                 return null;
             }
             return self;
         }
         Optional<AgentId> pin = AgentSelection.pinned(source);
-        if (pin.isEmpty()) return nearest(source);
+        if (pin.isEmpty()) return nearestBody(source);
         AgentId id = pin.get();
-        Person live = findLoaded(source.getServer(), id);
+        AgentBody live = AgentBodies.findLoaded(source.getServer(), id);
         if (live == null) {
             source.sendFailure(Component.literal("Selected " + label(source.getServer(), id)
                     + " isn't loaded — /autarkia select clear, or select someone else."));
         }
         return live;
+    }
+
+    /** {@link #resolveBody} narrowed to a Person, for the commands that are about being one. */
+    private static @Nullable Person resolve(CommandSourceStack source) {
+        AgentBody body = resolveBody(source);
+        if (body == null) {
+            return null;
+        }
+        if (body instanceof Person person) {
+            return person;
+        }
+        source.sendFailure(Component.literal(body.entity().getName().getString()
+                + " is not a Person — that command is Autarkia's, not Anima's."));
+        return null;
     }
 
     /** Suggests every loaded Person's name (quoted when it has spaces) and short id, so {@code select}
@@ -1247,7 +1286,7 @@ public final class AutarkiaCommands {
         MinecraftServer server = ctx.getSource().getServer();
         PersonDirectory directory = PersonDirectory.get(server);
         Stream<String> tokens = loadedPersons(server).stream().flatMap(person -> {
-            AgentId id = person.getAgentId();
+            AgentId id = person.agentId();
             if (id == null) return Stream.empty();
             String shortId = shortId(id);
             return directory.nameOf(id)
@@ -1370,11 +1409,11 @@ public final class AutarkiaCommands {
         loaded.stream()
                 .sorted((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .forEach(person -> {
-                    AgentId id = person.getAgentId();
+                    AgentId id = person.agentId();
                     boolean isPinned = id != null && pin.map(id::equals).orElse(false);
                     String name = id == null ? "<spawning>" : directory.nameOf(id).orElse("<unknown>");
                     String dimension = person.level().dimension().identifier().getPath();
-                    double distance = Math.sqrt(person.distanceToSqr(origin));
+                    double distance = Math.sqrt(person.entity().distanceToSqr(origin));
                     String line = String.format(Locale.ROOT, "%s%s  %s  %s  %.1fm",
                             isPinned ? "✓ " : "  ", name, id == null ? "-" : shortId(id), dimension, distance);
                     source.sendSuccess(() -> Component.literal(line)
@@ -1390,7 +1429,7 @@ public final class AutarkiaCommands {
         AABB search = player.getBoundingBox().expandTowards(player.getViewVector(1.0F).scale(NEAREST_RADIUS)).inflate(1.0);
         EntityHitResult hit = ProjectileUtil.getEntityHitResult(
                 player, eye, far, search,
-                e -> e instanceof Person person && person.isAlive(), // never pin a corpse
+                e -> e instanceof Person person && person.entity().isAlive(), // never pin a corpse
                 NEAREST_RADIUS * NEAREST_RADIUS);
         return hit != null && hit.getEntity() instanceof Person person ? person : null;
     }
@@ -1423,7 +1462,7 @@ public final class AutarkiaCommands {
     private static @Nullable AgentId sourceIdentity(CommandSourceStack source) {
         Entity self = source.getEntity();
         if (self instanceof Person person) {
-            AgentId id = person.getAgentId();
+            AgentId id = person.agentId();
             if (id == null) {
                 source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             }
@@ -1561,7 +1600,7 @@ public final class AutarkiaCommands {
     }
 
     private static void report(CommandSourceStack source, Person person) {
-        AgentId id = person.getAgentId();
+        AgentId id = person.agentId();
         if (id == null) {
             source.sendSuccess(() -> Component.literal("Person not yet identified (spawning).")
                     .withStyle(ChatFormatting.GRAY), false);
