@@ -237,6 +237,28 @@ class BeingSensorCoreTest {
     }
 
     @Test
+    void eyesCannotSeeBehindEvenAtTouchRange() {
+        // The old touch-range pass called a sneaker at arm's length behind "unmissable
+        // regardless". Sneaking is silent (vanilla omits the step event), so every channel is
+        // dark here.
+        world.addPerson("Backstabber", new Pos(0, 64, -1), 1.0, Being.Activity.IDLE);
+        List<BeingEvent> events = tickN(30);
+
+        assertTrue(events.isEmpty(), "behind is behind, at any range");
+        assertTrue(sensor.beings().isEmpty());
+        assertEquals(0, world.rayChecks, "outside the cone: not even a ray is spent");
+    }
+
+    @Test
+    void touchRangeInFrontIsSeenAsAlways() {
+        world.addPerson("Nose2Nose", new Pos(0, 64, 1), 1.0, Being.Activity.IDLE);
+        List<BeingEvent> events = tickN(2);
+
+        assertEquals(1, events.stream().filter(e -> e.type() == BeingEvent.Type.SPOTTED).count());
+        assertEquals(Being.Awareness.SEEN, only().awareness());
+    }
+
+    @Test
     void theConeHasAnUpAndDown() {
         world.addPerson("Hoverer", new Pos(0, 74, 3), 10.4, Being.Activity.IDLE);
         List<BeingEvent> level = tickN(15);

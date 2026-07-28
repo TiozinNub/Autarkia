@@ -598,16 +598,16 @@ public final class BeingSensorCore {
 
     /**
      * The view volume: the horizontal cone (yaw against half of {@link #coneDegrees()}) PLUS a
-     * ±{@link #verticalHalfDegrees()} elevation band around gaze pitch. Someone within arm's
-     * touch is trivially in view. Minecraft convention: yaw 0° = +Z, pitch −90° = straight up.
+     * ±{@link #verticalHalfDegrees()} elevation band around gaze pitch, so someone overhead is
+     * unseen until they crane up. There is no touch-range pass — eyes cannot see
+     * behind at any distance, and a sneaker at arm's length behind stays unseen; a non-sneaking
+     * one is still noticed by ear. Yaw/pitch follow the Minecraft convention (yaw 0° = +Z;
+     * pitch −90° = straight up).
      */
     private static boolean inCone(Pos feet, double yawDegrees, double pitchDegrees, Pos target) {
         double dx = target.x() - feet.x();
         double dy = target.y() - feet.y();
         double dz = target.z() - feet.z();
-        if (dx * dx + dy * dy + dz * dz < 2.25) {
-            return true; // within touch — no meaningful bearing, and unmissable regardless
-        }
         double horizontal = Math.sqrt(dx * dx + dz * dz);
         double elevation = Math.toDegrees(Math.atan2(dy, horizontal));
         if (Math.abs(elevation + pitchDegrees) > verticalHalfDegrees()) {
