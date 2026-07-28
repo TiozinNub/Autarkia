@@ -3,7 +3,7 @@ package dev.luizloyola.autarkia.mod.item;
 import dev.luizloyola.anima.compat.Players;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.agent.AgentId;
-import dev.luizloyola.autarkia.mod.command.PersonSelection;
+import dev.luizloyola.anima.mod.command.AgentSelection;
 import dev.luizloyola.autarkia.mod.debug.DebugLayer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -25,10 +25,10 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * A development tool that <em>selects</em> a {@link Person}: right-clicking one pins them to the
- * player's {@link PersonSelection} slot — the same slot {@code /autarkia select} uses. The pin is
- * per-player (not per stack) and lives on the server, mirrored to the client only for the
- * selection glow. Right-clicking a block then sends the pinned person walking there (see
- * {@link #useOn}). The wand itself is stateless — it carries no data.
+ * using player's {@link AgentSelection} slot — the slot {@code /autarkia select} uses. The pin is
+ * per-player (not per stack) and server-side, mirrored to the client only for the selection glow.
+ * Right-clicking a block sends the pinned person walking there (see {@link #useOn}). The item
+ * itself is stateless.
  */
 public class DebugWandItem extends Item {
     public DebugWandItem(Properties properties) {
@@ -43,7 +43,7 @@ public class DebugWandItem extends Item {
         if (level.isClientSide() || !(context.getPlayer() instanceof ServerPlayer player)) {
             return InteractionResult.SUCCESS;
         }
-        AgentId selected = PersonSelection.pinned(player).orElse(null);
+        AgentId selected = AgentSelection.pinned(player).orElse(null);
         if (selected == null) {
             Players.overlay(player, Component.translatable("item.autarkia.debug_wand.no_selection"));
             return InteractionResult.SUCCESS;
@@ -77,14 +77,15 @@ public class DebugWandItem extends Item {
             }
             return InteractionResult.SUCCESS;
         }
-        // The pin lands in the player's PersonSelection slot, which mirrors it to the client for the glow.
+        // Mutate only on the server (the ServerPlayer cast implies server); the client returns
+        // SUCCESS to predict the arm swing. The pin mirrors to the client for the glow.
         if (player instanceof ServerPlayer serverPlayer) {
             AgentId id = person.getAgentId();
             if (id == null) {
                 Players.overlay(serverPlayer,
                         Component.translatable("item.autarkia.debug_wand.no_identity"));
             } else {
-                PersonSelection.pin(serverPlayer, id);
+                AgentSelection.pin(serverPlayer, id);
                 Players.overlay(serverPlayer,
                         Component.translatable("item.autarkia.debug_wand.selected", person.getName()));
             }
@@ -107,9 +108,9 @@ public class DebugWandItem extends Item {
             return;
         }
         MinecraftServer server = player.level().getServer();
-        boolean reselected = !id.equals(PersonSelection.pinned(player).orElse(null));
+        boolean reselected = !id.equals(AgentSelection.pinned(player).orElse(null));
         if (reselected) {
-            PersonSelection.pin(player, id);
+            AgentSelection.pin(player, id);
         }
         // The cycle only CONTINUES from a single showing layer: with several up there is no
         // "current rung" to advance from, so the wand restarts at the first rather than guessing.

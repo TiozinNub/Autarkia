@@ -11,7 +11,7 @@ import dev.luizloyola.anima.core.nav.Path;
 import dev.luizloyola.anima.core.nav.Waypoint;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.mod.brain.Knowledges;
-import dev.luizloyola.autarkia.mod.command.PersonSelection;
+import dev.luizloyola.anima.mod.command.AgentSelection;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.anima.mod.nav.Navigator;
@@ -38,17 +38,17 @@ import org.jspecify.annotations.Nullable;
 /**
  * The in-world debug view, server half: who is watching what, and the snapshot that feeds it.
  *
- * <p>This viewer DRAWS rather than narrating, and drawing happens on the client, so the facts must
- * travel: one {@link DebugViewPayload} per watching player every {@link #SEND_INTERVAL_TICKS},
- * carrying only what the client cannot see for itself.
+ * <p>Drawing happens on the client, so the facts have to travel: one {@link DebugViewPayload} per
+ * watching player every {@link #SEND_INTERVAL_TICKS}, carrying only what the client cannot already
+ * see for itself.
  *
- * <p>Layers are switched per PLAYER and the Person drawn is whoever that player has pinned in
- * {@code PersonSelection} (the slot the debug wand and {@code /autarkia select} share), so there is
- * no second notion of "who am I debugging" to fall out of sync.
+ * <p><b>The view follows the selection.</b> Layers are switched per PLAYER and the Person drawn is
+ * whoever that player has pinned in {@code AgentSelection}, so there is no second notion of who is
+ * being debugged to fall out of sync.
  *
- * <p>All layers off, or an empty or unloaded pin, sends exactly one
- * {@link DebugViewPayload#clear()} and then silence; without that edge the client would redraw its
- * last snapshot forever. Transient state, one map per server, gone on stop.
+ * <p>All layers off, or an empty or unloaded pin, gets exactly one
+ * {@link DebugViewPayload#clear()} and then silence, or the client redraws its last snapshot
+ * forever. Transient debug state, one map per server, gone on stop.
  */
 public final class DebugView {
     private DebugView() {}
@@ -169,7 +169,7 @@ public final class DebugView {
      */
     private static DebugViewPayload snapshot(
             MinecraftServer server, ServerPlayer player, EnumSet<DebugLayer> layers) {
-        AgentId id = PersonSelection.pinned(player).orElse(null);
+        AgentId id = AgentSelection.pinned(player).orElse(null);
         Person person = id == null ? null : Persons.findLoaded(server, id);
         if (person == null) {
             return DebugViewPayload.clear();

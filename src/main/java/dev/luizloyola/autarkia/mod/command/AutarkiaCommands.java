@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.command;
 
+import dev.luizloyola.anima.mod.command.AgentSelection;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -107,7 +108,7 @@ import java.util.stream.Stream;
  * <em>as</em> (one line, every Person in turn), else the source's pin, else the nearest.
  * {@code select} pins by name or short-id, or by what a player is looking at, unpinning when they
  * look at nobody; {@code list} enumerates the loaded Persons, since names are not unique. Pins live
- * in {@link PersonSelection} — in memory, per source, gone on restart.
+ * in {@link AgentSelection} — in memory, per source, gone on restart.
  */
 public final class AutarkiaCommands {
     private AutarkiaCommands() {}
@@ -1224,7 +1225,7 @@ public final class AutarkiaCommands {
             }
             return self;
         }
-        Optional<AgentId> pin = PersonSelection.pinned(source);
+        Optional<AgentId> pin = AgentSelection.pinned(source);
         if (pin.isEmpty()) return nearest(source);
         AgentId id = pin.get();
         Person live = findLoaded(source.getServer(), id);
@@ -1297,7 +1298,7 @@ public final class AutarkiaCommands {
                 .min((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .orElseThrow();
         AgentId id = chosen.getAgentId();
-        PersonSelection.pin(source, id);
+        AgentSelection.pin(source, id);
         source.sendSuccess(() -> Component.literal("Selected " + label(server, id)
                 + (count > 1 ? " (nearest of " + count + " matches)" : "")).withStyle(ChatFormatting.AQUA), false);
         return 1;
@@ -1324,14 +1325,14 @@ public final class AutarkiaCommands {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        PersonSelection.pin(source, id);
+        AgentSelection.pin(source, id);
         source.sendSuccess(() -> Component.literal("Selected " + label(source.getServer(), id))
                 .withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 
     private static int selectClear(CommandSourceStack source) {
-        if (PersonSelection.clear(source)) {
+        if (AgentSelection.clear(source)) {
             source.sendSuccess(() -> Component.literal("Selection cleared — commands use the nearest Person again.")
                     .withStyle(ChatFormatting.AQUA), false);
             return 1;
@@ -1341,7 +1342,7 @@ public final class AutarkiaCommands {
     }
 
     private static int selectShow(CommandSourceStack source) {
-        Optional<AgentId> pin = PersonSelection.pinned(source);
+        Optional<AgentId> pin = AgentSelection.pinned(source);
         if (pin.isEmpty()) {
             source.sendSuccess(() -> Component.literal("No selection — commands use the nearest Person.")
                     .withStyle(ChatFormatting.GRAY), false);
@@ -1365,7 +1366,7 @@ public final class AutarkiaCommands {
             source.sendSuccess(() -> Component.literal("No Persons are loaded.").withStyle(ChatFormatting.GRAY), false);
             return 0;
         }
-        Optional<AgentId> pin = PersonSelection.pinned(source);
+        Optional<AgentId> pin = AgentSelection.pinned(source);
         loaded.stream()
                 .sorted((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .forEach(person -> {

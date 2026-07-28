@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.client;
 
+import dev.luizloyola.anima.mod.client.DebugGlowClient;
 import dev.luizloyola.autarkia.mod.net.DebugViewPayload;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;

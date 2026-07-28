@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.item;
 
+import dev.luizloyola.anima.mod.command.AgentSelection;
 import java.util.function.Function;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponents;
@@ -14,10 +15,10 @@ public final class ModItems {
     private ModItems() {}
 
     /**
-     * Debug wand — a development tool for probing NPCs. A vanilla stick model
-     * ({@code minecraft:item/stick}) with a forced enchantment glint so it stands out in the
-     * inventory. Right-clicking a {@code Person} selects it (see {@link DebugWandItem}); the
-     * selection is per-player in {@code PersonSelection}, not on the stack.
+     * Debug wand — a development tool for probing NPCs. Its client model points at
+     * {@code minecraft:item/stick}, with a forced enchantment glint so it stands out. Right-clicking
+     * a {@code Person} selects it ({@link DebugWandItem}); the selection is per-player, in
+     * {@code AgentSelection}, not on the stack — the item is stateless.
      */
     public static final Item DEBUG_WAND = register("debug_wand",
             props -> new DebugWandItem(props.component(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)));

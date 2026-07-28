@@ -22,7 +22,7 @@ import dev.luizloyola.autarkia.core.tree.WaterRule;
 import net.minecraft.core.particles.ParticleTypes;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
-import dev.luizloyola.autarkia.mod.net.DebugGlowSync;
+import dev.luizloyola.anima.mod.net.DebugGlowSync;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.minecraft.world.InteractionHand;

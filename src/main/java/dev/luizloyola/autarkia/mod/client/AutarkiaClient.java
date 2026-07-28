@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.client;
 
+import dev.luizloyola.anima.mod.client.DebugGlowClient;
 import dev.luizloyola.autarkia.compat.client.inv.PersonInventoryScreen;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.client.render.PersonRenderer;
