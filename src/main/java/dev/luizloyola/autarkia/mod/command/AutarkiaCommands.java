@@ -603,7 +603,7 @@ public final class AutarkiaCommands {
                 .withStyle(ChatFormatting.AQUA), false);
         String pronoun = person.getGender().object();
         for (Being being : beings) {
-            String kind = being.kind() == Being.Kind.PERSON || being.kind() == Being.Kind.UNKNOWN
+            String kind = being.kind() == Being.Kind.AGENT || being.kind() == Being.Kind.UNKNOWN
                     ? "" : " [" + being.kind().name().toLowerCase(Locale.ROOT)
                             + (being.aggressive() ? "!" : "") + "]";
             String line = String.format(Locale.ROOT, "%s%s (%d, %d, %d) - %.1f blocks away, %s%s",
