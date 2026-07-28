@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.client;
 
-import dev.luizloyola.autarkia.compat.client.debug.GizmoFrame;
+import dev.luizloyola.anima.compat.client.debug.GizmoFrame;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.nav.MoveType;

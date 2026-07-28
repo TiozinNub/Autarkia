@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.compat.sense.LevelProbe;
+import dev.luizloyola.anima.compat.sense.LevelProbe;
 import dev.luizloyola.anima.core.brain.knowledge.HerdNoter;
 import dev.luizloyola.anima.core.brain.knowledge.SenseEvent;
 import dev.luizloyola.anima.core.brain.sense.Being;

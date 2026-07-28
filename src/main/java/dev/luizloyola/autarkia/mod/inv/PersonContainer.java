@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.inv;
 
-import dev.luizloyola.autarkia.compat.inv.ItemStacks;
+import dev.luizloyola.anima.compat.inv.ItemStacks;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.HolderLookup;

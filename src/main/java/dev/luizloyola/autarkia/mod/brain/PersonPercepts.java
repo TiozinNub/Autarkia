@@ -1,8 +1,8 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.compat.inv.CookedForms;
-import dev.luizloyola.autarkia.compat.inv.FoodValues;
-import dev.luizloyola.autarkia.compat.sense.LevelProbe;
+import dev.luizloyola.anima.compat.inv.CookedForms;
+import dev.luizloyola.anima.compat.inv.FoodValues;
+import dev.luizloyola.anima.compat.sense.LevelProbe;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.Drop;

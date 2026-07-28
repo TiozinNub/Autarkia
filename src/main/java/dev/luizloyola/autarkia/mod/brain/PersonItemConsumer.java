@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.compat.inv.FoodValues;
-import dev.luizloyola.autarkia.compat.inv.ItemStacks;
+import dev.luizloyola.anima.compat.inv.FoodValues;
+import dev.luizloyola.anima.compat.inv.ItemStacks;
 import dev.luizloyola.anima.core.brain.act.ConsumeState;
 import dev.luizloyola.anima.core.brain.act.ItemConsumer;
 import dev.luizloyola.anima.core.inv.Inventory;

@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.nav;
 
-import dev.luizloyola.autarkia.compat.nav.WorldSnapshot;
+import dev.luizloyola.anima.compat.nav.WorldSnapshot;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.AgentProfile;
 import dev.luizloyola.anima.core.nav.CellNeed;

@@ -2,7 +2,7 @@ package dev.luizloyola.autarkia.mod.social;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import dev.luizloyola.autarkia.compat.SavedDatas;
+import dev.luizloyola.anima.compat.SavedDatas;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.social.ContactBook;
 import java.util.ArrayList;

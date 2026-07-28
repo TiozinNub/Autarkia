@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.entity;
 
-import dev.luizloyola.autarkia.compat.inv.Inventories;
-import dev.luizloyola.autarkia.compat.inv.ItemStacks;
+import dev.luizloyola.anima.compat.inv.Inventories;
+import dev.luizloyola.anima.compat.inv.ItemStacks;
 import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.log.Category;

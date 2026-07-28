@@ -2,7 +2,7 @@ package dev.luizloyola.autarkia.mod.brain;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import dev.luizloyola.autarkia.compat.SavedDatas;
+import dev.luizloyola.anima.compat.SavedDatas;
 import dev.luizloyola.anima.core.brain.knowledge.KnowledgeRegistry;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;

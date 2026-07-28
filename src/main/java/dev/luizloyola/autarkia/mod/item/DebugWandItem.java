@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.item;
 
-import dev.luizloyola.autarkia.compat.Players;
+import dev.luizloyola.anima.compat.Players;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.command.PersonSelection;
