@@ -11,12 +11,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * The idle call becomes hearable: {@code playAmbientSound} is the one reliable "this mob called"
- * point (vanilla plays it as a plain sound — no game event, verified in 26.1.2 bytecode), so it
- * emits the {@code autarkia:being_voice} event for Persons' ears. A voice names its species —
- * the identification ladder's middle rung ("if an idle sound is played close enough, they
- * detect what exact mob that is" — decision: Luiz). Species without an ambient sound (squid)
- * and silenced mobs are skipped: a voice that made no sound identifies nothing.
+ * The idle call becomes hearable: {@code playAmbientSound} is vanilla's one plain-sound "this mob
+ * called" point (no game event, verified in 26.1.2 bytecode), so it emits
+ * {@code anima:being_voice} for Persons' ears. A voice names its species — the identification
+ * ladder's middle rung (decision: Luiz). Silenced mobs and species with no ambient sound (squid)
+ * are skipped: a voice that made no sound identifies nothing.
  */
 @Mixin(Mob.class)
 abstract class MobAmbientSoundMixin {
