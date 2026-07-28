@@ -5,10 +5,10 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
-import dev.luizloyola.autarkia.core.brain.instinct.Danger;
-import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
-import dev.luizloyola.autarkia.core.config.Config;
-import dev.luizloyola.autarkia.core.config.Knob;
+import dev.luizloyola.anima.core.brain.instinct.Danger;
+import dev.luizloyola.anima.core.config.ConfigValues;
+import dev.luizloyola.anima.core.config.Config;
+import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -25,18 +25,17 @@ import java.util.Set;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
- * The JSON face of {@link AutarkiaConfig} — {@code config/autarkia.json}, read at startup and on
- * {@code /autarkia config reload}, written back whenever a knob changes. The shape is derived from
- * {@link Knob}: one object per {@link Knob#section()}, one entry per {@link Knob#leaf()}.
+ * The JSON face of {@link ConfigValues} — {@code config/autarkia.json}, read at startup and on
+ * {@code /autarkia config reload}, written back whenever a knob changes. Its shape derives from
+ * {@link Knob} (one object per section, one entry per leaf), so a new tunable needs no code here.
  *
- * <p><b>Self-documenting.</b> Each value is preceded by a {@code "// name"} string holding the
- * knob's own doc sentence — JSON has no comment syntax, but a key starting with {@code //} is
- * skipped on read, which keeps the parser dependency-free. Rewriting refreshes those lines from the
- * code.
+ * <p><b>Self-documenting:</b> each value is preceded by a {@code "// name"} string holding the
+ * knob's own doc sentence. JSON has no comment syntax, but a key starting with {@code //} is
+ * skipped on read, which keeps the parser dependency-free and the documentation from drifting.
  *
- * <p><b>Nothing here throws at the caller.</b> A missing file is written from the defaults; a
- * malformed one is reported and the defaults used, leaving the operator's file untouched. Only
- * {@link #save} surfaces I/O failure, and only as a log line.
+ * <p><b>Nothing here throws at the caller:</b> a missing file is written from the defaults, a
+ * malformed one is reported and the defaults used with the operator's file untouched, and only
+ * {@link #save} surfaces I/O failure — as a log line.
  */
 public final class ConfigFile {
 
@@ -70,9 +69,9 @@ public final class ConfigFile {
     public static List<String> reload() {
         Path path = path();
         if (!Files.exists(path)) {
-            Config.install(AutarkiaConfig.DEFAULTS);
+            Config.install(ConfigValues.DEFAULTS);
             Danger.reset();
-            save(AutarkiaConfig.DEFAULTS);
+            save(ConfigValues.DEFAULTS);
             AutarkiaMod.LOGGER.info("Autarkia config: wrote defaults to {}", path);
             return List.of();
         }
@@ -110,7 +109,7 @@ public final class ConfigFile {
         problems.addAll(unknownKeys(root));
         problems.addAll(loadDanger(root));
 
-        AutarkiaConfig.Loaded loaded = AutarkiaConfig.from(supplied);
+        ConfigValues.Loaded loaded = ConfigValues.from(supplied);
         problems.addAll(loaded.problems());
         Config.install(loaded.config());
 
@@ -124,7 +123,7 @@ public final class ConfigFile {
      * Writes {@code config} out, replacing the file. Atomic where the filesystem allows it, so a
      * crash mid-write cannot leave a truncated config behind. Returns false (and logs) on failure.
      */
-    public static boolean save(AutarkiaConfig config) {
+    public static boolean save(ConfigValues config) {
         Path path = path();
         try {
             Files.createDirectories(path.getParent());
@@ -144,7 +143,7 @@ public final class ConfigFile {
     }
 
     /** The exact text {@link #save} writes — pulled out so a test can check it round-trips. */
-    public static String render(AutarkiaConfig config) {
+    public static String render(ConfigValues config) {
         JsonObject root = new JsonObject();
         for (Knob knob : Knob.values()) {
             JsonObject section = root.getAsJsonObject(knob.section());
@@ -222,7 +221,7 @@ public final class ConfigFile {
                 + "the file was left untouched so you can fix it and run "
                 + "/autarkia config reload";
         AutarkiaMod.LOGGER.error("Autarkia config: {} ({})", message, path);
-        Config.install(AutarkiaConfig.DEFAULTS);
+        Config.install(ConfigValues.DEFAULTS);
         return List.of(message);
     }
 

@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.client;
 
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -30,10 +30,10 @@ public final class DebugGlow {
             return;
         }
         // Re-evaluated every tick, so the outline clears itself the instant the pin is dropped.
-        PersonId selected = DebugGlowClient.get();
+        AgentId selected = DebugGlowClient.get();
         for (Entity entity : level.entitiesForRendering()) {
             if (entity instanceof Person person) {
-                person.setForcedGlow(selected != null && selected.equals(person.getPersonId()));
+                person.setForcedGlow(selected != null && selected.equals(person.getAgentId()));
             }
         }
     }

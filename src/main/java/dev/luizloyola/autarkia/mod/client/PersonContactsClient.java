@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.client;
 
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.net.ContactsPayload;
 import java.util.Map;
 import java.util.UUID;
@@ -39,12 +39,12 @@ public final class PersonContactsClient {
     }
 
     /** Whether this player has been told who that is. A null id is a Person mid-spawn: not yet. */
-    public static boolean knows(@Nullable PersonId id) {
+    public static boolean knows(@Nullable AgentId id) {
         return id != null && NAMES.containsKey(id.value());
     }
 
     /** What this player calls them, or {@code null} if they have never been introduced. */
-    public static @Nullable String nameOf(@Nullable PersonId id) {
+    public static @Nullable String nameOf(@Nullable AgentId id) {
         return id == null ? null : NAMES.get(id.value());
     }
 }

@@ -7,10 +7,10 @@ import dev.isxander.yacl3.api.YetAnotherConfigLib;
 import dev.isxander.yacl3.api.controller.DoubleFieldControllerBuilder;
 import dev.isxander.yacl3.api.controller.IntegerFieldControllerBuilder;
 import dev.isxander.yacl3.api.controller.TickBoxControllerBuilder;
-import dev.luizloyola.autarkia.core.brain.instinct.Danger;
-import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
-import dev.luizloyola.autarkia.core.config.Config;
-import dev.luizloyola.autarkia.core.config.Knob;
+import dev.luizloyola.anima.core.brain.instinct.Danger;
+import dev.luizloyola.anima.core.config.ConfigValues;
+import dev.luizloyola.anima.core.config.Config;
+import dev.luizloyola.anima.core.config.Knob;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,21 +18,20 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /**
- * The optional YACL config screen — a category per {@link Knob#section()}, an option per knob, built
- * from the enum.
+ * The optional YACL config screen — one category per {@link Knob#section()}, one option per knob,
+ * built from the enum so it cannot fall out of step with the file or the command.
  *
- * <p><b>YACL is used here for the GUI only.</b> {@link ConfigFile} keeps ownership of
- * {@code config/autarkia.json} for three things YACL's config API does not give: an atomic
- * tmp-and-rename write, unknown-key reporting, and the regenerated {@code "// name"} doc lines.
- * Values live in the immutable {@link AutarkiaConfig} behind {@link Config}, whose volatile
- * whole-object swap makes a reload safe for the off-thread pathfinder.
+ * <p><b>The GUI only.</b> {@link ConfigFile} keeps ownership of {@code config/autarkia.json} for
+ * its atomic write, unknown-key reporting and regenerated {@code "// name"} doc lines, none of
+ * which YACL's config API gives; values live in {@link ConfigValues} behind {@link Config}, whose
+ * volatile whole-object swap makes a reload safe for the off-thread pathfinder.
  *
  * <p><b>Must not be loaded unless YACL is installed</b> — it names {@code dev.isxander.*} types
- * directly, so touching it without the library is a {@link NoClassDefFoundError}, and
- * {@link AutarkiaModMenu} is the only caller and checks first. {@code modCompileOnly}, never shipped.
+ * directly, so touching it without the library present is a {@link NoClassDefFoundError}.
+ * {@link AutarkiaModMenu} is the only caller and checks first; the library is
+ * {@code modCompileOnly}.
  *
- * <p>Controller ranges only refuse illegal input up front; {@link AutarkiaConfig#with} clamps again
- * on the way in, as it does for a hand-edited file.
+ * <p>Controller ranges are not the guarantee: {@link ConfigValues#with} clamps again on the way in.
  */
 final class YaclConfigScreen {
 
@@ -41,7 +40,7 @@ final class YaclConfigScreen {
 
     /** Builds the screen. Called only via {@link AutarkiaModMenu}, only with YACL present. */
     static Screen create(Screen parent) {
-        AutarkiaConfig live = Config.get();
+        ConfigValues live = Config.get();
 
         // Staged rather than applied per-option: YACL calls the setters as the user edits, and one
         // atomic install on Save keeps a half-applied config from being observed mid-tick.
@@ -76,7 +75,7 @@ final class YaclConfigScreen {
         return builder.save(() -> apply(staged, stagedDanger)).build().generateScreen(parent);
     }
 
-    private static Option<?> option(Knob knob, AutarkiaConfig live, Map<Knob, Double> staged) {
+    private static Option<?> option(Knob knob, ConfigValues live, Map<Knob, Double> staged) {
         // Labels are translation keys with the knob as the fallback, so a knob with no lang entry
         // reads sensibly and any label is overridable without touching Java. The last tooltip line
         // stays literal: the dotted key and the accepted range are what you type into /autarkia
@@ -156,7 +155,7 @@ final class YaclConfigScreen {
 
     /** Install the edited values as one config, then persist — the same path {@code config set} takes. */
     private static void apply(Map<Knob, Double> staged, Map<String, Double> stagedDanger) {
-        AutarkiaConfig updated = Config.get();
+        ConfigValues updated = Config.get();
         for (Map.Entry<Knob, Double> change : staged.entrySet()) {
             updated = updated.with(change.getKey(), change.getValue());
         }

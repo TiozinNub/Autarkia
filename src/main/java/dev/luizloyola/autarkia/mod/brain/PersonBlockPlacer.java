@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.act.BlockPlacer;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.act.BlockPlacer;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;

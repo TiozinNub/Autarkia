@@ -6,7 +6,7 @@ import dev.luizloyola.autarkia.compat.SavedDatas;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
@@ -25,14 +25,14 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.random.RandomGenerator;
 
 /**
- * The world-scoped, persisted store of every person's full identity — the {@code mod}-layer home
- * for the pure {@link PersonRegistry}, on the overworld's data storage
- * ({@code <world>/data/autarkia_persons.dat}). Identity outlives the entity: a loaded
- * {@code Person} holds only a {@link PersonId} and looks up a name here even for someone unloaded
- * or never spawned.
+ * Every person's full identity, world-scoped and persisted — the {@code mod}-layer home for the
+ * pure {@link PersonRegistry}. It lives on the overworld's data storage
+ * ({@code <world>/data/autarkia_persons.dat}), stays resident while the server runs and survives
+ * reloads, so a {@code Person} holding only an {@link AgentId} can name somebody whose entity is
+ * unloaded or was never spawned.
  *
- * <p>The codec lives in {@code mod} rather than {@code core} so the core stays free of
- * DataFixerUpper.
+ * <p>Codec-based (the 26.1 {@link SavedDataType} model); the codec lives in {@code mod} so the core
+ * stays free of DataFixerUpper.
  */
 public final class PersonDirectory extends SavedData {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
@@ -58,7 +58,7 @@ public final class PersonDirectory extends SavedData {
             UUIDUtil.CODEC.fieldOf("id").forGetter(identity -> identity.id().value()),
             Codec.STRING.fieldOf("name").forGetter(PersonIdentity::name),
             APPEARANCE_CODEC.optionalFieldOf("appearance", DEFAULT_APPEARANCE).forGetter(PersonIdentity::appearance)
-    ).apply(entry, (uuid, name, appearance) -> new PersonIdentity(PersonId.of(uuid), name, appearance)));
+    ).apply(entry, (uuid, name, appearance) -> new PersonIdentity(AgentId.of(uuid), name, appearance)));
 
     private static final Codec<PersonDirectory> CODEC = RecordCodecBuilder.create(dir -> dir.group(
             ENTRY_CODEC.listOf().fieldOf("persons").forGetter(PersonDirectory::entries)
@@ -107,18 +107,18 @@ public final class PersonDirectory extends SavedData {
     private PersonIdentity mint(Gender gender, String name, RandomGenerator random) {
         String skin = PersonSkins.random(random, gender);
         ModelType model = gender.choose(ModelType.WIDE, ModelType.SLIM);
-        PersonIdentity identity = registry.create(PersonId.random(), name, new Appearance(gender, skin, model));
+        PersonIdentity identity = registry.create(AgentId.random(), name, new Appearance(gender, skin, model));
         setDirty();
         return identity;
     }
 
-    public Optional<PersonIdentity> find(PersonId id) {
+    public Optional<PersonIdentity> find(AgentId id) {
         return registry.get(id);
     }
 
     /** Dev-tooling removal (the purge command); marks dirty. Real deaths never call this —
      *  identity outlives the entity. */
-    public boolean purge(PersonId id) {
+    public boolean purge(AgentId id) {
         boolean removed = registry.remove(id);
         if (removed) {
             setDirty();
@@ -126,7 +126,7 @@ public final class PersonDirectory extends SavedData {
         return removed;
     }
 
-    public Optional<String> nameOf(PersonId id) {
+    public Optional<String> nameOf(AgentId id) {
         return registry.get(id).map(PersonIdentity::name);
     }
 
@@ -135,8 +135,8 @@ public final class PersonDirectory extends SavedData {
     }
 
     /**
-     * Every registered identity — loaded or not. Enough to reach an offline person's debug journal,
-     * which is {@code PersonId}-keyed and outlives the entity.
+     * Every registered identity, loaded or not — for lookups that must reach a person whose entity
+     * is unloaded or was never spawned, such as reading an offline person's journal by name.
      */
     public List<PersonIdentity> all() {
         return entries();

@@ -2,11 +2,11 @@ package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.compat.inv.FoodValues;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
-import dev.luizloyola.autarkia.core.brain.act.ConsumeState;
-import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
-import dev.luizloyola.autarkia.core.inv.Inventory;
-import dev.luizloyola.autarkia.core.person.FoodValue;
-import dev.luizloyola.autarkia.core.person.Needs;
+import dev.luizloyola.anima.core.brain.act.ConsumeState;
+import dev.luizloyola.anima.core.brain.act.ItemConsumer;
+import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.agent.FoodValue;
+import dev.luizloyola.anima.core.agent.Needs;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
@@ -78,7 +78,7 @@ public final class PersonItemConsumer implements ItemConsumer {
         abort();
         if (slot < 0 || slot >= Inventory.ARMOR_START) return false;
         Inventory inventory = this.person.inventory();
-        dev.luizloyola.autarkia.core.inv.ItemStack stack = inventory.get(slot);
+        dev.luizloyola.anima.core.inv.ItemStack stack = inventory.get(slot);
         if (stack.isEmpty()) return false;
         ItemStack vanilla = ItemStacks.toVanilla(stack, this.person.registryAccess());
         Consumable consumable = vanilla.get(DataComponents.CONSUMABLE);
@@ -89,7 +89,7 @@ public final class PersonItemConsumer implements ItemConsumer {
         if (food != null && !canEat(food.canAlwaysEat())) return false;
         if (slot >= Inventory.MAIN_START) {
             int hand = Inventory.HOTBAR_START + inventory.selectedSlot();
-            dev.luizloyola.autarkia.core.inv.ItemStack displaced = inventory.get(hand);
+            dev.luizloyola.anima.core.inv.ItemStack displaced = inventory.get(hand);
             inventory.set(hand, stack);
             inventory.set(slot, displaced);
         } else {

@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.board.SiteClaims;
+import dev.luizloyola.anima.core.brain.board.SiteClaims;
 import java.util.HashMap;
 import java.util.Map;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;

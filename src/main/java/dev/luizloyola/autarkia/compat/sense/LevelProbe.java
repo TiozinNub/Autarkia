@@ -1,8 +1,8 @@
 package dev.luizloyola.autarkia.compat.sense;
 
-import dev.luizloyola.autarkia.core.brain.knowledge.BlockKind;
-import dev.luizloyola.autarkia.core.brain.knowledge.BlockProbe;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
+import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;

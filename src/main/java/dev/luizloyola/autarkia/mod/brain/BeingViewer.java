@@ -1,9 +1,9 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.sense.Being;
-import dev.luizloyola.autarkia.core.brain.sense.BeingEvent;
+import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.brain.sense.BeingEvent;
 import dev.luizloyola.autarkia.core.person.Gender;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -38,7 +38,7 @@ public final class BeingViewer {
     public static final UUID EVERYONE = new UUID(0L, 0L);
 
     /** Watched person → who gets the narration (a player, or {@link #EVERYONE}). */
-    private static final Map<MinecraftServer, Map<PersonId, UUID>> WATCHERS = new HashMap<>();
+    private static final Map<MinecraftServer, Map<AgentId, UUID>> WATCHERS = new HashMap<>();
 
     /** Call once from mod init. */
     public static void init() {
@@ -46,7 +46,7 @@ public final class BeingViewer {
     }
 
     /** Starts narrating this person's being events; a null viewer means console = everyone. */
-    public static void watch(MinecraftServer server, PersonId person, @Nullable UUID viewer) {
+    public static void watch(MinecraftServer server, AgentId person, @Nullable UUID viewer) {
         WATCHERS.computeIfAbsent(server, s -> new HashMap<>())
                 .put(person, viewer == null ? EVERYONE : viewer);
     }
@@ -56,14 +56,14 @@ public final class BeingViewer {
      * console toggle, or {@code null} when they aren't being narrated at all. The read side the
      * status readout of {@code /autarkia peers view} prints.
      */
-    public static @Nullable UUID viewer(MinecraftServer server, PersonId person) {
-        Map<PersonId, UUID> watched = WATCHERS.get(server);
+    public static @Nullable UUID viewer(MinecraftServer server, AgentId person) {
+        Map<AgentId, UUID> watched = WATCHERS.get(server);
         return watched == null ? null : watched.get(person);
     }
 
     /** Stops narrating; false when the person wasn't being watched. */
-    public static boolean unwatch(MinecraftServer server, PersonId person) {
-        Map<PersonId, UUID> watched = WATCHERS.get(server);
+    public static boolean unwatch(MinecraftServer server, AgentId person) {
+        Map<AgentId, UUID> watched = WATCHERS.get(server);
         return watched != null && watched.remove(person) != null;
     }
 
@@ -73,9 +73,9 @@ public final class BeingViewer {
      * needs both cases ("watching him/her", "the something he/she'd heard"), and every one has
      * to come from here rather than from a literal in the line.
      */
-    static void onEvent(MinecraftServer server, PersonId person, String personName,
+    static void onEvent(MinecraftServer server, AgentId person, String personName,
                         Gender gender, BeingEvent event) {
-        Map<PersonId, UUID> watched = WATCHERS.get(server);
+        Map<AgentId, UUID> watched = WATCHERS.get(server);
         UUID viewer = watched == null ? null : watched.get(person);
         if (viewer == null) {
             return;
@@ -93,7 +93,7 @@ public final class BeingViewer {
 
     private static Component line(String personName, Gender gender, BeingEvent event) {
         Being being = event.being();
-        String detail = being.tell(gender.objectPronoun())
+        String detail = being.tell(gender.object())
                 + (being.awareness() == Being.Awareness.SEEN
                         ? "" : " [" + being.awareness().name().toLowerCase(Locale.ROOT) + "]");
         return switch (event.type()) {
@@ -111,7 +111,7 @@ public final class BeingViewer {
                                     + " — the " + (event.was() == null
                                             || event.was().identified() == Being.Identified.NONE
                                             ? "someone" : event.was().knownAs())
-                                    + " " + gender.subjectPronoun()
+                                    + " " + gender.subject()
                                     + "'d been hearing, now " + detail)
                     .withStyle(ChatFormatting.AQUA);
         };

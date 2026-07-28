@@ -7,27 +7,27 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
-import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
-import dev.luizloyola.autarkia.core.brain.sense.Being;
-import dev.luizloyola.autarkia.core.brain.task.BreakBlock;
-import dev.luizloyola.autarkia.core.brain.task.ChopNearestTree;
-import dev.luizloyola.autarkia.core.brain.task.GoTo;
-import dev.luizloyola.autarkia.core.brain.task.ObtainItem;
-import dev.luizloyola.autarkia.core.brain.task.SatisfyHunger;
-import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
-import dev.luizloyola.autarkia.core.config.Config;
-import dev.luizloyola.autarkia.core.config.Knob;
-import dev.luizloyola.autarkia.core.inv.ArmorType;
-import dev.luizloyola.autarkia.core.inv.Inventory;
-import dev.luizloyola.autarkia.core.inv.ItemSpec;
-import dev.luizloyola.autarkia.core.log.Category;
-import dev.luizloyola.autarkia.core.log.Entry;
-import dev.luizloyola.autarkia.core.log.JournalService;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.brain.task.BreakBlock;
+import dev.luizloyola.anima.core.brain.task.ChopNearestTree;
+import dev.luizloyola.anima.core.brain.task.GoTo;
+import dev.luizloyola.anima.core.brain.task.ObtainItem;
+import dev.luizloyola.anima.core.brain.task.SatisfyHunger;
+import dev.luizloyola.anima.core.config.ConfigValues;
+import dev.luizloyola.anima.core.config.Config;
+import dev.luizloyola.anima.core.config.Knob;
+import dev.luizloyola.anima.core.inv.ArmorType;
+import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.log.Entry;
+import dev.luizloyola.anima.core.log.JournalService;
 import dev.luizloyola.autarkia.core.person.Appearance;
-import dev.luizloyola.autarkia.core.person.Needs;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.Needs;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.brain.Knowledges;
@@ -81,40 +81,33 @@ import java.util.stream.Stream;
 /**
  * Developer/admin commands for inspecting Autarkia state.
  *
- * <p>{@code whois [targets]} prints the full identity (id + name) of the resolved {@code Person} or
- * of each selected entity, read from the server-side {@link PersonDirectory}: the name is never
- * synced to clients.
+ * <p>{@code whois} prints a Person's identity (id + name), read straight from the server-side
+ * {@link PersonDirectory}: the name is never synced to clients.
  *
- * <p>{@code nav goto <pos> | stop | status} drives the resolved Person's navigator directly —
- * locomotion debug, usable from a headless dev server and by command blocks — while
- * {@code brain goto <pos> | eat | status | cancel} goes through the task machinery the arbiter
- * feeds. {@code brain auto true | false} flips the autonomy switch, which a manual {@code goto} or
- * {@code eat} also flips off as it runs.
+ * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs the same work
+ * through the task machinery the arbiter feeds; {@code brain auto true | false} flips autonomy — ON
+ * by default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
  *
- * <p><b>Every {@code true|false} switch reads back when you leave the value off.</b>
- * {@code brain auto}, {@code knowledge view}, {@code peers view} and {@code debug <layer>} report
- * their state and change nothing, returning 1 for on and 0 for off so an {@code execute if} parses
- * no chat.
+ * <p><b>Every {@code true|false} switch reads back when you leave the value off</b>, changing
+ * nothing and returning 1 for on, 0 for off — usable from a command block or an {@code execute if}
+ * without parsing the chat line.
  *
- * <p>{@code log [brain|pathfind|body|sense] [count]} prints the resolved Person's recent journal
- * from the in-memory ring, interleaved with no subsystem and filtered with one.
- * {@code log for <name|id> [subsystem] [count]} reaches any person by directory lookup, including
- * one whose entity is unloaded (the ring is {@code PersonId}-keyed and outlives the entity), tagged
- * {@code (not loaded)}. The durable per-person file is separate.
+ * <p>{@code log} reads the resolved Person's in-memory journal ring, all subsystems or one;
+ * {@code log for <name|id>} reaches any person by directory lookup, including one whose entity is
+ * unloaded (the ring is {@code AgentId}-keyed and outlives the entity). The durable per-person file
+ * is separate.
  *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
- * links the entity to it before spawn; position mirrors {@code /summon}. A plain
- * {@code /summon autarkia:person} is equally valid — it mints its own identity on its first server
- * tick — so the command only adds naming and a report of where it landed. {@code person spawn
- * nobrain} is the same path with autonomy off: an inert body to drive by hand.
+ * links it to the entity before it enters the world; a plain {@code /summon autarkia:person}
+ * instead mints one on the entity's first server tick. Position mirrors {@code /summon}.
+ * {@code person spawn nobrain} is that same path with autonomy off: an inert body for exercising
+ * one feature at a time.
  *
- * <p>Person-scoped subcommands resolve through {@link #resolve}: the Person the command runs
- * <em>as</em> (so {@code /execute as @e[type=autarkia:person]} addresses each in turn), else the
- * source's pinned Person, else the nearest. {@code select <name|id>} pins by name or short-id; bare
- * {@code select} pins the Person a player is looking at, unpins when looking at nobody, and pins the
- * nearest from the console; {@code select clear} and {@code select show} follow. {@code list}
- * enumerates the loaded Persons, since names are not unique. Pins live in {@link PersonSelection}
- * (in memory, per source, gone on restart).
+ * <p>Every person-scoped subcommand resolves through {@link #resolve}: the Person the command runs
+ * <em>as</em> (one line, every Person in turn), else the source's pin, else the nearest.
+ * {@code select} pins by name or short-id, or by what a player is looking at, unpinning when they
+ * look at nobody; {@code list} enumerates the loaded Persons, since names are not unique. Pins live
+ * in {@link PersonSelection} — in memory, per source, gone on restart.
  */
 public final class AutarkiaCommands {
     private AutarkiaCommands() {}
@@ -231,7 +224,7 @@ public final class AutarkiaCommands {
                                 .then(logCategory("sense", Category.SENSE))
                                 .then(logCategory("project", Category.PROJECT))
                                 // "for <name|id>" reaches any person by directory lookup — including one
-                                // whose entity is unloaded (the ring is PersonId-keyed and outlives the
+                                // whose entity is unloaded (the ring is AgentId-keyed and outlives the
                                 // entity), which the loaded-only nearest/pinned resolve() cannot.
                                 .then(Commands.literal("for")
                                         .then(Commands.argument("person", StringArgumentType.string())
@@ -416,13 +409,13 @@ public final class AutarkiaCommands {
     private static int purgeGraveyard(CommandSourceStack source) {
         MinecraftServer server = source.getServer();
         PersonDirectory directory = PersonDirectory.get(server);
-        java.util.Set<PersonId> loaded = new java.util.HashSet<>();
+        java.util.Set<AgentId> loaded = new java.util.HashSet<>();
         for (Person person : loadedPersons(server)) {
-            if (person.getPersonId() != null) {
-                loaded.add(person.getPersonId());
+            if (person.getAgentId() != null) {
+                loaded.add(person.getAgentId());
             }
         }
-        List<PersonId> dead = new ArrayList<>();
+        List<AgentId> dead = new ArrayList<>();
         for (PersonIdentity identity : directory.all()) {
             if (!loaded.contains(identity.id())) {
                 dead.add(identity.id());
@@ -430,7 +423,7 @@ public final class AutarkiaCommands {
         }
         var knowledge = Knowledges.of(server);
         JournalService journals = Journals.of(server);
-        for (PersonId id : dead) {
+        for (AgentId id : dead) {
             directory.purge(id);
             knowledge.remove(id);
             journals.drop(id);
@@ -557,7 +550,7 @@ public final class AutarkiaCommands {
     private static int peersView(CommandSourceStack source, boolean on) {
         Person person = resolve(source);
         if (person == null) return 0;
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
@@ -584,7 +577,7 @@ public final class AutarkiaCommands {
     private static int peersViewShow(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
@@ -634,7 +627,7 @@ public final class AutarkiaCommands {
         }
         source.sendSuccess(() -> Component.literal(name + " — " + beings.size() + " perceived")
                 .withStyle(ChatFormatting.AQUA), false);
-        String pronoun = person.getGender().objectPronoun();
+        String pronoun = person.getGender().object();
         for (Being being : beings) {
             String kind = being.kind() == Being.Kind.PERSON || being.kind() == Being.Kind.UNKNOWN
                     ? "" : " [" + being.kind().name().toLowerCase(Locale.ROOT)
@@ -656,7 +649,7 @@ public final class AutarkiaCommands {
     // installs the new value and writes the file, so a reload restores what is in force.
 
     private static int configShow(CommandSourceStack source) {
-        AutarkiaConfig config = Config.get();
+        ConfigValues config = Config.get();
         List<String> overrides = config.describeOverrides();
         source.sendSuccess(() -> Component.literal("Autarkia config — " + ConfigFile.path())
                 .withStyle(ChatFormatting.AQUA), false);
@@ -692,16 +685,16 @@ public final class AutarkiaCommands {
     private static int configGet(CommandSourceStack source, String key) {
         if (key.startsWith("danger.")) {
             String species = key.substring("danger.".length());
-            double weight = dev.luizloyola.autarkia.core.brain.instinct.Danger.weight(species);
+            double weight = dev.luizloyola.anima.core.brain.instinct.Danger.weight(species);
             source.sendSuccess(() -> Component.literal(key + " = " + weight
                     + " (unlisted species use danger." 
-                    + dev.luizloyola.autarkia.core.brain.instinct.Danger.DEFAULT_KEY + ")")
+                    + dev.luizloyola.anima.core.brain.instinct.Danger.DEFAULT_KEY + ")")
                     .withStyle(ChatFormatting.AQUA), false);
             return 1;
         }
         Knob knob = Knob.byKey(key).orElse(null);
         if (knob == null) return unknownKnob(source, key);
-        AutarkiaConfig config = Config.get();
+        ConfigValues config = Config.get();
         source.sendSuccess(() -> Component.literal(knob.key() + " = " + knob.format(config.get(knob))
                 + (config.isDefault(knob) ? " (default)"
                         : " — default is " + knob.format(knob.def())))
@@ -754,8 +747,8 @@ public final class AutarkiaCommands {
 
     private static int configResetAll(CommandSourceStack source) {
         int had = Config.get().describeOverrides().size();
-        Config.install(AutarkiaConfig.DEFAULTS);
-        if (!ConfigFile.save(AutarkiaConfig.DEFAULTS)) {
+        Config.install(ConfigValues.DEFAULTS);
+        if (!ConfigFile.save(ConfigValues.DEFAULTS)) {
             source.sendFailure(Component.literal("Reset in memory, but " + ConfigFile.path()
                     + " could not be written — the old values will come back on restart"));
             return 0;
@@ -766,7 +759,7 @@ public final class AutarkiaCommands {
     }
 
     /** Install + persist one changed knob, reporting what actually landed. */
-    private static int applyAndSave(CommandSourceStack source, Knob knob, AutarkiaConfig updated) {
+    private static int applyAndSave(CommandSourceStack source, Knob knob, ConfigValues updated) {
         Config.install(updated);
         double now = updated.get(knob);
         if (!ConfigFile.save(updated)) {
@@ -857,7 +850,7 @@ public final class AutarkiaCommands {
     private static int thinkToggle(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        boolean on = ThoughtBroadcast.toggle(person.getPersonId());
+        boolean on = ThoughtBroadcast.toggle(person.getAgentId());
         source.sendSuccess(() -> Component.literal(person.getName().getString()
                         + (on ? " is thinking out loud in chat now." : "'s thoughts are quiet again."))
                 .withStyle(ChatFormatting.AQUA), false);
@@ -910,7 +903,7 @@ public final class AutarkiaCommands {
     private static int logDump(CommandSourceStack source, @Nullable Category category, int count) {
         Person person = resolve(source);
         if (person == null) return 0;
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
@@ -919,12 +912,13 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * Dumps the journal of the person {@code token} names, resolved against the whole
-     * {@link PersonDirectory} ({@link #resolveDirectory}): the ring is {@code PersonId}-keyed, so an
-     * unloaded or never-spawned person still has one. Tagged {@code (not loaded)} when none is live.
+     * Dumps the journal of the person the {@code token} names — resolved against the whole
+     * {@link PersonDirectory} ({@link #resolveDirectory}), so it reaches a person whose entity is
+     * unloaded (or never spawned): the ring is {@code AgentId}-keyed and outlives the entity. The
+     * readout is tagged {@code (not loaded)} when there is no live entity, so a ghost's log reads as one.
      */
     private static int logFor(CommandSourceStack source, String token, @Nullable Category category, int count) {
-        PersonId id = resolveDirectory(source, token);
+        AgentId id = resolveDirectory(source, token);
         if (id == null) return 0;
         MinecraftServer server = source.getServer();
         String name = PersonDirectory.get(server).nameOf(id).orElse(shortId(id));
@@ -937,7 +931,7 @@ public final class AutarkiaCommands {
      * optionally filtered to one {@link Category}, read from the in-memory ring off the server-scoped
      * {@link Journals} service — the ephemeral tier; the full archive is the per-person file.
      */
-    private static int dumpJournal(CommandSourceStack source, PersonId id, String name, boolean loaded,
+    private static int dumpJournal(CommandSourceStack source, AgentId id, String name, boolean loaded,
                                    @Nullable Category category, int count) {
         List<Entry> all = Journals.of(source.getServer()).recent(id, Integer.MAX_VALUE); // whole ring; tail below
         List<Entry> matched = category == null ? all
@@ -960,12 +954,12 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * Resolves a {@code name|id} token against the whole directory (loaded or not) to one
-     * {@link PersonId}, or {@code null} having reported why: an id or short-id prefix first, then a
-     * case-insensitive name. An ambiguous name fails hard, listing the candidates' short-ids —
-     * there is no "nearest" to break the tie for an unloaded person.
+     * Resolves a {@code name|id} token against the whole directory (loaded or not) to a single
+     * {@link AgentId}, or {@code null} having reported why. An id or short-id prefix is tried
+     * first, then a case-insensitive name; since names are not unique and an unloaded person has no
+     * "nearest", an ambiguous name fails hard, listing the candidates' short-ids.
      */
-    private static @Nullable PersonId resolveDirectory(CommandSourceStack source, String rawToken) {
+    private static @Nullable AgentId resolveDirectory(CommandSourceStack source, String rawToken) {
         String token = rawToken.trim();
         String lower = token.toLowerCase(Locale.ROOT);
         List<PersonIdentity> all = PersonDirectory.get(source.getServer()).all();
@@ -1010,12 +1004,12 @@ public final class AutarkiaCommands {
     private static int knowledgeList(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
         }
-        PersonKnowledge knowledge = Knowledges.of(source.getServer()).forPerson(id);
+        AgentKnowledge knowledge = Knowledges.of(source.getServer()).forPerson(id);
         String name = person.getName().getString();
         if (knowledge.size() == 0) {
             source.sendSuccess(() -> Component.literal(name + " remembers no POIs yet.")
@@ -1071,7 +1065,7 @@ public final class AutarkiaCommands {
     private static int knowledgeView(CommandSourceStack source, boolean on) {
         Person person = resolve(source);
         if (person == null) return 0;
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
@@ -1106,7 +1100,7 @@ public final class AutarkiaCommands {
     private static int knowledgeViewShow(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
@@ -1162,9 +1156,9 @@ public final class AutarkiaCommands {
         // A count-1 template never trips the item argument's stack-size guard; the real count is set
         // in the core layer, which splits it across slots at the item's own cap. Components (from any
         // {…} the command carried) ride along via toCore.
-        dev.luizloyola.autarkia.core.inv.ItemStack template =
+        dev.luizloyola.anima.core.inv.ItemStack template =
                 ItemStacks.templateOf(input, source.registryAccess());
-        dev.luizloyola.autarkia.core.inv.ItemStack remainder = person.inventory().add(template.withCount(count));
+        dev.luizloyola.anima.core.inv.ItemStack remainder = person.inventory().add(template.withCount(count));
         int placed = count - remainder.count();
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " +" + placed + " "
                 + template.id() + (remainder.isEmpty() ? "" : "  (" + remainder.count() + " didn't fit)"))
@@ -1182,7 +1176,7 @@ public final class AutarkiaCommands {
         if (person == null) return 0;
         // The template resolves the kind + its natural slot only; the piece actually equipped is
         // pulled from storage below, so its own components (enchants, damage, …) are preserved.
-        dev.luizloyola.autarkia.core.inv.ItemStack want =
+        dev.luizloyola.anima.core.inv.ItemStack want =
                 ItemStacks.templateOf(input, source.registryAccess());
         EquipmentSlot slot = ItemStacks.equipmentSlotOf(want);
         if (slot == null) {
@@ -1194,12 +1188,12 @@ public final class AutarkiaCommands {
             return 0;
         }
         Inventory inv = person.inventory();
-        dev.luizloyola.autarkia.core.inv.ItemStack piece = inv.takeOne(want.id());
+        dev.luizloyola.anima.core.inv.ItemStack piece = inv.takeOne(want.id());
         if (piece.isEmpty()) {
             source.sendFailure(Component.literal(person.getName().getString() + " has no " + want.id() + " to equip."));
             return 0;
         }
-        dev.luizloyola.autarkia.core.inv.ItemStack displaced = placeEquipment(inv, slot, piece);
+        dev.luizloyola.anima.core.inv.ItemStack displaced = placeEquipment(inv, slot, piece);
         if (!displaced.isEmpty()) inv.add(displaced); // whatever was worn there goes back to storage
         source.sendSuccess(() -> Component.literal(person.getName().getString() + " equipped "
                 + want.id() + " (" + slot.getName() + ")").withStyle(ChatFormatting.AQUA), false);
@@ -1207,22 +1201,22 @@ public final class AutarkiaCommands {
     }
 
     /** Places {@code stack} in the core inventory slot for {@code slot}, returning what was there. */
-    private static dev.luizloyola.autarkia.core.inv.ItemStack placeEquipment(
-            Inventory inv, EquipmentSlot slot, dev.luizloyola.autarkia.core.inv.ItemStack stack) {
+    private static dev.luizloyola.anima.core.inv.ItemStack placeEquipment(
+            Inventory inv, EquipmentSlot slot, dev.luizloyola.anima.core.inv.ItemStack stack) {
         switch (slot) {
             case OFFHAND -> {
-                dev.luizloyola.autarkia.core.inv.ItemStack prev = inv.offhand();
+                dev.luizloyola.anima.core.inv.ItemStack prev = inv.offhand();
                 inv.setOffhand(stack);
                 return prev;
             }
             case MAINHAND -> {
-                dev.luizloyola.autarkia.core.inv.ItemStack prev = inv.mainHand();
+                dev.luizloyola.anima.core.inv.ItemStack prev = inv.mainHand();
                 inv.set(inv.selectedSlot(), stack);
                 return prev;
             }
             default -> { // the four armor slots — HEAD/CHEST/LEGS/FEET names match ArmorType
                 ArmorType type = ArmorType.valueOf(slot.name());
-                dev.luizloyola.autarkia.core.inv.ItemStack prev = inv.armor(type);
+                dev.luizloyola.anima.core.inv.ItemStack prev = inv.armor(type);
                 inv.setArmor(type, stack);
                 return prev;
             }
@@ -1395,9 +1389,9 @@ public final class AutarkiaCommands {
             }
             return self;
         }
-        Optional<PersonId> pin = PersonSelection.pinned(source);
+        Optional<AgentId> pin = PersonSelection.pinned(source);
         if (pin.isEmpty()) return nearest(source);
-        PersonId id = pin.get();
+        AgentId id = pin.get();
         Person live = findLoaded(source.getServer(), id);
         if (live == null) {
             source.sendFailure(Component.literal("Selected " + label(source.getServer(), id)
@@ -1412,7 +1406,7 @@ public final class AutarkiaCommands {
     private static final SuggestionProvider<CommandSourceStack> KNOB_SUGGESTIONS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(Stream.concat(
                     Stream.of(Knob.values()).map(Knob::key),
-                    dev.luizloyola.autarkia.core.brain.instinct.Danger.table().keySet().stream()
+                    dev.luizloyola.anima.core.brain.instinct.Danger.table().keySet().stream()
                             .sorted().map(species -> "danger." + species)), builder);
 
     /** Every debug layer's name — the completions behind {@code debug <layer>}. */
@@ -1424,7 +1418,7 @@ public final class AutarkiaCommands {
         MinecraftServer server = ctx.getSource().getServer();
         PersonDirectory directory = PersonDirectory.get(server);
         Stream<String> tokens = loadedPersons(server).stream().flatMap(person -> {
-            PersonId id = person.getPersonId();
+            AgentId id = person.getAgentId();
             if (id == null) return Stream.empty();
             String shortId = shortId(id);
             return directory.nameOf(id)
@@ -1456,13 +1450,13 @@ public final class AutarkiaCommands {
         // matches by id do we fall back to a case-insensitive name match (names aren't unique).
         String lower = token.toLowerCase(Locale.ROOT);
         List<Person> matches = loaded.stream()
-                .filter(p -> p.getPersonId() != null
-                        && p.getPersonId().toString().toLowerCase(Locale.ROOT).startsWith(lower))
+                .filter(p -> p.getAgentId() != null
+                        && p.getAgentId().toString().toLowerCase(Locale.ROOT).startsWith(lower))
                 .toList();
         if (matches.isEmpty()) {
             matches = loaded.stream()
-                    .filter(p -> p.getPersonId() != null
-                            && directory.nameOf(p.getPersonId()).map(n -> n.equalsIgnoreCase(token)).orElse(false))
+                    .filter(p -> p.getAgentId() != null
+                            && directory.nameOf(p.getAgentId()).map(n -> n.equalsIgnoreCase(token)).orElse(false))
                     .toList();
         }
         if (matches.isEmpty()) {
@@ -1474,7 +1468,7 @@ public final class AutarkiaCommands {
         Person chosen = matches.stream()
                 .min((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .orElseThrow();
-        PersonId id = chosen.getPersonId();
+        AgentId id = chosen.getAgentId();
         PersonSelection.pin(source, id);
         source.sendSuccess(() -> Component.literal("Selected " + label(server, id)
                 + (count > 1 ? " (nearest of " + count + " matches)" : "")).withStyle(ChatFormatting.AQUA), false);
@@ -1497,7 +1491,7 @@ public final class AutarkiaCommands {
             // the console branch already reported via nearest()
             return 0;
         }
-        PersonId id = target.getPersonId();
+        AgentId id = target.getAgentId();
         if (id == null) {
             source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             return 0;
@@ -1519,13 +1513,13 @@ public final class AutarkiaCommands {
     }
 
     private static int selectShow(CommandSourceStack source) {
-        Optional<PersonId> pin = PersonSelection.pinned(source);
+        Optional<AgentId> pin = PersonSelection.pinned(source);
         if (pin.isEmpty()) {
             source.sendSuccess(() -> Component.literal("No selection — commands use the nearest Person.")
                     .withStyle(ChatFormatting.GRAY), false);
             return 0;
         }
-        PersonId id = pin.get();
+        AgentId id = pin.get();
         boolean loaded = findLoaded(source.getServer(), id) != null;
         source.sendSuccess(() -> Component.literal("Selected: " + label(source.getServer(), id)
                 + (loaded ? "" : " (not loaded)")).withStyle(loaded ? ChatFormatting.AQUA : ChatFormatting.GRAY), false);
@@ -1543,11 +1537,11 @@ public final class AutarkiaCommands {
             source.sendSuccess(() -> Component.literal("No Persons are loaded.").withStyle(ChatFormatting.GRAY), false);
             return 0;
         }
-        Optional<PersonId> pin = PersonSelection.pinned(source);
+        Optional<AgentId> pin = PersonSelection.pinned(source);
         loaded.stream()
                 .sorted((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .forEach(person -> {
-                    PersonId id = person.getPersonId();
+                    AgentId id = person.getAgentId();
                     boolean isPinned = id != null && pin.map(id::equals).orElse(false);
                     String name = id == null ? "<spawning>" : directory.nameOf(id).orElse("<unknown>");
                     String dimension = person.level().dimension().identifier().getPath();
@@ -1581,12 +1575,12 @@ public final class AutarkiaCommands {
 
     /** The live Person with this id, searching every dimension, or {@code null} if none is loaded.
      *  A dead/dying Person (not yet swept) does not count — see {@link Persons#findLoaded}. */
-    private static @Nullable Person findLoaded(MinecraftServer server, PersonId id) {
+    private static @Nullable Person findLoaded(MinecraftServer server, AgentId id) {
         return Persons.findLoaded(server, id);
     }
 
     /** The person's name if the directory knows it, else the short id — a stable label for messages. */
-    private static String label(MinecraftServer server, PersonId id) {
+    private static String label(MinecraftServer server, AgentId id) {
         return PersonDirectory.get(server).nameOf(id).orElse(shortId(id));
     }
 
@@ -1597,17 +1591,17 @@ public final class AutarkiaCommands {
      * one, else the player who typed it (their account uuid is their person-identity, the same rule
      * the sense uses). The console has no book — it is nobody, and omniscient besides.
      */
-    private static @Nullable PersonId sourceIdentity(CommandSourceStack source) {
+    private static @Nullable AgentId sourceIdentity(CommandSourceStack source) {
         Entity self = source.getEntity();
         if (self instanceof Person person) {
-            PersonId id = person.getPersonId();
+            AgentId id = person.getAgentId();
             if (id == null) {
                 source.sendFailure(Component.literal("That Person isn't identified yet (still spawning)."));
             }
             return id;
         }
         if (self instanceof ServerPlayer player) {
-            return PersonId.of(player.getUUID());
+            return AgentId.of(player.getUUID());
         }
         source.sendFailure(Component.literal(
                 "The console knows everyone and nobody — run this as a player, or "
@@ -1617,20 +1611,20 @@ public final class AutarkiaCommands {
 
     /** Everyone the source can put a name to. */
     private static int contactsList(CommandSourceStack source) {
-        PersonId self = sourceIdentity(source);
+        AgentId self = sourceIdentity(source);
         return self == null ? 0 : printContacts(source, self, "You know");
     }
 
     /** Everyone that Person can name — the omniscient view: a dev tool reads any book. */
     private static int contactsOf(CommandSourceStack source, String token) {
-        PersonId who = resolveDirectory(source, token);
+        AgentId who = resolveDirectory(source, token);
         return who == null ? 0
                 : printContacts(source, who, label(source.getServer(), who) + " knows");
     }
 
-    private static int printContacts(CommandSourceStack source, PersonId who, String heading) {
+    private static int printContacts(CommandSourceStack source, AgentId who, String heading) {
         MinecraftServer server = source.getServer();
-        Set<PersonId> known = ContactData.get(server).contactsOf(who);
+        Set<AgentId> known = ContactData.get(server).contactsOf(who);
         if (known.isEmpty()) {
             source.sendSuccess(() -> Component.literal(heading + " nobody yet.")
                     .withStyle(ChatFormatting.GRAY), false);
@@ -1638,7 +1632,7 @@ public final class AutarkiaCommands {
         }
         source.sendSuccess(() -> Component.literal(heading + " " + known.size()
                 + (known.size() == 1 ? " person:" : " people:")).withStyle(ChatFormatting.AQUA), false);
-        for (PersonId id : known) {
+        for (AgentId id : known) {
             String line = "  " + label(server, id) + "  " + shortId(id);
             source.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.GRAY), false);
         }
@@ -1651,9 +1645,9 @@ public final class AutarkiaCommands {
      * two facts, not one.
      */
     private static int contactsMeet(CommandSourceStack source, String token) {
-        PersonId self = sourceIdentity(source);
+        AgentId self = sourceIdentity(source);
         if (self == null) return 0;
-        PersonId other = resolveDirectory(source, token);
+        AgentId other = resolveDirectory(source, token);
         if (other == null) return 0;
         MinecraftServer server = source.getServer();
         if (self.equals(other)) {
@@ -1674,9 +1668,9 @@ public final class AutarkiaCommands {
 
     /** One-sided forgetting: the source loses the name, the other keeps theirs. */
     private static int contactsForget(CommandSourceStack source, String token) {
-        PersonId self = sourceIdentity(source);
+        AgentId self = sourceIdentity(source);
         if (self == null) return 0;
-        PersonId other = resolveDirectory(source, token);
+        AgentId other = resolveDirectory(source, token);
         if (other == null) return 0;
         MinecraftServer server = source.getServer();
         if (!ContactData.get(server).forget(self, other)) {
@@ -1691,7 +1685,7 @@ public final class AutarkiaCommands {
     }
 
     private static int contactsClear(CommandSourceStack source) {
-        PersonId self = sourceIdentity(source);
+        AgentId self = sourceIdentity(source);
         if (self == null) return 0;
         MinecraftServer server = source.getServer();
         if (!ContactData.get(server).clear(self)) {
@@ -1706,7 +1700,7 @@ public final class AutarkiaCommands {
     }
 
     /** Pushes a whole book after a REMOVAL (an incremental add cannot express forgetting). */
-    private static void resyncIfOnline(MinecraftServer server, PersonId who) {
+    private static void resyncIfOnline(MinecraftServer server, AgentId who) {
         ServerPlayer player = server.getPlayerList().getPlayer(who.value());
         if (player != null) {
             ContactsSync.resync(player);
@@ -1714,7 +1708,7 @@ public final class AutarkiaCommands {
     }
 
     /** The first 8 characters of an id — enough to eyeball and to prefix-match in {@code select}. */
-    private static String shortId(PersonId id) {
+    private static String shortId(AgentId id) {
         String text = id.toString();
         return text.substring(0, Math.min(8, text.length()));
     }
@@ -1738,7 +1732,7 @@ public final class AutarkiaCommands {
     }
 
     private static void report(CommandSourceStack source, Person person) {
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             source.sendSuccess(() -> Component.literal("Person not yet identified (spawning).")
                     .withStyle(ChatFormatting.GRAY), false);

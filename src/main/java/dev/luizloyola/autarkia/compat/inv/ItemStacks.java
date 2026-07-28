@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.compat.inv;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import dev.luizloyola.autarkia.core.inv.ItemStack;
+import dev.luizloyola.anima.core.inv.ItemStack;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentPatch;

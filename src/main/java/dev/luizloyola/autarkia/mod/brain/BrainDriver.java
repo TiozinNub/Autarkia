@@ -1,27 +1,28 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.Arbiter;
-import dev.luizloyola.autarkia.core.brain.BrainContext;
-import dev.luizloyola.autarkia.core.brain.board.PersonalBoard;
-import dev.luizloyola.autarkia.core.brain.board.WorkItem;
-import dev.luizloyola.autarkia.core.brain.board.WorkSource;
-import dev.luizloyola.autarkia.core.brain.act.ActuatorAccess;
-import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
-import dev.luizloyola.autarkia.core.brain.act.BlockPlacer;
-import dev.luizloyola.autarkia.core.brain.act.ItemConsumer;
-import dev.luizloyola.autarkia.core.brain.act.Mover;
-import dev.luizloyola.autarkia.core.brain.act.Scaffolder;
-import dev.luizloyola.autarkia.core.brain.board.PersonClaims;
-import dev.luizloyola.autarkia.core.brain.instinct.DescendInstinct;
-import dev.luizloyola.autarkia.core.brain.instinct.EatInstinct;
-import dev.luizloyola.autarkia.core.brain.instinct.FleeInstinct;
-import dev.luizloyola.autarkia.core.brain.instinct.WanderInstinct;
-import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
-import dev.luizloyola.autarkia.core.brain.sense.Percepts;
-import dev.luizloyola.autarkia.core.brain.task.Task;
-import dev.luizloyola.autarkia.core.inv.ItemSpec;
-import dev.luizloyola.autarkia.core.log.Category;
-import dev.luizloyola.autarkia.core.log.PersonJournal;
+import dev.luizloyola.anima.core.brain.Arbiter;
+import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.board.AgentBoard;
+import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.brain.board.WorkSource;
+import dev.luizloyola.anima.core.brain.act.ActuatorAccess;
+import dev.luizloyola.anima.core.brain.act.BlockBreaker;
+import dev.luizloyola.anima.core.brain.act.BlockPlacer;
+import dev.luizloyola.anima.core.brain.act.ItemConsumer;
+import dev.luizloyola.anima.core.brain.act.Mover;
+import dev.luizloyola.anima.core.brain.act.Scaffolder;
+import dev.luizloyola.anima.core.brain.board.AgentClaims;
+import dev.luizloyola.anima.core.brain.instinct.DescendInstinct;
+import dev.luizloyola.anima.core.brain.instinct.EatInstinct;
+import dev.luizloyola.anima.core.brain.instinct.FleeInstinct;
+import dev.luizloyola.anima.core.brain.instinct.WanderInstinct;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
+import dev.luizloyola.anima.core.brain.sense.Percepts;
+import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.log.AgentJournal;
+import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayList;
@@ -34,17 +35,18 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 
 /**
- * Per-{@link Person} brain host: mounts the pure core decision machinery on the entity and hands it
- * a {@link BrainContext} — actuators to act with ({@link PersonMover} legs,
- * {@link PersonItemConsumer} mouth) and {@link PersonPercepts} to sense with. Arbiter-first: an
- * {@link Arbiter} of instincts decides on its own rather than waiting on debug commands. A mounting
- * bracket only, assembled once — the adapters are stateless views over the entity.
+ * Per-{@link Person} brain host: mounts the core decision machinery on the entity and gives it a
+ * {@link BrainContext} to think through — actuators ({@link PersonMover} legs,
+ * {@link PersonItemConsumer} mouth) and percepts ({@link PersonPercepts}). Arbiter-first since
+ * ladder step 4: it hosts an {@link Arbiter} (Flee, Eat, Wander — Flee first so a flee/eat pressure
+ * tie flees) rather than a bare {@link dev.luizloyola.anima.core.brain.task.TaskExecutor}. Only the
+ * mounting bracket — everything hosted is pure core, assembled once, the adapters being stateless
+ * views.
  *
- * <p>It only ever <em>reads</em> the body (through {@link Percepts}) and never owns body state: the
- * entity owns and ticks its own metabolism ({@link Person#needs()}), the way vanilla's
- * {@code FoodData} belongs to the player and not to any AI, so a paused brain still starves. That
- * decides what lives where — body state persists on the entity; the brain's working state (arbiter
- * + running task tree) is transient like the Navigator's, and a reload just re-decides.
+ * <p>It only ever <em>reads</em> the body, through {@link Percepts}, and never owns body state: the
+ * entity owns and ticks its own metabolism ({@link Person#needs()}), so a paused or throttled brain
+ * still starves. Anything of the body persists on the entity; the brain's working state (arbiter +
+ * running task tree) is transient like the Navigator's — a reload just re-decides.
  */
 public final class BrainDriver {
     private final Person person;
@@ -63,19 +65,17 @@ public final class BrainDriver {
     private boolean auto = true;
 
     /**
-     * This person's knowledge view, resolved lazily on first use and cached — the journal's
-     * pattern, for the same reason: the {@code PersonId} and the running server are absent at
-     * construction but guaranteed by the time any task asks (identity resolves at the top of
-     * {@code Person.tick()}, before the brain runs).
+     * This person's knowledge view, resolved lazily on first use and cached: the {@code AgentId}
+     * and the running server are absent at construction but guaranteed by the time any task asks
+     * (identity resolves at the top of {@code Person.tick()}).
      */
-    private PersonKnowledge knowledge;
+    private AgentKnowledge knowledge;
 
     /**
      * This person's view of the server-shared work-site claims — resolved lazily exactly like
-     * {@link #knowledge}, and for the same reason (the {@code PersonId} arrives after
-     * construction).
+     * {@link #knowledge}, and for the same reason.
      */
-    private PersonClaims claims;
+    private AgentClaims claims;
 
     /**
      * This person's personal board (layer 3's degenerate v1): the hardcoded keep-16-logs
@@ -83,7 +83,7 @@ public final class BrainDriver {
      * first real project (the axe) posts its own bill of materials. Transient: items
      * regenerate from the inventory predicate.
      */
-    private final PersonalBoard board;
+    private final AgentBoard board;
 
     /** The placeholder stock rule: keep this many logs, at this standing priority. */
     private static final int STOCK_LOGS = 16;
@@ -92,7 +92,7 @@ public final class BrainDriver {
     public BrainDriver(Person person) {
         this.person = person;
         // Offset the board cadence by entity id so a settlement doesn't re-plan in lockstep.
-        this.board = new PersonalBoard(ItemSpec.LOGS, STOCK_LOGS, STOCK_PRIORITY, person.getId());
+        this.board = new AgentBoard(ItemSpec.LOGS, STOCK_LOGS, STOCK_PRIORITY, person.getId());
         Mover mover = new PersonMover(person);
         ItemConsumer consumer = new PersonItemConsumer(person);
         BlockPlacer placer = new PersonBlockPlacer(person);
@@ -137,22 +137,22 @@ public final class BrainDriver {
             }
 
             @Override
-            public PersonJournal journal() {
+            public AgentJournal journal() {
                 return person.journal(); // the entity owns the one cached view; the body/nav share it
             }
 
             @Override
-            public Gender gender() {
+            public Pronouns pronouns() {
                 return person.getGender(); // the narrating voice: pronouns are asked for, never spelled
             }
 
             @Override
-            public PersonKnowledge knowledge() {
+            public AgentKnowledge knowledge() {
                 return resolveKnowledge();
             }
 
             @Override
-            public PersonClaims claims() {
+            public AgentClaims claims() {
                 return resolveClaims();
             }
 
@@ -262,24 +262,24 @@ public final class BrainDriver {
     }
 
     /** The person's knowledge store, resolved once and cached — see {@link #knowledge}. */
-    private PersonKnowledge resolveKnowledge() {
+    private AgentKnowledge resolveKnowledge() {
         if (this.knowledge == null) {
             ServerLevel level = (ServerLevel) this.person.level();
-            this.knowledge = Knowledges.of(level.getServer()).forPerson(this.person.getPersonId());
+            this.knowledge = Knowledges.of(level.getServer()).forPerson(this.person.getAgentId());
         }
         return this.knowledge;
     }
 
     /** The person's claims view, resolved once and cached — see {@link #claims}. */
-    private PersonClaims resolveClaims() {
+    private AgentClaims resolveClaims() {
         if (this.claims == null) {
             ServerLevel level = (ServerLevel) this.person.level();
-            this.claims = Claims.of(level.getServer()).forPerson(this.person.getPersonId());
+            this.claims = Claims.of(level.getServer()).forPerson(this.person.getAgentId());
         }
         return this.claims;
     }
 
-    /** The personal board's status line — see {@link PersonalBoard#describe}. */
+    /** The personal board's status line — see {@link AgentBoard#describe}. */
     public String describeBoard() {
         return this.board.describe(this.context);
     }

@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.compat.nav;
 
-import dev.luizloyola.autarkia.core.nav.CellType;
-import dev.luizloyola.autarkia.core.nav.NavGrid;
+import dev.luizloyola.anima.core.nav.CellType;
+import dev.luizloyola.anima.core.nav.NavGrid;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;

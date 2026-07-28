@@ -1,9 +1,9 @@
 package dev.luizloyola.autarkia.mod.client;
 
 import dev.luizloyola.autarkia.compat.client.debug.GizmoFrame;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
-import dev.luizloyola.autarkia.core.brain.sense.Being;
-import dev.luizloyola.autarkia.core.nav.MoveType;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.nav.MoveType;
 import dev.luizloyola.autarkia.mod.debug.DebugLayer;
 import dev.luizloyola.autarkia.mod.net.DebugViewPayload;
 import java.util.List;

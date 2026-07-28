@@ -1,8 +1,8 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.act.MoveState;
-import dev.luizloyola.autarkia.core.brain.act.Mover;
-import dev.luizloyola.autarkia.core.nav.Gait;
+import dev.luizloyola.anima.core.brain.act.MoveState;
+import dev.luizloyola.anima.core.brain.act.Mover;
+import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.nav.Navigator;
 import net.minecraft.core.BlockPos;

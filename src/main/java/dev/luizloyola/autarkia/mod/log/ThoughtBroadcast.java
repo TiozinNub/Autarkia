@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.log;
 
-import dev.luizloyola.autarkia.core.log.JournalService;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.log.JournalService;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,7 +21,7 @@ import net.minecraft.server.MinecraftServer;
 public final class ThoughtBroadcast {
     /** Persons currently thinking out loud. Server-thread writes; a concurrent set out of
      *  plain caution about future off-thread readers. */
-    private static final Set<PersonId> ENABLED = ConcurrentHashMap.newKeySet();
+    private static final Set<AgentId> ENABLED = ConcurrentHashMap.newKeySet();
 
     private ThoughtBroadcast() {
     }
@@ -43,7 +43,7 @@ public final class ThoughtBroadcast {
     }
 
     /** Flip narration for this person; returns the new state. */
-    public static boolean toggle(PersonId id) {
+    public static boolean toggle(AgentId id) {
         if (ENABLED.remove(id)) {
             return false;
         }

@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.compat.inv;
 
-import dev.luizloyola.autarkia.core.inv.ItemStack;
-import dev.luizloyola.autarkia.core.person.FoodValue;
+import dev.luizloyola.anima.core.inv.ItemStack;
+import dev.luizloyola.anima.core.agent.FoodValue;
 import java.util.Optional;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;

@@ -2,8 +2,8 @@ package dev.luizloyola.autarkia.compat.inv;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import dev.luizloyola.autarkia.core.inv.Inventory;
-import dev.luizloyola.autarkia.core.inv.ItemStack;
+import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.inv.ItemStack;
 import java.util.List;
 
 /**

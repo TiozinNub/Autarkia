@@ -1,9 +1,9 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.act.BlockBreaker;
-import dev.luizloyola.autarkia.core.brain.act.BreakState;
+import dev.luizloyola.anima.core.brain.act.BlockBreaker;
+import dev.luizloyola.anima.core.brain.act.BreakState;
 import dev.luizloyola.autarkia.compat.sense.LevelProbe;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;

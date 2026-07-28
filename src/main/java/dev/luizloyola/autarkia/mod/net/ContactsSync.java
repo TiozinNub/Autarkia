@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.net;
 
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import dev.luizloyola.autarkia.mod.social.ContactData;
 import java.util.ArrayList;
@@ -40,7 +40,7 @@ public final class ContactsSync {
         MinecraftServer server = level.getServer();
         PersonDirectory directory = PersonDirectory.get(server);
         List<ContactsPayload.Known> known = new ArrayList<>();
-        for (PersonId contact : ContactData.get(server).contactsOf(idOf(player))) {
+        for (AgentId contact : ContactData.get(server).contactsOf(idOf(player))) {
             directory.nameOf(contact)
                     .ifPresent(name -> known.add(ContactsPayload.Known.of(contact, name)));
         }
@@ -51,7 +51,7 @@ public final class ContactsSync {
      * Pushes one just-learned name, if the knower is an online player and the id names a Person.
      * Safe to call for any knower — a Person learning a name has no client to tell.
      */
-    public static void learned(MinecraftServer server, PersonId knower, PersonId whom) {
+    public static void learned(MinecraftServer server, AgentId knower, AgentId whom) {
         ServerPlayer player = server.getPlayerList().getPlayer(knower.value());
         if (player == null || !ServerPlayNetworking.canSend(player, ContactsPayload.TYPE)) {
             return;
@@ -61,7 +61,7 @@ public final class ContactsSync {
     }
 
     /** A player's identity handle: their account UUID, exactly as the sense mints it. */
-    public static PersonId idOf(ServerPlayer player) {
-        return PersonId.of(player.getUUID());
+    public static AgentId idOf(ServerPlayer player) {
+        return AgentId.of(player.getUUID());
     }
 }

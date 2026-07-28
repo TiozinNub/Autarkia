@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.client;
 
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.net.DebugGlowPayload;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -18,7 +18,7 @@ public final class DebugGlowClient {
     private DebugGlowClient() {}
 
     /** Written on the client thread by the payload receiver, read by the render tick. */
-    private static volatile @Nullable PersonId selected;
+    private static volatile @Nullable AgentId selected;
 
     public static void install() {
         ClientPlayNetworking.registerGlobalReceiver(DebugGlowPayload.TYPE,
@@ -28,7 +28,7 @@ public final class DebugGlowClient {
     }
 
     /** The Person this client's player has pinned, or {@code null} if none. */
-    public static @Nullable PersonId get() {
+    public static @Nullable AgentId get() {
         return selected;
     }
 }

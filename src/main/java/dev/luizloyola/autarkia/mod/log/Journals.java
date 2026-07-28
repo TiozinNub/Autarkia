@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.log;
 
-import dev.luizloyola.autarkia.core.log.JournalService;
+import dev.luizloyola.anima.core.log.JournalService;
 import java.util.HashMap;
 import java.util.Map;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;

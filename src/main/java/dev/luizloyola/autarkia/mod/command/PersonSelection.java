@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.command;
 
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.net.DebugGlowPayload;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.commands.CommandSourceStack;
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@link #CONSOLE} slot. That single shared console slot is what lets the headless FIFO test loop
  * select once and then fire a run of commands at the same Person.
  *
- * <p>A pin holds only a {@link PersonId} — the stable, entity-independent handle. Turning it back
+ * <p>A pin holds only a {@link AgentId} — the stable, entity-independent handle. Turning it back
  * into a live entity, and failing loudly when that entity is gone, is the resolver's job in
  * {@link AutarkiaCommands}: a stale pin must never silently fall through to whoever is nearest, which
  * would quietly command the wrong Person.
@@ -42,21 +42,21 @@ public final class PersonSelection {
     /** The shared slot for every non-player source (console / rcon / command block). */
     private static final Object CONSOLE = new Object();
 
-    private static final Map<Object, PersonId> PINS = new ConcurrentHashMap<>();
+    private static final Map<Object, AgentId> PINS = new ConcurrentHashMap<>();
 
     private static Object key(CommandSourceStack source) {
         return source.getEntity() instanceof ServerPlayer player ? player.getUUID() : CONSOLE;
     }
 
     /** Pins {@code id} to this source, replacing any previous pin. */
-    public static void pin(CommandSourceStack source, PersonId id) {
+    public static void pin(CommandSourceStack source, AgentId id) {
         PINS.put(key(source), id);
         if (source.getEntity() instanceof ServerPlayer player) sync(player, id);
     }
 
     /** Pins {@code id} to {@code player}'s slot — the debug wand's entry point, keyed by UUID exactly
      *  like this player's {@code /autarkia select}, so the wand and the command share one selection. */
-    public static void pin(ServerPlayer player, PersonId id) {
+    public static void pin(ServerPlayer player, AgentId id) {
         PINS.put(player.getUUID(), id);
         sync(player, id);
     }
@@ -68,13 +68,13 @@ public final class PersonSelection {
         return had;
     }
 
-    public static Optional<PersonId> pinned(CommandSourceStack source) {
+    public static Optional<AgentId> pinned(CommandSourceStack source) {
         return Optional.ofNullable(PINS.get(key(source)));
     }
 
     /** This player's current pin, if any — the wand's read path (same slot as
      *  {@link #pinned(CommandSourceStack)} for a player source). */
-    public static Optional<PersonId> pinned(ServerPlayer player) {
+    public static Optional<AgentId> pinned(ServerPlayer player) {
         return Optional.ofNullable(PINS.get(player.getUUID()));
     }
 
@@ -86,7 +86,7 @@ public final class PersonSelection {
 
     /** Mirrors a player's pin to their client for the selection glow. Skips clients that did not
      *  register the channel (vanilla clients, the headless test loop) — nothing to glow there. */
-    private static void sync(ServerPlayer player, @Nullable PersonId id) {
+    private static void sync(ServerPlayer player, @Nullable AgentId id) {
         if (ServerPlayNetworking.canSend(player, DebugGlowPayload.TYPE)) {
             ServerPlayNetworking.send(player, DebugGlowPayload.of(id));
         }

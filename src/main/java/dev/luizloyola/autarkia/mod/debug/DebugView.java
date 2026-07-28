@@ -1,15 +1,15 @@
 package dev.luizloyola.autarkia.mod.debug;
 
-import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
-import dev.luizloyola.autarkia.core.brain.knowledge.Region;
-import dev.luizloyola.autarkia.core.brain.sense.Being;
-import dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.nav.Path;
-import dev.luizloyola.autarkia.core.nav.Waypoint;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.brain.sense.BeingSensorCore;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.nav.Path;
+import dev.luizloyola.anima.core.nav.Waypoint;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.brain.Knowledges;
 import dev.luizloyola.autarkia.mod.command.PersonSelection;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -169,7 +169,7 @@ public final class DebugView {
      */
     private static DebugViewPayload snapshot(
             MinecraftServer server, ServerPlayer player, EnumSet<DebugLayer> layers) {
-        PersonId id = PersonSelection.pinned(player).orElse(null);
+        AgentId id = PersonSelection.pinned(player).orElse(null);
         Person person = id == null ? null : Persons.findLoaded(server, id);
         if (person == null) {
             return DebugViewPayload.clear();
@@ -206,12 +206,12 @@ public final class DebugView {
 
     /** Everything they remember, of every kind, flattened with staleness resolved server-side. */
     private static List<DebugViewPayload.Belief> beliefs(MinecraftServer server, Person person) {
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             return List.of();
         }
         long now = person.level().getGameTime();
-        PersonKnowledge knowledge = Knowledges.of(server).forPerson(id);
+        AgentKnowledge knowledge = Knowledges.of(server).forPerson(id);
         List<DebugViewPayload.Belief> out = new ArrayList<>();
         for (PoiKind kind : PoiKind.values()) {
             for (PoiMemory memory : knowledge.all(kind)) {
@@ -235,7 +235,7 @@ public final class DebugView {
     private static List<DebugViewPayload.PeerMark> peers(Person person) {
         // The observer's pronoun, not the peer's: tell() ends with "watching him/her" about
         // the watcher — the same argument the chat readouts pass.
-        String pronoun = person.getGender().objectPronoun();
+        String pronoun = person.getGender().object();
         List<DebugViewPayload.PeerMark> out = new ArrayList<>();
         for (Being being : person.brain().percepts().beings()) {
             out.add(new DebugViewPayload.PeerMark(

@@ -1,8 +1,8 @@
 package dev.luizloyola.autarkia.mod.item;
 
 import dev.luizloyola.autarkia.compat.Players;
-import dev.luizloyola.autarkia.core.nav.Gait;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.nav.Gait;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.command.PersonSelection;
 import dev.luizloyola.autarkia.mod.debug.DebugLayer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
@@ -43,7 +43,7 @@ public class DebugWandItem extends Item {
         if (level.isClientSide() || !(context.getPlayer() instanceof ServerPlayer player)) {
             return InteractionResult.SUCCESS;
         }
-        PersonId selected = PersonSelection.pinned(player).orElse(null);
+        AgentId selected = PersonSelection.pinned(player).orElse(null);
         if (selected == null) {
             Players.overlay(player, Component.translatable("item.autarkia.debug_wand.no_selection"));
             return InteractionResult.SUCCESS;
@@ -79,7 +79,7 @@ public class DebugWandItem extends Item {
         }
         // The pin lands in the player's PersonSelection slot, which mirrors it to the client for the glow.
         if (player instanceof ServerPlayer serverPlayer) {
-            PersonId id = person.getPersonId();
+            AgentId id = person.getAgentId();
             if (id == null) {
                 Players.overlay(serverPlayer,
                         Component.translatable("item.autarkia.debug_wand.no_identity"));
@@ -101,7 +101,7 @@ public class DebugWandItem extends Item {
      * restarts the cycle — the view always draws whoever was last clicked, never a stale pin.
      */
     private static void cycleDebugLayer(ServerPlayer player, Person person) {
-        PersonId id = person.getPersonId();
+        AgentId id = person.getAgentId();
         if (id == null) {
             Players.overlay(player, Component.translatable("item.autarkia.debug_wand.no_identity"));
             return;

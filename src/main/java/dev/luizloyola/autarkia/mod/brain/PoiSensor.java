@@ -1,12 +1,12 @@
 package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.compat.sense.LevelProbe;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiSensorCore;
-import dev.luizloyola.autarkia.core.brain.knowledge.SenseEvent;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.log.Category;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.anima.core.brain.knowledge.PoiSensorCore;
+import dev.luizloyola.anima.core.brain.knowledge.SenseEvent;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -14,14 +14,15 @@ import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Mounts the pure {@link PoiSensorCore} pipeline on a {@link Person}: only a mounting bracket and
- * the Minecraft boundary. A <em>body</em> sense, not a brain organ — it runs beside the brain in
+ * Mounts the pure {@link PoiSensorCore} pipeline on a {@link Person}: the mounting bracket and the
+ * Minecraft boundary only (feet position, game time, a {@link LevelProbe} over their level and
+ * eyes). A <em>body</em> sense, not a brain organ — it runs beside the brain in
  * {@code serverAiStep} and writes into the person's knowledge; the brain reads memory, never the
  * world.
  *
- * <p>Resolved lazily on first tick: the {@code PersonId} and the running server are absent at
- * construction but guaranteed by the top of {@code Person.tick()}. What it learns is narrated to the
- * journal ({@link Category#SENSE}), the same events the POI viewer's discovery chat hooks.
+ * <p>Resolved lazily on first tick, the {@code AgentId} and server being absent at construction
+ * but guaranteed by the top of {@code Person.tick()}. What it learns is narrated to the journal
+ * ({@link Category#SENSE}).
  */
 public final class PoiSensor {
     private final Person person;
@@ -39,7 +40,7 @@ public final class PoiSensor {
         if (this.core == null) {
             this.data = KnowledgeData.get(level.getServer());
             this.core = new PoiSensorCore(
-                    this.data.registry().forPerson(this.person.getPersonId()));
+                    this.data.registry().forPerson(this.person.getAgentId()));
             this.probe = new LevelProbe(this.person);
         }
         BlockPos feet = this.person.blockPosition();
@@ -50,7 +51,7 @@ public final class PoiSensor {
         this.data.setDirty();
         for (SenseEvent event : events) {
             this.person.journal().record(Category.SENSE, verb(event.type()), describe(event));
-            KnowledgeViewer.onEvent(level.getServer(), this.person.getPersonId(),
+            KnowledgeViewer.onEvent(level.getServer(), this.person.getAgentId(),
                     this.person.getName().getString(), event);
         }
     }

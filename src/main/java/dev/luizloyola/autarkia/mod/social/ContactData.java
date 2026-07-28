@@ -3,8 +3,8 @@ package dev.luizloyola.autarkia.mod.social;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.autarkia.compat.SavedDatas;
-import dev.luizloyola.autarkia.core.person.PersonId;
-import dev.luizloyola.autarkia.core.social.ContactBook;
+import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.social.ContactBook;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -18,12 +18,14 @@ import net.minecraft.world.level.saveddata.SavedDataType;
 
 /**
  * The world-scoped, persisted home of every contact book — the {@code PersonDirectory} pattern
- * applied to acquaintance ({@code <world>/data/autarkia_contacts.dat}). Player books live here
- * rather than in player data because a player's {@link PersonId} is minted from their account
- * UUID: one store, one rule, and gossip about a logged-out player needs no special case.
+ * applied to acquaintance ({@code <world>/data/autarkia_contacts.dat}).
+ *
+ * <p>Players are persisted here too, not in player data: a player's {@link AgentId} is minted from
+ * their account UUID, so one store covers both and gossip about a logged-out player needs no special
+ * case.
  *
  * <p>The pure {@link ContactBook} holds the logic; this owns persistence and the dirty flag, so
- * every mutation goes through here rather than handing the book out.
+ * every mutation goes through here.
  */
 public final class ContactData extends SavedData {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "contacts");
@@ -61,37 +63,37 @@ public final class ContactData extends SavedData {
     }
 
     /** @see ContactBook#knows */
-    public boolean knows(PersonId knower, PersonId whom) {
+    public boolean knows(AgentId knower, AgentId whom) {
         return book.knows(knower, whom);
     }
 
     /** @see ContactBook#contactsOf */
-    public Set<PersonId> contactsOf(PersonId knower) {
+    public Set<AgentId> contactsOf(AgentId knower) {
         return book.contactsOf(knower);
     }
 
     /** @see ContactBook#knowers */
-    public Set<PersonId> knowers() {
+    public Set<AgentId> knowers() {
         return book.knowers();
     }
 
     /** @see ContactBook#learn — marks dirty only when something was genuinely new. */
-    public boolean learn(PersonId knower, PersonId whom) {
+    public boolean learn(AgentId knower, AgentId whom) {
         return dirtyIf(book.learn(knower, whom));
     }
 
     /** @see ContactBook#introduce */
-    public boolean introduce(PersonId one, PersonId other) {
+    public boolean introduce(AgentId one, AgentId other) {
         return dirtyIf(book.introduce(one, other));
     }
 
     /** @see ContactBook#forget */
-    public boolean forget(PersonId knower, PersonId whom) {
+    public boolean forget(AgentId knower, AgentId whom) {
         return dirtyIf(book.forget(knower, whom));
     }
 
     /** @see ContactBook#clear */
-    public boolean clear(PersonId knower) {
+    public boolean clear(AgentId knower) {
         return dirtyIf(book.clear(knower));
     }
 
@@ -104,9 +106,9 @@ public final class ContactData extends SavedData {
 
     private List<Row> rows() {
         List<Row> rows = new ArrayList<>();
-        for (PersonId knower : book.knowers()) {
+        for (AgentId knower : book.knowers()) {
             List<UUID> knows = new ArrayList<>();
-            for (PersonId known : book.contactsOf(knower)) {
+            for (AgentId known : book.contactsOf(knower)) {
                 knows.add(known.value());
             }
             rows.add(new Row(knower.value(), knows));
@@ -118,7 +120,7 @@ public final class ContactData extends SavedData {
         ContactBook book = new ContactBook();
         for (Row row : rows) {
             for (UUID known : row.knows()) {
-                book.learn(PersonId.of(row.who()), PersonId.of(known));
+                book.learn(AgentId.of(row.who()), AgentId.of(known));
             }
         }
         return new ContactData(book);

@@ -1,19 +1,19 @@
 package dev.luizloyola.autarkia.mod.brain;
 
 import dev.luizloyola.autarkia.compat.sense.LevelProbe;
-import dev.luizloyola.autarkia.core.brain.knowledge.HerdNoter;
-import dev.luizloyola.autarkia.core.brain.knowledge.SenseEvent;
-import dev.luizloyola.autarkia.core.brain.sense.Being;
-import dev.luizloyola.autarkia.core.brain.sense.BeingEvent;
-import dev.luizloyola.autarkia.core.brain.sense.BeingId;
-import dev.luizloyola.autarkia.core.brain.sense.BeingReading;
-import dev.luizloyola.autarkia.core.brain.sense.BeingSensorCore;
-import dev.luizloyola.autarkia.core.brain.sense.BeingWorld;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.config.Config;
-import dev.luizloyola.autarkia.core.config.Knob;
-import dev.luizloyola.autarkia.core.log.Category;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.brain.knowledge.HerdNoter;
+import dev.luizloyola.anima.core.brain.knowledge.SenseEvent;
+import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.brain.sense.BeingEvent;
+import dev.luizloyola.anima.core.brain.sense.BeingId;
+import dev.luizloyola.anima.core.brain.sense.BeingReading;
+import dev.luizloyola.anima.core.brain.sense.BeingSensorCore;
+import dev.luizloyola.anima.core.brain.sense.BeingWorld;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.config.Config;
+import dev.luizloyola.anima.core.config.Knob;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.social.ContactData;
 import java.util.ArrayList;
@@ -151,7 +151,7 @@ public final class BeingSense {
                 continue;
             }
             journal(event);
-            PersonId self = person.getPersonId();
+            AgentId self = person.getAgentId();
             if (self != null && person.level().getServer() != null) {
                 BeingViewer.onEvent(person.level().getServer(), self,
                         person.getName().getString(), person.getGender(), event);
@@ -210,7 +210,7 @@ public final class BeingSense {
         if (now - lastHerdNoteAt < HerdNoter.NOTE_INTERVAL_TICKS) {
             return;
         }
-        PersonId self = person.getPersonId();
+        AgentId self = person.getAgentId();
         if (self == null || person.level().getServer() == null) {
             return;
         }
@@ -365,9 +365,9 @@ public final class BeingSense {
 
     /** The full person observation — the peer-sensor classifier. */
     private @Nullable BeingReading readPerson(LivingEntity body) {
-        PersonId personId = body instanceof Person other
-                ? other.getPersonId()
-                : PersonId.of(body.getUUID()); // a player's account uuid is their person-identity
+        AgentId personId = body instanceof Person other
+                ? other.getAgentId()
+                : AgentId.of(body.getUUID()); // a player's account uuid is their person-identity
         if (personId == null) {
             return null;
         }
@@ -425,8 +425,8 @@ public final class BeingSense {
      * one specific individual; only a contact book says who (decision: Luiz). Players are looked up
      * the same way, by the id minted from their account.
      */
-    private String knownName(LivingEntity body, PersonId whom) {
-        PersonId self = person.getPersonId();
+    private String knownName(LivingEntity body, AgentId whom) {
+        AgentId self = person.getAgentId();
         MinecraftServer server = person.level().getServer();
         if (self == null || server == null || !ContactData.get(server).knows(self, whom)) {
             return "";
@@ -530,13 +530,13 @@ public final class BeingSense {
             case RECOGNIZED -> "recognized " + being.knownAs() + " — the "
                     + (event.was().identified() == Being.Identified.NONE
                             ? "someone" : event.was().knownAs())
-                    + " " + person.getGender().subjectPronoun() + "'d heard";
+                    + " " + person.getGender().subject() + "'d heard";
         };
         person.journal().record(Category.SENSE, "peer", what);
     }
 
     private String describe(Being being) {
-        return being.tell(person.getGender().objectPronoun())
+        return being.tell(person.getGender().object())
                 + (being.awareness() == Being.Awareness.HEARD ? ", heard" : "");
     }
 }

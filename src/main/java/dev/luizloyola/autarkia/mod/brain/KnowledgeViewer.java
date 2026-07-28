@@ -1,13 +1,13 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.knowledge.KnowledgeRegistry;
-import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
-import dev.luizloyola.autarkia.core.brain.knowledge.Region;
-import dev.luizloyola.autarkia.core.brain.knowledge.SenseEvent;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.brain.knowledge.KnowledgeRegistry;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.core.brain.knowledge.SenseEvent;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.agent.AgentId;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -38,7 +38,7 @@ public final class KnowledgeViewer {
     private static final int RENDER_INTERVAL_TICKS = 10;
 
     /** Watched person → the player who toggled the view (gets the discovery chat lines). */
-    private static final Map<MinecraftServer, Map<PersonId, UUID>> WATCHERS = new HashMap<>();
+    private static final Map<MinecraftServer, Map<AgentId, UUID>> WATCHERS = new HashMap<>();
 
     /** Call once from mod init. */
     public static void init() {
@@ -51,7 +51,7 @@ public final class KnowledgeViewer {
     }
 
     /** Starts viewing this person's knowledge, routing discovery chat to {@code viewer}. */
-    public static void watch(MinecraftServer server, PersonId person, UUID viewer) {
+    public static void watch(MinecraftServer server, AgentId person, UUID viewer) {
         WATCHERS.computeIfAbsent(server, s -> new HashMap<>()).put(person, viewer);
     }
 
@@ -59,20 +59,20 @@ public final class KnowledgeViewer {
      * The player currently receiving this person's discovery chat, or {@code null} when nobody is
      * viewing them — the read side the status readout of {@code /autarkia knowledge view} prints.
      */
-    public static @Nullable UUID viewer(MinecraftServer server, PersonId person) {
-        Map<PersonId, UUID> watched = WATCHERS.get(server);
+    public static @Nullable UUID viewer(MinecraftServer server, AgentId person) {
+        Map<AgentId, UUID> watched = WATCHERS.get(server);
         return watched == null ? null : watched.get(person);
     }
 
     /** Stops viewing; false when the person wasn't being viewed. */
-    public static boolean unwatch(MinecraftServer server, PersonId person) {
-        Map<PersonId, UUID> watched = WATCHERS.get(server);
+    public static boolean unwatch(MinecraftServer server, AgentId person) {
+        Map<AgentId, UUID> watched = WATCHERS.get(server);
         return watched != null && watched.remove(person) != null;
     }
 
     /** A perception event for a possibly-watched person — chat it to whoever toggled the view. */
-    static void onEvent(MinecraftServer server, PersonId person, String personName, SenseEvent event) {
-        Map<PersonId, UUID> watched = WATCHERS.get(server);
+    static void onEvent(MinecraftServer server, AgentId person, String personName, SenseEvent event) {
+        Map<AgentId, UUID> watched = WATCHERS.get(server);
         UUID viewer = watched == null ? null : watched.get(person);
         if (viewer == null) {
             return;
@@ -107,14 +107,14 @@ public final class KnowledgeViewer {
     }
 
     private static void render(MinecraftServer server) {
-        Map<PersonId, UUID> watched = WATCHERS.get(server);
+        Map<AgentId, UUID> watched = WATCHERS.get(server);
         if (watched == null || watched.isEmpty()) {
             return;
         }
         ServerLevel level = server.overworld(); // knowledge is overworld-scoped in v1
         KnowledgeRegistry registry = Knowledges.of(server);
-        for (PersonId person : watched.keySet()) {
-            PersonKnowledge knowledge = registry.forPerson(person);
+        for (AgentId person : watched.keySet()) {
+            AgentKnowledge knowledge = registry.forPerson(person);
             for (PoiKind kind : PoiKind.values()) {
                 for (PoiMemory memory : knowledge.all(kind)) {
                     emit(level, memory);

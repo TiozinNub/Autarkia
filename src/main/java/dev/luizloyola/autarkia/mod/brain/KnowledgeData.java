@@ -3,13 +3,13 @@ package dev.luizloyola.autarkia.mod.brain;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.autarkia.compat.SavedDatas;
-import dev.luizloyola.autarkia.core.brain.knowledge.KnowledgeRegistry;
-import dev.luizloyola.autarkia.core.brain.knowledge.PersonKnowledge;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiKind;
-import dev.luizloyola.autarkia.core.brain.knowledge.PoiMemory;
-import dev.luizloyola.autarkia.core.brain.knowledge.Region;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.brain.knowledge.KnowledgeRegistry;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.agent.AgentId;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -21,18 +21,14 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
 /**
- * The world-scoped, persisted home of every person's knowledge — the {@code PersonDirectory}
- * pattern applied to memories, exactly as the brain design's storage section prescribes:
- * durable memory is {@code PersonId}-keyed, attached to the overworld's data storage
- * ({@code <world>/data/autarkia_knowledge.dat}), and outlives every entity. What a person has
- * noticed survives chunk unloads, their death (memories are not physical — the inventory drops,
- * the knowledge doesn't), and server restarts.
+ * The world-scoped, persisted home of every person's knowledge: {@code AgentId}-keyed, on the
+ * overworld's data storage ({@code <world>/data/autarkia_knowledge.dat}), outliving every entity.
+ * Memories are not physical — on death the inventory drops and the knowledge does not.
  *
  * <p>Serialization is codec-based and lives here so {@code core} stays free of DataFixerUpper.
- * Loading rebuilds the pure {@link KnowledgeRegistry} by replaying {@code note()} — entries
- * were stored post-merge and insertion-ordered, so the replay reproduces the store exactly.
- * Only the durable tier is saved: the claim indexes and pending queues are per-entity sensor
- * state and rebuild from re-walking the world.
+ * Loading rebuilds the pure {@link KnowledgeRegistry} by replaying {@code note()}: entries were
+ * stored post-merge and insertion-ordered, so the replay reproduces the store exactly. Only the
+ * durable tier is saved — claim indexes and pending queues rebuild from re-walking the world.
  */
 public final class KnowledgeData extends SavedData {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "knowledge");
@@ -60,13 +56,13 @@ public final class KnowledgeData extends SavedData {
                     units, partial, seen)));
 
     /** One person's remembered POIs, flattened across kinds ({@code kind} rides in each memory). */
-    private record PersonEntry(PersonId id, List<PoiMemory> pois) {
+    private record PersonEntry(AgentId id, List<PoiMemory> pois) {
     }
 
     private static final Codec<PersonEntry> ENTRY_CODEC = RecordCodecBuilder.create(e -> e.group(
             UUIDUtil.CODEC.fieldOf("id").forGetter(entry -> entry.id().value()),
             MEMORY_CODEC.listOf().fieldOf("pois").forGetter(PersonEntry::pois)
-    ).apply(e, (uuid, pois) -> new PersonEntry(PersonId.of(uuid), pois)));
+    ).apply(e, (uuid, pois) -> new PersonEntry(AgentId.of(uuid), pois)));
 
     private static final Codec<KnowledgeData> CODEC = RecordCodecBuilder.create(d -> d.group(
             ENTRY_CODEC.listOf().fieldOf("persons").forGetter(KnowledgeData::entries)
@@ -98,8 +94,8 @@ public final class KnowledgeData extends SavedData {
 
     private List<PersonEntry> entries() {
         List<PersonEntry> entries = new ArrayList<>();
-        for (PersonId id : registry.persons()) {
-            PersonKnowledge knowledge = registry.forPerson(id);
+        for (AgentId id : registry.persons()) {
+            AgentKnowledge knowledge = registry.forPerson(id);
             List<PoiMemory> pois = new ArrayList<>();
             for (PoiKind kind : PoiKind.values()) {
                 pois.addAll(knowledge.all(kind));
@@ -114,7 +110,7 @@ public final class KnowledgeData extends SavedData {
     private static KnowledgeData fromEntries(List<PersonEntry> entries) {
         KnowledgeRegistry registry = new KnowledgeRegistry();
         for (PersonEntry entry : entries) {
-            PersonKnowledge knowledge = registry.forPerson(entry.id());
+            AgentKnowledge knowledge = registry.forPerson(entry.id());
             for (PoiMemory memory : entry.pois()) {
                 knowledge.note(memory);
             }

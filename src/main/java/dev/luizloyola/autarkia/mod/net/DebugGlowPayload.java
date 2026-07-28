@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.net;
 
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
@@ -12,9 +12,10 @@ import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
 
 /**
- * S2C debug payload: which {@link PersonId} the player has pinned in {@code PersonSelection},
- * empty for none. The pin lives only on the server; this is the read-only shadow the client keeps
- * for the debug selection glow ({@code mod.client.DebugGlow}, {@code mod.client.DebugGlowClient}).
+ * S2C debug payload: which {@link AgentId} a client's player has pinned (their {@code
+ * PersonSelection} slot), or none — an empty {@link #selected} means "no selection". The pin lives
+ * only on the server; this is the read-only shadow behind the debug selection glow ({@code
+ * mod.client.DebugGlow}, {@code mod.client.DebugGlowClient}).
  */
 public record DebugGlowPayload(Optional<UUID> selected) implements CustomPacketPayload {
     public static final Type<DebugGlowPayload> TYPE =
@@ -25,12 +26,13 @@ public record DebugGlowPayload(Optional<UUID> selected) implements CustomPacketP
                     ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC), DebugGlowPayload::selected,
                     DebugGlowPayload::new);
 
-    public static DebugGlowPayload of(@Nullable PersonId id) {
-        return new DebugGlowPayload(Optional.ofNullable(id).map(PersonId::value));
+    public static DebugGlowPayload of(@Nullable AgentId id) {
+        return new DebugGlowPayload(Optional.ofNullable(id).map(AgentId::value));
     }
 
-    public @Nullable PersonId personId() {
-        return selected.map(PersonId::of).orElse(null);
+    /** The pinned id as a {@link AgentId}, or {@code null} when nothing is selected. */
+    public @Nullable AgentId personId() {
+        return selected.map(AgentId::of).orElse(null);
     }
 
     @Override

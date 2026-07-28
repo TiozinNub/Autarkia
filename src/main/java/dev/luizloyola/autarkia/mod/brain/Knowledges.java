@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.knowledge.KnowledgeRegistry;
+import dev.luizloyola.anima.core.brain.knowledge.KnowledgeRegistry;
 import net.minecraft.server.MinecraftServer;
 
 /**

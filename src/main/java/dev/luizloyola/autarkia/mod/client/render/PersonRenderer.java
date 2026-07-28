@@ -121,7 +121,7 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
      */
     @Override
     protected boolean shouldShowName(Person person, double distanceSq) {
-        return PersonContactsClient.knows(person.getPersonId())
+        return PersonContactsClient.knows(person.getAgentId())
                 && super.shouldShowName(person, distanceSq);
     }
 
@@ -132,7 +132,7 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
      */
     @Override
     protected Component getNameTag(Person person) {
-        String known = PersonContactsClient.nameOf(person.getPersonId());
+        String known = PersonContactsClient.nameOf(person.getAgentId());
         return known == null ? super.getNameTag(person) : Component.literal(known);
     }
 

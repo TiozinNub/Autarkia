@@ -1,8 +1,8 @@
 package dev.luizloyola.autarkia.mod.inv;
 
-import dev.luizloyola.autarkia.core.inv.ArmorType;
-import dev.luizloyola.autarkia.core.inv.Inventory;
-import dev.luizloyola.autarkia.core.person.Needs;
+import dev.luizloyola.anima.core.inv.ArmorType;
+import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.agent.Needs;
 import java.util.function.IntSupplier;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.Container;

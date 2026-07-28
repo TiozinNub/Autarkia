@@ -2,16 +2,16 @@ package dev.luizloyola.autarkia.mod.entity;
 
 import dev.luizloyola.autarkia.compat.inv.Inventories;
 import dev.luizloyola.autarkia.compat.inv.ItemStacks;
-import dev.luizloyola.autarkia.core.inv.ArmorType;
-import dev.luizloyola.autarkia.core.inv.Inventory;
-import dev.luizloyola.autarkia.core.log.Category;
-import dev.luizloyola.autarkia.core.nav.Gait;
-import dev.luizloyola.autarkia.core.log.PersonJournal;
+import dev.luizloyola.anima.core.inv.ArmorType;
+import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.nav.Gait;
+import dev.luizloyola.anima.core.log.AgentJournal;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
-import dev.luizloyola.autarkia.core.person.Needs;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.Needs;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.autarkia.mod.brain.BrainDriver;
@@ -90,24 +90,24 @@ public class Person extends Avatar {
             SynchedEntityData.defineId(Person.class, EntityDataSerializers.BOOLEAN);
 
     /**
-     * This person's identity handle ({@link PersonId}) as a UUID string, synced so the client can
-     * match a rendered entity back to a {@code PersonId} (e.g. the debug selection glow).
+     * This person's identity handle ({@link AgentId}) as a UUID string, synced so the client can
+     * match a rendered entity back to a {@code AgentId} (e.g. the debug selection glow).
      * Empty until the server assigns one. This carries only the opaque handle — identity
      * <em>content</em> (name, …) stays server-side.
      */
     private static final EntityDataAccessor<String> DATA_PERSON_ID =
             SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
 
-    private static final String TAG_PERSON_ID = "PersonId";
+    private static final String TAG_PERSON_ID = "AgentId";
 
     /** NBT key under which this entity persists its carried inventory (see {@link Inventories#CODEC}). */
     private static final String TAG_INVENTORY = "Inventory";
 
     /**
-     * NBT keys for this entity's food state — vanilla {@code FoodData}'s exact four tags (names,
-     * types and load defaults verified against the 26.1.2 bytecode), so a Person's food reads
-     * familiarly in NBT tooling. Hunger dies with the body; durable memories are instead
-     * {@link PersonId}-keyed, per the brain design's storage section.
+     * NBT keys under which this entity persists its food state — vanilla {@code FoodData}'s exact
+     * four tags (names, types and load defaults verified against the 26.1.2 bytecode). Hunger is
+     * physical state of <em>this</em> body and dies with it; durable memories are instead
+     * {@link AgentId}-keyed.
      */
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -128,7 +128,7 @@ public class Person extends Avatar {
      * This entity's link to its identity in the world-scoped {@link PersonDirectory} — only a
      * reference, so the identity itself outlives the entity. {@code null} until first assigned.
      */
-    private @Nullable PersonId personId;
+    private @Nullable AgentId personId;
 
     /**
      * Drives this person toward a target position (see {@link #serverAiStep()} /
@@ -145,16 +145,16 @@ public class Person extends Avatar {
     private final BrainDriver brain = new BrainDriver(this);
 
     /**
-     * This person's debug journal view ({@link PersonJournal}) — the one handle the brain, the
-     * {@link #navigator} and the body all record through, resolved lazily and cached (see
-     * {@link #journal()}). Transient: the log lives in the server-scoped {@link Journals} service.
+     * This person's journal view ({@link AgentJournal}) — the one handle the brain, the
+     * {@link #navigator} and the body all record through, resolved lazily and cached. Transient:
+     * the log lives in the server-scoped {@link Journals} service.
      */
-    private @Nullable PersonJournal journal;
+    private @Nullable AgentJournal journal;
 
     /**
-     * This person's passive POI perception ({@link PoiSensor}, "notice as you go"): it writes what
-     * they move past into their {@link PersonId}-keyed knowledge — the memory the brain reads
-     * instead of scanning the world. Transient, but the knowledge outlives the entity.
+     * This person's passive POI perception ({@link PoiSensor}, "notice as you go"): it records what
+     * they move past into their {@link AgentId}-keyed knowledge — the memory the brain reads
+     * instead of ever scanning the world, and it outlives the entity.
      */
     private final PoiSensor poiSensor = new PoiSensor(this);
 
@@ -218,7 +218,7 @@ public class Person extends Avatar {
      * core form — the reference for deciding which side moved. Transient; rebuilt from the inventory
      * on the first tick after load.
      */
-    private final java.util.EnumMap<EquipmentSlot, dev.luizloyola.autarkia.core.inv.ItemStack> mirroredEquipment =
+    private final java.util.EnumMap<EquipmentSlot, dev.luizloyola.anima.core.inv.ItemStack> mirroredEquipment =
             new java.util.EnumMap<>(EquipmentSlot.class);
 
     /**
@@ -271,16 +271,16 @@ public class Person extends Avatar {
 
     @Override
     public void tick() {
-        // Resolve identity before super.tick(), which runs serverAiStep (brain + navigator): a
-        // Person summoned with a plain /summon has none, and would tick its AI once with a null
-        // personId — a latent trap for the PersonId-keyed knowledge the brain grows. Lazy rather
-        // than a constructor because it needs the running server; Avatar is not a Mob, so there is
-        // no finalizeSpawn hook.
+        // Identity before super.tick(), which runs serverAiStep: a plainly summoned Person has
+        // none and would otherwise tick its AI once with a null personId — a latent trap for the
+        // AgentId-keyed knowledge the brain grows. Doing it first restores the "identity before
+        // AI" invariant /autarkia spawn guarantees by assigning before addFreshEntity. Lazy
+        // because it needs the running server; Avatar is not a Mob, so there is no finalizeSpawn.
         if (this.level() instanceof ServerLevel serverLevel
                 && (this.personId == null || !this.identityProjected)) {
             PersonDirectory directory = PersonDirectory.get(serverLevel.getServer());
             if (this.personId == null) {
-                setPersonId(directory.createPerson().id());
+                setAgentId(directory.createPerson().id());
             }
             // Mirror the public appearance onto the synced fields, once per load — the directory is
             // the source of truth.
@@ -391,16 +391,16 @@ public class Person extends Avatar {
     }
 
     /**
-     * This person's debug journal — the single {@code PersonId}-bound view onto the server's
+     * This person's journal — the single {@code AgentId}-bound view onto the server's
      * {@link Journals} service, resolved once and cached (the id, once assigned, never changes).
-     * Server-side only. It mints an id itself only in the rare case of being hit before this
-     * person's first tick, so the returned view is never {@code null}.
+     * Server-side only, and past identity resolution, so it mints an id only if this body is hit
+     * before its first tick — which keeps the view always valid rather than ever {@code null}.
      */
-    public PersonJournal journal() {
+    public AgentJournal journal() {
         if (this.journal == null) {
             ServerLevel level = (ServerLevel) level();
             if (this.personId == null) {
-                setPersonId(PersonDirectory.get(level.getServer()).createPerson().id());
+                setAgentId(PersonDirectory.get(level.getServer()).createPerson().id());
             }
             this.journal = Journals.of(level.getServer()).forPerson(this.personId);
         }
@@ -518,7 +518,7 @@ public class Person extends Avatar {
      * {@code ItemStack.matches} against what we last pushed), we pull that back into the inventory.
      */
     private void reconcile(EquipmentSlot slot, int coreSlot) {
-        dev.luizloyola.autarkia.core.inv.ItemStack coreStack = this.inventory.get(coreSlot);
+        dev.luizloyola.anima.core.inv.ItemStack coreStack = this.inventory.get(coreSlot);
         if (!coreStack.equals(this.mirroredEquipment.get(slot))) {
             ItemStack pushed = ItemStacks.toVanilla(coreStack, registryAccess());
             setItemSlot(slot, pushed);
@@ -531,7 +531,7 @@ public class Person extends Avatar {
         if (lastPushed != null && ItemStack.matches(entityStack, lastPushed)) {
             return; // vanilla didn't touch it
         }
-        dev.luizloyola.autarkia.core.inv.ItemStack entityAsCore = ItemStacks.toCore(entityStack, registryAccess());
+        dev.luizloyola.anima.core.inv.ItemStack entityAsCore = ItemStacks.toCore(entityStack, registryAccess());
         this.inventory.set(coreSlot, entityAsCore);
         this.mirroredEquipment.put(slot, entityAsCore);
         this.mirroredVanilla.put(slot, entityStack.copy());
@@ -759,13 +759,13 @@ public class Person extends Avatar {
      * first-tick creation is skipped and this Person keeps that deliberate (named) identity instead
      * of minting an anonymous random one. Server-side; the path behind {@code /autarkia person spawn}.
      */
-    public void assignPerson(PersonId id) {
-        setPersonId(id);
+    public void assignPerson(AgentId id) {
+        setAgentId(id);
     }
 
     /** Sets this person's identity handle and mirrors it to the synced field, so clients can match
-     *  the entity back to its {@link PersonId}. Server-side only — that is where the id originates. */
-    private void setPersonId(PersonId id) {
+     *  the entity back to its {@link AgentId}. Server-side only — that is where the id originates. */
+    private void setAgentId(AgentId id) {
         this.personId = id;
         this.entityData.set(DATA_PERSON_ID, id.value().toString());
     }
@@ -773,9 +773,9 @@ public class Person extends Avatar {
     /** This person's directory handle, or {@code null} before it has been assigned (the spawn tick
      *  has not run yet). Synced, so it resolves on the client too. Resolve names/identity via
      *  {@link PersonDirectory}. */
-    public @Nullable PersonId getPersonId() {
+    public @Nullable AgentId getAgentId() {
         String id = this.entityData.get(DATA_PERSON_ID);
-        return id.isEmpty() ? null : PersonId.of(UUID.fromString(id));
+        return id.isEmpty() ? null : AgentId.of(UUID.fromString(id));
     }
 
     @Override
@@ -794,7 +794,7 @@ public class Person extends Avatar {
     @Override
     protected void readAdditionalSaveData(ValueInput input) {
         super.readAdditionalSaveData(input);
-        input.read(TAG_PERSON_ID, UUIDUtil.CODEC).map(PersonId::of).ifPresent(this::setPersonId);
+        input.read(TAG_PERSON_ID, UUIDUtil.CODEC).map(AgentId::of).ifPresent(this::setAgentId);
         input.read(TAG_INVENTORY, Inventories.CODEC).ifPresent(this.inventory::copyFrom);
         // Vanilla FoodData's own load defaults (full food, 5.0 saturation). Food level must load
         // before saturation — saturation clamps against the current food level.
@@ -846,7 +846,7 @@ public class Person extends Avatar {
                 continue;
             }
             int before = ground.getCount();
-            dev.luizloyola.autarkia.core.inv.ItemStack leftover =
+            dev.luizloyola.anima.core.inv.ItemStack leftover =
                     this.inventory.add(ItemStacks.toCore(ground, registryAccess()));
             int taken = before - leftover.count();
             if (taken <= 0) {

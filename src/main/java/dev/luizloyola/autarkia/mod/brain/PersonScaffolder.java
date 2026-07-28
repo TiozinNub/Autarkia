@@ -1,9 +1,9 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.act.ScaffoldState;
-import dev.luizloyola.autarkia.core.brain.act.Scaffolder;
-import dev.luizloyola.autarkia.core.brain.sense.Pos;
-import dev.luizloyola.autarkia.core.log.Category;
+import dev.luizloyola.anima.core.brain.act.ScaffoldState;
+import dev.luizloyola.anima.core.brain.act.Scaffolder;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayDeque;
 import java.util.Deque;

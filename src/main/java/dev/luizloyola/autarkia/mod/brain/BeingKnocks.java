@@ -1,8 +1,8 @@
 package dev.luizloyola.autarkia.mod.brain;
 
-import dev.luizloyola.autarkia.core.brain.sense.Being;
-import dev.luizloyola.autarkia.core.config.Config;
-import dev.luizloyola.autarkia.core.config.Knob;
+import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.config.Config;
+import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;

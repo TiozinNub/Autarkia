@@ -1,11 +1,11 @@
 package dev.luizloyola.autarkia.mod.nav;
 
 import dev.luizloyola.autarkia.compat.nav.WorldSnapshot;
-import dev.luizloyola.autarkia.core.nav.AgentProfile;
-import dev.luizloyola.autarkia.core.nav.CellType;
-import dev.luizloyola.autarkia.core.nav.Path;
-import dev.luizloyola.autarkia.core.nav.PathRequest;
-import dev.luizloyola.autarkia.core.nav.Pathfinder;
+import dev.luizloyola.anima.core.nav.AgentProfile;
+import dev.luizloyola.anima.core.nav.CellType;
+import dev.luizloyola.anima.core.nav.Path;
+import dev.luizloyola.anima.core.nav.PathRequest;
+import dev.luizloyola.anima.core.nav.Pathfinder;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import java.util.HashMap;
 import java.util.Map;

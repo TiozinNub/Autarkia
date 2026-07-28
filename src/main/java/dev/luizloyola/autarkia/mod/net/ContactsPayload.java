@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.net;
 
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.agent.AgentId;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
@@ -31,7 +31,7 @@ public record ContactsPayload(boolean replace, List<Known> contacts) implements 
                         ByteBufCodecs.STRING_UTF8, Known::name,
                         Known::new);
 
-        public static Known of(PersonId id, String name) {
+        public static Known of(AgentId id, String name) {
             return new Known(id.value(), name);
         }
     }
@@ -47,7 +47,7 @@ public record ContactsPayload(boolean replace, List<Known> contacts) implements 
         return new ContactsPayload(true, contacts);
     }
 
-    public static ContactsPayload learned(PersonId id, String name) {
+    public static ContactsPayload learned(AgentId id, String name) {
         return new ContactsPayload(false, List.of(Known.of(id, name)));
     }
 

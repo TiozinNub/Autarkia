@@ -1,16 +1,16 @@
 package dev.luizloyola.autarkia.mod.nav;
 
 import dev.luizloyola.autarkia.compat.nav.WorldSnapshot;
-import dev.luizloyola.autarkia.core.log.Category;
-import dev.luizloyola.autarkia.core.nav.AgentProfile;
-import dev.luizloyola.autarkia.core.nav.CellNeed;
-import dev.luizloyola.autarkia.core.nav.Gait;
-import dev.luizloyola.autarkia.core.nav.MoveType;
-import dev.luizloyola.autarkia.core.nav.NavGrid;
-import dev.luizloyola.autarkia.core.nav.NavGrids;
-import dev.luizloyola.autarkia.core.nav.Path;
-import dev.luizloyola.autarkia.core.nav.PathIntegrity;
-import dev.luizloyola.autarkia.core.nav.Waypoint;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.nav.AgentProfile;
+import dev.luizloyola.anima.core.nav.CellNeed;
+import dev.luizloyola.anima.core.nav.Gait;
+import dev.luizloyola.anima.core.nav.MoveType;
+import dev.luizloyola.anima.core.nav.NavGrid;
+import dev.luizloyola.anima.core.nav.NavGrids;
+import dev.luizloyola.anima.core.nav.Path;
+import dev.luizloyola.anima.core.nav.PathIntegrity;
+import dev.luizloyola.anima.core.nav.Waypoint;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;

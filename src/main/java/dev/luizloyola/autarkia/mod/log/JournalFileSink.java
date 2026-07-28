@@ -1,8 +1,8 @@
 package dev.luizloyola.autarkia.mod.log;
 
-import dev.luizloyola.autarkia.core.log.Entry;
-import dev.luizloyola.autarkia.core.log.JournalService;
-import dev.luizloyola.autarkia.core.person.PersonId;
+import dev.luizloyola.anima.core.log.Entry;
+import dev.luizloyola.anima.core.log.JournalService;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.io.BufferedWriter;
@@ -60,13 +60,13 @@ public final class JournalFileSink {
     private final Path dir;
     private final String runStamp;
     /** id → filesystem-safe name, resolved once on the server thread (a directory read lives there). */
-    private final Map<PersonId, String> names = new ConcurrentHashMap<>();
+    private final Map<AgentId, String> names = new ConcurrentHashMap<>();
     private final LinkedBlockingQueue<Pending> queue = new LinkedBlockingQueue<>();
     private final ScheduledExecutorService writer;
     /** Open writers, access-ordered so the eldest entry is the least-recently-written. Writer-thread only. */
-    private final LinkedHashMap<PersonId, BufferedWriter> handles;
+    private final LinkedHashMap<AgentId, BufferedWriter> handles;
 
-    private record Pending(PersonId id, Entry entry) {}
+    private record Pending(AgentId id, Entry entry) {}
 
     private JournalFileSink(MinecraftServer server, Path dir, String runStamp) {
         this.server = server;
@@ -74,7 +74,7 @@ public final class JournalFileSink {
         this.runStamp = runStamp;
         this.handles = new LinkedHashMap<>(16, 0.75f, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<PersonId, BufferedWriter> eldest) {
+            protected boolean removeEldestEntry(Map.Entry<AgentId, BufferedWriter> eldest) {
                 if (size() > MAX_OPEN_FILES) {
                     closeQuietly(eldest.getValue()); // reopened in append mode when it next writes
                     return true;
@@ -100,12 +100,12 @@ public final class JournalFileSink {
     }
 
     /** Server thread: pin the name (once) and queue the entry. Never blocks on I/O. */
-    private void onEntry(PersonId id, Entry entry) {
+    private void onEntry(AgentId id, Entry entry) {
         names.computeIfAbsent(id, this::resolveName);
         queue.offer(new Pending(id, entry));
     }
 
-    private String resolveName(PersonId id) {
+    private String resolveName(AgentId id) {
         return sanitize(PersonDirectory.get(server).nameOf(id).orElse("unknown"));
     }
 
@@ -118,11 +118,11 @@ public final class JournalFileSink {
         if (batch.isEmpty()) {
             return;
         }
-        Map<PersonId, List<String>> byPerson = new LinkedHashMap<>();
+        Map<AgentId, List<String>> byPerson = new LinkedHashMap<>();
         for (Pending pending : batch) {
             byPerson.computeIfAbsent(pending.id(), key -> new ArrayList<>()).add(render(pending.entry()));
         }
-        for (Map.Entry<PersonId, List<String>> person : byPerson.entrySet()) {
+        for (Map.Entry<AgentId, List<String>> person : byPerson.entrySet()) {
             try {
                 BufferedWriter out = handleFor(person.getKey());
                 for (String line : person.getValue()) {
@@ -137,7 +137,7 @@ public final class JournalFileSink {
     }
 
     /** The open writer for {@code id}, opening (and header-stamping) its file on first use. */
-    private BufferedWriter handleFor(PersonId id) throws IOException {
+    private BufferedWriter handleFor(AgentId id) throws IOException {
         BufferedWriter existing = handles.get(id);
         if (existing != null) {
             return existing;
