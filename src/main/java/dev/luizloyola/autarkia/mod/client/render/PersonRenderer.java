@@ -163,7 +163,7 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
      * One hand's pose. Eating and drinking fall through to {@link HumanoidModel.ArmPose#ITEM} — that
      * Is vanilla's eat pose, there is no separate chew: the bite reads as the raised item plus the
      * food particles and eating sounds the item's {@code Consumable} emits every few ticks of the
-     * use, which {@code PersonItemConsumer} already drives through vanilla's own item-use pipeline.
+     * use, which {@code AgentItemConsumer} already drives through vanilla's own item-use pipeline.
      */
     private static HumanoidModel.ArmPose armPose(Person person, ItemStack stack, InteractionHand hand) {
         if (stack.isEmpty()) return HumanoidModel.ArmPose.EMPTY;

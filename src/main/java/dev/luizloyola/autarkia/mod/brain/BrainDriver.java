@@ -23,6 +23,10 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.AgentJournal;
 import dev.luizloyola.anima.core.agent.Pronouns;
+import dev.luizloyola.anima.mod.brain.AgentBlockPlacer;
+import dev.luizloyola.anima.mod.brain.AgentItemConsumer;
+import dev.luizloyola.anima.mod.brain.AgentMover;
+import dev.luizloyola.anima.mod.brain.AgentPercepts;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayList;
@@ -35,18 +39,17 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 
 /**
- * Per-{@link Person} brain host: mounts the core decision machinery on the entity and gives it a
- * {@link BrainContext} to think through — actuators ({@link PersonMover} legs,
- * {@link PersonItemConsumer} mouth) and percepts ({@link PersonPercepts}). Arbiter-first since
- * ladder step 4: it hosts an {@link Arbiter} (Flee, Eat, Wander — Flee first so a flee/eat pressure
- * tie flees) rather than a bare {@link dev.luizloyola.anima.core.brain.task.TaskExecutor}. Only the
- * mounting bracket — everything hosted is pure core, assembled once, the adapters being stateless
- * views.
+ * Per-{@link Person} brain host: mounts the core decision machinery on the entity and hands it a
+ * {@link BrainContext} — actuators ({@link AgentMover} legs, {@link AgentItemConsumer} mouth) and
+ * percepts ({@link AgentPercepts}). Arbiter-first, hosting an {@link Arbiter} rather than a bare
+ * {@link dev.luizloyola.anima.core.brain.task.TaskExecutor}. Only a mounting bracket: everything
+ * hosted is pure core, assembled once at construction because the adapters are stateless views
+ * over the entity.
  *
- * <p>It only ever <em>reads</em> the body, through {@link Percepts}, and never owns body state: the
- * entity owns and ticks its own metabolism ({@link Person#needs()}), so a paused or throttled brain
- * still starves. Anything of the body persists on the entity; the brain's working state (arbiter +
- * running task tree) is transient like the Navigator's — a reload just re-decides.
+ * <p>The brain decides; the body suffers. The entity owns and ticks its own metabolism
+ * ({@link Person#needs()}), so a paused or throttled brain still starves, and this host only ever
+ * <em>reads</em> the body (through {@link Percepts}). Body state persists on the entity; the
+ * brain's working state is transient like the Navigator's — a reload just re-decides.
  */
 public final class BrainDriver {
     private final Person person;
@@ -93,10 +96,10 @@ public final class BrainDriver {
         this.person = person;
         // Offset the board cadence by entity id so a settlement doesn't re-plan in lockstep.
         this.board = new AgentBoard(ItemSpec.LOGS, STOCK_LOGS, STOCK_PRIORITY, person.getId());
-        Mover mover = new PersonMover(person);
-        ItemConsumer consumer = new PersonItemConsumer(person);
-        BlockPlacer placer = new PersonBlockPlacer(person);
-        Percepts percepts = new PersonPercepts(person);
+        Mover mover = new AgentMover(person);
+        ItemConsumer consumer = new AgentItemConsumer(person);
+        BlockPlacer placer = new AgentBlockPlacer(person);
+        Percepts percepts = new AgentPercepts(person, () -> person.beingSense().beings());
         ActuatorAccess actuators = new ActuatorAccess() {
             @Override
             public Mover mover() {

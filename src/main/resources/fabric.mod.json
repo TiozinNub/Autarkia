@@ -3,7 +3,7 @@
   "id": "${id}",
   "version": "${version}",
   "name": "${name}",
-  "description": "Fully autonomous NPCs that survive, build, and evolve on their own — the world lives without you.",
+  "description": "The world lives... Without you.",
   "authors": [
     "Luiz Loyola"
   ],

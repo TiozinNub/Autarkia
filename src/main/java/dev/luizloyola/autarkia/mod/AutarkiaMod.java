@@ -11,7 +11,7 @@ import dev.luizloyola.autarkia.mod.brain.DamageMarks;
 import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.log.Journals;
-import dev.luizloyola.autarkia.mod.nav.PathfinderService;
+import dev.luizloyola.anima.mod.nav.PathfinderService;
 import dev.luizloyola.autarkia.mod.net.DebugGlowSync;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;

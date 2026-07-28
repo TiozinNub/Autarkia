@@ -14,7 +14,7 @@ import dev.luizloyola.autarkia.mod.brain.Knowledges;
 import dev.luizloyola.autarkia.mod.command.PersonSelection;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.entity.Persons;
-import dev.luizloyola.autarkia.mod.nav.Navigator;
+import dev.luizloyola.anima.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.net.DebugViewPayload;
 import java.util.ArrayList;
 import java.util.EnumSet;

@@ -15,13 +15,13 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.autarkia.mod.brain.BrainDriver;
-import dev.luizloyola.autarkia.mod.brain.PersonBlockBreaker;
-import dev.luizloyola.autarkia.mod.brain.PersonScaffolder;
+import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
+import dev.luizloyola.anima.mod.brain.AgentScaffolder;
 import dev.luizloyola.autarkia.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
 import dev.luizloyola.autarkia.mod.log.Journals;
-import dev.luizloyola.autarkia.mod.nav.Navigator;
+import dev.luizloyola.anima.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.Locale;
 import java.util.UUID;
@@ -57,13 +57,18 @@ import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
+import dev.luizloyola.anima.core.agent.Pronouns;
+import dev.luizloyola.anima.mod.body.AgentBody;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A player-shaped autonomous NPC. Extends {@link Avatar} so it renders like a player (custom skin,
- * player model) without inheriting the immovable "decoration" behaviour of {@link Mannequin}.
+ * A player-shaped autonomous NPC. Extends {@link Avatar} so it renders like a player without
+ * inheriting the immovable "decoration" behaviour of {@link Mannequin}.
+ *
+ * <p>Anima's first {@link AgentBody}: the mind belongs to the library and knows nothing about
+ * Persons; this class adds only what it means to be a <em>person</em>.
  */
-public class Person extends Avatar {
+public class Person extends Avatar implements AgentBody {
     /**
      * Default skin, as a texture <em>asset id</em> — not a file path. It resolves to
      * {@code assets/autarkia/textures/entity/person/default.png} (the render pipeline prepends
@@ -177,17 +182,18 @@ public class Person extends Avatar {
                     new dev.luizloyola.autarkia.mod.brain.BeingEar(this));
 
     /**
-     * This person's working arm ({@link PersonBlockBreaker}) — ticked here so the crack animation,
-     * drops and exhaustion advance with the body; the brain drives it as an actuator port.
-     * Transient — an interrupted break just heals its crack.
+     * This person's working arm ({@link AgentBlockBreaker}) — body machinery ticked here so the
+     * crack animation, drops and exhaustion advance with the body, and exposed to the brain as an
+     * actuator port by the {@link #brain} driver.
      */
-    private final PersonBlockBreaker blockBreaker = new PersonBlockBreaker(this);
+    private final AgentBlockBreaker blockBreaker = new AgentBlockBreaker(this);
 
     /**
-     * This person's climbing legs ({@link PersonScaffolder}) — the nerd-pole machine, ticked here so
-     * jump/place timing advances with the body; the brain asks for steps through the actuator port.
+     * This person's climbing legs ({@link AgentScaffolder}) — the nerd-pole machine, body
+     * machinery like the {@link #blockBreaker}: owned and ticked here so jump/place timing
+     * advances with the body; the brain asks for steps through the actuator port.
      */
-    private final PersonScaffolder scaffolder = new PersonScaffolder(this);
+    private final AgentScaffolder scaffolder = new AgentScaffolder(this);
 
     /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
@@ -375,13 +381,13 @@ public class Person extends Avatar {
         }
     }
 
-    /** This person's working arm — the break machinery the brain drives as a port. See {@link PersonBlockBreaker}. */
-    public PersonBlockBreaker blockBreaker() {
+    /** This person's working arm — the break machinery the brain drives as a port. See {@link AgentBlockBreaker}. */
+    public AgentBlockBreaker blockBreaker() {
         return this.blockBreaker;
     }
 
-    /** This person's climbing legs — the nerd-pole machinery. See {@link PersonScaffolder}. */
-    public PersonScaffolder scaffolder() {
+    /** This person's climbing legs — the nerd-pole machinery. See {@link AgentScaffolder}. */
+    public AgentScaffolder scaffolder() {
         return this.scaffolder;
     }
 
@@ -776,6 +782,26 @@ public class Person extends Avatar {
     public @Nullable AgentId getAgentId() {
         String id = this.entityData.get(DATA_PERSON_ID);
         return id.isEmpty() ? null : AgentId.of(UUID.fromString(id));
+    }
+
+    // ---- AgentBody: what Anima needs of any body it drives -----------------------------
+
+    /** A Person is its own entity — the escape hatch Anima reads vanilla state through. */
+    @Override
+    public LivingEntity entity() {
+        return this;
+    }
+
+    /** {@inheritDoc} Autarkia's name for it is {@link #getAgentId()}. */
+    @Override
+    public @Nullable AgentId agentId() {
+        return getAgentId();
+    }
+
+    /** {@inheritDoc} A Person narrates through their {@link Gender}. */
+    @Override
+    public Pronouns pronouns() {
+        return getGender();
     }
 
     @Override
