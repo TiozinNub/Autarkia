@@ -1,7 +1,6 @@
 package dev.luizloyola.autarkia.mod;
 
 import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
-import dev.luizloyola.autarkia.mod.config.ConfigFile;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;
@@ -30,8 +29,9 @@ public class AutarkiaMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        // First: everything below may read a tuning knob, and the simulation certainly does.
-        ConfigFile.reload();
+        // No config load here: every knob Autarkia had was a knob of the MIND, so Anima owns them
+        // and loads config/anima.json. A Person-shaped tunable would declare its own KnobSet and
+        // ConfigFile — see KnobSet.
         ModEntities.init();
         ModItems.init();
         ModMenus.init();

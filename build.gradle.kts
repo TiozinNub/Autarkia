@@ -50,10 +50,6 @@ repositories {
     }
     strictMaven("https://www.cursemaven.com", "CurseForge", "curse.maven")
     strictMaven("https://api.modrinth.com/maven", "Modrinth", "maven.modrinth")
-    // YACL (optional config screen) — upstream's own maven. Note it is not always ahead of
-    // Modrinth: the 1.21.11 line stops at 3.8.1 here while Modrinth has 3.8.2. Pin per node
-    // against this repository's maven-metadata.xml, not against what Modrinth lists.
-    strictMaven("https://maven.isxander.dev/releases", "Xander", "dev.isxander")
 }
 
 dependencies {
@@ -93,25 +89,9 @@ dependencies {
         "fabric-networking-api-v1", "fabric-entity-events-v1"
     )
 
-    // Optional config GUI. Both are compile-only: never shipped, never required at runtime, and
-    // guarded at every call site (see AutarkiaModMenu). YACL is used for the SCREEN only — its
-    // config API is not used, because mod/config/ConfigFile keeps the atomic
-    // tmp-and-rename write, the unknown-key reporting and the regenerated doc comments that YACL's
-    // serializer does not offer, and core/config/Config keeps the volatile whole-object swap that
-    // makes a reload safe for the off-thread pathfinder.
-    // YACL over Cloth Config because Cloth is feature-frozen upstream, YACL tracks new MC versions
-    // sooner, and its mod id is identical on Fabric and NeoForge (Cloth needs Connector's legacy
-    // `cloth-config2` alias to resolve across loaders).
-    // Do not bundle YACL: upstream asks not to, and it is almost always already installed.
-    // To actually see the screen in a dev client, flip these two to modLocalRuntime.
-    val yacl: String = sc.properties["deps.yacl"]
-    val modMenu: String = sc.properties["deps.modmenu"]
-    // isTransitive=false: YACL's POM pulls org.quiltmc.parsers (its JSON5 serializer), which lives
-    // on a maven we don't otherwise need. We compile against YACL's screen API and never run it —
-    // at runtime the real YACL brings its own nested copies — so the transitives buy nothing but
-    // another repository to keep alive.
-    modCompileOnly("dev.isxander:yet-another-config-lib:$yacl") { isTransitive = false }
-    modCompileOnly("maven.modrinth:modmenu:$modMenu")
+    // The optional config GUI moved to Anima with the knobs it edits: Autarkia has no
+    // tunables of its own yet, so it needs neither YACL nor the Mod Menu entrypoint. When it
+    // grows a KnobSet, these come back here for its screen — Anima's stays Anima's.
 
     // DevAuth Neo: real-account login in dev runs (enable with -Pdevauth). Runtime-only,
     // never shipped. No builds exist below 1.21.11 - those nodes stay offline-mode.
