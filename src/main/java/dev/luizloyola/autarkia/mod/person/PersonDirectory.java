@@ -22,6 +22,9 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.List;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.random.RandomGenerator;
@@ -126,6 +129,16 @@ public final class PersonDirectory extends SavedData implements AgentDirectory {
     @Override
     public Optional<PrivateIdentity> identity(AgentId id) {
         return registry.get(id).map(PrivateIdentity.class::cast);
+    }
+
+    /** Anima's enumeration, answered for Persons — every one, loaded or not. */
+    @Override
+    public Map<AgentId, PrivateIdentity> known() {
+        Map<AgentId, PrivateIdentity> everyone = new LinkedHashMap<>();
+        for (PersonIdentity identity : entries()) {
+            everyone.put(identity.id(), identity);
+        }
+        return Collections.unmodifiableMap(everyone);
     }
 
     /** Dev-tooling removal (the purge command); marks dirty. Real deaths never call this —
