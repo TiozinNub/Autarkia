@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.client;
 
-import dev.luizloyola.anima.mod.client.AgentContactsClient;
-import dev.luizloyola.anima.mod.client.DebugGlowClient;
+import dev.luizloyola.autarkia.core.tree.Pois;
+import dev.luizloyola.anima.mod.client.DebugViewRenderer;
 import dev.luizloyola.autarkia.compat.client.inv.PersonInventoryScreen;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.client.render.PersonRenderer;
@@ -21,10 +21,11 @@ public class AutarkiaClient implements ClientModInitializer {
         EntityRenderers.register(ModEntities.PERSON, PersonRenderer::new);
         // MenuScreens.register is package-private too — the same access-widener route.
         MenuScreens.register(ModMenus.PERSON_INVENTORY, PersonInventoryScreen::new);
-        AgentContactsClient.install();
-        DebugGlowClient.install();
+        // Anima's client entrypoint installs the contact cache, the glow sync and the debug view.
+        // Here: the renderer, the inventory screen, the outline through Person's own render flag,
+        // and the colours our POI kinds are drawn in.
         DebugGlow.install();
-        DebugViewClient.install();
-        DebugViewRenderer.install();
+        DebugViewRenderer.kindColor(Pois.TREE, 0xFF3BA55D);
+        DebugViewRenderer.kindColor(Pois.WATER, 0xFF3B7FA5);
     }
 }

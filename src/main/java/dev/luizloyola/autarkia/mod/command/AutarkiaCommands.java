@@ -40,8 +40,8 @@ import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
 import dev.luizloyola.anima.mod.brain.Knowledges;
 import dev.luizloyola.anima.mod.brain.BeingViewer;
-import dev.luizloyola.autarkia.mod.debug.DebugLayer;
-import dev.luizloyola.autarkia.mod.debug.DebugView;
+import dev.luizloyola.anima.mod.debug.DebugLayer;
+import dev.luizloyola.anima.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -164,22 +164,7 @@ public final class AutarkiaCommands {
                         // The in-world debug view: gizmo lines, boxes and floating text over the
                         // SELECTED Person. Per-player, and the only way to raise several layers at
                         // once (the wand's shift-click cycles them one at a time).
-                        .then(Commands.literal("debug")
-                                .executes(ctx -> debugShow(ctx.getSource()))
-                                .then(Commands.literal("show")
-                                        .executes(ctx -> debugShow(ctx.getSource())))
-                                .then(Commands.literal("off")
-                                        .executes(ctx -> debugOff(ctx.getSource())))
-                                .then(Commands.argument("layer", StringArgumentType.word())
-                                        .suggests(LAYER_SUGGESTIONS)
-                                        .executes(ctx -> debugLayerShow(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "layer")))
-                                        .then(Commands.literal("true")
-                                                .executes(ctx -> debugLayer(ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "layer"), true)))
-                                        .then(Commands.literal("false")
-                                                .executes(ctx -> debugLayer(ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "layer"), false)))))
+                        .then(AgentCommands.debug())
                         // NOTE: the tunables moved with the mind. Every knob Autarkia had was a knob of the
                         // BRAIN, so they live in Anima's own file and command now: /anima config. Autarkia
                         // registers its own set the day it grows a knob about being a PERSON, not a mind.
@@ -256,104 +241,6 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /**
-     * Switches one debug-view layer on or off for this player. Layers are per-player and combine
-     * freely, which the debug wand's one-at-a-time cycle cannot; what gets drawn is whoever the
-     * player has selected, so the view moves with the pin.
-     *
-     * <p>Player-only, and it fails loudly: the layers are drawn by a client, and the console has
-     * none.
-     */
-    private static int debugLayer(CommandSourceStack source, String token, boolean on) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) {
-            source.sendFailure(Component.literal(
-                    "The debug view draws on a client — run it as a player. "
-                            + "(For a headless readout use knowledge view / peers view.)"));
-            return 0;
-        }
-        DebugLayer layer = parseLayer(source, token);
-        if (layer == null) {
-            return 0;
-        }
-        EnumSet<DebugLayer> now = DebugView.set(source.getServer(), player.getUUID(), layer, on);
-        source.sendSuccess(() -> Component.literal("Debug " + layer.key() + " " + (on ? "on" : "off")
-                        + " — showing " + describeLayers(now))
-                .withStyle(on ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
-        return 1;
-    }
-
-    /**
-     * {@code /autarkia debug <layer>} with the {@code true|false} left off READS that layer for this
-     * player instead of moving it, as every {@code true|false} switch in this file does: a status
-     * line has to be safe to run when you have forgotten the state.
-     */
-    private static int debugLayerShow(CommandSourceStack source, String token) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) {
-            source.sendFailure(Component.literal("The debug view is per-player — run it as a player."));
-            return 0;
-        }
-        DebugLayer layer = parseLayer(source, token);
-        if (layer == null) {
-            return 0;
-        }
-        EnumSet<DebugLayer> now = DebugView.layers(source.getServer(), player.getUUID());
-        boolean on = now.contains(layer);
-        source.sendSuccess(() -> Component.literal("Debug " + layer.key() + " is " + on
-                        + " — showing " + describeLayers(now))
-                .withStyle(on ? ChatFormatting.GREEN : ChatFormatting.GRAY), false);
-        return on ? 1 : 0;
-    }
-
-    /** The layer this token names, or null having already reported the vocabulary it should use. */
-    private static @Nullable DebugLayer parseLayer(CommandSourceStack source, String token) {
-        DebugLayer layer = DebugLayer.byKey(token).orElse(null);
-        if (layer == null) {
-            source.sendFailure(Component.literal("Unknown debug layer '" + token + "' — try "
-                    + Stream.of(DebugLayer.values()).map(DebugLayer::key)
-                            .collect(Collectors.joining(", "))));
-        }
-        return layer;
-    }
-
-    /** What this player currently has drawn, and what else there is to draw. */
-    private static int debugShow(CommandSourceStack source) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) {
-            source.sendFailure(Component.literal("The debug view is per-player — run it as a player."));
-            return 0;
-        }
-        EnumSet<DebugLayer> now = DebugView.layers(source.getServer(), player.getUUID());
-        source.sendSuccess(() -> Component.literal("Debug view — showing " + describeLayers(now))
-                .withStyle(ChatFormatting.AQUA), false);
-        source.sendSuccess(() -> Component.literal("  layers: "
-                        + Stream.of(DebugLayer.values()).map(DebugLayer::key)
-                                .collect(Collectors.joining(", ")))
-                .withStyle(ChatFormatting.GRAY), false);
-        return 1;
-    }
-
-    /** Clears every layer for this player — the command twin of cycling the wand back past the end. */
-    private static int debugOff(CommandSourceStack source) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) {
-            source.sendFailure(Component.literal("The debug view is per-player — run it as a player."));
-            return 0;
-        }
-        boolean had = DebugView.clear(source.getServer(), player.getUUID());
-        source.sendSuccess(() -> Component.literal(had
-                        ? "Debug view off." : "Debug view was already off.")
-                .withStyle(ChatFormatting.YELLOW), false);
-        return had ? 1 : 0;
-    }
-
-    private static String describeLayers(EnumSet<DebugLayer> layers) {
-        return layers.isEmpty()
-                ? "nothing"
-                : layers.stream().map(DebugLayer::key).collect(Collectors.joining(", "));
-    }
-
     /** Runs {@link ObtainItem} (logs × count): rounds of scavenge-or-chop until the pack holds the
      *  quota, run to completion in one invocation. */
     private static int brainObtain(CommandSourceStack source, int count) {
@@ -377,7 +264,6 @@ public final class AutarkiaCommands {
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
-
 
     /**
      * Attaches the optional {@code [<pos>] [name]} leaves to a spawn literal, so {@code spawn} and
@@ -509,13 +395,6 @@ public final class AutarkiaCommands {
                 + " is not a Person — that command is Autarkia's, not Anima's."));
         return null;
     }
-
-    /** Suggests every loaded Person's name (quoted when it has spaces) and short id, so {@code select}
-     *  tab-completes to something that actually resolves. */
-    /** Every debug layer's name — the completions behind {@code debug <layer>}. */
-    private static final SuggestionProvider<CommandSourceStack> LAYER_SUGGESTIONS = (ctx, builder) ->
-            SharedSuggestionProvider.suggest(
-                    Stream.of(DebugLayer.values()).map(DebugLayer::key), builder);
 
     /** Lists the loaded Persons, nearest first: a {@code ✓} on the pinned one, then name, short id,
      *  dimension, and distance. This is how you find out what to {@code select}. */

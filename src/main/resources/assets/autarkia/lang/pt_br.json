@@ -1,12 +1,3 @@
 {
-  "entity.autarkia.person": "Pessoa",
-  "item.autarkia.debug_wand": "Varinha de Depuração",
-  "item.autarkia.debug_wand.selected": "Seleção: %s",
-  "item.autarkia.debug_wand.no_identity": "Essa pessoa ainda não tem identidade",
-  "item.autarkia.debug_wand.debug_layer": "%s — depuração: %s",
-  "item.autarkia.debug_wand.debug_off": "%s — depuração desligada",
-  "item.autarkia.debug_wand.no_selection": "Nenhuma pessoa selecionada — clique com o botão direito em uma primeiro",
-  "item.autarkia.debug_wand.not_loaded": "A pessoa selecionada não está carregada",
-  "item.autarkia.debug_wand.moving": "Mandando %s andar até %s, %s, %s",
-  "item.autarkia.debug_wand.running": "Mandando %s correr até %s, %s, %s"
+  "entity.autarkia.person": "Pessoa"
 }

@@ -4,11 +4,11 @@ import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;
-import dev.luizloyola.autarkia.mod.item.ModItems;
+import dev.luizloyola.anima.mod.item.AnimaItems;
 import dev.luizloyola.anima.mod.brain.Claims;
 import dev.luizloyola.anima.mod.brain.DamageMarks;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
-import dev.luizloyola.autarkia.mod.debug.DebugView;
+import dev.luizloyola.anima.mod.debug.DebugView;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.autarkia.core.tree.ChopKnownTree;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
@@ -42,7 +42,7 @@ public class AutarkiaMod implements ModInitializer {
         // and loads config/anima.json. A Person-shaped tunable would declare its own KnobSet and
         // ConfigFile — see KnobSet.
         ModEntities.init();
-        ModItems.init();
+        AnimaItems.init();
         ModMenus.init();
         AutarkiaCommands.register();
         DebugGlowSync.install();
