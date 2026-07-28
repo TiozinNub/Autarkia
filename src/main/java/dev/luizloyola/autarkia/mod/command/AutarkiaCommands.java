@@ -1,5 +1,8 @@
 package dev.luizloyola.autarkia.mod.command;
 
+import java.util.Map;
+import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.anima.core.agent.PrivateIdentity;
 import dev.luizloyola.anima.mod.body.AgentBodies;
 import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.command.AgentSelection;
@@ -43,7 +46,7 @@ import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.log.ThoughtBroadcast;
-import dev.luizloyola.autarkia.mod.net.ContactsSync;
+import dev.luizloyola.anima.mod.net.ContactsSync;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import dev.luizloyola.anima.mod.social.ContactData;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -805,26 +808,29 @@ public final class AutarkiaCommands {
     private static @Nullable AgentId resolveDirectory(CommandSourceStack source, String rawToken) {
         String token = rawToken.trim();
         String lower = token.toLowerCase(Locale.ROOT);
-        List<PersonIdentity> all = PersonDirectory.get(source.getServer()).all();
-        List<PersonIdentity> matches = all.stream()
-                .filter(identity -> identity.id().toString().toLowerCase(Locale.ROOT).startsWith(lower))
+        Map<AgentId, PrivateIdentity> all = AgentDirectory.of(source.getServer()).known();
+        List<AgentId> matches = all.keySet().stream()
+                .filter(id -> id.toString().toLowerCase(Locale.ROOT).startsWith(lower))
                 .toList();
         if (matches.isEmpty()) {
-            matches = all.stream().filter(identity -> identity.name().equalsIgnoreCase(token)).toList();
+            matches = all.entrySet().stream()
+                    .filter(e -> e.getValue().name().equalsIgnoreCase(token))
+                    .map(Map.Entry::getKey)
+                    .toList();
         }
         if (matches.isEmpty()) {
             source.sendFailure(Component.literal(
-                    "No person matches '" + token + "' — try a name or id from /autarkia list."));
+                    "No agent matches '" + token + "' — try a name or id from the list command."));
             return null;
         }
         if (matches.size() > 1) {
-            String ids = matches.stream().map(identity -> shortId(identity.id()))
+            String ids = matches.stream().map(AutarkiaCommands::shortId)
                     .collect(java.util.stream.Collectors.joining(", "));
-            source.sendFailure(Component.literal(matches.size() + " persons named '" + token
+            source.sendFailure(Component.literal(matches.size() + " agents named '" + token
                     + "' — pick one by id: " + ids));
             return null;
         }
-        return matches.get(0).id();
+        return matches.get(0);
     }
 
     /** One journal line, the {@code Bob - pathfind - target(…) - success N nodes} shape, tick-prefixed. */
@@ -1299,10 +1305,11 @@ public final class AutarkiaCommands {
     /** Suggests every registered person's name + short id (loaded or not) for {@code log for},
      *  which (unlike {@code select}) can reach an unloaded person's journal. */
     private static final SuggestionProvider<CommandSourceStack> ALL_PERSON_SUGGESTIONS = (ctx, builder) -> {
-        Stream<String> tokens = PersonDirectory.get(ctx.getSource().getServer()).all().stream()
-                .flatMap(identity -> Stream.of(
-                        identity.name().contains(" ") ? '"' + identity.name() + '"' : identity.name(),
-                        shortId(identity.id())));
+        Stream<String> tokens = AgentDirectory.of(ctx.getSource().getServer()).known().entrySet().stream()
+                .flatMap(entry -> Stream.of(
+                        entry.getValue().name().contains(" ")
+                                ? '"' + entry.getValue().name() + '"' : entry.getValue().name(),
+                        shortId(entry.getKey())));
         return SharedSuggestionProvider.suggest(tokens, builder);
     };
 
@@ -1310,36 +1317,42 @@ public final class AutarkiaCommands {
     private static int selectByToken(CommandSourceStack source, String rawToken) {
         String token = rawToken.trim();
         MinecraftServer server = source.getServer();
-        PersonDirectory directory = PersonDirectory.get(server);
-        Vec3 origin = source.getPosition();
-        List<Person> loaded = loadedPersons(server);
+        AgentDirectory directory = AgentDirectory.of(server);
+        List<AgentBody> loaded = AgentBodies.loaded(server);
 
         // An id (or short-id prefix) is an unambiguous handle, so it's tried first; only if nothing
         // matches by id do we fall back to a case-insensitive name match (names aren't unique).
         String lower = token.toLowerCase(Locale.ROOT);
-        List<Person> matches = loaded.stream()
-                .filter(p -> p.getAgentId() != null
-                        && p.getAgentId().toString().toLowerCase(Locale.ROOT).startsWith(lower))
+        List<AgentBody> matches = loaded.stream()
+                .filter(b -> b.agentId() != null
+                        && b.agentId().toString().toLowerCase(Locale.ROOT).startsWith(lower))
                 .toList();
         if (matches.isEmpty()) {
             matches = loaded.stream()
-                    .filter(p -> p.getAgentId() != null
-                            && directory.nameOf(p.getAgentId()).map(n -> n.equalsIgnoreCase(token)).orElse(false))
+                    .filter(b -> b.agentId() != null
+                            && directory.nameOf(b.agentId()).map(n -> n.equalsIgnoreCase(token)).orElse(false))
                     .toList();
         }
         if (matches.isEmpty()) {
             source.sendFailure(Component.literal(
-                    "No loaded Person matches '" + token + "' — try /autarkia list."));
+                    "Nobody loaded matches '" + token + "' — try the list command."));
             return 0;
         }
-        int count = matches.size();
-        Person chosen = matches.stream()
-                .min((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
-                .orElseThrow();
-        AgentId id = chosen.getAgentId();
+        // Ambiguity FAILS rather than guessing (decision: Luiz): a name collides across kinds once
+        // several mods share a world, and picking the closer of a settler and a wolf is a worse
+        // answer than asking. Ids are always unambiguous.
+        if (matches.size() > 1) {
+            String ids = matches.stream()
+                    .map(b -> shortId(b.agentId()))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            source.sendFailure(Component.literal(matches.size() + " agents match '" + token
+                    + "' — pick one by id: " + ids));
+            return 0;
+        }
+        AgentId id = matches.get(0).agentId();
         AgentSelection.pin(source, id);
-        source.sendSuccess(() -> Component.literal("Selected " + label(server, id)
-                + (count > 1 ? " (nearest of " + count + " matches)" : "")).withStyle(ChatFormatting.AQUA), false);
+        source.sendSuccess(() -> Component.literal("Selected " + label(server, id))
+                .withStyle(ChatFormatting.AQUA), false);
         return 1;
     }
 

@@ -46,7 +46,7 @@ public class AutarkiaMod implements ModInitializer {
         ModMenus.init();
         AutarkiaCommands.register();
         DebugGlowSync.install();
-        dev.luizloyola.autarkia.mod.net.ContactsSync.install();
+        dev.luizloyola.anima.mod.net.ContactsSync.install();
         DebugView.init();
         PathfinderService.init();
         Journals.init();

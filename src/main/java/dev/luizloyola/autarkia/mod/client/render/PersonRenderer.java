@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.mod.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import dev.luizloyola.autarkia.mod.client.PersonContactsClient;
+import dev.luizloyola.anima.mod.client.AgentContactsClient;
 import dev.luizloyola.autarkia.mod.client.anim.NeaBridge;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -121,7 +121,7 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
      */
     @Override
     protected boolean shouldShowName(Person person, double distanceSq) {
-        return PersonContactsClient.knows(person.getAgentId())
+        return AgentContactsClient.knows(person.getAgentId())
                 && super.shouldShowName(person, distanceSq);
     }
 
@@ -132,7 +132,7 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
      */
     @Override
     protected Component getNameTag(Person person) {
-        String known = PersonContactsClient.nameOf(person.getAgentId());
+        String known = AgentContactsClient.nameOf(person.getAgentId());
         return known == null ? super.getNameTag(person) : Component.literal(known);
     }
 

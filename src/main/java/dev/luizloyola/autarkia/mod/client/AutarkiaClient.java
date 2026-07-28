@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.client;
 
+import dev.luizloyola.anima.mod.client.AgentContactsClient;
 import dev.luizloyola.anima.mod.client.DebugGlowClient;
 import dev.luizloyola.autarkia.compat.client.inv.PersonInventoryScreen;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
@@ -20,7 +21,7 @@ public class AutarkiaClient implements ClientModInitializer {
         EntityRenderers.register(ModEntities.PERSON, PersonRenderer::new);
         // MenuScreens.register is package-private too — the same access-widener route.
         MenuScreens.register(ModMenus.PERSON_INVENTORY, PersonInventoryScreen::new);
-        PersonContactsClient.install();
+        AgentContactsClient.install();
         DebugGlowClient.install();
         DebugGlow.install();
         DebugViewClient.install();

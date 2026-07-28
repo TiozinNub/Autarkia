@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.entity;
 
+import dev.luizloyola.anima.mod.client.AgentContactsClient;
 import dev.luizloyola.anima.compat.inv.Inventories;
 import dev.luizloyola.anima.compat.inv.ItemStacks;
 import dev.luizloyola.anima.core.inv.ArmorType;
@@ -728,13 +729,12 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * This person's name, SERVER-SIDE and omniscient — commands, journals and logs read it here,
-     * unchanged by the contact book.
+     * This person's name, SERVER-SIDE and omniscient — commands, journals and logs all read it
+     * here, unchanged by the contact book.
      *
      * <p>Overriding this rather than the custom name keeps every server-side caller working, since
-     * {@code Entity#getDisplayName} builds on it. On the CLIENT it falls through to the entity type —
-     * a client that has not been told a name genuinely does not have one, and the renderer asks
-     * {@code PersonContactsClient}.
+     * {@code Entity#getDisplayName} builds on it. On the CLIENT it falls through to the entity
+     * type, and the renderer asks {@code AgentContactsClient} instead.
      */
     @Override
     public Component getName() {
