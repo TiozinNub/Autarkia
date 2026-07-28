@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mixin;
 
-import dev.luizloyola.autarkia.mod.brain.PlaceMarks;
+import dev.luizloyola.anima.mod.brain.PlaceMarks;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;

@@ -6,12 +6,14 @@ import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;
 import dev.luizloyola.autarkia.mod.item.ModItems;
-import dev.luizloyola.autarkia.mod.brain.Claims;
-import dev.luizloyola.autarkia.mod.brain.DamageMarks;
-import dev.luizloyola.autarkia.mod.brain.KnowledgeViewer;
+import dev.luizloyola.anima.mod.brain.Claims;
+import dev.luizloyola.anima.mod.brain.DamageMarks;
+import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
-import dev.luizloyola.autarkia.mod.log.Journals;
+import dev.luizloyola.anima.mod.log.Journals;
+import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
+import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import dev.luizloyola.autarkia.mod.net.DebugGlowSync;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
@@ -41,10 +43,14 @@ public class AutarkiaMod implements ModInitializer {
         Journals.init();
         Claims.init();
         DamageMarks.init();
-        dev.luizloyola.autarkia.mod.brain.PlaceMarks.init();
-        dev.luizloyola.autarkia.mod.brain.BeingViewer.init();
-        dev.luizloyola.autarkia.mod.brain.BeingVoices.init();
+        dev.luizloyola.anima.mod.brain.PlaceMarks.init();
+        dev.luizloyola.anima.mod.brain.BeingViewer.init();
+        dev.luizloyola.anima.mod.brain.BeingVoices.init();
         KnowledgeViewer.init();
+        // Teach Anima who Persons are. It asks only for the private tier (the name); the public
+        // tier stays ours to sync. Providers chain, so a future pets mod answers for its own ids
+        // beside this one.
+        AgentDirectory.provide(PersonDirectory::get);
         registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
     }

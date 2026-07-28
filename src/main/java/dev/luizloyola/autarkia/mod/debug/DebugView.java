@@ -10,7 +10,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.nav.Path;
 import dev.luizloyola.anima.core.nav.Waypoint;
 import dev.luizloyola.anima.core.agent.AgentId;
-import dev.luizloyola.autarkia.mod.brain.Knowledges;
+import dev.luizloyola.anima.mod.brain.Knowledges;
 import dev.luizloyola.autarkia.mod.command.PersonSelection;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.entity.Persons;

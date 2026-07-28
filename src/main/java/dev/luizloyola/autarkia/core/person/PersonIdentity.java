@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.person;
 
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.agent.PrivateIdentity;
 import java.util.Objects;
 
 /**
@@ -11,7 +12,7 @@ import java.util.Objects;
  * directory is the single source of truth; the entity holds a reference and projects the appearance
  * onto its synced fields.
  */
-public record PersonIdentity(AgentId id, String name, Appearance appearance) {
+public record PersonIdentity(AgentId id, String name, Appearance appearance) implements PrivateIdentity {
     public PersonIdentity {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(name, "name");

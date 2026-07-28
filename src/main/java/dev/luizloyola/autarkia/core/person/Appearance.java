@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.person;
 
+import dev.luizloyola.anima.core.agent.PublicIdentity;
 import java.util.Objects;
 
 /**
@@ -8,7 +9,7 @@ import java.util.Objects;
  * for (wide/slim). The rest of {@link PersonIdentity} is server-side, sent only when relevant. A
  * new person draws a skin from their gender's pool; the model follows the skin.
  */
-public record Appearance(Gender gender, String skin, ModelType model) {
+public record Appearance(Gender gender, String skin, ModelType model) implements PublicIdentity {
     public Appearance {
         Objects.requireNonNull(gender, "gender");
         Objects.requireNonNull(skin, "skin");

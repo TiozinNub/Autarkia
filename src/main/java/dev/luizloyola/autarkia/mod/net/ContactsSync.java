@@ -2,7 +2,7 @@ package dev.luizloyola.autarkia.mod.net;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
-import dev.luizloyola.autarkia.mod.social.ContactData;
+import dev.luizloyola.anima.mod.social.ContactData;
 import java.util.ArrayList;
 import java.util.List;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;

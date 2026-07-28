@@ -7,6 +7,8 @@ import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.agent.PrivateIdentity;
+import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
@@ -34,7 +36,7 @@ import java.util.random.RandomGenerator;
  * <p>Codec-based (the 26.1 {@link SavedDataType} model); the codec lives in {@code mod} so the core
  * stays free of DataFixerUpper.
  */
-public final class PersonDirectory extends SavedData {
+public final class PersonDirectory extends SavedData implements AgentDirectory {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
 
     /** Default external appearance for a legacy (pre-appearance) person. */
@@ -114,6 +116,16 @@ public final class PersonDirectory extends SavedData {
 
     public Optional<PersonIdentity> find(AgentId id) {
         return registry.get(id);
+    }
+
+    /**
+     * Anima's identity lookup, answered for Persons. Anima only ever asks for the private tier
+     * ({@link PrivateIdentity#name()}); the public tier — the {@link Appearance} it never needs —
+     * stays Autarkia's to sync and render.
+     */
+    @Override
+    public Optional<PrivateIdentity> identity(AgentId id) {
+        return registry.get(id).map(PrivateIdentity.class::cast);
     }
 
     /** Dev-tooling removal (the purge command); marks dirty. Real deaths never call this —

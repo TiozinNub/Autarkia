@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mixin;
 
-import dev.luizloyola.autarkia.mod.brain.BeingVoices;
+import dev.luizloyola.anima.mod.brain.BeingVoices;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.entity.Mob;
 import org.jspecify.annotations.Nullable;

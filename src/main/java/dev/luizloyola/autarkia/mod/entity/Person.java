@@ -14,13 +14,13 @@ import dev.luizloyola.anima.core.agent.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
-import dev.luizloyola.autarkia.mod.brain.BrainDriver;
+import dev.luizloyola.anima.mod.brain.BrainDriver;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentScaffolder;
-import dev.luizloyola.autarkia.mod.brain.PoiSensor;
+import dev.luizloyola.anima.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
-import dev.luizloyola.autarkia.mod.log.Journals;
+import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.Locale;
@@ -164,22 +164,21 @@ public class Person extends Avatar implements AgentBody {
     private final PoiSensor poiSensor = new PoiSensor(this);
 
     /**
-     * This person's being sense ({@link dev.luizloyola.autarkia.mod.brain.BeingSense}) — eyes
-     * (cone + line of sight), attention, and object permanence over every living body around them.
-     * The brain reads its output through {@code Percepts.beings()} (and the person-filtered
-     * {@code peers()} view).
+     * This person's being sense ({@link dev.luizloyola.anima.mod.brain.BeingSense}) — eyes (cone +
+     * line of sight), attention and object permanence over every living body around them. The brain
+     * reads its output through {@code Percepts.beings()} and the person-filtered {@code peers()}.
      */
-    private final dev.luizloyola.autarkia.mod.brain.BeingSense beingSense =
-            new dev.luizloyola.autarkia.mod.brain.BeingSense(this);
+    private final dev.luizloyola.anima.mod.brain.BeingSense beingSense =
+            new dev.luizloyola.anima.mod.brain.BeingSense(this);
 
     /**
      * The EAR half of the being sense — a game-event listener on the sculk vibration bus (see
-     * {@link dev.luizloyola.autarkia.mod.brain.BeingEar}), registered with the level through
+     * {@link dev.luizloyola.anima.mod.brain.BeingEar}), registered with the level through
      * {@link #updateDynamicGameEventListener} the way the warden's is.
      */
-    private final net.minecraft.world.level.gameevent.DynamicGameEventListener<dev.luizloyola.autarkia.mod.brain.BeingEar> ear =
+    private final net.minecraft.world.level.gameevent.DynamicGameEventListener<dev.luizloyola.anima.mod.brain.BeingEar> ear =
             new net.minecraft.world.level.gameevent.DynamicGameEventListener<>(
-                    new dev.luizloyola.autarkia.mod.brain.BeingEar(this));
+                    new dev.luizloyola.anima.mod.brain.BeingEar(this));
 
     /**
      * This person's working arm ({@link AgentBlockBreaker}) — body machinery ticked here so the
@@ -367,8 +366,8 @@ public class Person extends Avatar implements AgentBody {
         return this.poiSensor;
     }
 
-    /** This person's being sense — eyes, ears, attention. See {@link dev.luizloyola.autarkia.mod.brain.BeingSense}. */
-    public dev.luizloyola.autarkia.mod.brain.BeingSense beingSense() {
+    /** This person's being sense — eyes, ears, attention. See {@link dev.luizloyola.anima.mod.brain.BeingSense}. */
+    public dev.luizloyola.anima.mod.brain.BeingSense beingSense() {
         return this.beingSense;
     }
 

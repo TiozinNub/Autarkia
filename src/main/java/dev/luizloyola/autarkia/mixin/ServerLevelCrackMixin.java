@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mixin;
 
-import dev.luizloyola.autarkia.mod.brain.BeingKnocks;
+import dev.luizloyola.anima.mod.brain.BeingKnocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import org.spongepowered.asm.mixin.Mixin;
