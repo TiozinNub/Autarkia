@@ -117,6 +117,16 @@ public final class PersonDirectory extends SavedData implements AgentDirectory {
         return identity;
     }
 
+    /**
+     * Overwrites an existing identity in place — same id, corrected content. Used by the
+     * self-healing skin migration; anything that changes what a person is should go through a
+     * named operation rather than this.
+     */
+    public void replace(PersonIdentity identity) {
+        registry.register(identity);
+        setDirty();
+    }
+
     public Optional<PersonIdentity> find(AgentId id) {
         return registry.get(id);
     }

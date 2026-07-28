@@ -14,6 +14,7 @@ import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
+import dev.luizloyola.autarkia.core.person.PersonSkins;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.anima.mod.brain.BrainDriver;
 import dev.luizloyola.autarkia.core.board.Stock;
@@ -73,12 +74,11 @@ import org.jspecify.annotations.Nullable;
  */
 public class Person extends Avatar implements AgentBody {
     /**
-     * Default skin, as a texture <em>asset id</em> — not a file path. It resolves to
-     * {@code assets/autarkia/textures/entity/person/default.png} (the render pipeline prepends
-     * {@code textures/} and appends {@code .png}). Redirect any Person via {@link #setSkinTexture}.
+     * Default skin, as a texture <em>asset id</em> — vanilla's own Steve, which every client
+     * already has. Autarkia ships no skin textures at all; see {@link PersonSkins} for why.
      */
     public static final Identifier DEFAULT_SKIN =
-            Identifier.fromNamespaceAndPath("autarkia", "entity/person/default");
+            Identifier.fromNamespaceAndPath("minecraft", "entity/player/wide/steve");
 
     private static final EntityDataAccessor<String> DATA_SKIN =
             SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
@@ -723,7 +723,16 @@ public class Person extends Avatar implements AgentBody {
     private void applyIdentity(PersonIdentity identity) {
         this.identityName = identity.name();
         Appearance appearance = identity.appearance();
-        setSkinTexture(Identifier.parse(appearance.skin()));
+        // Self-healing migration: Autarkia used to bundle its own skin PNGs, so a person created
+        // then points at a texture no longer in the jar. Corrected once on first load rather than
+        // resolved on every read.
+        String skin = PersonSkins.resolve(appearance.skin(), appearance.gender());
+        if (!skin.equals(appearance.skin()) && level() instanceof ServerLevel serverLevel) {
+            appearance = appearance.withSkin(skin);
+            PersonDirectory.get(serverLevel.getServer())
+                    .replace(identity.withAppearance(appearance));
+        }
+        setSkinTexture(Identifier.parse(skin));
         this.entityData.set(DATA_GENDER, appearance.gender().name());
         this.entityData.set(DATA_SLIM, appearance.model() == ModelType.SLIM);
     }
