@@ -213,11 +213,11 @@ public final class DebugView {
         long now = person.level().getGameTime();
         AgentKnowledge knowledge = Knowledges.of(server).forPerson(id);
         List<DebugViewPayload.Belief> out = new ArrayList<>();
-        for (PoiKind kind : PoiKind.values()) {
+        for (PoiKind kind : PoiKind.all()) {
             for (PoiMemory memory : knowledge.all(kind)) {
                 Region bounds = memory.bounds();
                 out.add(new DebugViewPayload.Belief(
-                        memory.kind().ordinal(),
+                        memory.kind().key(),
                         cell(memory.anchor()),
                         cell(bounds.min()),
                         cell(bounds.max()),

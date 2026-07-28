@@ -102,6 +102,13 @@ dependencies {
     }?.let { modLocalRuntime("maven.modrinth:dev-auth-neo:$it") }
 
     // core/-layer unit tests: plain JUnit, headless — no Minecraft on the test classpath.
+    // Anima's brain test doubles come from its testFixtures: the chop tests drive a FakeContext,
+    // and re-implementing that harness per consumer is the duplication the split exists
+    // to avoid. Fidelia will want the same.
+    // Named by configuration rather than testFixtures(project(...)): the main dependency above
+    // already takes Anima through an explicit `namedElements` configuration, and mixing that
+    // with normal variant selection collides on the project's own capability.
+    testImplementation(project(path = anima.path, configuration = "testFixturesRuntimeElements"))
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

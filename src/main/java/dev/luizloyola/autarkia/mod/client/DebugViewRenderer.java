@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.client;
 
 import dev.luizloyola.anima.compat.client.debug.GizmoFrame;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.nav.MoveType;
 import dev.luizloyola.autarkia.mod.debug.DebugLayer;
@@ -337,16 +338,17 @@ public final class DebugViewRenderer {
         };
     }
 
-    private static int kindColor(int kind) {
-        PoiKind[] kinds = PoiKind.values();
-        if (kind < 0 || kind >= kinds.length) {
-            return GHOST_COLOR;
+    private static int kindColor(String kind) {
+        if (Pois.TREE.key().equals(kind)) {
+            return TREE_COLOR;
         }
-        return switch (kinds[kind]) {
-            case TREE -> TREE_COLOR;
-            case WATER -> WATER_COLOR;
-            case HERD -> HERD_COLOR;
-        };
+        if (Pois.WATER.key().equals(kind)) {
+            return WATER_COLOR;
+        }
+        if (PoiKind.HERD.key().equals(kind)) {
+            return HERD_COLOR;
+        }
+        return GHOST_COLOR;
     }
 
     private static int awarenessColor(int awareness) {

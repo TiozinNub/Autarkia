@@ -10,10 +10,16 @@ import dev.luizloyola.anima.mod.brain.DamageMarks;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
 import dev.luizloyola.anima.mod.log.Journals;
-import dev.luizloyola.anima.core.brain.task.ChopKnownTree;
+import dev.luizloyola.autarkia.core.tree.ChopKnownTree;
+import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
+import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
 import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.autarkia.core.board.Stock;
+import dev.luizloyola.autarkia.core.tree.Pois;
+import dev.luizloyola.autarkia.core.tree.TreeRule;
+import dev.luizloyola.autarkia.core.tree.WaterRule;
+import net.minecraft.core.particles.ParticleTypes;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import dev.luizloyola.autarkia.mod.net.DebugGlowSync;
@@ -57,6 +63,13 @@ public class AutarkiaMod implements ModInitializer {
         // Where logs come from is a fact about this world, not about having a mind: Anima knows how
         // to WANT an item and pick one up, so the producer is registered here, not in the library.
         Producers.register(Stock.LOGS, ChopKnownTree::new);
+        // Declare what a settler finds worth remembering, and what grows into it. Anima owns the
+        // crescent sampler, the region flood and the merge rule; it has no idea what a tree is.
+        Pois.init();
+        GrowthRules.register(BlockKind.LOG, TreeRule.INSTANCE);
+        GrowthRules.register(BlockKind.LEAVES, TreeRule.INSTANCE);
+        GrowthRules.register(BlockKind.WATER, WaterRule.INSTANCE);
+        KnowledgeViewer.particle(Pois.TREE, ParticleTypes.HAPPY_VILLAGER);
         registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
     }

@@ -12,7 +12,7 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.task.BreakBlock;
-import dev.luizloyola.anima.core.brain.task.ChopNearestTree;
+import dev.luizloyola.autarkia.core.tree.ChopNearestTree;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.SatisfyHunger;
@@ -859,7 +859,7 @@ public final class AutarkiaCommands {
         source.sendSuccess(() -> Component.literal(name + " — " + knowledge.size()
                         + " remembered POI(s), " + person.poiSensor().claimCount() + " claimed blocks")
                 .withStyle(ChatFormatting.AQUA), false);
-        for (PoiKind kind : PoiKind.values()) {
+        for (PoiKind kind : PoiKind.all()) {
             for (PoiMemory memory : knowledge.all(kind)) {
                 String line = formatPoi(person, memory, now);
                 source.sendSuccess(() -> Component.literal(line)
@@ -877,18 +877,14 @@ public final class AutarkiaCommands {
         String age = ageSeconds < 2 ? "just now"
                 : ageSeconds < 120 ? ageSeconds + "s ago"
                 : (ageSeconds / 60) + "m ago";
-        StringBuilder line = new StringBuilder(memory.kind().name());
+        StringBuilder line = new StringBuilder(memory.kind().key().toUpperCase(java.util.Locale.ROOT));
         if (!memory.detail().isEmpty()) {
             line.append(' ').append(memory.detail());
         }
         line.append(" (").append(memory.anchor().x()).append(", ").append(memory.anchor().y())
                 .append(", ").append(memory.anchor().z()).append(") - ")
                 .append(Math.round(distance)).append(" blocks away, ")
-                .append(memory.units()).append(switch (memory.kind()) {
-                    case TREE -> " logs";
-                    case HERD -> " head";
-                    default -> " cells";
-                })
+                .append(memory.units()).append(memory.kind().unit().isEmpty() ? " cells" : memory.kind().unit())
                 .append(", seen ").append(age);
         if (memory.partial()) {
             line.append(", partial");

@@ -59,10 +59,13 @@ public record DebugViewPayload(
      * they believe it fills, and whether the belief has gone stale. Stale is computed server-side
      * against the last sighting, because the client has no game time it can trust.
      */
-    public record Belief(int kind, BlockPos anchor, BlockPos min, BlockPos max, boolean stale) {
+    /** {@code kind} is the POI kind's stable KEY, not a positional index: POI kinds are an open
+     *  registry now, so registration order is not a stable wire format the moment a second mod
+     *  declares one. */
+    public record Belief(String kind, BlockPos anchor, BlockPos min, BlockPos max, boolean stale) {
         public static final StreamCodec<RegistryFriendlyByteBuf, Belief> CODEC =
                 StreamCodec.composite(
-                        ByteBufCodecs.VAR_INT, Belief::kind,
+                        ByteBufCodecs.STRING_UTF8, Belief::kind,
                         BlockPos.STREAM_CODEC, Belief::anchor,
                         BlockPos.STREAM_CODEC, Belief::min,
                         BlockPos.STREAM_CODEC, Belief::max,
