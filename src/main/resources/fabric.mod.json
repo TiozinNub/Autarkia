@@ -24,6 +24,7 @@
   "accessWidener": "autarkia.ct",
   "depends": {
     "fabricloader": ">=0.17",
+    "anima": "${version}",
     "minecraft": "${minecraft}",
     "fabric-api": "*"
   }

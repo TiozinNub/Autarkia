@@ -73,10 +73,14 @@ dependencies {
     val anima = requireNotNull(sc.node.sibling("anima")) {
         "No `anima` sibling for ${sc.current.project} — every branch must carry the same nodes"
     }.project
+    // Compile and dev-run against it, but do not nest it (decision: Luiz). Anima is a mod in
+    // its own right and is downloaded as its own file; jar-in-jar would mean a player who also
+    // runs a second Anima consumer carries two copies and lets Loader pick, and it would make
+    // Anima's release cadence a detail of Autarkia's jar. fabric.mod.json declares the
+    // dependency instead, pinned to the exact version — both are built from one commit, so a
+    // mismatched pair is always a mistake and should fail loudly at load rather than subtly at
+    // runtime.
     implementation(project(path = anima.path, configuration = "namedElements"))
-    // Ship as one download: Anima is nested inside Autarkia's jar, while still publishing
-    // standalone for third parties (and for Fidelia) on its own Modrinth project.
-    include(project(anima.path))
 
     // Use `mod{dependency type}` even on 26.1+ - loom-back-compat converts them
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
@@ -206,6 +210,9 @@ publishMods {
         // Resolves to uj0QkqNF via the `[autarkia]` table
         val modrinthId: String = sc.properties["publish.modrinth_id"]
         projectId = modrinthId
+        // Anima is no longer nested, so the page has to say it is required — otherwise the
+        // first thing a downloader meets is a missing-dependency crash.
+        requires { id = "l8eKuisB" }
         accessToken = providers.environmentVariable("MODRINTH_TOKEN")
         minecraftVersions.addAll(compatibleVersions)
     }
