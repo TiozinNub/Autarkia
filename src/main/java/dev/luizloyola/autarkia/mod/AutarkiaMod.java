@@ -10,7 +10,10 @@ import dev.luizloyola.anima.mod.brain.DamageMarks;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
 import dev.luizloyola.autarkia.mod.debug.DebugView;
 import dev.luizloyola.anima.mod.log.Journals;
+import dev.luizloyola.anima.core.brain.task.ChopKnownTree;
+import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import dev.luizloyola.autarkia.mod.net.DebugGlowSync;
@@ -51,6 +54,9 @@ public class AutarkiaMod implements ModInitializer {
         // tier stays ours to sync. Providers chain, so a future pets mod answers for its own ids
         // beside this one.
         AgentDirectory.provide(PersonDirectory::get);
+        // Where logs come from is a fact about this world, not about having a mind: Anima knows how
+        // to WANT an item and pick one up, so the producer is registered here, not in the library.
+        Producers.register(Stock.LOGS, ChopKnownTree::new);
         registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
     }

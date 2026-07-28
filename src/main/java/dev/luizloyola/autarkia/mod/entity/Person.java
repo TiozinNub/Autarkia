@@ -15,6 +15,8 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.anima.mod.brain.BrainDriver;
+import dev.luizloyola.autarkia.core.board.Stock;
+import dev.luizloyola.autarkia.core.board.StockBoard;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentScaffolder;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
@@ -147,7 +149,16 @@ public class Person extends Avatar implements AgentBody {
      * runs the task executor and only ever <em>reads</em> the body. Transient — a running task is
      * working state, not persisted; a reload just re-decides.
      */
-    private final BrainDriver brain = new BrainDriver(this);
+    private final BrainDriver brain = new BrainDriver(this, new StockBoard(
+            Stock.LOGS, STOCK_LOGS, STOCK_PRIORITY, getId()));
+
+    /**
+     * The placeholder stock rule every fresh settler wants: keep this many logs, at this standing
+     * priority. Layer 3's degenerate v1, and Autarkia's to own — Anima has no opinion about what an
+     * agent should stockpile.
+     */
+    private static final int STOCK_LOGS = 16;
+    private static final double STOCK_PRIORITY = 0.35;
 
     /**
      * This person's journal view ({@link AgentJournal}) — the one handle the brain, the

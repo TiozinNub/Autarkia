@@ -22,6 +22,7 @@ import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.Entry;
 import dev.luizloyola.anima.core.log.JournalService;
@@ -623,7 +624,7 @@ public final class AutarkiaCommands {
     private static int brainObtain(CommandSourceStack source, int count) {
         Person person = resolve(source);
         if (person == null) return 0;
-        boolean autoDisabled = person.brain().run(new ObtainItem(ItemSpec.LOGS, count));
+        boolean autoDisabled = person.brain().run(new ObtainItem(Stock.LOGS, count));
         String suffix = autoDisabledSuffix(autoDisabled);
         source.sendSuccess(() -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA), false);
