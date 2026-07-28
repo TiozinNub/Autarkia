@@ -7,7 +7,7 @@
   "authors": [
     "Luiz Loyola"
   ],
-  "license": "All-Rights-Reserved",
+  "license": "GPL-3.0-only",
   "icon": "assets/autarkia/icon.png",
   "environment": "*",
   "entrypoints": {

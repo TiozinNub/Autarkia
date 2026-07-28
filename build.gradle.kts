@@ -184,6 +184,14 @@ tasks {
         filesMatching("*.mixins.json") { expand("java" to mixinJava) }
     }
 
+    // The licence travels with the jar: someone who has only the file, not the repository,
+    // still has the terms. TRADEMARKS.md rides along because the licences say
+    // nothing about the name, so the jar would otherwise imply the name came with the code.
+    named<Jar>("jar") {
+        from(rootProject.file("TRADEMARKS.md"))
+        from(sc.branch.project.file("LICENSE"))
+    }
+
     register<Copy>("buildAndCollect") {
         group = "build"
         description = "Builds mod jars and copies results to `build/libs/{mod version}/`"
