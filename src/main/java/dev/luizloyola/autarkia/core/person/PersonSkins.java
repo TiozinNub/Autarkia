@@ -28,16 +28,16 @@ public final class PersonSkins {
 
     static final List<String> MALE_SKINS = List.of(
             VANILLA + "wide/steve",
-            VANILLA + "wide/efe",
             VANILLA + "wide/kai",
-            VANILLA + "wide/ari");
+            VANILLA + "wide/noor",
+            VANILLA + "wide/sunny",
+            VANILLA + "wide/zuri");
 
     static final List<String> FEMALE_SKINS = List.of(
             VANILLA + "slim/alex",
-            VANILLA + "slim/makena",
-            VANILLA + "slim/noor",
-            VANILLA + "slim/sunny",
-            VANILLA + "slim/zuri");
+            VANILLA + "slim/ari",
+            VANILLA + "slim/efe",
+            VANILLA + "slim/makena");
 
     public static String random(RandomGenerator random, Gender gender) {
         List<String> pool = gender.choose(MALE_SKINS, FEMALE_SKINS);
