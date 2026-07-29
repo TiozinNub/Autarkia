@@ -178,6 +178,8 @@ public final class AutarkiaCommands {
                         // Who they can currently SEE — the peers() sense: Persons and live
                         // players, one seamless list, activity read off the visible body.
                         .then(AgentCommands.peers())
+                        // What this one is running: species -> modifiers -> effective.
+                        .then(AgentCommands.profile())
                         .then(AgentCommands.inv(registryAccess))
                         // "person", not "brain": these are body readouts (vitals live with the
                         // entity); the brain group above holds the decision machinery.

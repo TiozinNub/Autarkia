@@ -1,6 +1,8 @@
 package dev.luizloyola.autarkia.mod.entity;
 
+import dev.luizloyola.anima.core.agent.AgentModifiers;
 import dev.luizloyola.anima.core.agent.AgentProfile;
+import dev.luizloyola.anima.core.agent.ModifiedProfile;
 import dev.luizloyola.anima.mod.client.AgentContactsClient;
 import dev.luizloyola.anima.compat.inv.Inventories;
 import dev.luizloyola.anima.compat.inv.ItemStacks;
@@ -216,6 +218,19 @@ public class Person extends Avatar implements AgentBody {
      * Persisted in this entity's NBT (see {@link #TAG_FOOD_LEVEL}), ticked by {@link #tickNeeds()}.
      */
     private final Needs needs = new Needs();
+    /**
+     * Per-agent aspect modifiers — see {@link #profile()}. Empty until something shifts one.
+     *
+     * <p>Lazy rather than a field initialiser: the organs above are themselves initialisers, and
+     * they ask this body what it is <em>while</em> the fields are still being assigned.
+     */
+    private AgentModifiers modifiers;
+    /**
+     * One profile object for this body's whole life. The resolved read behind it caches its fold
+     * and re-does it when the config or the modifiers move, so a fresh wrapper per call would throw
+     * that cache away — and the navigator alone asks every tick. Lazy like {@link #modifiers}.
+     */
+    private AgentProfile profile;
 
     /**
      * Previous-tick position for the sprint-exhaustion odometer in {@link #tickNeeds()}, kept apart
@@ -828,13 +843,32 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * What a settler is like — {@link PersonSpecies}, read live through {@code config/autarkia.json}
-     * so {@code /autarkia config reload} retunes a Person mid-stride. One shared object: every organ
-     * keeps the one it was handed, and per-agent modifiers stack on top rather than replacing it.
+     * What this settler is like: {@link PersonSpecies} read live through
+     * {@code config/autarkia.json} — so {@code /autarkia config reload} retunes a Person
+     * mid-stride — plus whatever is currently shifting this particular one.
+     *
+     * <p>Nothing shifts one yet (no traits, skills or jobs), so {@link ModifiedProfile#of} hands
+     * back the shared species view unchanged, allocating nothing; {@code /autarkia profile} shows
+     * the derivation either way.
      */
     @Override
     public AgentProfile profile() {
-        return AutarkiaConfig.PERSON;
+        if (this.profile == null) {
+            this.profile = ModifiedProfile.of(AutarkiaConfig.PERSON, modifiers());
+        }
+        return this.profile;
+    }
+
+    /**
+     * What is shifting this Person away from a plain settler. Empty for now, and not
+     * saved: whatever grows a job or a trait persists THAT and re-applies its modifiers on load.
+     */
+    @Override
+    public AgentModifiers modifiers() {
+        if (this.modifiers == null) {
+            this.modifiers = new AgentModifiers();
+        }
+        return this.modifiers;
     }
 
     @Override
