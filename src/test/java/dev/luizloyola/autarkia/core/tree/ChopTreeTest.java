@@ -97,6 +97,84 @@ class ChopTreeTest {
         assertTrue(leafAt < stumpAt, "freed BEFORE the stump fell — Luiz's choreography");
     }
 
+    /**
+     * Drives a chop and, on first reaching {@code phase}, drops {@code item} onto a leaf planted
+     * at (12, 66, 10) — a cell no arrival scan puts on the fishing menu, so any swing at it
+     * answers the drop and nothing else. Returns the break count at that moment.
+     */
+    private int driveDroppingOnto(ChopTree task, String phase, String item) {
+        TaskStatus status = TaskStatus.RUNNING;
+        int breaksBefore = -1;
+        for (int i = 0; i < 400 && status == TaskStatus.RUNNING; i++) {
+            status = task.tick(ctx);
+            if (ctx.breaker.state == BreakState.BREAKING) {
+                Pos t = ctx.breaker.target;
+                ctx.percepts.blocks.clear(t.x(), t.y(), t.z());
+                ctx.breaker.state = BreakState.FINISHED;
+            }
+            if (breaksBefore < 0 && task.describe().contains(": " + phase)) {
+                breaksBefore = ctx.breaker.targets.size();
+                ctx.percepts.blocks.set(12, 66, 10, BlockKind.LEAVES);
+                ctx.percepts.drops = List.of(new Drop(new Pos(12, 67, 10), item));
+            }
+        }
+        return breaksBefore;
+    }
+
+    /**
+     * The collect sweep steps over leaf-borne drops, so a sapling knocked onto more canopy used
+     * to be left in the tree. The chase outranks the menu: the next swing is the leaf propping
+     * it up.
+     */
+    @Test
+    void theFishedSaplingIsChasedDownInsteadOfLeftHangingInTheCanopy() {
+        placeOakAndStandBy();
+        ctx.percepts.inventory.add(ItemStack.of("minecraft:oak_log", 1, 64)); // species → fishing arms
+
+        ChopTree task = new ChopTree(memory, true);
+        int breaksBefore = driveDroppingOnto(task, "fish", "minecraft:oak_sapling");
+
+        assertTrue(breaksBefore >= 0, "the scenario actually happened: they went fishing");
+        assertEquals(breaksBefore, ctx.breaker.targets.indexOf(new Pos(12, 66, 10)),
+                "the NEXT swing after the sapling came loose was the leaf holding it up: "
+                        + ctx.breaker.targets.subList(breaksBefore, ctx.breaker.targets.size()));
+    }
+
+    /**
+     * The chase is for the sapling; everything else fishing strands is freed on the way out —
+     * from up here, because after the descent every leaf is out of arm's reach (decision: Luiz).
+     */
+    @Test
+    void whatFishingStrandsIsFreedBeforeTheDescent() {
+        placeOakAndStandBy();
+        ctx.percepts.inventory.add(ItemStack.of("minecraft:oak_log", 1, 64));
+
+        ChopTree task = new ChopTree(memory, true);
+        int breaksBefore = driveDroppingOnto(task, "fish", "minecraft:stick");
+
+        assertTrue(breaksBefore >= 0, "the scenario actually happened: they went fishing");
+        int leafAt = ctx.breaker.targets.indexOf(new Pos(12, 66, 10));
+        assertTrue(leafAt > breaksBefore,
+                "not chased mid-fishing (it is no sapling), but freed before the descent");
+    }
+
+    /**
+     * "Won" is the pack OR the ground — a sapling already lying where the collect sweep will walk
+     * is a sapling, so the crown is not stripped for a second one.
+     */
+    @Test
+    void aSaplingAlreadyOnTheGroundMeansNoFishingAtAll() {
+        placeOakAndStandBy();
+        ctx.percepts.inventory.add(ItemStack.of("minecraft:oak_log", 1, 64));
+        ctx.percepts.drops = List.of(new Drop(new Pos(12, 64, 10), "minecraft:oak_sapling"));
+
+        drive(new ChopTree(memory, true), 400);
+
+        assertTrue(ctx.journal().recent(80).stream().map(Entry::detail)
+                        .noneMatch(line -> line.contains("searching the leaves")),
+                "the sapling was already won — no fishing");
+    }
+
     @Test
     void collectionWalksToTheFlockCentroid() {
         placeOakAndStandBy();

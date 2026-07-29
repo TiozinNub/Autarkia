@@ -30,46 +30,63 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 /**
- * Chop one whole tree, methodically: walk near the remembered anchor, re-scan
- * ({@link RegionGrowth} at task time), individuate our tree ({@link TreeSurvey}; no grounded
- * trunk → not a tree → forget), then sweep. Trunk logs the arm can take go from the ground; the
- * rest is climbed to, nerd-poling up the trunk's own column and placing one of their own logs in
- * each cell a broken one vacates ({@link Scaffolder}), so the trunk feeds its own climb. Then
- * the branch layers top-down, outermost-first (the never-orphan order), the crown chores, the
- * descent, the stump dead last, collection by flock ({@link Flocks}) and the replant: one
- * sapling per base cell (decision: Luiz), planted from BESIDE the footprint, because a sapling
- * goes into an occupied cell quite happily and the tree grows through them.
+ * Chop one whole tree, methodically — the sixth revision's deterministic column sweep. Walk
+ * near the remembered anchor, re-scan ({@link RegionGrowth} re-run at task time), individuate
+ * Our tree ({@link TreeSurvey}; no grounded trunk → not a tree → forget), then sweep:
  *
- * <p>The pillar they leave is the trunk rebuilt, ledgered on the BODY
- * ({@code Scaffolder.placed()}), so a fresh instance un-builds any standing ledger before
- * walking anywhere ({@link PillarDescent}, shared with the descend instinct's
- * {@code UnbuildPillar}).
+ * <p><b>The trunk.</b> From the ground, second log up: every trunk log the arm will take. What
+ * stays out of reach is CLIMBED to — nerd-poling up the trunk's own column, breaking the log
+ * overhead into the cell the next step occupies ({@link Scaffolder}), so the trunk feeds its
+ * own climb. The pillar is ledgered on the BODY ({@code Scaffolder.placed()}), so a suspension
+ * mid-climb never orphans the tower: a fresh instance un-builds any standing ledger before
+ * walking anywhere ({@link PillarDescent}, shared with {@code UnbuildPillar}).
  *
- * <p><b>The guarantee</b> (decision: Luiz — one tree FULLY, before thinking of the next): what
- * still stands is re-surveyed ({@link #standingLogs}, orphan sweep included) and re-rounded
- * while the rounds keep felling; when they run dry the chopper re-approaches for a whole fresh
- * sweep, as long as each sweep takes something. Only a sweep that fells NOTHING ends the errand;
- * only a clean survey fells the stump and forgets the anchor. Whatever survives <b>keeps its
- * stump</b> — a grounded base is the only thing keeping a remnant a surveyable tree, so felling
- * it would strand the rest forever.
+ * <p><b>The fork.</b> No branches → come down through the trunk, newest cell first, and fell
+ * the last log from atop it. Branches → {@link Phase#LAYERS}, top-down, outermost-first within
+ * a layer (the never-orphan order): swing from the column's top, WALK to what the arm cannot
+ * reach (stable leaves are real ground to the pathfinder now) clearing the leaves that hem
+ * the way and re-swinging after every hop, then back to the center, one cell broken down, next
+ * layer. When the column is spent, the low layers are ground work like any other.
  *
- * <p>The tree is a CLAIMED site, heartbeat every tick (claimed at selection), so a second
- * chopper rotates away instead of felling this one's logs or its climber's scaffolding. Every
- * exit releases the claim.
+ * <p>Then the crown chores while they are still up there — stranded drops freed, saplings
+ * fished out of the leftover canopy until the stump's pattern is WON, each one chased down
+ * through the leaves that catch it — the descent through the trunk, the stump dead last,
+ * collection by flock ({@link Flocks}), and the replant in the stump's own shape: one sapling
+ * per base cell, planted from BESIDE the footprint, because a sapling goes into an occupied
+ * cell quite happily and the tree grows through them.
  *
- * <p>Memory on the way out: ghost or ungrounded blob → forget + FAILED; felled whole → forget +
- * SUCCESS; felled in part → memory KEPT, SUCCESS, anchor avoided {@link #PARTIAL_AVOID_TICKS};
- * real but unworkable → memory kept, FAILED, anchor avoided ({@code AgentKnowledge.avoid}).
- * {@link #failureDetail()} reports the ending.
+ * <p><b>The guarantee</b> (decision: Luiz — a tree gets chopped FULLY, one at a time, before
+ * thinking of the next): what is still standing is re-surveyed ({@link #standingLogs}, orphan
+ * sweep included, because a half-chop's air gap blinds the arrival scan) and re-rounds while
+ * the rounds keep felling wood; when they run dry the chopper RE-APPROACHES and sweeps again,
+ * fresh scan and fresh stances, as long as each sweep takes something. Only a complete sweep
+ * that fells NOTHING ends the errand; only a clean survey fells the stump and forgets the
+ * anchor. Anything that survives <b>keeps its stump</b> — a grounded base is the only thing
+ * keeping a remnant a surveyable tree, so felling it would strand the rest forever.
+ *
+ * <p>The tree is a CLAIMED site, heartbeated every tick, so a second chopper rotates elsewhere
+ * instead of felling this one's logs (or its climber's scaffolding) out from under them.
+ * Every exit releases the claim.
+ *
+ * <p>Memory writes on the way out: ghost or ungrounded blob → forget + FAILED; felled whole →
+ * forget + SUCCESS; felled in part (wood still standing, stump left holding it) → memory KEPT,
+ * SUCCESS, anchor avoided {@link #PARTIAL_AVOID_TICKS} so they return to finish it; real-but-
+ * unworkable (approach failed; nothing reachable at all) → memory kept, FAILED, anchor AVOIDED
+ * a while so retries rotate targets ({@code AgentKnowledge.avoid}). {@link #failureDetail()}
+ * reports the real ending.
  */
 public final class ChopTree implements PrimitiveTask {
     /** Close enough to the anchor to count as "at the tree" — the chop loop steps the rest. */
     public static final int APPROACH_NEAR = 6;
     /** Matches the sensor's own per-tick read budget. */
     public static final int SCAN_READS_PER_TICK = 64;
-    /** Safety cap on leaves broken while freeing stranded drops. */
+    /**
+     * Safety cap on leaves broken while freeing stranded drops — the crown chores and the
+     * fishing chase spend the one budget, being the same move.
+     */
     public static final int FREED_LEAVES_LIMIT = 32;
     /** Ground margin around the tree bounds that still counts as the collection area. */
     public static final int COLLECT_MARGIN = 3;
@@ -96,7 +113,10 @@ public final class ChopTree implements PrimitiveTask {
      * them pillaring off-column to y+30 over an 8-log tree, stopped only by the body's cap.
      */
     public static final int PILLAR_HORIZONTAL = 3;
-    /** Leaves broken while fishing for a replant sapling before giving up. */
+    /**
+     * Leaves broken PROSPECTING for a replant sapling before giving up. Chase swings are bounded
+     * by {@link #FREED_LEAVES_LIMIT} instead — they rescue a sapling already won.
+     */
     public static final int FISH_LIMIT = 24;
     /**
      * How far the orphan sweep climbs a stump's own column looking for wood a half-chop left
@@ -203,6 +223,10 @@ public final class ChopTree implements PrimitiveTask {
     private int fished;
     private int fishCursor = -1;
     private boolean fishPassProgress;
+    /** Set when fishing has had its turn — the crown chores it returns to never loop back in. */
+    private boolean fishingDone;
+    /** One "caught in the leaves" per chop: the chase is a swing a tick and would spam the log. */
+    private boolean chaseNarrated;
     private int collectLaps;
     private int collectLapCap = -1;
     /** The species chopped, learned from the first log drop seen — names the sapling to plant. */
@@ -819,6 +843,7 @@ public final class ChopTree implements PrimitiveTask {
         think(ctx, "still wood up there — walking back in for another pass");
         sweepFelled = felled;
         descentNarrated = false;
+        fishingDone = false; // a fresh sweep is a fresh crown; FISH_LIMIT still bounds the total
         lastRoundFelled = -1;
         scan = null;
         tree = null;
@@ -843,24 +868,41 @@ public final class ChopTree implements PrimitiveTask {
         phase = Phase.APPROACH;
     }
 
+    /**
+     * The crown chores: free everything the felling left resting on leaves, while they are still
+     * up here to reach it. Run twice — once before fishing, once after ({@link #doneFishing}) —
+     * because fishing strands drops of its own, and after the descent every leaf is out of reach.
+     */
     private TaskStatus freeItems(BrainContext ctx) {
         if (breakInFlight(ctx)) {
             return TaskStatus.RUNNING;
         }
-        if (freedLeaves >= FREED_LEAVES_LIMIT) {
-            phase = wantsFishing(ctx) ? Phase.FISH : Phase.DESCEND;
-            if (phase == Phase.FISH) {
-                think(ctx, "no sapling in my pack — searching the leaves for one");
-            }
+        Pos bestLeaf = leafUnderStranded(ctx, 1, drop -> true);
+        if (bestLeaf != null && freedLeaves < FREED_LEAVES_LIMIT) {
+            freeStranded(ctx, bestLeaf);
             return TaskStatus.RUNNING;
         }
+        phase = wantsFishing(ctx) ? Phase.FISH : Phase.DESCEND;
+        if (phase == Phase.FISH) {
+            think(ctx, "no sapling in my pack — searching the leaves for one");
+        }
+        return TaskStatus.RUNNING;
+    }
+
+    /**
+     * The nearest leaf holding up a stranded drop worth freeing, or {@code null} when nothing
+     * matching is stranded. One move, two callers — the crown chores ({@link #freeItems}) and
+     * the chase ({@link #fish}). A drop resting on anything but leaves is the collect sweep's.
+     */
+    private Pos leafUnderStranded(BrainContext ctx, int margin, Predicate<Drop> wanted) {
         BlockProbe probe = ctx.percepts().blocks();
         Pos here = ctx.percepts().position();
         Pos bestLeaf = null;
         long bestDist = Long.MAX_VALUE;
         for (Drop drop : ctx.percepts().drops()) {
             noteSpecies(drop);
-            if (!inArea(drop.pos(), 1) || triedStranded.contains(drop.pos())) {
+            if (!inArea(drop.pos(), margin) || triedStranded.contains(drop.pos())
+                    || !wanted.test(drop)) {
                 continue;
             }
             Pos below = new Pos(drop.pos().x(), drop.pos().y() - 1, drop.pos().z());
@@ -876,20 +918,21 @@ public final class ChopTree implements PrimitiveTask {
                 bestLeaf = below;
             }
         }
-        if (bestLeaf == null) {
-            phase = wantsFishing(ctx) ? Phase.FISH : Phase.DESCEND;
-            if (phase == Phase.FISH) {
-                think(ctx, "no sapling in my pack — searching the leaves for one");
-            }
-            return TaskStatus.RUNNING;
-        }
-        if (ctx.actuators().breaker().begin(bestLeaf)) {
+        return bestLeaf;
+    }
+
+    /**
+     * Break a stranded drop's leaf so it falls another block. A refusal retires that drop, keyed
+     * by where the drop is — one that later falls of its own accord is a new cell and comes back
+     * onto the menu.
+     */
+    private void freeStranded(BrainContext ctx, Pos leaf) {
+        if (ctx.actuators().breaker().begin(leaf)) {
             breaking = true;
             freedLeaves++;
         } else {
-            triedStranded.add(new Pos(bestLeaf.x(), bestLeaf.y() + 1, bestLeaf.z()));
+            triedStranded.add(new Pos(leaf.x(), leaf.y() + 1, leaf.z()));
         }
-        return TaskStatus.RUNNING;
     }
 
     /**
@@ -1019,20 +1062,37 @@ public final class ChopTree implements PrimitiveTask {
     }
 
     /**
-     * No sapling in the pack? Fish for one (decision: Luiz): break leftover canopy leaves WHILE
-     * Still up AT the CROWN (after the descent every leaf is out of arm's reach), and let the
-     * ground sweep collect what falls. Yielding nothing skips, never fails.
+     * No sapling in the pack? Fish for one: break leftover canopy leaves — WHILE still up AT the
+     * CROWN, since after the descent every leaf is out of arm's reach — and let the ground sweep
+     * collect what falls. Replanting stays a courtesy: fishing that yields nothing skips, never
+     * fails.
+     *
+     * <p><b>Every swing is answered before the next is taken</b> (decision: Luiz). A sapling
+     * knocked out of a canopy almost always lands on more canopy, and {@link #collect} steps
+     * over leaf-borne drops, so counting only the pack kept swinging past its own success. The
+     * CHASE therefore outranks the menu: percepts are re-read every tick, and the sapling is
+     * walked down a leaf a swing until it rests somewhere the sweep will actually visit.
      */
     private TaskStatus fish(BrainContext ctx) {
         String species = species(ctx);
         String sapling = species == null ? null : saplingFor(species);
-        if (sapling == null || ctx.percepts().inventory().count(sapling) >= tree.base().size()
-                || fished >= FISH_LIMIT) {
-            phase = Phase.DESCEND; // the pack holds the stump's pattern (or the crown is spent)
-            return TaskStatus.RUNNING;
+        if (sapling == null) {
+            return doneFishing();
         }
         if (breakInFlight(ctx)) {
             return TaskStatus.RUNNING;
+        }
+        Pos propping = leafUnderStranded(ctx, COLLECT_MARGIN, drop -> sapling.equals(drop.itemId()));
+        if (propping != null && freedLeaves < FREED_LEAVES_LIMIT) {
+            if (!chaseNarrated) {
+                chaseNarrated = true;
+                think(ctx, "that sapling is caught in the leaves — knocking it down");
+            }
+            freeStranded(ctx, propping);
+            return TaskStatus.RUNNING;
+        }
+        if (saplingsWon(ctx, sapling) >= tree.base().size() || fished >= FISH_LIMIT) {
+            return doneFishing(); // the stump's pattern is won (or the crown is spent)
         }
         // The canopy blocks its own interior (leaves are opaque to arms), so refused leaves
         // stay on the menu: breaking the outer shell is what exposes the next pass's targets.
@@ -1068,24 +1128,57 @@ public final class ChopTree implements PrimitiveTask {
             fishCursor--; // out of reach this pass — the shell may open it up next pass
         }
         if (canopy.isEmpty() || !fishPassProgress) {
-            phase = Phase.DESCEND; // exhausted, or the rest is truly unreachable
-        } else {
-            fishCursor = -1; // another pass: the broken shell exposed new targets
+            return doneFishing(); // exhausted, or the rest is truly unreachable
         }
+        fishCursor = -1; // another pass: the broken shell exposed new targets
         return TaskStatus.RUNNING;
     }
 
     /**
-     * Whether the crown is worth fishing: replanting is on and the pack holds fewer saplings than
-     * the stump's pattern needs — one per base cell (decision: Luiz).
+     * Fishing's one exit, and it goes back to the crown chores rather than straight down: the
+     * swings strand drops of their own (sticks, apples, saplings past the pattern), and freeing
+     * those is the pass that already exists. The flag keeps that pass from routing back into
+     * another fishing round.
+     */
+    private TaskStatus doneFishing() {
+        fishingDone = true;
+        phase = Phase.FREE_ITEMS;
+        return TaskStatus.RUNNING;
+    }
+
+    /**
+     * Saplings this chop has actually WON: in the pack, or lying where the collect sweep will
+     * walk. One stranded on the canopy is not won — {@link #collect} steps over leaf-borne
+     * drops, so counting it would end the fishing over a sapling nobody picks up.
+     *
+     * <p>Stacks read as one: a {@link Drop} is a bare sighting with no count, so a doubled
+     * sapling undercounts — erring toward one more swing, never toward leaving the stump bare.
+     */
+    private int saplingsWon(BrainContext ctx, String sapling) {
+        int won = ctx.percepts().inventory().count(sapling);
+        BlockProbe probe = ctx.percepts().blocks();
+        for (Drop drop : ctx.percepts().drops()) {
+            if (sapling.equals(drop.itemId()) && inArea(drop.pos(), COLLECT_MARGIN)
+                    && probe.at(drop.pos().x(), drop.pos().y() - 1, drop.pos().z())
+                            != BlockKind.LEAVES) {
+                won++;
+            }
+        }
+        return won;
+    }
+
+    /**
+     * Whether the crown is worth fishing. The stump's pattern is what it fishes for — one
+     * sapling per base cell, so a 2×2 giant fishes for its four-square.
      */
     private boolean wantsFishing(BrainContext ctx) {
-        if (!replant || tree == null || tree.base().isEmpty() || fished >= FISH_LIMIT) {
+        if (!replant || fishingDone || tree == null || tree.base().isEmpty()
+                || fished >= FISH_LIMIT) {
             return false;
         }
         String species = species(ctx);
         String sapling = species == null ? null : saplingFor(species);
-        return sapling != null && ctx.percepts().inventory().count(sapling) < tree.base().size();
+        return sapling != null && saplingsWon(ctx, sapling) < tree.base().size();
     }
 
     /**
