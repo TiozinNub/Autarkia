@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.tree;
 
+import dev.luizloyola.anima.core.agent.TestSpecies;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
@@ -43,7 +44,7 @@ class PoiSensorCoreTest {
     private static final int READ_CEILING = PoiSensorCore.readsPerTick() + 40;
 
     private final AgentKnowledge knowledge = new AgentKnowledge();
-    private final PoiSensorCore sensor = new PoiSensorCore(knowledge);
+    private final PoiSensorCore sensor = new PoiSensorCore(knowledge, TestSpecies.PROFILE);
     private long now;
 
     /** Ticks at fixed feet until the sensor goes quiet (queue drained, growth finished). */

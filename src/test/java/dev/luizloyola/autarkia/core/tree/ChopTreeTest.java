@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.core.tree;
 
+import dev.luizloyola.anima.core.agent.TestSpecies;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.FakePlacer;
 import dev.luizloyola.anima.core.brain.act.Scaffolder;
@@ -39,7 +41,7 @@ class ChopTreeTest {
     private void placeOakAndStandBy() {
         ctx.percepts.blocks.placeOak(10, 10);
         ctx.percepts.position = new Pos(8, 64, 8); // inside APPROACH_NEAR: straight to the scan
-        ctx.knowledge.note(memory);
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
     }
 
     /** Ticks the task; whenever the arm reports BREAKING, the "world" breaks the block. */
@@ -73,7 +75,7 @@ class ChopTreeTest {
     @Test
     void aGhostGroveIsForgottenAndFailed() {
         ctx.percepts.position = new Pos(8, 64, 8);
-        ctx.knowledge.note(memory); // believed, but the world is bare grass
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE)); // believed, but the world is bare grass
 
         TaskStatus status = drive(new ChopTree(memory, true), 50);
 
@@ -160,7 +162,7 @@ class ChopTreeTest {
             }
         }
         ctx.percepts.position = new Pos(8, 64, 8);
-        ctx.knowledge.note(memory);
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
         ctx.percepts.inventory.add(ItemStack.of("minecraft:oak_log", 1, 64));     // names the species
         ctx.percepts.inventory.add(ItemStack.of("minecraft:oak_sapling", 4, 64)); // the full pattern
 
@@ -475,7 +477,7 @@ class ChopTreeTest {
         ctx.percepts.blocks.set(10, 68, 10, BlockKind.LOG); // a taller trunk: the crown needs a climb
         ctx.percepts.blocks.set(10, 69, 10, BlockKind.LOG);
         ctx.percepts.position = new Pos(10, 64, 7);
-        ctx.knowledge.note(memory);
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
     }
 
     /** A nerd-pole step needs the cell TWO above their feet empty; a low canopy puts a leaf
@@ -618,7 +620,7 @@ class ChopTreeTest {
         ctx.percepts.blocks.set(10, 64, 10, BlockKind.LOG); // the stump a half-chop left
         ctx.percepts.blocks.set(10, 68, 10, BlockKind.LOG); // its crown, four up, air between
         ctx.percepts.position = new Pos(8, 64, 8);
-        ctx.knowledge.note(memory);
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
 
         TaskStatus status = drive(new ChopTree(memory, false), 400);
 
@@ -640,7 +642,7 @@ class ChopTreeTest {
         ctx.percepts.blocks.set(10, 64, 10, BlockKind.LOG);
         ctx.percepts.blocks.set(10, 68, 10, BlockKind.LOG); // stranded well above the bounds
         ctx.percepts.position = new Pos(8, 64, 8);
-        ctx.knowledge.note(flat);
+        ctx.knowledge.note(flat, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
 
         drive(new ChopTree(flat, false), 400);
 
@@ -708,7 +710,7 @@ class ChopTreeTest {
         ctx.percepts.blocks.set(10, 66, 10, BlockKind.LOG); // stranded, reachable
         ctx.percepts.blocks.set(10, 68, 10, BlockKind.LOG); // stranded, blocked by the lower one
         ctx.percepts.position = new Pos(8, 64, 8);
-        ctx.knowledge.note(memory);
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
         Pos high = new Pos(10, 68, 10);
         ctx.breaker.refuse.add(high); // until the log below it is gone
 
@@ -740,7 +742,7 @@ class ChopTreeTest {
         ctx.percepts.blocks.set(10, 64, 10, BlockKind.LOG);
         ctx.percepts.blocks.set(10, 68, 10, BlockKind.LOG);
         ctx.percepts.position = new Pos(8, 64, 8);
-        ctx.knowledge.note(memory);
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
         ctx.breaker.refuse.add(new Pos(10, 68, 10)); // nothing brings it down today
         ctx.scaffolder.refuse = true;
 

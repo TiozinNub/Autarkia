@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.entity;
 
+import dev.luizloyola.anima.core.agent.AgentProfile;
 import dev.luizloyola.anima.mod.client.AgentContactsClient;
 import dev.luizloyola.anima.compat.inv.Inventories;
 import dev.luizloyola.anima.compat.inv.ItemStacks;
@@ -8,6 +9,7 @@ import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.log.AgentJournal;
+import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
@@ -15,6 +17,7 @@ import dev.luizloyola.anima.core.agent.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonSkins;
+import dev.luizloyola.autarkia.core.person.PersonSpecies;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.anima.mod.brain.BrainDriver;
 import dev.luizloyola.autarkia.core.board.Stock;
@@ -652,11 +655,12 @@ public class Person extends Avatar implements AgentBody {
     /**
      * Movement control: choose this tick's gait. Sprinting adds vanilla's ×1.3 speed modifier
      * (picked up by {@link #driveForward}'s attribute read — call this first) and the sprint-jump
-     * boost. Guarded on change, since {@code setSprinting} churns an attribute modifier.
+     * boost in {@code jumpFromGround}. Guarded on change: {@code setSprinting} churns an attribute
+     * modifier.
      *
-     * <p>Enabling is subject to the vanilla food-6 gate ({@link Needs#canSprint()}); disabling is
-     * always allowed. A food&le;6 Person therefore cannot sprint, so 3-gap leap paths fail — the
-     * pathfinder doesn't know yet (deferred: hunger-aware {@code AgentProfile}).
+     * <p>Enabling is subject to the vanilla food-6 sprint gate ({@link Needs#canSprint()});
+     * disabling is always allowed. A food&le;6 Person therefore cannot sprint, so 3-gap leap paths
+     * fail — the pathfinder doesn't know yet (deferred: hunger-aware {@code MoveCapabilities}).
      */
     public void driveSprint(boolean sprint) {
         if (sprint && !this.needs.canSprint()) {
@@ -821,6 +825,16 @@ public class Person extends Avatar implements AgentBody {
     @Override
     public Pronouns pronouns() {
         return getGender();
+    }
+
+    /**
+     * What a settler is like — {@link PersonSpecies}, read live through {@code config/autarkia.json}
+     * so {@code /autarkia config reload} retunes a Person mid-stride. One shared object: every organ
+     * keeps the one it was handed, and per-agent modifiers stack on top rather than replacing it.
+     */
+    @Override
+    public AgentProfile profile() {
+        return AutarkiaConfig.PERSON;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.mod;
 
+import dev.luizloyola.anima.mod.config.ConfigFile;
+import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -36,15 +38,23 @@ public class AutarkiaMod implements ModInitializer {
     public static final String VERSION = /*$ mod_version*/ "0.1.0";
     public static final String MINECRAFT = /*$ minecraft*/ "26.1.2";
 
+    /**
+     * {@code config/autarkia.json} — today, what a Person is like. Anima keeps the schema
+     * of a mind; the values for this body are ours.
+     */
+    public static final ConfigFile CONFIG = new ConfigFile(AutarkiaConfig.store());
+
     @Override
     public void onInitialize() {
-        // No config load here: every knob Autarkia had was a knob of the MIND, so Anima owns them
-        // and loads config/anima.json. A Person-shaped tunable would declare its own KnobSet and
-        // ConfigFile — see KnobSet.
+        // Load before anything can read a Person's aspects. Anima's own file (the limits, the
+        // journal, the flee weights) is loaded by its initializer; this one holds the species.
+        for (String problem : CONFIG.reload()) {
+            LOGGER.warn("autarkia.json: {}", problem);
+        }
         ModEntities.init();
         AnimaItems.init();
         ModMenus.init();
-        AutarkiaCommands.register();
+        AutarkiaCommands.register(CONFIG);
         DebugGlowSync.install();
         dev.luizloyola.anima.mod.net.ContactsSync.install();
         DebugView.init();

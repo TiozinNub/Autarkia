@@ -25,6 +25,9 @@ import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.SatisfyHunger;
 import dev.luizloyola.anima.core.config.ConfigValues;
+import dev.luizloyola.anima.mod.command.ConfigCommands;
+import dev.luizloyola.anima.mod.config.ConfigFile;
+import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.anima.core.config.Config;
 import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.anima.core.inv.ArmorType;
@@ -123,7 +126,7 @@ public final class AutarkiaCommands {
 
     private static final double NEAREST_RADIUS = 32.0;
 
-    public static void register() {
+    public static void register(ConfigFile configFile) {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(Commands.literal("autarkia")
                         // Pin the Person that this source's later commands target. "clear"/"show" are
@@ -166,9 +169,10 @@ public final class AutarkiaCommands {
                         // SELECTED Person. Per-player, and the only way to raise several layers at
                         // once (the wand's shift-click cycles them one at a time).
                         .then(AgentCommands.debug())
-                        // NOTE: the tunables moved with the mind. Every knob Autarkia had was a knob of the
-                        // BRAIN, so they live in Anima's own file and command now: /anima config. Autarkia
-                        // registers its own set the day it grows a knob about being a PERSON, not a mind.
+                        // What a PERSON is like, in our own file; /anima config holds the
+                        // server-wide limits, the journal and the flee weights. Same subcommand,
+                        // built for whichever set it is handed.
+                        .then(ConfigCommands.tree(AutarkiaConfig.store(), configFile))
                         .then(Commands.literal("board")
                                 .executes(ctx -> boardShow(ctx.getSource())))
                         // Who they can currently SEE — the peers() sense: Persons and live

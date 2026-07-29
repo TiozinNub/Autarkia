@@ -320,7 +320,7 @@ public final class ChopTree implements PrimitiveTask {
                 return ghost(ctx);
             }
             scan = new RegionGrowth(TreeRule.INSTANCE, seed.get(),
-                    probe.at(seed.get().x(), seed.get().y(), seed.get().z()));
+                    probe.at(seed.get().x(), seed.get().y(), seed.get().z()), ctx.profile());
         }
         scan.step(probe, SCAN_READS_PER_TICK);
         if (!scan.isDone()) {

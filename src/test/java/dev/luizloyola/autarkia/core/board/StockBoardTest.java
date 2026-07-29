@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.agent.AgentProfile;
+import dev.luizloyola.anima.core.agent.TestSpecies;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 
@@ -71,6 +73,11 @@ class AgentBoardTest {
 
     /** A minimal context for the board: real inventory + journal, nothing else consulted. */
     private static final class BoardContext implements BrainContext {
+
+        @Override
+        public AgentProfile profile() {
+            return TestSpecies.PROFILE;
+        }
         private final dev.luizloyola.anima.core.inv.Inventory inventory =
                 new dev.luizloyola.anima.core.inv.Inventory();
         private final dev.luizloyola.anima.core.log.JournalService journal =

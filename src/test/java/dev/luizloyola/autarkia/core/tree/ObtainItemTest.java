@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.core.tree;
 
+import dev.luizloyola.anima.core.agent.TestSpecies;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
@@ -58,7 +60,7 @@ class ObtainItemTest {
         ctx.percepts.blocks.placeOak(x, z);
         PoiMemory memory = new PoiMemory(Pois.TREE, anchor,
                 new Region(new Pos(x - 1, 64, z - 1), new Pos(x + 1, 68, z + 1)), 4, false, 0);
-        ctx.knowledge.note(memory);
+        ctx.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
         return memory;
     }
 

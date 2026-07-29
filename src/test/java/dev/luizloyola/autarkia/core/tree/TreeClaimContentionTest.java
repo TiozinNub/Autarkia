@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.core.tree;
 
+import dev.luizloyola.anima.core.agent.TestSpecies;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,8 +34,8 @@ class TreeClaimContentionTest {
     @Test
     void selectionSkipsTheTreeSomeoneElseIsWorking() {
         shareOneWorld();
-        alice.knowledge.note(memory);
-        bob.knowledge.note(memory);
+        alice.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
+        bob.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
         ChopKnownTree method = new ChopKnownTree();
 
         assertTrue(method.applicable(alice));
@@ -49,9 +51,9 @@ class TreeClaimContentionTest {
         Pos farAnchor = new Pos(30, 64, 10);
         PoiMemory far = new PoiMemory(Pois.TREE, farAnchor,
                 new Region(new Pos(29, 64, 9), new Pos(31, 68, 11)), 4, false, 0);
-        alice.knowledge.note(memory);
-        bob.knowledge.note(memory);
-        bob.knowledge.note(far);
+        alice.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
+        bob.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
+        bob.knowledge.note(far, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
         bob.percepts.position = new Pos(8, 64, 8); // near tree is genuinely nearer for bob
         ChopKnownTree method = new ChopKnownTree();
 
@@ -68,7 +70,7 @@ class TreeClaimContentionTest {
         shareOneWorld();
         bob.percepts.blocks.placeOak(10, 10);
         bob.percepts.position = new Pos(8, 64, 8);
-        bob.knowledge.note(memory);
+        bob.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
         alice.siteClaims.claim(Pois.TREE, anchor, alice.self, 0); 
 
         TaskStatus status = new ChopTree(memory, true).tick(bob);
@@ -86,7 +88,7 @@ class TreeClaimContentionTest {
         shareOneWorld();
         alice.percepts.blocks.placeOak(10, 10);
         alice.percepts.position = new Pos(8, 64, 8);
-        alice.knowledge.note(memory);
+        alice.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
 
         ChopTree task = new ChopTree(memory, false);
         TaskStatus status = TaskStatus.RUNNING;
@@ -109,7 +111,7 @@ class TreeClaimContentionTest {
         shareOneWorld();
         alice.percepts.blocks.placeOak(10, 10);
         alice.percepts.position = new Pos(8, 64, 8);
-        alice.knowledge.note(memory);
+        alice.knowledge.note(memory, AgentKnowledge.maxPerKind(TestSpecies.PROFILE));
 
         ChopTree task = new ChopTree(memory, true);
         task.tick(alice); // claims on the first heartbeat

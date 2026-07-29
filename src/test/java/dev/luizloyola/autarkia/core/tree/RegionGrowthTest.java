@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.tree;
 
+import dev.luizloyola.anima.core.agent.TestSpecies;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
 import dev.luizloyola.anima.core.brain.knowledge.GrownRegion;
@@ -37,7 +38,7 @@ class RegionGrowthTest {
         FakeProbe probe = new FakeProbe();
         probe.placeOak(10, 10);
         Pos seed = new Pos(10, 68, 10);
-        GrownRegion region = grow(new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES),
+        GrownRegion region = grow(new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES, TestSpecies.PROFILE),
                 probe, 10_000);
 
         assertTrue(region.accepted());
@@ -63,7 +64,7 @@ class RegionGrowthTest {
         probe.placeOak(10, 10);
         probe.placeOak(12, 10); // canopies overlap along x = 11: one connected mass
         GrownRegion region = grow(
-                new RegionGrowth(TreeRule.INSTANCE, new Pos(10, 68, 10), BlockKind.LEAVES),
+                new RegionGrowth(TreeRule.INSTANCE, new Pos(10, 68, 10), BlockKind.LEAVES, TestSpecies.PROFILE),
                 probe, 10_000);
 
         assertEquals(2, region.parts().size(), "two trunks, two trees, two memories");
@@ -95,7 +96,7 @@ class RegionGrowthTest {
         probe.set(11, 65, 10, BlockKind.LOG); // a low branch, corner-hung off the trunk
         probe.set(12, 64, 10, BlockKind.LOG); // and a bare stump it reaches down to
         GrownRegion region = grow(
-                new RegionGrowth(TreeRule.INSTANCE, new Pos(10, 68, 10), BlockKind.LEAVES),
+                new RegionGrowth(TreeRule.INSTANCE, new Pos(10, 68, 10), BlockKind.LEAVES, TestSpecies.PROFILE),
                 probe, 10_000);
 
         GrownRegion.Part tree = only(region);
@@ -111,7 +112,7 @@ class RegionGrowthTest {
         probe.placeOak(10, 10);
         Pos seed = new Pos(10, 68, 10);
 
-        RegionGrowth sliced = new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES);
+        RegionGrowth sliced = new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES, TestSpecies.PROFILE);
         int steps = 0;
         while (!sliced.isDone()) {
             sliced.step(probe, 7);
@@ -121,7 +122,7 @@ class RegionGrowthTest {
 
         FakeProbe fresh = new FakeProbe();
         fresh.placeOak(10, 10);
-        GrownRegion unsliced = grow(new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES),
+        GrownRegion unsliced = grow(new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES, TestSpecies.PROFILE),
                 fresh, 10_000);
         assertEquals(only(unsliced).anchor(), only(sliced.result()).anchor());
         assertEquals(only(unsliced).units(), only(sliced.result()).units());
@@ -135,7 +136,7 @@ class RegionGrowthTest {
         probe.set(5, 67, 5, BlockKind.LOG);
         probe.set(5, 68, 5, BlockKind.LEAVES); // sunlit leaf and all — still not a tree
         GrownRegion region = grow(
-                new RegionGrowth(TreeRule.INSTANCE, new Pos(5, 68, 5), BlockKind.LEAVES),
+                new RegionGrowth(TreeRule.INSTANCE, new Pos(5, 68, 5), BlockKind.LEAVES, TestSpecies.PROFILE),
                 probe, 10_000);
 
         assertFalse(region.accepted(),
@@ -149,7 +150,7 @@ class RegionGrowthTest {
             probe.set(5, y, 5, BlockKind.LOG);
         }
         GrownRegion region = grow(
-                new RegionGrowth(TreeRule.INSTANCE, new Pos(5, 66, 5), BlockKind.LOG),
+                new RegionGrowth(TreeRule.INSTANCE, new Pos(5, 66, 5), BlockKind.LOG, TestSpecies.PROFILE),
                 probe, 10_000);
 
         assertFalse(region.accepted(), "logs with no sunlit leaf: a woodpile");
@@ -162,7 +163,7 @@ class RegionGrowthTest {
         probe.placeOak(10, 10);
         probe.markUnloaded(12, 10);
         GrownRegion region = grow(
-                new RegionGrowth(TreeRule.INSTANCE, new Pos(10, 68, 10), BlockKind.LEAVES),
+                new RegionGrowth(TreeRule.INSTANCE, new Pos(10, 68, 10), BlockKind.LEAVES, TestSpecies.PROFILE),
                 probe, 10_000);
 
         assertTrue(region.accepted());
@@ -178,7 +179,7 @@ class RegionGrowthTest {
             }
         }
         Pos seed = new Pos(12, FakeProbe.GROUND_Y, 12);
-        GrownRegion region = grow(new RegionGrowth(WaterRule.INSTANCE, seed, BlockKind.WATER),
+        GrownRegion region = grow(new RegionGrowth(WaterRule.INSTANCE, seed, BlockKind.WATER, TestSpecies.PROFILE),
                 probe, 10_000);
 
         assertTrue(region.accepted());
@@ -207,7 +208,7 @@ class RegionGrowthTest {
         probe.set(2, y + 2, 2, BlockKind.LOG);
 
         GrownRegion region = grow(
-                new RegionGrowth(TreeRule.INSTANCE, new Pos(0, y, 0), BlockKind.LOG), probe, 10_000);
+                new RegionGrowth(TreeRule.INSTANCE, new Pos(0, y, 0), BlockKind.LOG, TestSpecies.PROFILE), probe, 10_000);
 
         assertTrue(region.accepted());
         assertEquals(6, only(region).units(),
@@ -221,12 +222,12 @@ class RegionGrowthTest {
             probe.set(x, FakeProbe.GROUND_Y, 0, BlockKind.WATER);
         }
         GrownRegion region = grow(
-                new RegionGrowth(WaterRule.INSTANCE, new Pos(0, FakeProbe.GROUND_Y, 0), BlockKind.WATER),
+                new RegionGrowth(WaterRule.INSTANCE, new Pos(0, FakeProbe.GROUND_Y, 0), BlockKind.WATER, TestSpecies.PROFILE),
                 probe, 10_000);
 
         assertTrue(region.accepted());
         assertTrue(region.partial(), "the river continues beyond the spread cap");
-        assertTrue(only(region).units() <= RegionGrowth.maxSpread() + 1,
+        assertTrue(only(region).units() <= RegionGrowth.maxSpread(TestSpecies.PROFILE) + 1,
                 "only the reach within the cap: " + only(region).units());
     }
 }
