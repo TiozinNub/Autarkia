@@ -142,6 +142,9 @@ public final class AutarkiaCommands {
                         // Who knows whom. Until the encounter rung lands there is no in-world way
                         // to be introduced, so "meet" is the scaffold that stands in for it.
                         .then(AgentCommands.contacts())
+                        // Who belongs with whom — layer 3's scope. join/leave are the dev
+                        // stand-ins until the social era's group-up handshake exists.
+                        .then(AgentCommands.party())
                         .then(AgentCommands.nav())
                         // nav (above) drives the legs directly — locomotion debug; brain runs
                         // tasks through the executor, the machinery the arbiter will feed.
