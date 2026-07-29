@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.entity;
 import dev.luizloyola.anima.core.agent.AgentModifiers;
 import dev.luizloyola.anima.core.agent.AgentProfile;
 import dev.luizloyola.anima.core.agent.ModifiedProfile;
+import dev.luizloyola.anima.core.brain.sense.DangerTable;
 import dev.luizloyola.anima.mod.client.AgentContactsClient;
 import dev.luizloyola.anima.compat.inv.Inventories;
 import dev.luizloyola.anima.compat.inv.ItemStacks;
@@ -17,6 +18,7 @@ import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.autarkia.core.person.PersonDanger;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonSkins;
 import dev.luizloyola.autarkia.core.person.PersonSpecies;
@@ -863,6 +865,15 @@ public class Person extends Avatar implements AgentBody {
      * What is shifting this Person away from a plain settler. Empty for now, and not
      * saved: whatever grows a job or a trait persists THAT and re-applies its modifiers on load.
      */
+    /**
+     * What frightens a settler — {@link PersonDanger}, read through so the regeneration at every
+     * server start (and an operator's edit) reaches a Person already walking around.
+     */
+    @Override
+    public DangerTable danger() {
+        return PersonDanger.STORE.get();
+    }
+
     @Override
     public AgentModifiers modifiers() {
         if (this.modifiers == null) {

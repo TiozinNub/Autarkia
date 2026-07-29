@@ -1,6 +1,9 @@
 package dev.luizloyola.autarkia.mod;
 
+import dev.luizloyola.anima.mod.brain.DangerFile;
 import dev.luizloyola.anima.mod.config.ConfigFile;
+import dev.luizloyola.autarkia.core.person.PersonDanger;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
@@ -51,6 +54,10 @@ public class AutarkiaMod implements ModInitializer {
         for (String problem : CONFIG.reload()) {
             LOGGER.warn("autarkia.json: {}", problem);
         }
+        // The weights cannot be generated here: modded and datapack entity types only exist
+        // once the registries freeze, so this waits for a server to start.
+        ServerLifecycleEvents.SERVER_STARTING.register(server ->
+                new DangerFile(MOD_ID, PersonDanger.STORE).generate());
         ModEntities.init();
         AnimaItems.init();
         ModMenus.init();
