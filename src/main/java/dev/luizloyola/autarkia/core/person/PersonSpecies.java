@@ -42,6 +42,9 @@ public final class PersonSpecies {
             .set(ProfileAspect.SENSES_HEARD_DECAY_TICKS, 60)
             .set(ProfileAspect.SENSES_NEAR_INTERVAL, 1)
             .set(ProfileAspect.SENSES_FAR_INTERVAL, 20)
+            // 30 seconds: long enough to keep running from what shot you, short enough that a
+            // settler is not permanently haunted by one bad afternoon.
+            .set(ProfileAspect.SENSES_ATTACK_DECAY_TICKS, 600)
             .set(ProfileAspect.SENSES_HERD_LINK_RADIUS, 12)
             // --- places: sized above the trees a settler works among (an 81-tree grid starved
             //     its far corners at 64, churning forget/rediscover forever) --------------------
