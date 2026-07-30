@@ -250,9 +250,12 @@ public final class AutarkiaCommands {
             knowledge.remove(id);
             journals.drop(id);
         }
+        // LOGGED: purging destroys an identity, its memories and its journal — the very record
+        // that would have said what happened to it goes with it. Spawning was already logged;
+        // unmaking was not, which left creation traceable and destruction silent.
         Replies.send(source, () -> Component.literal("Purged " + dead.size()
                 + " unloaded identit" + (dead.size() == 1 ? "y" : "ies")
-                + " (directory + knowledge + journal ring).").withStyle(ChatFormatting.GRAY));
+                + " (directory + knowledge + journal ring).").withStyle(ChatFormatting.GRAY), true);
         return dead.size();
     }
 
@@ -440,8 +443,10 @@ public final class AutarkiaCommands {
         needs.setFoodLevel(food);
         needs.setSaturation(saturation);
         needs.setExhaustion(0.0F);
+        // LOGGED: needs persist on the entity and drive the arbiter — a hand-set hunger explains
+        // an eat that would otherwise read as the brain deciding something inexplicable.
         Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
-                + needs.describe()).withStyle(ChatFormatting.AQUA));
+                + needs.describe()).withStyle(ChatFormatting.AQUA), true);
         return 1;
     }
 
