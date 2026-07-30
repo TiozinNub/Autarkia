@@ -93,32 +93,35 @@ import java.util.stream.Stream;
 /**
  * Developer/admin commands for inspecting Autarkia state.
  *
- * <p>{@code whois} prints a Person's identity (id + name), read straight from the server-side
- * {@link PersonDirectory}: the name is never synced to clients.
+ * <p>{@code whois [targets]} prints the resolved {@code Person}'s full identity: the name is never
+ * synced to clients, so it is read from the server-side {@link PersonDirectory} on request.
  *
- * <p>{@code nav} drives the legs directly (locomotion debug) where {@code brain} runs the same work
- * through the task machinery the arbiter feeds; {@code brain auto true | false} flips autonomy — ON
- * by default, and a manual {@code goto}/{@code eat} flips it OFF the moment it runs.
+ * <p>{@code nav} drives the resolved Person's legs directly (locomotion debug, exercisable from a
+ * headless dev server and by command blocks); {@code brain} runs a task through the executor the
+ * arbiter feeds. {@code brain auto true|false} flips autonomy — ON, every Person's default, is the
+ * arbiter deciding on its own; OFF is the dev override, which a manual {@code goto}/{@code eat}
+ * also sets. {@code brain wander true|false} is narrower: the arbiter keeps deciding but the idle
+ * wander drive bids nothing, and the pressure line reads {@code wander (muted) 0.00} so a mute
+ * never reads as a coincidence.
  *
- * <p><b>Every {@code true|false} switch reads back when you leave the value off</b>, changing
- * nothing and returning 1 for on, 0 for off — usable from a command block or an {@code execute if}
- * without parsing the chat line.
+ * <p><b>Every {@code true|false} switch reads back when you leave the value off</b> — a READ, not
+ * a blind toggle, because you ask precisely when you have lost track of the state. Each returns 1
+ * for on and 0 for off, usable from a command block or an {@code execute if}.
  *
- * <p>{@code log} reads the resolved Person's in-memory journal ring, all subsystems or one;
- * {@code log for <name|id>} reaches any person by directory lookup, including one whose entity is
- * unloaded (the ring is {@code AgentId}-keyed and outlives the entity). The durable per-person file
- * is separate.
+ * <p>{@code log} reads the in-memory ring, interleaved with no subsystem given and filtered with
+ * one; {@code log for <name|id>} reaches any person by directory lookup, including one whose
+ * entity is unloaded (the ring is {@code AgentId}-keyed and outlives the entity), tagged
+ * {@code (not loaded)}.
  *
  * <p>{@code person spawn [<pos>] [name]} registers an identity in the {@link PersonDirectory} and
- * links it to the entity before it enters the world; a plain {@code /summon autarkia:person}
- * instead mints one on the entity's first server tick. Position mirrors {@code /summon}.
- * {@code person spawn nobrain} is that same path with autonomy off: an inert body for exercising
- * one feature at a time.
+ * links the entity to it before spawn; a plain {@code /summon autarkia:person} mints its own a
+ * tick later instead. {@code spawn nobrain} starts with autonomy off, {@code spawn nowander} with
+ * the idle drift muted.
  *
- * <p>Every person-scoped subcommand resolves through {@link #resolve}: the Person the command runs
- * <em>as</em> (one line, every Person in turn), else the source's pin, else the nearest.
- * {@code select} pins by name or short-id, or by what a player is looking at, unpinning when they
- * look at nobody; {@code list} enumerates the loaded Persons, since names are not unique. Pins live
+ * <p>Person-scoped subcommands resolve through {@link #resolve}: the Person the command runs
+ * <em>as</em> (one line, every Person in turn), else the source's pinned Person, else the nearest.
+ * Bare {@code select} pins the Person a player is looking at, unpins when looking at nobody, and
+ * pins the nearest from the console; {@code list} exists because names are not unique. Pins live
  * in {@link AgentSelection} — in memory, per source, gone on restart.
  */
 public final class AutarkiaCommands {
@@ -196,12 +199,14 @@ public final class AutarkiaCommands {
                         // "person", not "brain": these are body readouts (vitals live with the
                         // entity); the brain group above holds the decision machinery.
                         .then(Commands.literal("person")
-                                // "spawn" makes an autonomous Person; "nobrain" makes one with
-                                // autonomy off, for testing one feature at a time. Both take the same
-                                // [<pos>] [name] leaves (see spawnLeaves) and differ only in the brain
-                                // flag; "nobrain" is a literal, so quote it to use it as a name.
-                                .then(spawnLeaves(Commands.literal("spawn"), true)
-                                        .then(spawnLeaves(Commands.literal("nobrain"), false)))
+                                // "spawn" is autonomous, "nobrain" starts with autonomy off,
+                                // "nowander" thinks normally but never drifts. All three take the
+                                // same [<pos>] [name] leaves (see spawnLeaves); being literals, the
+                                // children win over a Person named "nobrain" — quote it to use
+                                // that as a name.
+                                .then(spawnLeaves(Commands.literal("spawn"), Mind.FULL)
+                                        .then(spawnLeaves(Commands.literal("nobrain"), Mind.NO_BRAIN))
+                                        .then(spawnLeaves(Commands.literal("nowander"), Mind.NO_WANDER)))
                                 // Every identity with no loaded entity loses its directory entry,
                                 // knowledge and journal ring. Real deaths keep identity;
                                 // this is for test-world churn.
@@ -318,44 +323,57 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * Attaches the optional {@code [<pos>] [name]} leaves to a spawn literal, so {@code spawn} and
-     * its {@code nobrain} child share one argument shape and differ only in the brain flag they hand
-     * {@link #personSpawn}.
-     *
-     * <p>Position mirrors {@code /summon}'s {@code <pos>}. The name is a NON-greedy string on
-     * purpose: against coords like {@code 10 -59 5} a one-word name consumes only {@code 10} and
-     * leaves {@code -59 5} unparsed, so that branch loses to the Vec3 one, while a bare {@code Bob}
-     * falls to the name. Multi-word names must be quoted; a greedy name would swallow the line.
+     * What mind a freshly spawned Person starts with — the only thing the three {@code spawn}
+     * literals differ by.
      */
-    private static LiteralArgumentBuilder<CommandSourceStack> spawnLeaves(
-            LiteralArgumentBuilder<CommandSourceStack> node, boolean autonomous) {
-        return node
-                .executes(ctx -> personSpawn(ctx.getSource(), null, null, autonomous))
-                .then(Commands.argument("pos", Vec3Argument.vec3())
-                        .executes(ctx -> personSpawn(ctx.getSource(),
-                                Vec3Argument.getVec3(ctx, "pos"), null, autonomous))
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(ctx -> personSpawn(ctx.getSource(),
-                                        Vec3Argument.getVec3(ctx, "pos"),
-                                        StringArgumentType.getString(ctx, "name"), autonomous))))
-                .then(Commands.argument("name", StringArgumentType.string())
-                        .executes(ctx -> personSpawn(ctx.getSource(), null,
-                                StringArgumentType.getString(ctx, "name"), autonomous)));
+    private enum Mind {
+        /** The arbiter deciding everything. */
+        FULL,
+        /** Autonomy off: an inert body that acts only when a {@code /autarkia brain} order says so. */
+        NO_BRAIN,
+        /** Thinking normally, minus the idle drift — see {@code /autarkia brain wander}. */
+        NO_WANDER
     }
 
     /**
-     * Spawns a new Person at {@code pos} (or the source's position when {@code null}), facing south
-     * (yaw 0) like {@code /summon}. Directory-first: an identity — {@code name} if given, else
-     * generated — is registered in the {@link PersonDirectory} and linked to the entity before it
-     * enters the world. The entity is created before the directory is touched, so the common failure
-     * (a null entity) leaves no orphan entry.
+     * Attaches the optional {@code [<pos>] [name]} leaves to a spawn literal, each executor
+     * spawning with the given {@code mind}, so the three literals share one argument shape.
      *
-     * <p>{@code autonomous} is the arbiter switch every Person spawns with ON; {@code person spawn
-     * nobrain} passes {@code false} before the first tick, leaving an inert body still drivable via
-     * {@code /autarkia brain}.
+     * <p>The name is a NON-greedy string on purpose: for real coords like {@code 10 -59 5} a
+     * one-word name would consume only {@code 10} and leave {@code -59 5} unparsed, so that branch
+     * loses and the fully-consuming Vec3 branch wins. Multi-word names must be quoted
+     * ({@code "Alice Smith"}) — a greedy name would swallow the whole line, coordinates and all.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> spawnLeaves(
+            LiteralArgumentBuilder<CommandSourceStack> node, Mind mind) {
+        return node
+                .executes(ctx -> personSpawn(ctx.getSource(), null, null, mind))
+                .then(Commands.argument("pos", Vec3Argument.vec3())
+                        .executes(ctx -> personSpawn(ctx.getSource(),
+                                Vec3Argument.getVec3(ctx, "pos"), null, mind))
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .executes(ctx -> personSpawn(ctx.getSource(),
+                                        Vec3Argument.getVec3(ctx, "pos"),
+                                        StringArgumentType.getString(ctx, "name"), mind))))
+                .then(Commands.argument("name", StringArgumentType.string())
+                        .executes(ctx -> personSpawn(ctx.getSource(), null,
+                                StringArgumentType.getString(ctx, "name"), mind)));
+    }
+
+    /**
+     * Spawns a new Person at {@code pos} (or the source's position when {@code null}), facing
+     * south (yaw 0) like {@code /summon}. Directory-first: an identity is registered in the
+     * {@link PersonDirectory} ({@code name} if given, else generated), and linked to the entity
+     * <em>before</em> it enters the world. (A plain {@code /summon autarkia:person} mints its
+     * generated identity a tick later instead, in {@link Person#tick()}.) The entity is created
+     * before the directory is touched, so a null entity leaves no orphan entry.
+     *
+     * <p>{@code mind} is applied before the first tick, so the Person is never briefly something
+     * else: {@link Mind#NO_BRAIN} inert but still drivable, {@link Mind#NO_WANDER} thinking
+     * normally without the idle drift.
      */
     private static int personSpawn(CommandSourceStack source, @Nullable Vec3 pos, @Nullable String name,
-                                   boolean autonomous) {
+                                   Mind mind) {
         String trimmed = name == null ? null : name.trim();
         if (trimmed != null && trimmed.isEmpty()) {
             Replies.fail(source, Component.literal("Name must not be blank."));
@@ -374,10 +392,13 @@ public final class AutarkiaCommands {
         // pitch pinned flat since a Person stands upright (pitch is render-only head tilt, see face()).
         person.snapTo(spawnPos.x, spawnPos.y, spawnPos.z, 0.0F, 0.0F);
         person.assignPerson(identity.id());
-        // "no brain": drop the arbiter into manual mode before the entity's first serverAiStep, so
-        // it spawns inert.
-        if (!autonomous) {
-            person.brain().setAuto(false);
+        // Both overrides land before the entity's first serverAiStep, so it spawns as asked
+        // rather than deciding for itself on tick one: "no brain" drops the arbiter into manual
+        // mode, "no wander" leaves it running and mutes the drive that would carry them off.
+        switch (mind) {
+            case NO_BRAIN -> person.brain().setAuto(false);
+            case NO_WANDER -> person.brain().setWander(false);
+            case FULL -> { }
         }
         if (!level.addFreshEntity(person)) {
             Replies.fail(source, Component.literal("Could not add the Person to the world."));
@@ -385,7 +406,11 @@ public final class AutarkiaCommands {
         }
         Appearance appearance = identity.appearance();
         String where = String.format(Locale.ROOT, "%.1f %.1f %.1f", spawnPos.x, spawnPos.y, spawnPos.z);
-        String brainNote = autonomous ? "" : " — brain off (/autarkia brain auto true to enable)";
+        String brainNote = switch (mind) {
+            case FULL -> "";
+            case NO_BRAIN -> " — brain off (/autarkia brain auto true to enable)";
+            case NO_WANDER -> " — wander muted (/autarkia brain wander true to enable)";
+        };
         Replies.send(source, () -> Component.literal("Spawned ")
                 .append(Component.literal(identity.name()).withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" (" + appearance.gender() + ") at " + where + brainNote)
