@@ -49,8 +49,18 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     private static final int PINV_MAIN_Y = 174;
 
     private final Container personContainer;
-    /** The Person entity's network id, synced to the client so the screen can render its paper-doll. */
-    private final DataSlot personEntityId = DataSlot.standalone();
+    /**
+     * The Person entity's network id, synced for the screen's paper-doll — as two 16-bit halves,
+     * because a {@link DataSlot} is <em>not</em> an int on the wire:
+     * {@code ClientboundContainerSetDataPacket} writes it with {@code writeShort} and reads it back
+     * signed, so one slot turns every id past 32767 negative and the doll and vitals rows vanish.
+     *
+     * <p>Ids come off one static counter bumped in the {@code Entity} constructor, and in
+     * single-player client and integrated server share it, so that ceiling arrives twice as fast.
+     */
+    private final DataSlot personIdLow = DataSlot.standalone();
+    /** The high 16 bits of {@link #personIdLow}'s id; see there for why the id is split at all. */
+    private final DataSlot personIdHigh = DataSlot.standalone();
     /** Last food level the server broadcast; the {@link #foodLevel} slot reads it back on the client. */
     private int syncedFood = Needs.MAX_FOOD;
     /** Live food source: the Person's needs on the server, the {@link #syncedFood} cache on the client. */
@@ -86,8 +96,10 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         this.personContainer = personContainer;
         // The client's container is a dummy SimpleContainer, so it falls back to the broadcast value.
         this.foodSource = (personContainer instanceof PersonContainer pc) ? pc::foodLevel : () -> syncedFood;
-        this.personEntityId.set(entityId);
-        addDataSlot(this.personEntityId);
+        this.personIdLow.set(entityId & 0xFFFF);
+        this.personIdHigh.set((entityId >>> 16) & 0xFFFF);
+        addDataSlot(this.personIdLow);
+        addDataSlot(this.personIdHigh);
         addDataSlot(this.foodLevel);
 
         // Vanilla's own player-inventory layout: 3 main rows (container 9..35) at (GRID_X, GRID_Y),
@@ -105,9 +117,14 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         addStandardInventorySlots(playerInv, PINV_X, PINV_MAIN_Y);
     }
 
-    /** The Person's entity network id (synced), for the screen's paper-doll lookup; {@code -1} if unknown. */
+    /**
+     * The Person's entity network id, for the screen's paper-doll lookup; {@code -1} if unknown.
+     * Reassembled from the two synced halves, each masked back to 16 bits — the wire hands them over
+     * sign-extended, so a half of {@code 0xFFFF} arrives as {@code -1}. The unknown id survives the
+     * round trip on its own: {@code -1} splits into two {@code 0xFFFF} halves and comes back {@code -1}.
+     */
     public int personEntityId() {
-        return this.personEntityId.get();
+        return (this.personIdHigh.get() & 0xFFFF) << 16 | (this.personIdLow.get() & 0xFFFF);
     }
 
     /** The Person's food level ({@code 0..20}, synced), for the screen's hunger row. */
