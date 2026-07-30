@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.brain.instinct.Instinct;
 import java.util.ArrayList;
@@ -103,6 +104,25 @@ public final class ComposedBoards implements WorkSource {
     public void driveFailed(Instinct instinct, String detail, BrainContext ctx) {
         personal.driveFailed(instinct, detail, ctx);
         party.get().driveFailed(instinct, detail, ctx);
+    }
+
+    /** Routed, not broadcast: a heartbeat is an answer about one errand on one board. */
+    @Override
+    public void heartbeat(WorkItem item, BrainContext ctx) {
+        sourceOf(item).heartbeat(item, ctx);
+    }
+
+    /** Likewise the question — only the board that lent the errand out can say whose it is. */
+    @Override
+    public boolean stillMine(WorkItem item, BrainContext ctx) {
+        return sourceOf(item).stillMine(item, ctx);
+    }
+
+    @Override
+    public List<WorkLease> leases(BrainContext ctx) {
+        List<WorkLease> all = new ArrayList<>(personal.leases(ctx));
+        all.addAll(party.get().leases(ctx));
+        return all;
     }
 
     /**

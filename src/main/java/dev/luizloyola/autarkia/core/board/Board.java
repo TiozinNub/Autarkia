@@ -2,7 +2,9 @@ package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.board.SiteClaims;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
@@ -33,10 +35,24 @@ public class Board {
     private final List<Entry> entries = new ArrayList<>();
 
     /**
-     * Who holds which item. Identity-keyed on purpose: an item is one specific offer, not a value
-     * — two errands that describe themselves identically are still two errands.
+     * Who holds which item, and until when. Identity-keyed on purpose: an item is one specific
+     * offer, not a value — two errands that describe themselves identically are still two
+     * errands.
      */
-    private final Map<WorkItem, AgentId> claimedBy = new IdentityHashMap<>();
+    private final Map<WorkItem, Lease> leases = new IdentityHashMap<>();
+
+    /**
+     * One hold: a holder and the tick it dies on without another heartbeat.
+     *
+     * <p>Same semantics as {@code SiteClaims}, sharing its TTL knob in v1. An agent preempted,
+     * unloaded or killed mid-errand stops heartbeating and the hold lapses — no cleanup path, no
+     * death hook, no way for a crash to wedge a board shut.
+     */
+    private record Lease(AgentId who, long untilTick) {
+        boolean liveAt(long now) {
+            return untilTick > now;
+        }
+    }
 
     /** Hands out the small stable handles the board command cancels by. Never reused. */
     private int nextHandle = 1;
@@ -103,7 +119,7 @@ public class Board {
      * — no auction, no global matching. Ties go to the earlier project and, within one, the earlier
      * item, so the same board asked twice answers the same way.
      */
-    public Optional<WorkItem> bestFor(AgentId asker, BrainContext ctx) {
+    public Optional<WorkItem> bestFor(AgentId asker, BrainContext ctx, long now) {
         if (asker == null) {
             return Optional.empty(); // an agent that does not yet know who it is cannot owe anything
         }
@@ -111,8 +127,9 @@ public class Board {
         double bestScore = Double.NEGATIVE_INFINITY;
         for (Entry entry : entries) {
             for (WorkItem item : entry.project().open()) {
-                if (claimedBy.containsKey(item)) {
-                    continue;
+                Lease lease = leases.get(item);
+                if (lease != null && lease.liveAt(now)) {
+                    continue; 
                 }
                 double score = item.priority() - item.estimatedCost(ctx);
                 if (score > bestScore) {
@@ -124,43 +141,111 @@ public class Board {
         return Optional.ofNullable(best);
     }
 
-    /** Records that {@code who} owes this item, and tells the project it is no longer free. */
-    public void claim(WorkItem item, AgentId who) {
-        boolean fresh = claimedBy.put(item, who) == null;
-        Project owner = fresh ? ownerOf(item) : null;
-        if (owner != null) {
-            owner.claimed(item);
+    /**
+     * Takes the hold for {@code who} until {@code now + }{@link #ttlTicks()}, and tells the project.
+     * Refuses only against somebody else's LIVE hold (the {@code SiteClaims} rule), so a lapsed hold
+     * is an opening, not a conflict.
+     */
+    public boolean claim(WorkItem item, AgentId who, long now) {
+        Lease held = leases.get(item);
+        if (held != null && held.liveAt(now) && !held.who().equals(who)) {
+            return false;
+        }
+        boolean fresh = held == null;
+        leases.put(item, new Lease(who, now + ttlTicks()));
+        if (fresh) {
+            Project owner = ownerOf(item);
+            if (owner != null) {
+                owner.claimed(item);
+            }
+        }
+        return true;
+    }
+
+    /** Renews {@code who}'s hold. A heartbeat from anyone else is not theirs to give. */
+    public void heartbeat(WorkItem item, AgentId who, long now) {
+        if (holds(item, who, now)) {
+            leases.put(item, new Lease(who, now + ttlTicks()));
         }
     }
 
-    /** Whether {@code who} currently holds this item — step 3's {@code stillMine} reads this. */
-    public boolean holds(WorkItem item, AgentId who) {
-        return who != null && who.equals(claimedBy.get(item));
+    /** Whether {@code who}'s hold on this item is live right now — what {@code stillMine} reads. */
+    public boolean holds(WorkItem item, AgentId who, long now) {
+        Lease held = leases.get(item);
+        return who != null && held != null && held.liveAt(now) && held.who().equals(who);
+    }
+
+    /**
+     * Sweeps every lapsed hold back to the pool and tells the project. Run on whatever cadence the
+     * owning scope ticks at. Not a failure (the holder only stopped saying they were on it), so the
+     * project pays no retry cooldown for somebody else's interruption.
+     */
+    public void expire(long now) {
+        List<WorkItem> lapsed = new ArrayList<>();
+        for (Map.Entry<WorkItem, Lease> held : leases.entrySet()) {
+            if (!held.getValue().liveAt(now)) {
+                lapsed.add(held.getKey());
+            }
+        }
+        for (WorkItem item : lapsed) {
+            leases.remove(item);
+            Project owner = ownerOf(item);
+            if (owner != null) {
+                owner.lapsed(item);
+            }
+        }
     }
 
     /** Gives the item back to the pool without an outcome — a release, not a failure. */
-    public void release(WorkItem item, AgentId who) {
-        if (holds(item, who)) {
-            claimedBy.remove(item);
+    public void release(WorkItem item, AgentId who, long now) {
+        if (holds(item, who, now)) {
+            leases.remove(item);
         }
     }
 
-    /** The item's root SUCCEEDED: the claim clears and the project is told. */
+    /** The item's root SUCCEEDED: the hold clears and the project is told. */
     public void completed(WorkItem item, AgentId who, BrainContext ctx) {
-        claimedBy.remove(item);
+        leases.remove(item);
         Project owner = ownerOf(item);
         if (owner != null) {
             owner.completed(item, ctx);
         }
     }
 
-    /** The item's root FAILED: the claim clears and the project paces its own retry. */
+    /** The item's root FAILED: the hold clears and the project paces its own retry. */
     public void failed(WorkItem item, AgentId who, BrainContext ctx) {
-        claimedBy.remove(item);
+        leases.remove(item);
         Project owner = ownerOf(item);
         if (owner != null) {
             owner.failed(item, ctx);
         }
+    }
+
+    /**
+     * Every live hold on this board, for the claims dump — flattened into Anima's reporting
+     * shape so the command can render a holder's name without knowing what a board is.
+     */
+    public List<WorkLease> leases(long now) {
+        List<WorkLease> live = new ArrayList<>();
+        for (Entry entry : entries) {
+            for (WorkItem item : entry.project().open()) {
+                Lease held = leases.get(item);
+                if (held != null && held.liveAt(now)) {
+                    live.add(new WorkLease(held.who(), label(), item.describe(),
+                            held.untilTick() - now));
+                }
+            }
+        }
+        return live;
+    }
+
+    /**
+     * Ticks a hold survives past its last heartbeat. Shared with {@code SiteClaims} in v1
+     * (decision: Luiz — one semantics, and for the clear-area project the two holds coincide
+     * anyway), so the one knob tunes both.
+     */
+    public static int ttlTicks() {
+        return SiteClaims.ttlTicks();
     }
 
     /**
@@ -193,7 +278,7 @@ public class Board {
     }
 
     /** This board's rows for the operator readout: a header line, then one line per project. */
-    public List<String> describeLines() {
+    public List<String> describeLines(long now) {
         String label = label();
         List<String> lines = new ArrayList<>();
         if (entries.isEmpty()) {
@@ -203,27 +288,31 @@ public class Board {
         lines.add(label + ": " + entries.size() + (entries.size() == 1 ? " project" : " projects"));
         for (Entry entry : entries) {
             lines.add("  #" + entry.handle() + " " + entry.project().describe()
-                    + itemSummary(entry.project()));
+                    + itemSummary(entry.project(), now));
         }
         return lines;
     }
 
-    /** {@code — 1 item (claimed)} / {@code — 3 items, 1 claimed} / nothing when none are open. */
-    private String itemSummary(Project project) {
+    /**
+     * {@code — 1 item (held)} / {@code — 3 items, 1 held} / nothing when none are open. Counts LIVE
+     * holds only: an item whose holder went quiet is on offer again.
+     */
+    private String itemSummary(Project project, long now) {
         List<WorkItem> open = project.open();
         if (open.isEmpty()) {
             return "";
         }
-        int claimed = 0;
+        int held = 0;
         for (WorkItem item : open) {
-            if (claimedBy.containsKey(item)) {
-                claimed++;
+            Lease lease = leases.get(item);
+            if (lease != null && lease.liveAt(now)) {
+                held++;
             }
         }
         if (open.size() == 1) {
-            return " — 1 item (" + (claimed == 1 ? "claimed" : "open") + ")";
+            return " — 1 item (" + (held == 1 ? "held" : "open") + ")";
         }
-        return " — " + open.size() + " items, " + claimed + " claimed";
+        return " — " + open.size() + " items, " + held + " held";
     }
 
     /** The project currently offering this item, or null if none does (cancelled mid-errand). */
@@ -238,10 +327,10 @@ public class Board {
         return null;
     }
 
-    /** Drops every claim on a departing project's items, so the record cannot outlive the work. */
+    /** Drops every hold on a departing project's items, so the record cannot outlive the work. */
     private void forget(Project project) {
         for (WorkItem item : project.open()) {
-            claimedBy.remove(item);
+            leases.remove(item);
         }
     }
 
@@ -258,15 +347,25 @@ public class Board {
 
         @Override
         public Optional<WorkItem> bestAvailable(BrainContext ctx) {
-            return bestFor(member.get(), ctx);
+            return bestFor(member.get(), ctx, now(ctx));
         }
 
         @Override
         public void claimed(WorkItem item, BrainContext ctx) {
             AgentId who = member.get();
             if (who != null) {
-                claim(item, who);
+                claim(item, who, now(ctx));
             }
+        }
+
+        @Override
+        public void heartbeat(WorkItem item, BrainContext ctx) {
+            Board.this.heartbeat(item, member.get(), now(ctx));
+        }
+
+        @Override
+        public boolean stillMine(WorkItem item, BrainContext ctx) {
+            return holds(item, member.get(), now(ctx));
         }
 
         @Override
@@ -287,13 +386,27 @@ public class Board {
         }
 
         @Override
+        public List<WorkLease> leases(BrainContext ctx) {
+            return Board.this.leases(now(ctx));
+        }
+
+        @Override
         public String describe(BrainContext ctx) {
-            return String.join(" | ", Board.this.describeLines());
+            return String.join(" | ", Board.this.describeLines(now(ctx)));
         }
 
         @Override
         public List<String> describeLines(BrainContext ctx) {
-            return Board.this.describeLines();
+            return Board.this.describeLines(now(ctx));
+        }
+
+        /**
+         * The clock every hold is measured against — the same game time the asking body already
+         * read this tick, following the {@code AgentClaims} discipline: callers stamp, the store
+         * keeps no clock of its own.
+         */
+        private long now(BrainContext ctx) {
+            return ctx.percepts().time();
         }
     }
 }

@@ -34,10 +34,13 @@ public final class PartyBoard extends Board {
      * One beat of the board's own slow, entity-free thinking — run by the server-side host on a
      * staggered cadence, with no agent's context.
      *
-     * <p>Today it only closes what is satisfied; party projects and step 3's lease expiry hang off
-     * this same beat. {@code now} is an argument from the start so neither changes the signature.
+     * <p>It expires lapsed holds and closes what is satisfied. Expiry matters more here than on a
+     * personal board: no member ticks and there is no death hook, so this beat frees a shared
+     * errand when whoever took it died, unloaded or was pulled away. Party projects arrive with
+     * step 4.
      */
     public void tick(long now) {
+        expire(now);
         closeFinished();
     }
 }

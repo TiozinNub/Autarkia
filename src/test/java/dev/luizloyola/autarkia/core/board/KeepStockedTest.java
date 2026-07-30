@@ -25,9 +25,11 @@ class KeepStockedTest {
         board.post(new KeepStocked(Stock.LOGS, 16, 0.35, 0));
     }
 
+    /** n brain ticks, with the world clock moving as it really does — holds age against it. */
     private void ticks(int n) {
         for (int i = 0; i < n; i++) {
             board.tick(ctx);
+            ctx.advance(1);
         }
     }
 
@@ -85,7 +87,8 @@ class KeepStockedTest {
         work.claimed(item, ctx);
         ctx.inventory().add(ItemStack.of("minecraft:oak_log", 16, 64));
         ticks(KeepStocked.CHECK_INTERVAL * 2);
-        assertTrue(board.holds(item, me), "still theirs — the project must not have dropped it");
+        assertTrue(board.holds(item, me, ctx.now()),
+                "still theirs — the project must not have dropped it");
     }
 
     /** A standing condition is never done with: reaching the target closes no project. */

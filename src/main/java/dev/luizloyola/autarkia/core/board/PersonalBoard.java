@@ -30,6 +30,10 @@ public final class PersonalBoard extends Board {
                 personal.tick(ctx);
             }
         }
+        // A lapsed hold goes back on offer before anything else reads the board this tick. The
+        // holder here is always the owner, so this is how an agent preempted long enough stops
+        // owing themselves an errand they abandoned.
+        expire(ctx.percepts().time());
         closeFinished();
     }
 }

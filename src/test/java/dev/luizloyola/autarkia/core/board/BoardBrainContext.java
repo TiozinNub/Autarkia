@@ -31,6 +31,8 @@ final class BoardBrainContext implements BrainContext {
     private final AgentJournal view = journal.forPerson(AgentId.random());
     /** What an item is allowed to price itself against — the one map fact a board test needs. */
     private Pos position = new Pos(0, 0, 0);
+    /** The clock every hold is measured against; tests move it to make a lease lapse. */
+    private long now;
 
     Inventory inventory() {
         return inventory;
@@ -38,6 +40,15 @@ final class BoardBrainContext implements BrainContext {
 
     void standAt(Pos where) {
         this.position = where;
+    }
+
+    long now() {
+        return now;
+    }
+
+    /** Moves the world clock forward — the only way a lease dies. */
+    void advance(long ticks) {
+        this.now += ticks;
     }
 
     @Override
@@ -95,7 +106,7 @@ final class BoardBrainContext implements BrainContext {
 
             @Override
             public long time() {
-                return 0L;
+                return now;
             }
         };
     }

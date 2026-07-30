@@ -30,13 +30,13 @@ class BoardTest {
         WorkItem dear = project.add(new FakeItem("far", 0.5, 0.4));
         board.post(project);
 
-        assertSame(cheap, board.bestFor(alice, ctx).orElseThrow(),
+        assertSame(cheap, board.bestFor(alice, ctx, ctx.now()).orElseThrow(),
                 "same bid, lower cost -> the one that costs this asker less");
-        board.claim(cheap, alice);
-        assertSame(dear, board.bestFor(bob, ctx).orElseThrow(),
+        board.claim(cheap, alice, ctx.now());
+        assertSame(dear, board.bestFor(bob, ctx, ctx.now()).orElseThrow(),
                 "the claimed one is gone from the pool; the next best is offered");
-        board.claim(dear, bob);
-        assertTrue(board.bestFor(alice, ctx).isEmpty(), "everything is spoken for");
+        board.claim(dear, bob, ctx.now());
+        assertTrue(board.bestFor(alice, ctx, ctx.now()).isEmpty(), "everything is spoken for");
     }
 
     /**
@@ -51,9 +51,9 @@ class BoardTest {
         board.post(project);
 
         ctx.standAt(new Pos(18, 0, 0));
-        assertSame(east, board.bestFor(alice, ctx).orElseThrow());
+        assertSame(east, board.bestFor(alice, ctx, ctx.now()).orElseThrow());
         ctx.standAt(new Pos(-18, 0, 0));
-        assertSame(west, board.bestFor(bob, ctx).orElseThrow());
+        assertSame(west, board.bestFor(bob, ctx, ctx.now()).orElseThrow());
     }
 
     @Test
@@ -61,7 +61,7 @@ class BoardTest {
         FakeProject project = new FakeProject("errands");
         project.add(new FakeItem("anything", 0.5, 0.0));
         board.post(project);
-        assertTrue(board.bestFor(null, ctx).isEmpty(),
+        assertTrue(board.bestFor(null, ctx, ctx.now()).isEmpty(),
                 "a body that does not know who it is cannot owe anybody an errand");
     }
 
@@ -70,7 +70,7 @@ class BoardTest {
         FakeProject project = new FakeProject("errands");
         WorkItem item = project.add(new FakeItem("one", 0.5, 0.0));
         board.post(project);
-        board.claim(item, alice);
+        board.claim(item, alice, ctx.now());
         assertEquals(List.of("claimed:one"), project.events);
     }
 
@@ -81,15 +81,15 @@ class BoardTest {
         WorkItem lost = project.add(new FakeItem("lost", 0.5, 0.0));
         board.post(project);
 
-        board.claim(done, alice);
+        board.claim(done, alice, ctx.now());
         board.completed(done, alice, ctx);
-        board.claim(lost, alice);
+        board.claim(lost, alice, ctx.now());
         board.failed(lost, alice, ctx);
 
         assertEquals(List.of("claimed:done", "completed:done", "claimed:lost", "failed:lost"),
                 project.events);
-        assertFalse(board.holds(done, alice), "a finished errand is nobody's");
-        assertFalse(board.holds(lost, alice), "a failed one is nobody's either");
+        assertFalse(board.holds(done, alice, ctx.now()), "a finished errand is nobody's");
+        assertFalse(board.holds(lost, alice, ctx.now()), "a failed one is nobody's either");
     }
 
     @Test
@@ -98,11 +98,11 @@ class BoardTest {
         WorkItem item = project.add(new FakeItem("one", 0.5, 0.0));
         board.post(project);
 
-        board.claim(item, alice);
-        board.release(item, bob);
-        assertTrue(board.holds(item, alice), "bob cannot release what he never held");
-        board.release(item, alice);
-        assertTrue(board.bestFor(bob, ctx).isPresent(), "released -> back in the pool");
+        board.claim(item, alice, ctx.now());
+        board.release(item, bob, ctx.now());
+        assertTrue(board.holds(item, alice, ctx.now()), "bob cannot release what he never held");
+        board.release(item, alice, ctx.now());
+        assertTrue(board.bestFor(bob, ctx, ctx.now()).isPresent(), "released -> back in the pool");
     }
 
     @Test
@@ -114,7 +114,7 @@ class BoardTest {
 
         board.closeFinished();
         assertTrue(board.isEmpty(), "satisfied -> dropped");
-        assertTrue(board.bestFor(alice, ctx).isEmpty());
+        assertTrue(board.bestFor(alice, ctx, ctx.now()).isEmpty());
     }
 
     @Test
@@ -125,13 +125,110 @@ class BoardTest {
         WorkItem doomed = drop.add(new FakeItem("doomed", 0.9, 0.0));
         int keepHandle = board.post(keep);
         int dropHandle = board.post(drop);
-        board.claim(doomed, alice);
+        board.claim(doomed, alice, ctx.now());
 
         assertTrue(board.cancel(dropHandle).isPresent());
-        assertFalse(board.holds(doomed, alice), "a cancelled project's claims go with it");
+        assertFalse(board.holds(doomed, alice, ctx.now()), "a cancelled project's claims go with it");
         assertEquals(1, board.projects().size());
         assertTrue(board.cancel(dropHandle).isEmpty(), "handles are never reused");
         assertTrue(board.cancel(keepHandle).isPresent());
+    }
+
+    // ---- leases: a hold is a heartbeat, not a lock ---------------------------------------
+
+    /**
+     * The failure mode the lease model exists for: a holder never comes back. There is no death hook
+     * and no cleanup pass — silence for long enough is letting go, and the errand returns to the
+     * pool.
+     */
+    @Test
+    void aHolderWhoGoesQuietLosesTheErrand() {
+        FakeProject project = new FakeProject("errands");
+        WorkItem item = project.add(new FakeItem("one", 0.5, 0.0));
+        board.post(project);
+        board.claim(item, alice, 0);
+
+        assertTrue(board.bestFor(bob, ctx, Board.ttlTicks() - 1).isEmpty(), "still hers, just");
+        assertSame(item, board.bestFor(bob, ctx, Board.ttlTicks() + 1).orElseThrow(),
+                "silence outlived the hold -> anyone's again");
+        assertFalse(board.holds(item, alice, Board.ttlTicks() + 1));
+    }
+
+    /** ...and saying so keeps it. One heartbeat buys another full TTL, indefinitely. */
+    @Test
+    void aHeartbeatKeepsTheErrand() {
+        FakeProject project = new FakeProject("errands");
+        WorkItem item = project.add(new FakeItem("one", 0.5, 0.0));
+        board.post(project);
+        board.claim(item, alice, 0);
+
+        for (long t = 0; t < Board.ttlTicks() * 3L; t += 10) {
+            board.heartbeat(item, alice, t);
+        }
+        long late = Board.ttlTicks() * 3L;
+        assertTrue(board.holds(item, alice, late), "kept saying so -> kept it");
+        assertTrue(board.bestFor(bob, ctx, late).isEmpty());
+    }
+
+    /** Somebody else's heartbeat is not a claim, and must not renew a hold that is lapsing. */
+    @Test
+    void aStrangersHeartbeatRenewsNothing() {
+        FakeProject project = new FakeProject("errands");
+        WorkItem item = project.add(new FakeItem("one", 0.5, 0.0));
+        board.post(project);
+        board.claim(item, alice, 0);
+
+        board.heartbeat(item, bob, Board.ttlTicks() - 1);
+        assertFalse(board.holds(item, alice, Board.ttlTicks() + 1), "bob cannot hold it open for her");
+    }
+
+    /**
+     * A lapse is not a failure. The project hears {@code lapsed} — no outcome, no retry cooldown
+     * — because nobody has learned the errand is undoable, only that its holder stopped saying
+     * they were on it.
+     */
+    @Test
+    void expiryTellsTheProjectItLapsedRatherThanFailed() {
+        FakeProject project = new FakeProject("errands");
+        WorkItem item = project.add(new FakeItem("one", 0.5, 0.0));
+        board.post(project);
+        board.claim(item, alice, 0);
+
+        board.expire(Board.ttlTicks() - 1);
+        assertEquals(List.of("claimed:one"), project.events, "still live: nothing to report");
+        board.expire(Board.ttlTicks() + 1);
+        assertEquals(List.of("claimed:one", "lapsed:one"), project.events);
+    }
+
+    /** A live hold refuses a second taker; a lapsed one is not a conflict but an opening. */
+    @Test
+    void aSecondTakerIsRefusedOnlyWhileTheHoldIsLive() {
+        FakeProject project = new FakeProject("errands");
+        WorkItem item = project.add(new FakeItem("one", 0.5, 0.0));
+        board.post(project);
+
+        assertTrue(board.claim(item, alice, 0));
+        assertFalse(board.claim(item, bob, 1), "hers, and she is still saying so");
+        assertTrue(board.claim(item, bob, Board.ttlTicks() + 1), "lapsed -> his to take");
+        assertTrue(board.holds(item, bob, Board.ttlTicks() + 1));
+        assertFalse(board.holds(item, alice, Board.ttlTicks() + 1));
+    }
+
+    /** The dump the claims command prints: live holds only, with who and how long is left. */
+    @Test
+    void theLeaseDumpReportsLiveHoldsOnly() {
+        FakeProject project = new FakeProject("errands");
+        WorkItem held = project.add(new FakeItem("held", 0.5, 0.0));
+        project.add(new FakeItem("free", 0.5, 0.0));
+        board.post(project);
+        board.claim(held, alice, 0);
+
+        var live = board.leases(100);
+        assertEquals(1, live.size(), "only the one that is actually held");
+        assertEquals(alice, live.get(0).who());
+        assertEquals("held", live.get(0).item());
+        assertEquals(Board.ttlTicks() - 100, live.get(0).remaining());
+        assertTrue(board.leases(Board.ttlTicks() + 1).isEmpty(), "lapsed holds are not holds");
     }
 
     /** The view is the whole identity story: the brain holds one and never learns whose. */
@@ -145,7 +242,7 @@ class BoardTest {
 
         WorkItem item = hers.bestAvailable(ctx).orElseThrow();
         hers.claimed(item, ctx);
-        assertTrue(board.holds(item, alice));
+        assertTrue(board.holds(item, alice, ctx.now()));
         assertTrue(his.bestAvailable(ctx).isEmpty(), "one board, one pool: bob sees it is taken");
     }
 
@@ -185,6 +282,11 @@ class BoardTest {
         @Override
         public void claimed(WorkItem item) {
             events.add("claimed:" + item.describe());
+        }
+
+        @Override
+        public void lapsed(WorkItem item) {
+            events.add("lapsed:" + item.describe());
         }
 
         @Override
