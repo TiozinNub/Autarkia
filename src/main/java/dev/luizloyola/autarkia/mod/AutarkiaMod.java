@@ -5,6 +5,7 @@ import dev.luizloyola.anima.mod.config.ConfigFile;
 import dev.luizloyola.autarkia.core.person.PersonDanger;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
+import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -68,6 +69,8 @@ public class AutarkiaMod implements ModInitializer {
         PathfinderService.init();
         Journals.init();
         Claims.init();
+        // Layer 3's shared half: one board per party, ticked here rather than by anybody's body.
+        PartyBoards.init();
         DamageMarks.init();
         dev.luizloyola.anima.mod.brain.PlaceMarks.init();
         dev.luizloyola.anima.mod.brain.BeingViewer.init();

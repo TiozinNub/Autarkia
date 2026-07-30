@@ -24,8 +24,14 @@ import dev.luizloyola.autarkia.core.person.PersonSkins;
 import dev.luizloyola.autarkia.core.person.PersonSpecies;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.anima.mod.brain.BrainDriver;
+import dev.luizloyola.anima.core.brain.board.WorkSource;
+import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.mod.social.PartyData;
+import dev.luizloyola.autarkia.core.board.ComposedBoards;
+import dev.luizloyola.autarkia.core.board.KeepStocked;
+import dev.luizloyola.autarkia.core.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
-import dev.luizloyola.autarkia.core.board.StockBoard;
+import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentScaffolder;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
@@ -153,20 +159,63 @@ public class Person extends Avatar implements AgentBody {
     private final Navigator navigator = new Navigator(this);
 
     /**
+     * This person's own board — where wants stated about this body live, and nobody else can reach.
+     * A project posted here is theirs for life (compose, don't merge — see {@link ComposedBoards}).
+     */
+    private final PersonalBoard personalBoard = personalBoard(getId());
+
+    /**
      * This person's brain host ({@link BrainDriver}) — a machine beside the {@link #navigator}: it
      * runs the task executor and only ever <em>reads</em> the body. Transient — a running task is
      * working state, not persisted; a reload just re-decides.
      */
-    private final BrainDriver brain = new BrainDriver(this, new StockBoard(
-            Stock.LOGS, STOCK_LOGS, STOCK_PRIORITY, getId()));
+    private final BrainDriver brain = new BrainDriver(this, new ComposedBoards(
+            personalBoard.viewFor(this::getAgentId), this::partyWork));
 
     /**
-     * The placeholder stock rule every fresh settler wants: keep this many logs, at this standing
-     * priority. Layer 3's degenerate v1, and Autarkia's to own — Anima has no opinion about what an
-     * agent should stockpile.
+     * The standing stock rule every fresh settler wants: keep this many logs, at this priority.
+     * Autarkia's to own — Anima has no opinion about what an agent should stockpile.
      */
     private static final int STOCK_LOGS = 16;
     private static final double STOCK_PRIORITY = 0.35;
+
+    /**
+     * The party board view handed to the brain, and the party it was built for — re-checked every
+     * ask, rebuilt only when membership moves, since a view cached for life would quietly keep
+     * serving a board they no longer belong to.
+     */
+    private @Nullable PartyId boardParty;
+    private @Nullable WorkSource partyWork;
+
+    /** A fresh settler's own board, carrying the one standing want everybody starts with. */
+    private static PersonalBoard personalBoard(int offset) {
+        PersonalBoard board = new PersonalBoard();
+        board.post(new KeepStocked(Stock.LOGS, STOCK_LOGS, STOCK_PRIORITY, offset));
+        return board;
+    }
+
+    /** This person's own board — what the board command reads and, later, posts to. */
+    public PersonalBoard board() {
+        return this.personalBoard;
+    }
+
+    /**
+     * This person's face on their party's board, resolved on ask. Nothing before identity exists
+     * (a body that does not yet know who it is cannot be a member of anything) and nothing on the
+     * client, where there are no boards at all.
+     */
+    private WorkSource partyWork() {
+        AgentId id = getAgentId();
+        if (id == null || !(level() instanceof ServerLevel server)) {
+            return WorkSource.NONE;
+        }
+        PartyId party = PartyData.get(server.getServer()).partyOf(id);
+        if (!party.equals(this.boardParty) || this.partyWork == null) {
+            this.boardParty = party;
+            this.partyWork = PartyBoards.of(server.getServer(), party).viewFor(this::getAgentId);
+        }
+        return this.partyWork;
+    }
 
     /**
      * This person's journal view ({@link AgentJournal}) — the one handle the brain, the

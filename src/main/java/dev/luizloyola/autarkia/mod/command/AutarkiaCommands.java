@@ -176,8 +176,14 @@ public final class AutarkiaCommands {
                         // server-wide limits, the journal and the flee weights. Same subcommand,
                         // built for whichever set it is handed.
                         .then(ConfigCommands.tree(AutarkiaConfig.store(), configFile))
+                        // Layer 3, both scopes at once: the personal board (what this body wants
+                        // for itself) and the party board (what the group has posted).
                         .then(Commands.literal("board")
-                                .executes(ctx -> boardShow(ctx.getSource())))
+                                .executes(ctx -> boardShow(ctx.getSource()))
+                                .then(Commands.literal("cancel")
+                                        .then(Commands.argument("project", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> boardCancel(ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "project"))))))
                         // Who they can currently SEE — the peers() sense: Persons and live
                         // players, one seamless list, activity read off the visible body.
                         .then(AgentCommands.peers())
@@ -242,12 +248,41 @@ public final class AutarkiaCommands {
         return dead.size();
     }
 
-    /** Prints the resolved Person's personal board — the work-demand side of the brain. */
+    /**
+     * Prints both boards the resolved Person can reach (their own and their party's) one row per
+     * project, with its handle, its state and how many of its items are claimed.
+     *
+     * <p>Both, because a summary could not tell a quiet personal board from an empty party one.
+     */
     private static int boardShow(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        Replies.send(source, () -> Component.literal(person.getName().getString() + " board: "
-                + person.brain().describeBoard()).withStyle(ChatFormatting.LIGHT_PURPLE));
+        Replies.send(source, () -> Component.literal(person.getName().getString() + " boards:")
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
+        for (String line : person.brain().describeBoard()) {
+            Replies.send(source, () -> Component.literal("  " + line)
+                    .withStyle(ChatFormatting.LIGHT_PURPLE));
+        }
+        return 1;
+    }
+
+    /**
+     * Cancels a project by the handle the readout shows. Scoped to the personal board: nothing can
+     * be posted to a party board yet, and cancelling a shared project will be a different question
+     * from dropping one's own standing want.
+     */
+    private static int boardCancel(CommandSourceStack source, int handle) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        var cancelled = person.board().cancel(handle);
+        if (cancelled.isEmpty()) {
+            Replies.fail(source, Component.literal(
+                    "No project #" + handle + " on " + person.getName().getString() + "'s own board."));
+            return 0;
+        }
+        Replies.send(source, () -> Component.literal(person.getName().getString()
+                        + " drops #" + handle + " — " + cancelled.get().describe())
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
         return 1;
     }
 
