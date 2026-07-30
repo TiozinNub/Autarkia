@@ -208,7 +208,8 @@ class TaskExecutorTreeTest {
         executor.tick(ctx); // b FAILED -> second tried -> nothing left -> root FAILED
         assertEquals(List.of("tick a", "tick b"), log);
         assertFalse(executor.isBusy());
-        assertEquals("idle (last: goal -> FAILED)", executor.describe());
+        assertEquals("idle (last: goal -> FAILED — a failed)", executor.describe(),
+                "the DEEPEST cause, not the parent it bubbled up to");
     }
 
     @Test
@@ -218,7 +219,8 @@ class TaskExecutorTreeTest {
         executor.run(goal("goal", off), ctx);
         executor.tick(ctx);
         assertEquals(List.of(), log, "nothing applicable: the compound fails during expansion");
-        assertEquals("idle (last: goal -> FAILED)", executor.describe());
+        assertEquals("idle (last: goal -> FAILED — goal: no applicable way)", executor.describe(),
+                "nothing applied — distinct from everything being priced out");
     }
 
     // --- trivial success (empty decompose) -------------------------------------------------------
@@ -280,7 +282,8 @@ class TaskExecutorTreeTest {
         executor.run(new RecursiveCompound(), ctx);
         executor.tick(ctx);
         assertFalse(executor.isBusy());
-        assertEquals("idle (last: recursive goal -> FAILED)", executor.describe());
+        assertEquals("idle (last: recursive goal -> FAILED — recursive goal: depth cap (8))",
+                executor.describe());
     }
 
     private static final class RecursiveCompound implements CompoundTask {
