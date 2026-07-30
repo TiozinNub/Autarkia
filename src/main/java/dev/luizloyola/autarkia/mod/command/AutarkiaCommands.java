@@ -283,9 +283,13 @@ public final class AutarkiaCommands {
                     "No project #" + handle + " on " + person.getName().getString() + "'s own board."));
             return 0;
         }
+        // LOGGED: this destroys layer-3 state. No journal line records it — the journal belongs
+        // to the agent, and an agent does not narrate what was done TO it — so left unlogged a
+        // cancel is invisible everywhere, the board reading "nothing posted" afterwards.
+        // Caught live, chasing a Person whose want had evaporated.
         Replies.send(source, () -> Component.literal(person.getName().getString()
                         + " drops #" + handle + " — " + cancelled.get().describe())
-                .withStyle(ChatFormatting.LIGHT_PURPLE));
+                .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
 
