@@ -16,12 +16,9 @@ import dev.luizloyola.anima.mod.brain.DamageMarks;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
 import dev.luizloyola.anima.mod.debug.DebugView;
 import dev.luizloyola.anima.mod.log.Journals;
-import dev.luizloyola.autarkia.core.tree.ChopKnownTree;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
-import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
-import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.autarkia.core.tree.TreeRule;
 import dev.luizloyola.autarkia.core.tree.WaterRule;
@@ -81,10 +78,11 @@ public class AutarkiaMod implements ModInitializer {
         // beside this one.
         AgentDirectory.provide(PersonDirectory::get);
         // Where logs come from is a fact about this world, not about having a mind: Anima knows how
-        // to WANT an item and pick one up, so the producer is registered here, not in the library.
-        Producers.register(Stock.LOGS, ChopKnownTree::new);
-        // Declare what a settler finds worth remembering, and what grows into it. Anima owns the
-        // crescent sampler, the region flood and the merge rule; it has no idea what a tree is.
+        // to WANT an item and pick one up. The old chop choreography was removed for redesign, so
+        // there is no log producer today (obtain degrades to scavenging), and the seam is
+        // Producers.register(Stock.LOGS, <the new task>::new).
+        // What a settler finds worth remembering, and what grows into it: Anima owns the sampler,
+        // the region flood and the merge rule, and has no idea what a tree is.
         Pois.init();
         GrowthRules.register(BlockKind.LOG, TreeRule.INSTANCE);
         GrowthRules.register(BlockKind.LEAVES, TreeRule.INSTANCE);

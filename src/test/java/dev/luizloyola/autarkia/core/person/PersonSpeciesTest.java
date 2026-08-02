@@ -30,7 +30,6 @@ class PersonSpeciesTest {
         assertEquals(16.0, PERSON.d(ProfileAspect.FLEE_RANGE), "instincts.flee_range");
         assertEquals(12.0, PERSON.d(ProfileAspect.FLEE_RAMP), "instincts.flee_ramp");
         assertEquals(1.3, PERSON.d(ProfileAspect.FLEE_APPROACH_BONUS), "flee_approach_bonus");
-        assertEquals(0.45, PERSON.d(ProfileAspect.DESCEND_PRESSURE), "descend_pressure");
         assertEquals(0.15, PERSON.d(ProfileAspect.WANDER_IDLE_PRESSURE), "wander_idle_pressure");
         assertEquals(8, PERSON.i(ProfileAspect.WANDER_RADIUS), "wander_radius");
 
@@ -68,8 +67,6 @@ class PersonSpeciesTest {
     @Test
     @DisplayName("the invariants a settler's own docs depend on")
     void theInvariantsBetweenAspectsHold() {
-        assertTrue(PERSON.d(ProfileAspect.DESCEND_PRESSURE) < PERSON.d(ProfileAspect.MIND_PREEMPT),
-                "descend must stay under the preempt bar or a mid-climb chop gets cut");
         assertTrue(PERSON.i(ProfileAspect.SOCIAL_HAIL_RADIUS) > PERSON.i(ProfileAspect.SENSES_RADIUS),
                 "a hail that does not outrange sight adds nothing to simply noticing someone");
         assertTrue(PERSON.i(ProfileAspect.SENSES_HEARING_RADIUS) < PERSON.i(ProfileAspect.SENSES_RADIUS),

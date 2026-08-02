@@ -94,7 +94,7 @@ class PoiSensorCoreTest {
                 "two trunks in the mass, two things noticed");
         assertEquals(2, knowledge.size());
 
-        // ChopTree.finish on the near one: its memory goes, and only its memory.
+        // A felling task finishing the near one.
         knowledge.forget(Pois.TREE, new Pos(8, 64, 0));
 
         assertEquals(1, knowledge.size(), "the neighbour is still theirs to walk to");
@@ -198,8 +198,8 @@ class PoiSensorCoreTest {
         FakeProbe probe = new FakeProbe();
         probe.placeOak(8, 0);
         tickUntilQuiet(probe, new Pos(0, 64, 0));
-        // A task (ChopTree's ghost path, an eviction) forgets the memory without the sensor's
-        // claims hearing — a regrown sapling then stayed invisible behind the orphaned claims.
+        // A forget the sensor's claims never hear about: identical blocks re-appearing in the
+        // claimed cells (a regrown sapling) stayed invisible behind the orphans.
         knowledge.forget(Pois.TREE, new Pos(8, 64, 0));
 
         // The return pass: the first orphaned column drops the region's claims, which un-masks

@@ -16,19 +16,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Splits a scanned mass of logs and leaves into individual trees — the one answer shared by
- * {@link TreeRule}, which remembers them, and {@code TreeSurvey}, which fells them, so perception
- * and the axe cannot disagree. Worldgen and 26-way growth ({@link RegionGrowth}) fuse canopies;
- * this is the seam that puts them back.
+ * Splits a scanned mass of logs and leaves into individual trees. {@link TreeRule} individuates
+ * through this and whatever fells them must too, so perception and the axe never disagree.
+ * Worldgen and 26-way growth ({@link RegionGrowth}) fuse canopies; this is the seam that puts them
+ * back.
  *
- * <p>A <b>trunk</b> is the vertical log run above a <em>grounded base</em> — a log cell supported
- * by real ground ({@link BlockKind#OTHER}) — with adjacent base cells clustered, so a 2×2 giant
- * is one trunk of four columns. Every other cell, log or leaf, goes to the horizontally nearest
- * base centroid: the perpendicular-bisector split, generalized. A mass with no grounded base (a
- * floating remnant of an earlier partial chop) splits into nothing.
+ * <p>A <b>trunk</b> is the log run above a <em>grounded base</em> — a log whose support is real
+ * ground (the probe says {@link BlockKind#OTHER}) — bases clustered so a 2×2 giant is one trunk of
+ * four columns. Every other cell belongs to the trunk whose base centroid is horizontally nearest.
+ * A mass with no grounded base splits into nothing.
  *
- * <p>Deterministic: base cells and clusters are sorted before assignment, because the anchor is a
- * memory's identity and must not depend on hash order.
+ * <p>Deterministic: cells are sorted before assignment, because the anchor is a memory's identity
+ * and must not depend on hash order.
  */
 public final class TreeShape {
     /** Low-to-high, then west-to-east, then north-to-south: a total order over cells. */

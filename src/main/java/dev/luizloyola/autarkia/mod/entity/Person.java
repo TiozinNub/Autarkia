@@ -33,7 +33,6 @@ import dev.luizloyola.autarkia.core.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
-import dev.luizloyola.anima.mod.brain.AgentScaffolder;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
@@ -256,13 +255,6 @@ public class Person extends Avatar implements AgentBody {
     private final AgentBlockBreaker blockBreaker = new AgentBlockBreaker(this);
 
     /**
-     * This person's climbing legs ({@link AgentScaffolder}) — the nerd-pole machine, body
-     * machinery like the {@link #blockBreaker}: owned and ticked here so jump/place timing
-     * advances with the body; the brain asks for steps through the actuator port.
-     */
-    private final AgentScaffolder scaffolder = new AgentScaffolder(this);
-
-    /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
      * brain organ: the entity owns and ticks its own metabolism, as vanilla's {@code FoodData}
      * belongs to the player rather than to any AI, and the brain only ever <em>reads</em> it.
@@ -411,10 +403,6 @@ public class Person extends Avatar implements AgentBody {
         this.blockBreaker.tick();
         // The navigator owns the forward input.
         this.navigator.tick();
-        // The climbing legs tick after the navigator: the nerd-pole's jump input must survive to
-        // aiStep, and the navigator's at-rest path resets inputs — ticking before it swallowed
-        // every pillar jump.
-        this.scaffolder.tick();
         // Buoyancy last: it owns the vertical input while submerged, whatever drove the horizontal.
         floatInWater();
     }
@@ -464,11 +452,6 @@ public class Person extends Avatar implements AgentBody {
     /** This person's working arm — the break machinery the brain drives as a port. See {@link AgentBlockBreaker}. */
     public AgentBlockBreaker blockBreaker() {
         return this.blockBreaker;
-    }
-
-    /** This person's climbing legs — the nerd-pole machinery. See {@link AgentScaffolder}. */
-    public AgentScaffolder scaffolder() {
-        return this.scaffolder;
     }
 
     /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */
@@ -760,11 +743,11 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * Turn the gaze onto the center of {@code cell} — head, eyes, and (unless the cell is straight
-     * underfoot) body — so the Person renders looking at what they break or place. The one shared
-     * answer to "look at that block" for every arm actuator (breaker, placer, scaffolder). A cell
-     * directly below has no meaningful bearing (horizontal distance ~0), so the travel yaw is kept
-     * and only the pitch tilts down.
+     * Turn the gaze onto the centre of {@code cell} — head, eyes, and, unless the cell is straight
+     * underfoot, body. The one shared answer to "look at that block" for every arm actuator
+     * (breaker, placer), so none re-derives the trig. A cell in their own column, underfoot or
+     * overhead, has no meaningful bearing (horizontal distance ~0), so the travel yaw is kept and
+     * only the pitch tilts.
      */
     public void faceBlock(BlockPos cell) {
         Vec3 center = Vec3.atCenterOf(cell);

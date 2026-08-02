@@ -20,7 +20,6 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.task.BreakBlock;
-import dev.luizloyola.autarkia.core.tree.ChopNearestTree;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.SatisfyHunger;
@@ -150,12 +149,10 @@ public final class AutarkiaCommands {
                         .then(AgentCommands.party())
                         .then(AgentCommands.nav())
                         // nav (above) drives the legs directly — locomotion debug; brain runs
-                        // tasks through the executor, the machinery the arbiter will feed.
-                        // Anima's shared brain verbs, plus the two that are ours: chop is tree
-                        // content and obtain is a log quota — neither is the library's business.
+                        // tasks through the executor, the machinery the arbiter feeds. Anima's
+                        // shared brain verbs, plus the one that is ours: obtain is a log quota,
+                        // not the library's business.
                         .then(AgentCommands.brain()
-                                .then(Commands.literal("chop")
-                                        .executes(ctx -> brainChop(ctx.getSource())))
                                 .then(Commands.literal("obtain")
                                         .then(Commands.literal("logs")
                                                 .executes(ctx -> brainObtain(ctx.getSource(), 16))
@@ -307,18 +304,6 @@ public final class AutarkiaCommands {
         Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new ObtainItem(Stock.LOGS, count));
-        String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
-        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
-                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
-        return 1;
-    }
-
-    /** Runs {@link ChopNearestTree} on the resolved Person — the full chop choreography against
-     *  their nearest REMEMBERED grove (knowledge-driven: no memory of a tree, no chop). */
-    private static int brainChop(CommandSourceStack source) {
-        Person person = resolve(source);
-        if (person == null) return 0;
-        boolean autoDisabled = person.brain().run(new ChopNearestTree());
         String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
         Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));

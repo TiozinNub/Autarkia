@@ -28,8 +28,6 @@ public final class PersonSpecies {
             .set(ProfileAspect.FLEE_RANGE, 16.0)
             .set(ProfileAspect.FLEE_RAMP, 12.0)
             .set(ProfileAspect.FLEE_APPROACH_BONUS, 1.3)
-            // below MIND_PREEMPT on purpose: climbing down never interrupts a legitimate chop
-            .set(ProfileAspect.DESCEND_PRESSURE, 0.45)
             .set(ProfileAspect.WANDER_IDLE_PRESSURE, 0.15)
             .set(ProfileAspect.WANDER_RADIUS, 8)
             // --- senses: human-shaped vision, wide across and flat up-down --------------------
