@@ -117,31 +117,32 @@ class ChopPlanTest {
     @Test
     void aOneCellFloorHoleIsALeapATwoCellHoleRefuses() {
         // The dig rule's single allowance: one missing floor cell is a jump, two is no route.
-        // The target sits far enough out (arm's reach starts winning around four blocks) that
-        // the tunnel must cross the hole. Same tree twice, floor leaves apart.
-        List<Pos> floorWithHole = List.of(new Pos(1, 63, 0), new Pos(2, 63, 0),
-                new Pos(4, 63, 0), new Pos(5, 63, 0));
+        // The target sits far enough out that the tunnel must cross the hole, and high enough
+        // that no floor below (not even the ground) can serve the swing instead. Same tree
+        // twice, floor leaves apart.
+        List<Pos> floorWithHole = List.of(new Pos(1, 68, 0), new Pos(2, 68, 0),
+                new Pos(4, 68, 0), new Pos(5, 68, 0));
         TreeShape.Trunk leapable = new TreeShape.Trunk(
-                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
-                List.of(new Pos(7, 64, 0)), floorWithHole);
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 70),
+                List.of(new Pos(7, 69, 0)), floorWithHole);
 
         ChopPlan plan = ChopPlan.of(leapable);
 
         assertTrue(plan.refusals().isEmpty());
         ChopPlan.Move move = plan.layers().get(0).moves().get(0);
         assertTrue(move.leap(), "one hole in the canopy floor is a jump");
-        assertEquals(new Pos(4, 64, 0), move.stand(), "the first floored cell inside reach");
+        assertEquals(new Pos(4, 69, 0), move.stand(), "the first floored cell inside reach");
 
         TreeShape.Trunk gapped = new TreeShape.Trunk(
-                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
-                List.of(new Pos(7, 64, 0)), List.of(new Pos(1, 63, 0), new Pos(2, 63, 0)));
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 70),
+                List.of(new Pos(7, 69, 0)), List.of(new Pos(1, 68, 0), new Pos(2, 68, 0)));
 
         ChopPlan refused = ChopPlan.of(gapped);
 
         assertTrue(refused.layers().isEmpty());
         assertEquals(1, refused.refusals().size());
         assertEquals(ChopPlan.Reason.NO_FLOOR, refused.refusals().get(0).reason());
-        assertEquals(new Pos(7, 64, 0), refused.refusals().get(0).cell());
+        assertEquals(new Pos(7, 69, 0), refused.refusals().get(0).cell());
     }
 
     @Test
@@ -248,6 +249,29 @@ class ChopPlanTest {
         }
         assertTrue(tip != null && tip.boost(), "the tip needs the one-block budget");
         assertEquals(new Pos(2, 61, 0), tip.stand(), "boosted from atop the mast itself");
+    }
+
+    @Test
+    void aFarLevelLogIsSwungAtFromTheDenserFloorBelow() {
+        // The fancy oak's top-blob signature (Luiz's finds at 251,84 and 213,84): a branch at
+        // trunk-top height, five out, with no canopy floor at its own level — but the blob one
+        // level down is dense. The escalation walks down into it and swings upward, free of
+        // charge, instead of refusing.
+        TreeShape.Trunk oak = new TreeShape.Trunk(
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 70),
+                List.of(new Pos(0, 69, 5)),
+                List.of(new Pos(0, 67, 1), new Pos(0, 67, 2), new Pos(0, 67, 3),
+                        new Pos(0, 67, 4)));
+
+        ChopPlan plan = ChopPlan.of(oak);
+
+        assertTrue(plan.refusals().isEmpty(), "the floor below serves what its own level lacks");
+        ChopPlan.Layer layer = plan.layers().get(0);
+        assertEquals(68, layer.y(), "one level below the target, on the dense floor");
+        ChopPlan.Move move = layer.moves().get(0);
+        assertEquals(new Pos(0, 69, 5), move.target());
+        assertEquals(new Pos(0, 68, 2), move.stand(), "swinging upward from the blob floor");
+        assertFalse(move.boost(), "walking lower costs nothing");
     }
 
     @Test

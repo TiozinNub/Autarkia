@@ -174,19 +174,30 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
             if (consumed.contains(target)) {
                 continue; // broken en route to something farther — already in that move
             }
-            // Escalating passes, cheapest dance first: at each feet level, a plain floored
-            // walk, then the one leap the rules allow, then the one-block boost, then both —
-            // and only then one level higher, up to the target's own.
+            // Escalating passes, cheapest dance first: at each feet level a plain floored walk,
+            // then the one leap, then the one-block boost, then both. Levels escalate too — the
+            // target's natural level, then down into the denser canopy floors below it (a swing
+            // reaches wood well above the feet, and walking lower is free), and only then up
+            // past the trunk top, where every rung is a placed block.
             Move move = null;
             int f0 = Math.max(baseY, Math.min(target.y(), topFeet));
             int servingFeet = f0;
-            for (int feet = f0; feet <= Math.max(f0, target.y()) && move == null; feet++) {
+            List<Integer> feetCandidates = new ArrayList<>();
+            feetCandidates.add(f0);
+            for (int down = 1; down <= 4 && f0 - down >= baseY; down++) {
+                feetCandidates.add(f0 - down);
+            }
+            for (int up = f0 + 1; up <= target.y(); up++) {
+                feetCandidates.add(up);
+            }
+            for (int feet : feetCandidates) {
                 for (int attempt = 0; attempt < 4 && move == null; attempt++) {
                     move = route(target, feet, mx, mz, baseY, radius, (attempt & 1) != 0,
                             attempt >> 1, logs, canopy, consumed);
                 }
                 if (move != null) {
                     servingFeet = feet;
+                    break;
                 }
             }
             if (move == null) {
