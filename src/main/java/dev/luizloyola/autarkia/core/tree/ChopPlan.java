@@ -46,8 +46,16 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
     private static final Comparator<Pos> ORDER = Comparator.comparingInt(Pos::y)
             .thenComparingInt(Pos::x).thenComparingInt(Pos::z);
 
-    /** How far above her feet a target may sit and still be swung at from beside-or-below. */
-    private static final int REACH_UP = 2;
+    /**
+     * How far from her eyes a swing lands, in blocks. Vanilla survival interaction range is
+     * 4.5; 4.0 leaves margin for eye height and hitbox, so the card never promises a swing the
+     * executor's arm cannot deliver. The first cut planned point-blank and refused half a
+     * jungle tree.
+     */
+    private static final double REACH = 4.0;
+
+    /** Where the eyes sit above the feet cell — what reach is measured from. */
+    private static final double EYE = 1.62;
 
     /** One feet level's work: its targets in execution order, outermost from the mast first. */
     public record Layer(int y, List<Move> moves) {
@@ -67,9 +75,9 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
     }
 
     public enum Reason {
-        /** Sits more than {@link #REACH_UP} above the highest feet level the mast offers. */
+        /** Above {@link #REACH} even from atop the mast — no feet level can serve a swing. */
         TOO_HIGH,
-        /** No floored tunnel reaches a stand cell beside it — a hole wider than one leap. */
+        /** No floored tunnel reaches a cell within {@link #REACH} — a hole wider than one leap. */
         NO_FLOOR
     }
 
@@ -141,7 +149,7 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         List<Refusal> refusals = new ArrayList<>();
         for (Pos target : targets) {
             int feet = Math.max(baseY, Math.min(target.y(), topFeet));
-            if (target.y() - feet > REACH_UP) {
+            if (target.y() + 0.5 - (topFeet + EYE) > REACH) {
                 refusals.add(new Refusal(target, Reason.TOO_HIGH));
                 continue;
             }
@@ -182,14 +190,18 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
     }
 
     /**
-     * Digs one tunnel from the mast toward the target at this feet level; {@code null} when no
-     * floored stand exists (the caller's {@link Reason#NO_FLOOR}).
+     * Digs one tunnel from the mast toward the target at this feet level, and returns the move —
+     * or {@code null} when no floored stand exists (the caller's {@link Reason#NO_FLOOR}).
      *
-     * <p>4-way along the straightest cell line, digging the feet and head cells the tree still
-     * holds (a leaf is access, a log en route a bonus chop). The floor beneath must hold — tree
-     * cell, mast axis, ground level, or once per tunnel a single-cell gap taken as a leap. Stops at
-     * the first floored cell within swinging range: horizontally adjacent, no higher than
-     * {@link #REACH_UP} above the feet.
+     * <p>The tunnel advances 4-way along the straightest cell line. At each step the feet and
+     * head cells are dug if the tree still holds them (a leaf is access, a log en route is a
+     * bonus chop — both land in {@code digs} and are consumed), and the floor beneath must hold:
+     * a still-standing tree cell, the mast axis (her pillar), ground level, or — once per tunnel
+     * — a single-cell gap taken as a leap. The walk stops at the first floored cell with the
+     * target inside {@link #REACH} of her eyes — most targets are hit from the mast itself, and
+     * a tunnel only grows as far as the arm falls short. Whatever tree matter sits on the swing
+     * line from there is cleared into {@code digs} too ("break every leaf in the way until that
+     * block" — and a log on the line is a bonus chop).
      */
     private static Move route(Pos target, int feet, int mx, int mz, int baseY,
                               Set<Pos> logs, Set<Pos> canopy, Set<Pos> consumed) {
@@ -200,26 +212,25 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         int z = mz;
         int gap = 0;
         while (true) {
-            boolean inRange = Math.max(Math.abs(target.x() - x), Math.abs(target.z() - z)) <= 1
-                    && !(target.x() == x && target.z() == z && target.y() == feet);
             boolean floored = x == mx && z == mz
                     || feet <= baseY
                     || isStanding(new Pos(x, feet - 1, z), logs, canopy, consumed);
-            if (inRange && floored) {
-                consume(target, logs, canopy, consumed, dug, null);
-                return new Move(target, new Pos(x, feet, z), List.copyOf(digs), leaped);
-            }
-            if (!floored) {
-                if (gap > 0 || inRange) {
-                    return null; // two holes in a row, or a holed stand: no clean way there
+            if (floored) {
+                gap = 0;
+                if (inReach(x, feet, z, target)) {
+                    clearSwingLine(x, feet, z, target, logs, canopy, consumed, dug, digs);
+                    consume(target, logs, canopy, consumed, dug, null);
+                    return new Move(target, new Pos(x, feet, z), List.copyOf(digs), leaped);
+                }
+            } else {
+                if (gap > 0) {
+                    return null; // two holes in a row: no clean way there
                 }
                 gap++;
                 leaped = true;
-            } else {
-                gap = 0;
             }
             if (target.x() == x && target.z() == z) {
-                return null; // arrived under it and still not in range: nowhere left to walk
+                return null; // under it and still out of reach: nowhere left to walk
             }
             int dx = target.x() - x;
             int dz = target.z() - z;
@@ -230,6 +241,41 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
             }
             consume(new Pos(x, feet, z), logs, canopy, consumed, dug, digs);
             consume(new Pos(x, feet + 1, z), logs, canopy, consumed, dug, digs);
+        }
+    }
+
+    /** Whether a swing from this stand's eye position lands on the target's centre. */
+    private static boolean inReach(int x, int feet, int z, Pos target) {
+        double dx = target.x() - x;
+        double dy = target.y() + 0.5 - (feet + EYE);
+        double dz = target.z() - z;
+        return dx * dx + dy * dy + dz * dz <= REACH * REACH;
+    }
+
+    /**
+     * Consumes every tree cell the eye-to-target line passes through — the leaves (and bonus
+     * logs) in the way of the swing. Sampled finely along the segment; deterministic because
+     * the segment is.
+     */
+    private static void clearSwingLine(int x, int feet, int z, Pos target, Set<Pos> logs,
+                                       Set<Pos> canopy, Set<Pos> consumed, Set<Pos> dug,
+                                       List<Pos> digs) {
+        double ex = x + 0.5;
+        double ey = feet + EYE;
+        double ez = z + 0.5;
+        double dx = target.x() + 0.5 - ex;
+        double dy = target.y() + 0.5 - ey;
+        double dz = target.z() + 0.5 - ez;
+        int steps = (int) Math.ceil(Math.sqrt(dx * dx + dy * dy + dz * dz) / 0.25);
+        Pos last = null;
+        for (int i = 1; i < steps; i++) {
+            double t = i / (double) steps;
+            Pos cell = new Pos((int) Math.floor(ex + dx * t), (int) Math.floor(ey + dy * t),
+                    (int) Math.floor(ez + dz * t));
+            if (!cell.equals(last) && !cell.equals(target)) {
+                consume(cell, logs, canopy, consumed, dug, digs);
+            }
+            last = cell;
         }
     }
 

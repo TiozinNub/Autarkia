@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -60,8 +62,9 @@ class ChopPlanTest {
 
         assertEquals(11, plan.mast().size(), "the (0,·,0) column plus its base cell");
         assertTrue(plan.refusals().isEmpty());
-        assertEquals(3 + 3 * 10, plan.chopCount(), "three sibling bases, three ten-log columns");
-        assertEquals(0, plan.digCount(), "a giant's own footprint never needs a tunnel");
+        // Every non-mast log is accounted for exactly once — as a move's target, or as a bonus
+        // chop riding another swing's line — and no leaf is ever dug for a giant's own trunk.
+        Set<Pos> felled = new HashSet<>();
         int lastY = Integer.MAX_VALUE;
         for (ChopPlan.Layer layer : plan.layers()) {
             assertTrue(layer.y() < lastY, "layers descend");
@@ -69,15 +72,23 @@ class ChopPlanTest {
             for (ChopPlan.Move move : layer.moves()) {
                 assertEquals(new Pos(0, layer.y(), 0), move.stand(),
                         "every swing comes from atop the mast");
+                assertTrue(felled.add(move.target()), "each log is planned once");
+                for (Pos dig : move.digs()) {
+                    assertTrue(felled.add(dig), "each log is planned once");
+                }
             }
         }
+        Set<Pos> expected = new HashSet<>(base);
+        expected.addAll(columns);
+        plan.mast().forEach(expected::remove);
+        assertEquals(expected, felled, "the whole giant comes down, and only the giant");
     }
 
     @Test
-    void aBranchInTheCanopyIsReachedByDiggingAndNearerWoodFallsEnRoute() {
-        // Two branch logs on one ray at the same level. Furthest-first digs one tunnel to the
-        // far one; the near one is broken en route ("freeing space as needed") and must appear
-        // as that tunnel's dig, not as a second move.
+    void aFarBranchGrowsATunnelOnlyAsFarAsTheArmFallsShort() {
+        // A branch log past arm's length. The tunnel digs outward only until the target comes
+        // inside REACH, then the swing clears its own line — the leaf in the way lands in the
+        // digs. The nearer branch is inside reach of the mast itself: a swing, no tunnel.
         TreeShape.Trunk oak = new TreeShape.Trunk(
                 List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
                 List.of(new Pos(2, 64, 0), new Pos(4, 64, 0)),
@@ -90,57 +101,64 @@ class ChopPlanTest {
         assertEquals(1, plan.layers().size());
         ChopPlan.Layer layer = plan.layers().get(0);
         assertEquals(64, layer.y());
-        assertEquals(1, layer.moves().size(), "the near log rides the far log's tunnel");
-        ChopPlan.Move move = layer.moves().get(0);
-        assertEquals(new Pos(4, 64, 0), move.target(), "outermost first");
-        assertEquals(new Pos(3, 64, 0), move.stand());
-        assertTrue(move.digs().contains(new Pos(2, 64, 0)), "the near log is dug en route");
-        assertTrue(move.digs().contains(new Pos(1, 64, 0)), "the access leaf is dug");
-        assertFalse(move.leap());
+        assertEquals(2, layer.moves().size());
+        ChopPlan.Move far = layer.moves().get(0);
+        assertEquals(new Pos(4, 64, 0), far.target(), "outermost first");
+        assertEquals(new Pos(1, 64, 0), far.stand(), "one step out brings it inside reach");
+        assertTrue(far.digs().contains(new Pos(1, 64, 0)), "the tunnel's own cell is dug");
+        assertTrue(far.digs().contains(new Pos(3, 64, 0)), "the leaf on the swing line is dug");
+        assertFalse(far.leap());
+        ChopPlan.Move near = layer.moves().get(1);
+        assertEquals(new Pos(2, 64, 0), near.target());
+        assertEquals(new Pos(0, 64, 0), near.stand(), "inside reach of the mast: no tunnel");
+        assertTrue(near.digs().isEmpty());
     }
 
     @Test
     void aOneCellFloorHoleIsALeapATwoCellHoleRefuses() {
         // The dig rule's single allowance: one missing floor cell is a jump, two is no route.
-        // Same tree twice, one floor leaf apart.
-        List<Pos> floorWithHole = List.of(new Pos(1, 63, 0), new Pos(3, 63, 0));
+        // The target sits far enough out (arm's reach starts winning around four blocks) that
+        // the tunnel must cross the hole. Same tree twice, floor leaves apart.
+        List<Pos> floorWithHole = List.of(new Pos(1, 63, 0), new Pos(2, 63, 0),
+                new Pos(4, 63, 0), new Pos(5, 63, 0));
         TreeShape.Trunk leapable = new TreeShape.Trunk(
                 List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
-                List.of(new Pos(4, 64, 0)), floorWithHole);
+                List.of(new Pos(7, 64, 0)), floorWithHole);
 
         ChopPlan plan = ChopPlan.of(leapable);
 
         assertTrue(plan.refusals().isEmpty());
         ChopPlan.Move move = plan.layers().get(0).moves().get(0);
         assertTrue(move.leap(), "one hole in the canopy floor is a jump");
-        assertEquals(new Pos(3, 64, 0), move.stand());
+        assertEquals(new Pos(4, 64, 0), move.stand(), "the first floored cell inside reach");
 
         TreeShape.Trunk gapped = new TreeShape.Trunk(
                 List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
-                List.of(new Pos(4, 64, 0)), List.of(new Pos(1, 63, 0)));
+                List.of(new Pos(7, 64, 0)), List.of(new Pos(1, 63, 0), new Pos(2, 63, 0)));
 
         ChopPlan refused = ChopPlan.of(gapped);
 
         assertTrue(refused.layers().isEmpty());
         assertEquals(1, refused.refusals().size());
         assertEquals(ChopPlan.Reason.NO_FLOOR, refused.refusals().get(0).reason());
-        assertEquals(new Pos(4, 64, 0), refused.refusals().get(0).cell());
+        assertEquals(new Pos(7, 64, 0), refused.refusals().get(0).cell());
     }
 
     @Test
     void woodTheMastCannotServeRefusesAsTooHigh() {
         // The acacia signature: a stubby vertical column, wood climbing far above it. The plan
-        // does not improvise a way up — it refuses at compile time, painted.
+        // does not improvise a way up — what even a full swing from atop the mast cannot touch
+        // refuses at compile time, painted.
         TreeShape.Trunk acacia = new TreeShape.Trunk(
                 List.of(new Pos(0, 60, 0)), column(0, 0, 61, 62),
-                List.of(new Pos(1, 63, 1), new Pos(2, 66, 2)),
-                List.of(new Pos(2, 67, 2)));
+                List.of(new Pos(1, 63, 1), new Pos(2, 68, 2)),
+                List.of(new Pos(2, 69, 2)));
 
         ChopPlan plan = ChopPlan.of(acacia);
 
         assertEquals(1, plan.refusals().size());
         ChopPlan.Refusal refusal = plan.refusals().get(0);
-        assertEquals(new Pos(2, 66, 2), refusal.cell());
+        assertEquals(new Pos(2, 68, 2), refusal.cell());
         assertEquals(ChopPlan.Reason.TOO_HIGH, refusal.reason());
         assertEquals(1, plan.chopCount(), "the reachable diagonal step is still planned");
     }
