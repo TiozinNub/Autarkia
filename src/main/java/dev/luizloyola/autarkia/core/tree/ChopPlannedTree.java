@@ -15,6 +15,7 @@ import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
@@ -70,6 +71,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private int moveIndex;
     /** The current move's digs still standing, in card order. */
     private Deque<Pos> digsAhead;
+    /** Every cell the surveyed tree owns — what the chew-through is allowed to eat. */
+    private java.util.Set<Pos> treeBlocks;
     private boolean boostUp;
     private Pos boostCell;
     /** Everything the card promised that this run could not serve — the reckoning of the exit. */
@@ -145,6 +148,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
         if (tree == null) {
             return ghost(ctx);
         }
+        treeBlocks = new HashSet<>(tree.leaves());
+        treeBlocks.addAll(tree.base());
+        treeBlocks.addAll(tree.column());
+        treeBlocks.addAll(tree.branches());
         plan = ChopPlan.of(tree);
         mastAhead = new ArrayDeque<>(plan.mast());
         ctx.journal().record(Category.BRAIN, "chop",
@@ -445,14 +452,15 @@ public final class ChopPlannedTree implements PrimitiveTask {
         };
     }
 
-    /**
-     * Break a cell, walking into arm's reach first when needed: the approach accepts stopping a few
-     * blocks shy, but the arm does not stretch — the entry refused from six blocks out.
-     */
     private TaskStatus breakWithinReach(BrainContext ctx, Pos cell, String what) {
         if (inReach(ctx, cell)) {
             walkIssued = false;
             return beginBreak(ctx, cell, what);
+        }
+        Pos blocker = firstBlockerToward(ctx, cell);
+        if (blocker != null && inReach(ctx, blocker)) {
+            walkIssued = false;
+            return beginBreak(ctx, blocker, "the way to " + what);
         }
         if (!walkIssued) {
             ctx.actuators().mover().moveTo(cell.x(), cell.y(), cell.z());
@@ -468,7 +476,44 @@ public final class ChopPlannedTree implements PrimitiveTask {
         if (inReach(ctx, cell)) {
             return beginBreak(ctx, cell, what);
         }
+        blocker = firstBlockerToward(ctx, cell);
+        if (blocker != null && inReach(ctx, blocker)) {
+            return beginBreak(ctx, blocker, "the way to " + what);
+        }
         return fail("cannot get near " + what + " at " + shortPos(cell));
+    }
+
+    /**
+     * The first of this tree's own cells still standing on the eye line toward {@code cell} —
+     * what "break all the blocks in the way" eats next. Null when the line is clear (the
+     * distance itself is the problem) or the blocker is somebody else's.
+     */
+    private Pos firstBlockerToward(BrainContext ctx, Pos cell) {
+        Pos feet = ctx.percepts().position();
+        double ex = feet.x() + 0.5;
+        double ey = feet.y() + EYE;
+        double ez = feet.z() + 0.5;
+        double dx = cell.x() + 0.5 - ex;
+        double dy = cell.y() + 0.5 - ey;
+        double dz = cell.z() + 0.5 - ez;
+        int steps = (int) Math.ceil(Math.sqrt(dx * dx + dy * dy + dz * dz) / 0.25);
+        BlockProbe probe = ctx.percepts().blocks();
+        Pos last = null;
+        for (int i = 1; i < steps; i++) {
+            double t = i / (double) steps;
+            Pos on = new Pos((int) Math.floor(ex + dx * t), (int) Math.floor(ey + dy * t),
+                    (int) Math.floor(ez + dz * t));
+            if (on.equals(last) || on.equals(cell)) {
+                last = on;
+                continue;
+            }
+            last = on;
+            BlockKind kind = probe.at(on.x(), on.y(), on.z());
+            if ((kind == BlockKind.LEAVES || kind == BlockKind.LOG) && treeBlocks.contains(on)) {
+                return on;
+            }
+        }
+        return null;
     }
 
     private TaskStatus beginBreak(BrainContext ctx, Pos cell, String what) {
