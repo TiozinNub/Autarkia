@@ -151,6 +151,52 @@ class TreeShapeTest {
     }
 
     @Test
+    void anAirborneBranchFragmentIsAdoptedThroughTheCanopy() {
+        // The fancy-oak signature: a branch log floating two cells clear of any other wood,
+        // embedded in the canopy. Grounded wood must prove its lineage through wood, but
+        // floating wood is what a stump can never be — the leaves carry it home.
+        for (int y = 64; y <= 67; y++) {
+            log(0, y, 0);
+        }
+        leaf(0, 68, 0);
+        leaf(1, 68, 0);
+        leaf(2, 68, 0); // the canopy lattice reaching out to the fragment
+        log(3, 68, 0); // the airborne fragment: nearest wood is 3 away, air below
+
+        List<TreeShape.Trunk> trees = TreeShape.split(mass, probe);
+
+        assertEquals(1, trees.size());
+        assertTrue(trees.get(0).branches().contains(new Pos(3, 68, 0)),
+                "a floating branch fragment is the tree's wood, reached through its leaves");
+        assertTrue(SplitReport.of(mass, probe).strayLogs().isEmpty());
+    }
+
+    @Test
+    void aGroundedStumpUnderTheCanopyStaysNobodys() {
+        // The control the adoption rule must never loosen: a crownless stump wood-linked to
+        // nothing, standing on real ground under my canopy, is still nobody's branch — the
+        // lone-stump lesson that created the log-from-log rule in the first place.
+        for (int y = 64; y <= 67; y++) {
+            log(0, y, 0);
+        }
+        leaf(0, 68, 0);
+        leaf(1, 68, 0);
+        leaf(2, 68, 0);
+        leaf(3, 68, 0);
+        for (int y = 64; y <= 68; y++) {
+            leaf(4, y, 0); // canopy draping down BESIDE the stump to touch its east face
+        }
+        log(3, 64, 0); // the stump: grounded, air overhead (no bush), only leaves touch it
+
+        List<TreeShape.Trunk> trees = TreeShape.split(mass, probe);
+
+        assertEquals(1, trees.size());
+        assertFalse(trees.get(0).branches().contains(new Pos(3, 64, 0)),
+                "grounded wood never rides in on a leaf");
+        assertTrue(SplitReport.of(mass, probe).strayLogs().contains(new Pos(3, 64, 0)));
+    }
+
+    @Test
     void attachmentIsSixWayForLeavesAndTwentySixWayForWood() {
         assertTrue(TreeShape.attached(BlockKind.LOG, BlockKind.LOG, 1, 1, 1),
                 "a branch steps diagonally");

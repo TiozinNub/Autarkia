@@ -179,11 +179,14 @@ public final class TreeShape {
                                     || !assignable.contains(next) || owner.containsKey(next)) {
                                 continue;
                             }
-                            // Ownership enters a LOG only from another LOG: branches hang
-                            // from wood, never from leaves. A crownless stump under a grove's
-                            // canopy is in the mass (the leaves touch it), but it is
-                            // nobody's branch (the lone-stump lesson, again).
-                            if (nextKind == BlockKind.LOG && kind != BlockKind.LOG) {
+                            // Ownership enters a GROUNDED log only from another LOG — branches
+                            // hang from wood, never leaves, so a crownless stump under a grove's
+                            // canopy stays nobody's branch. An AIRBORNE log may be adopted through
+                            // its leaves: vanilla's fancy oak scatters branch logs two and three
+                            // cells clear of any wood (the gauntlet oak at 159,163, 2026-08-02),
+                            // and floating is what a stump never is.
+                            if (nextKind == BlockKind.LOG && kind != BlockKind.LOG
+                                    && groundedRun(next, logs, probe)) {
                                 continue;
                             }
                             Integer rival = claims.get(next);
@@ -239,6 +242,19 @@ public final class TreeShape {
             return distA < distB ? a : b;
         }
         return Math.min(a, b);
+    }
+
+    /**
+     * Whether this log's supporting run bottoms out on real ground — the stump signature, and the
+     * gate on leaf-mediated adoption: grounded wood must prove its lineage through wood, floating
+     * wood can only be a branch.
+     */
+    private static boolean groundedRun(Pos log, Set<Pos> logs, BlockProbe probe) {
+        Pos below = new Pos(log.x(), log.y() - 1, log.z());
+        while (logs.contains(below)) {
+            below = new Pos(below.x(), below.y() - 1, below.z());
+        }
+        return probe.at(below.x(), below.y(), below.z()) == BlockKind.OTHER;
     }
 
     /**
