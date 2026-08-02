@@ -162,6 +162,15 @@ loom {
         if (providers.gradleProperty("hotswap").isPresent) {
             jvmArguments.add("-XX:+AllowEnhancedClassRedefinition")
             jvmArguments.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:${if (name == "client") 5006 else 5005}")
+            // Stop the JIT at C1. Enhanced redefinition and the C2 compiler do not get along: C2
+            // can be part-way through compiling a method that a swap replaces underneath it, and
+            // then dies on `guarantee(...jvmti_state_changed()) failed: old method not detected`
+            // (ciMethod.cpp:749) — a HARD VM abort, SIGABRT, no Minecraft crash report, just an
+            // hs_err file. It killed a dev client six minutes after a swap on 2026-08-02. C1 alone
+            // does not do the speculative devirtualisation that trips it. The cost is peak
+            // throughput, which a dev session on a superflat test world can afford; hot swap is
+            // never on in a real build.
+            jvmArguments.add("-XX:TieredStopAtLevel=1")
         }
 
         // Real Microsoft-account login via DevAuth Neo: scripts/client.sh --auth
