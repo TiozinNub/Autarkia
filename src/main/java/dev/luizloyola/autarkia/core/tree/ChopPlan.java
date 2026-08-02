@@ -19,18 +19,17 @@ import java.util.TreeMap;
  * unit-testable headless and paintable by the survey monocle before any executor exists.
  *
  * <ol>
- * <li><b>Ascend the mast.</b> One column of the trunk footprint (the anchor base cell's) is the
- * shaft: break the log above, jump, place a harvested log beneath, until its top is broken.
- * Financed by the tree's own wood — no foreign blocks, no external pillar.
+ * <li><b>Ascend the mast</b>, a level at a time, until its top is broken.
  * <li><b>Descend layer by layer, furthest target first.</b> Every log at the feet level is a
  * target, outermost first, reached by DIGGING a floor-checked tunnel from the mast through the
  * canopy, so nearer targets sit on tunnel already dug; then the trunk cells, the mast block
  * underfoot last, and she drops one. Leaves out of a tunnel's way are never chopped — decay clears
  * the canopy and drops the saplings.
- * <li><b>Refuse at compile time, never improvise at run time.</b> A target no floored tunnel can
- * reach, or higher above the mast than an arm can swing, becomes a painted {@link Refusal}: the
- * executor chops the rest and exits PARTIAL, so the monocle shows what cannot be felled instead of
- * surprising it mid-chop.
+ * <li><b>Escalate before refusing, refuse before improvising.</b> Each target is tried cheapest
+ * first — plain walk, the one leap, a log of her own underfoot ({@link Move#boost}) — and then the
+ * MAST EXTENDS level by level up to the target's own, which serves a bending trunk's tip and a
+ * cherry arm from below. What still fails is a painted {@link Refusal}: the executor chops the rest
+ * and exits PARTIAL, so the monocle shows what cannot be felled instead of surprising it mid-chop.
  * </ol>
  *
  * <p>Tunnels are 4-way: a diagonal dig leaves corner blocks that block the body anyway. The mast
@@ -78,9 +77,10 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
     }
 
     public enum Reason {
-        /** Above {@link #REACH} even from atop the mast — no feet level can serve a swing. */
-        TOO_HIGH,
-        /** No floored tunnel reaches a cell within {@link #REACH} — a hole wider than one leap. */
+        /**
+         * No floored stand can swing at it, after every escalation: the plain walk, the one
+         * leap, the one-block boost, and the mast extended clear to the target's own level.
+         */
         NO_FLOOR
     }
 
@@ -155,54 +155,49 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
                     Math.max(Math.abs(cell.x() - mx), Math.abs(cell.z() - mz)) + 2);
         }
 
-        // Feet level per target, grouped top-down; within a level, outermost first (the tunnel
-        // dug for the far one carries the near ones home), ties broken by the total order so
-        // the plan never depends on anything but the shape.
-        TreeMap<Integer, List<Pos>> byLevel = new TreeMap<>(Comparator.reverseOrder());
-        List<Refusal> refusals = new ArrayList<>();
-        for (Pos target : targets) {
-            int feet = Math.max(baseY, Math.min(target.y(), topFeet));
-            if (target.y() + 0.5 - (topFeet + 1 + EYE) > REACH) {
-                refusals.add(new Refusal(target, Reason.TOO_HIGH));
-                continue;
-            }
-            byLevel.computeIfAbsent(feet, y -> new ArrayList<>()).add(target);
-        }
-        for (Map.Entry<Integer, List<Pos>> level : byLevel.entrySet()) {
-            level.getValue().sort(Comparator
-                    .comparingLong((Pos p) -> TreeShape.horizontalDistSq(p, entry)).reversed()
-                    .thenComparing(ORDER));
-        }
+        // Work order: highest wood first, outermost first among equals, ties by the total order
+        // so the plan depends on nothing but the shape. Each target is then served at the
+        // LOWEST feet level whose escalation succeeds — past the trunk top only when nothing
+        // cheaper works, on her own logs, placed into air and reclaimed by the descent.
+        targets.sort(Comparator.comparingInt(Pos::y).reversed()
+                .thenComparing(Comparator.comparingLong((Pos p) ->
+                        TreeShape.horizontalDistSq(p, entry)).reversed())
+                .thenComparing(ORDER));
 
         // The simulation: walk the plan in execution order, consuming what each move breaks, so
         // later floor checks see the world as it will be then — not as it is now. The mast is
         // consumed up front (the ascent has already eaten it by the time any layer runs).
+        List<Refusal> refusals = new ArrayList<>();
         Set<Pos> consumed = new HashSet<>(mast);
-        List<Layer> layers = new ArrayList<>();
-        for (Map.Entry<Integer, List<Pos>> level : byLevel.entrySet()) {
-            int feet = level.getKey();
-            List<Move> moves = new ArrayList<>();
-            for (Pos target : level.getValue()) {
-                if (consumed.contains(target)) {
-                    continue; // broken en route to something farther — already in that move
-                }
-                // Escalating passes, cheapest dance first: a plain floored walk, then the one
-                // leap the rules allow, then the one-block budget (a log of her own placed
-                // underfoot at the stand — Luiz's bend fix), then both.
-                Move move = null;
+        TreeMap<Integer, List<Move>> served = new TreeMap<>(Comparator.reverseOrder());
+        for (Pos target : targets) {
+            if (consumed.contains(target)) {
+                continue; // broken en route to something farther — already in that move
+            }
+            // Escalating passes, cheapest dance first: at each feet level, a plain floored
+            // walk, then the one leap the rules allow, then the one-block boost, then both —
+            // and only then one level higher, up to the target's own.
+            Move move = null;
+            int f0 = Math.max(baseY, Math.min(target.y(), topFeet));
+            int servingFeet = f0;
+            for (int feet = f0; feet <= Math.max(f0, target.y()) && move == null; feet++) {
                 for (int attempt = 0; attempt < 4 && move == null; attempt++) {
                     move = route(target, feet, mx, mz, baseY, radius, (attempt & 1) != 0,
                             attempt >> 1, logs, canopy, consumed);
                 }
-                if (move == null) {
-                    refusals.add(new Refusal(target, Reason.NO_FLOOR));
-                } else {
-                    moves.add(move);
+                if (move != null) {
+                    servingFeet = feet;
                 }
             }
-            if (!moves.isEmpty()) {
-                layers.add(new Layer(feet, moves));
+            if (move == null) {
+                refusals.add(new Refusal(target, Reason.NO_FLOOR));
+            } else {
+                served.computeIfAbsent(servingFeet, y -> new ArrayList<>()).add(move);
             }
+        }
+        List<Layer> layers = new ArrayList<>();
+        for (Map.Entry<Integer, List<Move>> level : served.entrySet()) {
+            layers.add(new Layer(level.getKey(), level.getValue()));
         }
         refusals.sort(Comparator.comparing(Refusal::cell, ORDER));
         return new ChopPlan(entry, List.copyOf(mast), List.copyOf(layers),

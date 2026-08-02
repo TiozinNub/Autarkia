@@ -25,18 +25,16 @@ import net.minecraft.world.level.Level;
 
 /**
  * The choreographer's monocle, twin to {@link TreeSplitViewer}: every tree around the watching
- * player wears its {@link ChopPlan}, painted over the live world before any executor exists, so
- * the choreography is iterated by LOOKING at it.
+ * player wears its {@link ChopPlan}, painted over the live world before any executor exists.
  *
- * <p>The colour language: the MAST is gold (entry cell white-rimmed); each planned chop wears the
- * plan's clock (green first swings ageing through amber to red last) with its access DIGS in the
- * same hue washed out and its stand cell a faint white shell (orange where the route takes its one
- * allowed leap). Refusals keep the survey's language: red for wood the mast cannot serve
- * ({@code TOO_HIGH}), magenta for wood no floored tunnel reaches ({@code NO_FLOOR}). The tally over
- * each mast sums planned chops (mast included), digs and refusals.
+ * <p>MAST gold, its entry cell white-rimmed and its planned extension above the trunk top a thin
+ * gold climb; each chop on the plan's clock, green first through amber to red last, its access
+ * DIGS the same hue washed out and its stand cell a faint white shell — orange for the one allowed
+ * leap, gold where she places a log of her own underfoot; REFUSALS magenta. The tally over each
+ * mast sums the card: chops (mast included), digs, refusals.
  *
- * <p>Leaves are unpainted: the plan never chops canopy except as access, and an unpainted crown is
- * the claim that decay will clear it.
+ * <p>Leaves are unpainted: the plan never chops canopy except as access, and an
+ * unpainted crown is the claim that decay will clear it.
  */
 public final class TreeChopPlanViewer {
     private TreeChopPlanViewer() {}
@@ -59,10 +57,8 @@ public final class TreeChopPlanViewer {
     private static final int MAST_FILL = 0x3CFFD700;
     private static final int STAND_STROKE = 0x50FFFFFF;
     private static final int LEAP_STAND_STROKE = 0xFFFF9020;
-    private static final int TOO_HIGH_STROKE = 0xFFFF4040;
-    private static final int TOO_HIGH_FILL = 0x2DFF4040;
-    private static final int NO_FLOOR_STROKE = 0xFFFF3FD4;
-    private static final int NO_FLOOR_FILL = 0x50FF3FD4;
+    private static final int REFUSED_STROKE = 0xFFFF3FD4;
+    private static final int REFUSED_FILL = 0x50FF3FD4;
 
     private static final Map<MinecraftServer, Map<UUID, Integer>> WATCHERS = new HashMap<>();
 
@@ -200,26 +196,31 @@ public final class TreeChopPlanViewer {
                     MAST_STROKE, STROKE_WIDTH, 0, true, boostStands));
         }
 
-        List<BlockPos> tooHigh = new ArrayList<>();
-        List<BlockPos> noFloor = new ArrayList<>();
-        for (ChopPlan.Refusal refusal : plan.refusals()) {
-            (refusal.reason() == ChopPlan.Reason.TOO_HIGH ? tooHigh : noFloor)
-                    .add(blockPos(refusal.cell()));
-        }
-        if (!tooHigh.isEmpty()) {
+        if (!plan.refusals().isEmpty()) {
+            List<BlockPos> refused = new ArrayList<>();
+            for (ChopPlan.Refusal refusal : plan.refusals()) {
+                refused.add(blockPos(refusal.cell()));
+            }
             groups.add(new CellOverlayPayload.Group(
-                    TOO_HIGH_STROKE, BASE_STROKE_WIDTH, TOO_HIGH_FILL, true, tooHigh));
+                    REFUSED_STROKE, BASE_STROKE_WIDTH, REFUSED_FILL, true, refused));
         }
-        if (!noFloor.isEmpty()) {
-            groups.add(new CellOverlayPayload.Group(
-                    NO_FLOOR_STROKE, BASE_STROKE_WIDTH, NO_FLOOR_FILL, true, noFloor));
+
+        // Layers above the broken trunk top imply the mast extending on her own logs.
+        int mastTop = plan.mast().get(plan.mast().size() - 1).y();
+        int topLayer = plan.layers().isEmpty() ? mastTop : plan.layers().get(0).y();
+        if (topLayer - 1 > mastTop) {
+            List<BlockPos> extension = new ArrayList<>();
+            for (int y = mastTop + 1; y <= topLayer - 1; y++) {
+                extension.add(new BlockPos(plan.entry().x(), y, plan.entry().z()));
+            }
+            groups.add(new CellOverlayPayload.Group(MAST_STROKE, THIN_WIDTH, 0, true, extension));
         }
 
         Pos top = plan.mast().get(plan.mast().size() - 1);
         String tally = (chops + plan.mast().size()) + " chops · " + plan.digCount() + " digs"
                 + (plan.refusals().isEmpty() ? "" : " · " + plan.refusals().size() + " refused");
         labels.add(new CellOverlayPayload.Label(tally,
-                plan.refusals().isEmpty() ? MAST_STROKE : TOO_HIGH_STROKE,
+                plan.refusals().isEmpty() ? MAST_STROKE : REFUSED_STROKE,
                 new BlockPos(top.x(), top.y() + 1, top.z())));
     }
 

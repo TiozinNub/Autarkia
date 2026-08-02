@@ -145,10 +145,10 @@ class ChopPlanTest {
     }
 
     @Test
-    void woodTheMastCannotServeRefusesAsTooHigh() {
-        // The acacia signature: a stubby vertical column, wood climbing far above it. The plan
-        // does not improvise a way up — what even a full swing from atop the mast cannot touch
-        // refuses at compile time, painted.
+    void woodAboveTheTrunkTopIsServedByExtendingTheMast() {
+        // The acacia signature: a stubby vertical column, wood climbing far above it. The mast
+        // no longer stops where the trunk top broke — rise-one keeps going on her own logs,
+        // level by level, until the drifted tip comes inside a swing.
         TreeShape.Trunk acacia = new TreeShape.Trunk(
                 List.of(new Pos(0, 60, 0)), column(0, 0, 61, 62),
                 List.of(new Pos(1, 63, 1), new Pos(2, 68, 2)),
@@ -156,11 +156,36 @@ class ChopPlanTest {
 
         ChopPlan plan = ChopPlan.of(acacia);
 
-        assertEquals(1, plan.refusals().size());
-        ChopPlan.Refusal refusal = plan.refusals().get(0);
-        assertEquals(new Pos(2, 68, 2), refusal.cell());
-        assertEquals(ChopPlan.Reason.TOO_HIGH, refusal.reason());
-        assertEquals(1, plan.chopCount(), "the reachable diagonal step is still planned");
+        assertTrue(plan.refusals().isEmpty(), "the extension serves what a swing cannot");
+        assertEquals(2, plan.chopCount());
+        ChopPlan.Layer top = plan.layers().get(0);
+        assertTrue(top.y() > 61, "the tip's layer stands above the old trunk-top perch");
+        ChopPlan.Move tip = top.moves().get(0);
+        assertEquals(new Pos(2, 68, 2), tip.target());
+        assertEquals(new Pos(1, 64, 1), tip.stand(),
+                "leapt from the extended mast onto the branch itself — the diagonal log is her "
+                        + "floor, and its own chop waits in a lower layer");
+        assertTrue(tip.leap());
+    }
+
+    @Test
+    void aFarHighBranchCostsOneMastBlockNotARefusal() {
+        // Luiz's gauntlet find at (245,70), distilled: a five-log trunk, a branch three out
+        // and five up — a boosted swing from the old perch misses by a hair, one mast block
+        // higher lands it. The escalation finds the cheapest serving height.
+        TreeShape.Trunk oak = new TreeShape.Trunk(
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 64),
+                List.of(new Pos(0, 68, 3)), List.of(new Pos(0, 69, 3)));
+
+        ChopPlan plan = ChopPlan.of(oak);
+
+        assertTrue(plan.refusals().isEmpty());
+        ChopPlan.Layer top = plan.layers().get(0);
+        assertEquals(64, top.y(), "one level above the old perch is enough");
+        ChopPlan.Move move = top.moves().get(0);
+        assertEquals(new Pos(0, 68, 3), move.target());
+        assertTrue(move.boost(), "and the one-block boost rides on top of it");
+        assertEquals(new Pos(0, 64, 0), move.stand());
     }
 
     @Test
