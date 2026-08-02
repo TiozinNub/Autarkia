@@ -76,6 +76,8 @@ public class AutarkiaMod implements ModInitializer {
         KnowledgeViewer.init();
         // The tree-split survey — needs the cell overlay channel initialized above.
         dev.luizloyola.autarkia.mod.debug.TreeSplitViewer.init();
+        // The same trees, drawn with their chop dance cards.
+        dev.luizloyola.autarkia.mod.debug.TreeChopPlanViewer.init();
         // Teach Anima who Persons are. It asks only for the private tier (the name); the public
         // tier stays ours to sync. Providers chain, so a future pets mod answers for its own ids
         // beside this one.

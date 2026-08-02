@@ -45,6 +45,7 @@ import dev.luizloyola.anima.mod.brain.Knowledges;
 import dev.luizloyola.anima.mod.brain.BeingViewer;
 import dev.luizloyola.anima.mod.debug.DebugLayer;
 import dev.luizloyola.anima.mod.debug.DebugView;
+import dev.luizloyola.autarkia.mod.debug.TreeChopPlanViewer;
 import dev.luizloyola.autarkia.mod.debug.TreeSplitViewer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Persons;
@@ -185,6 +186,16 @@ public final class AutarkiaCommands {
                                         .then(Commands.argument("radius",
                                                         IntegerArgumentType.integer(4, 32))
                                                 .executes(ctx -> treeView(ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(
+                                                                ctx, "radius")))))
+                                // The same trees with their ChopPlan dance cards — mast, dig
+                                // tunnels, chop order, refusals — read by eye before any Person
+                                // swings an axe.
+                                .then(Commands.literal("plan")
+                                        .executes(ctx -> treePlan(ctx.getSource(), 0))
+                                        .then(Commands.argument("radius",
+                                                        IntegerArgumentType.integer(4, 32))
+                                                .executes(ctx -> treePlan(ctx.getSource(),
                                                         IntegerArgumentType.getInteger(
                                                                 ctx, "radius"))))))
                         // What a PERSON is like, in our own file; /anima config holds the
@@ -333,6 +344,22 @@ public final class AutarkiaCommands {
         Replies.send(source, () -> Component.literal(active > 0
                 ? "Surveying the trees within " + active + " blocks — every tree its own colour."
                 : "The tree survey is off.").withStyle(ChatFormatting.GRAY));
+        return 1;
+    }
+
+    /**
+     * Toggles the {@link TreeChopPlanViewer} around the calling player, or retunes its radius
+     * while it is on — the same lifecycle as {@link #treeView}, painting dance cards instead of
+     * ownership.
+     */
+    private static int treePlan(CommandSourceStack source, int radius)
+            throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        int active = TreeChopPlanViewer.toggle(source.getServer(), player, radius);
+        Replies.send(source, () -> Component.literal(active > 0
+                ? "Planning the chop of every tree within " + active
+                        + " blocks — green swings first, red last, refusals loud."
+                : "The chop plan view is off.").withStyle(ChatFormatting.GRAY));
         return 1;
     }
 
