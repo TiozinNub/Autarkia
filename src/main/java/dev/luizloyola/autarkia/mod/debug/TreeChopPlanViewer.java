@@ -163,6 +163,7 @@ public final class TreeChopPlanViewer {
         int chops = plan.chopCount();
         List<BlockPos> stands = new ArrayList<>();
         List<BlockPos> leapStands = new ArrayList<>();
+        List<BlockPos> boostStands = new ArrayList<>();
         int move = 0;
         for (ChopPlan.Layer layer : plan.layers()) {
             for (ChopPlan.Move m : layer.moves()) {
@@ -177,7 +178,8 @@ public final class TreeChopPlanViewer {
                             Mth.hsvToArgb(hue, 0.25F, 1.0F, 0x50), THIN_WIDTH, 0, true,
                             blockPositions(m.digs())));
                 }
-                (m.leap() ? leapStands : stands).add(blockPos(m.stand()));
+                (m.boost() ? boostStands : m.leap() ? leapStands : stands)
+                        .add(blockPos(m.stand()));
                 if (move % 10 == 0 && chops > 1) {
                     labels.add(new CellOverlayPayload.Label(String.valueOf(move + 1),
                             Mth.hsvToArgb(hue, 0.90F, 1.0F, 0xFF), blockPos(m.target())));
@@ -191,6 +193,11 @@ public final class TreeChopPlanViewer {
         if (!leapStands.isEmpty()) {
             groups.add(new CellOverlayPayload.Group(
                     LEAP_STAND_STROKE, STROKE_WIDTH, 0, true, leapStands));
+        }
+        if (!boostStands.isEmpty()) {
+            // Gold like the mast: this stand is placed wood — one of her own logs underfoot.
+            groups.add(new CellOverlayPayload.Group(
+                    MAST_STROKE, STROKE_WIDTH, 0, true, boostStands));
         }
 
         List<BlockPos> tooHigh = new ArrayList<>();

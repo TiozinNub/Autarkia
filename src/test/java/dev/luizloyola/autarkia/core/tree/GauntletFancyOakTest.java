@@ -66,5 +66,26 @@ class GauntletFancyOakTest {
             assertTrue(oak.branches().contains(cell),
                     "the farthest fragments are branches: " + cell);
         }
+
+        // And the choreography serves the whole of it: the far fragment's straight ray falls
+        // into a canopy-floor hole (the second flight's magenta), so this pins the dogleg.
+        ChopPlan plan = ChopPlan.of(oak);
+        assertTrue(plan.refusals().isEmpty(), "every log of the real oak is planned");
+        java.util.Set<Pos> felled = new java.util.HashSet<>(plan.mast());
+        for (ChopPlan.Layer layer : plan.layers()) {
+            for (ChopPlan.Move move : layer.moves()) {
+                felled.add(move.target());
+                felled.addAll(move.digs());
+            }
+        }
+        for (Pos log : oak.base()) {
+            assertTrue(felled.contains(log), "base cell planned: " + log);
+        }
+        for (Pos log : oak.column()) {
+            assertTrue(felled.contains(log), "column cell planned: " + log);
+        }
+        for (Pos log : oak.branches()) {
+            assertTrue(felled.contains(log), "branch cell planned: " + log);
+        }
     }
 }

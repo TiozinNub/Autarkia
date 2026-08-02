@@ -180,6 +180,52 @@ class ChopPlanTest {
     }
 
     @Test
+    void aHoledFloorIsWalkedAroundNotRefused() {
+        // The gauntlet oak's far fragment, distilled: the straight ray to the target crosses a
+        // two-cell hole in the canopy floor, but a one-cell dogleg is fully floored. The
+        // tunnel is a search, not a ray — it goes around.
+        TreeShape.Trunk oak = new TreeShape.Trunk(
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
+                List.of(new Pos(5, 64, 0)),
+                List.of(new Pos(0, 63, 1), new Pos(1, 63, 1), new Pos(2, 63, 1)));
+
+        ChopPlan plan = ChopPlan.of(oak);
+
+        assertTrue(plan.refusals().isEmpty(), "a dogleg exists, so no refusal");
+        ChopPlan.Move move = plan.layers().get(0).moves().get(0);
+        assertEquals(new Pos(2, 64, 1), move.stand(), "the floored lane one step south");
+        assertFalse(move.leap(), "walked around, never jumped");
+    }
+
+    @Test
+    void aBendingTrunksTipCostsOneExtraBlock() {
+        // Luiz's diagram, verbatim: the trunk bends away from the base column and its tip sits
+        // a hair past a swing from atop the mast — but one of her own logs placed underfoot
+        // brings it home. The second pass spends that one-block budget.
+        TreeShape.Trunk bent = new TreeShape.Trunk(
+                List.of(new Pos(2, 60, 0)), column(2, 0, 61, 62),
+                List.of(new Pos(1, 63, 0), new Pos(0, 64, 0), new Pos(0, 65, 0),
+                        new Pos(0, 66, 0)),
+                List.of(new Pos(0, 67, 0)));
+
+        ChopPlan plan = ChopPlan.of(bent);
+
+        assertTrue(plan.refusals().isEmpty(), "one placed block serves the whole bend");
+        ChopPlan.Move tip = null;
+        for (ChopPlan.Layer layer : plan.layers()) {
+            for (ChopPlan.Move move : layer.moves()) {
+                if (move.target().equals(new Pos(0, 66, 0))) {
+                    tip = move;
+                } else {
+                    assertFalse(move.boost(), "the budget is spent only where the arm fails");
+                }
+            }
+        }
+        assertTrue(tip != null && tip.boost(), "the tip needs the one-block budget");
+        assertEquals(new Pos(2, 61, 0), tip.stand(), "boosted from atop the mast itself");
+    }
+
+    @Test
     void theSameShapeAlwaysCompilesTheSameDance() {
         // The plan is a memory-identity-grade artifact: replans (resume-after-a-fall recompiles
         // from the remnant) must reproduce the interrupted card exactly, so nothing about it

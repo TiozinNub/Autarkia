@@ -1,9 +1,11 @@
 package dev.luizloyola.autarkia.core.tree;
 
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -62,12 +64,13 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
     }
 
     /**
-     * One chop and the access it needs: dig every {@code digs} cell in order (leaves mostly —
-     * a log en route is broken en route. That is what "freeing space as needed" means), stand
-     * at {@code stand}, break {@code target}. {@code leap} marks a route that crosses a one-cell
-     * floor gap — the single jump the dig rules allow.
+     * One chop and the access it needs: dig every {@code digs} cell in order (leaves mostly; a
+     * log en route is broken en route), stand at {@code stand}, break {@code target}.
+     * {@code leap} marks a route crossing a one-cell floor gap, the only jump the dig rules
+     * allow; {@code boost} a stand needing one of her own logs underfoot first, reclaimed when
+     * she steps down.
      */
-    public record Move(Pos target, Pos stand, List<Pos> digs, boolean leap) {
+    public record Move(Pos target, Pos stand, List<Pos> digs, boolean leap, boolean boost) {
     }
 
     /** A cell the plan refuses, and why. Painted magenta/red by the monocle, never hidden. */
@@ -141,6 +144,16 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         logs.addAll(tree.column());
         logs.addAll(tree.branches());
         Set<Pos> canopy = new HashSet<>(tree.leaves());
+        // How far a tunnel may ever wander: the tree's own horizontal extent, with margin.
+        int radius = 2;
+        for (Pos cell : logs) {
+            radius = Math.max(radius,
+                    Math.max(Math.abs(cell.x() - mx), Math.abs(cell.z() - mz)) + 2);
+        }
+        for (Pos cell : canopy) {
+            radius = Math.max(radius,
+                    Math.max(Math.abs(cell.x() - mx), Math.abs(cell.z() - mz)) + 2);
+        }
 
         // Feet level per target, grouped top-down; within a level, outermost first (the tunnel
         // dug for the far one carries the near ones home), ties broken by the total order so
@@ -149,7 +162,7 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         List<Refusal> refusals = new ArrayList<>();
         for (Pos target : targets) {
             int feet = Math.max(baseY, Math.min(target.y(), topFeet));
-            if (target.y() + 0.5 - (topFeet + EYE) > REACH) {
+            if (target.y() + 0.5 - (topFeet + 1 + EYE) > REACH) {
                 refusals.add(new Refusal(target, Reason.TOO_HIGH));
                 continue;
             }
@@ -173,7 +186,14 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
                 if (consumed.contains(target)) {
                     continue; // broken en route to something farther — already in that move
                 }
-                Move move = route(target, feet, mx, mz, baseY, logs, canopy, consumed);
+                // Escalating passes, cheapest dance first: a plain floored walk, then the one
+                // leap the rules allow, then the one-block budget (a log of her own placed
+                // underfoot at the stand — Luiz's bend fix), then both.
+                Move move = null;
+                for (int attempt = 0; attempt < 4 && move == null; attempt++) {
+                    move = route(target, feet, mx, mz, baseY, radius, (attempt & 1) != 0,
+                            attempt >> 1, logs, canopy, consumed);
+                }
                 if (move == null) {
                     refusals.add(new Refusal(target, Reason.NO_FLOOR));
                 } else {
@@ -190,58 +210,101 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
     }
 
     /**
-     * Digs one tunnel from the mast toward the target at this feet level, and returns the move —
+     * Digs one tunnel from the mast toward the target at this feet level and returns the move —
      * or {@code null} when no floored stand exists (the caller's {@link Reason#NO_FLOOR}).
      *
-     * <p>The tunnel advances 4-way along the straightest cell line. At each step the feet and
-     * head cells are dug if the tree still holds them (a leaf is access, a log en route is a
-     * bonus chop — both land in {@code digs} and are consumed), and the floor beneath must hold:
-     * a still-standing tree cell, the mast axis (her pillar), ground level, or — once per tunnel
-     * — a single-cell gap taken as a leap. The walk stops at the first floored cell with the
-     * target inside {@link #REACH} of her eyes — most targets are hit from the mast itself, and
-     * a tunnel only grows as far as the arm falls short. Whatever tree matter sits on the swing
-     * line from there is cleared into {@code digs} too ("break every leaf in the way until that
-     * block" — and a log on the line is a bonus chop).
+     * <p>The tunnel is the SHORTEST 4-way walk at this feet level to a floored cell with the
+     * target inside {@link #REACH} of her eyes. A cell's floor must hold — a still-standing tree
+     * cell, the mast axis, or ground level — and one single-cell hole may be leapt, never two in
+     * a row. Breadth-first rather than a straight ray, because the real canopy floor has holes
+     * the straight line falls into while a one-cell dogleg walks around them. Only the winning
+     * path is dug: the feet and head cells the tree still holds, then whatever sits on the swing
+     * line from the stand. A {@code boost} of one plans the whole swing from one block higher, on
+     * her own log placed underfoot and reclaimed on the way down.
      */
-    private static Move route(Pos target, int feet, int mx, int mz, int baseY,
-                              Set<Pos> logs, Set<Pos> canopy, Set<Pos> consumed) {
+    private static Move route(Pos target, int feet, int mx, int mz, int baseY, int radius,
+                              boolean allowLeap, int boost, Set<Pos> logs, Set<Pos> canopy,
+                              Set<Pos> consumed) {
+        record Cell(int x, int z) {
+        }
+        Map<Cell, Cell> cameFrom = new LinkedHashMap<>();
+        ArrayDeque<Cell> frontier = new ArrayDeque<>();
+        Cell start = new Cell(mx, mz);
+        cameFrom.put(start, null);
+        frontier.add(start);
+        Cell stand = null;
+        while (!frontier.isEmpty() && stand == null) {
+            Cell cell = frontier.poll();
+            boolean floored = floored(cell.x(), feet, cell.z(), mx, mz, baseY,
+                    logs, canopy, consumed);
+            if (floored && inReach(cell.x(), feet + boost, cell.z(), target)) {
+                stand = cell;
+                break;
+            }
+            // Neighbours nearest the target first, then the total order — a pure tie-break, so
+            // equally short tunnels prefer hugging the straight line.
+            List<Cell> steps = new ArrayList<>(4);
+            steps.add(new Cell(cell.x() + 1, cell.z()));
+            steps.add(new Cell(cell.x() - 1, cell.z()));
+            steps.add(new Cell(cell.x(), cell.z() + 1));
+            steps.add(new Cell(cell.x(), cell.z() - 1));
+            steps.sort(Comparator
+                    .comparingLong((Cell c) -> {
+                        long dx = target.x() - c.x();
+                        long dz = target.z() - c.z();
+                        return dx * dx + dz * dz;
+                    })
+                    .thenComparingInt(Cell::x).thenComparingInt(Cell::z));
+            for (Cell next : steps) {
+                if (Math.max(Math.abs(next.x() - mx), Math.abs(next.z() - mz)) > radius
+                        || cameFrom.containsKey(next)) {
+                    continue;
+                }
+                // A hole may only be entered from floor, and only once the no-leap pass has
+                // come up empty.
+                boolean nextFloored = floored(next.x(), feet, next.z(), mx, mz, baseY,
+                        logs, canopy, consumed);
+                if (!nextFloored && (!allowLeap || !floored)) {
+                    continue;
+                }
+                cameFrom.put(next, cell);
+                frontier.add(next);
+            }
+        }
+        if (stand == null) {
+            return null;
+        }
+        List<Cell> path = new ArrayList<>();
+        for (Cell cell = stand; cell != null; cell = cameFrom.get(cell)) {
+            path.add(cell);
+        }
         List<Pos> digs = new ArrayList<>();
         Set<Pos> dug = new HashSet<>();
         boolean leaped = false;
-        int x = mx;
-        int z = mz;
-        int gap = 0;
-        while (true) {
-            boolean floored = x == mx && z == mz
-                    || feet <= baseY
-                    || isStanding(new Pos(x, feet - 1, z), logs, canopy, consumed);
-            if (floored) {
-                gap = 0;
-                if (inReach(x, feet, z, target)) {
-                    clearSwingLine(x, feet, z, target, logs, canopy, consumed, dug, digs);
-                    consume(target, logs, canopy, consumed, dug, null);
-                    return new Move(target, new Pos(x, feet, z), List.copyOf(digs), leaped);
-                }
-            } else {
-                if (gap > 0) {
-                    return null; // two holes in a row: no clean way there
-                }
-                gap++;
-                leaped = true;
-            }
-            if (target.x() == x && target.z() == z) {
-                return null; // under it and still out of reach: nowhere left to walk
-            }
-            int dx = target.x() - x;
-            int dz = target.z() - z;
-            if (Math.abs(dx) >= Math.abs(dz)) {
-                x += Integer.signum(dx);
-            } else {
-                z += Integer.signum(dz);
-            }
-            consume(new Pos(x, feet, z), logs, canopy, consumed, dug, digs);
-            consume(new Pos(x, feet + 1, z), logs, canopy, consumed, dug, digs);
+        for (int i = path.size() - 2; i >= 0; i--) {
+            Cell cell = path.get(i);
+            leaped |= !floored(cell.x(), feet, cell.z(), mx, mz, baseY, logs, canopy, consumed);
+            consume(new Pos(cell.x(), feet, cell.z()), logs, canopy, consumed, dug, digs);
+            consume(new Pos(cell.x(), feet + 1, cell.z()), logs, canopy, consumed, dug, digs);
         }
+        if (boost > 0) {
+            // Standing one higher on her placed log: the head needs clearing one above too.
+            consume(new Pos(stand.x(), feet + 1 + boost, stand.z()),
+                    logs, canopy, consumed, dug, digs);
+        }
+        clearSwingLine(stand.x(), feet + boost, stand.z(), target, logs, canopy, consumed,
+                dug, digs);
+        consume(target, logs, canopy, consumed, dug, null);
+        return new Move(target, new Pos(stand.x(), feet, stand.z()), List.copyOf(digs), leaped,
+                boost > 0);
+    }
+
+    /** Whether a cell at this feet level can hold her: pillar, ground level, or living tree. */
+    private static boolean floored(int x, int feet, int z, int mx, int mz, int baseY,
+                                   Set<Pos> logs, Set<Pos> canopy, Set<Pos> consumed) {
+        return x == mx && z == mz
+                || feet <= baseY
+                || isStanding(new Pos(x, feet - 1, z), logs, canopy, consumed);
     }
 
     /** Whether a swing from this stand's eye position lands on the target's centre. */
