@@ -121,15 +121,33 @@ class TreeShapeTest {
     }
 
     @Test
-    void aOneLogTrunkReadsTreelessTheKnownPriceOfTheFallenLogRule() {
-        // The azalea shape: a single grounded log wearing its crown with no column. From the
-        // blocks alone it is indistinguishable from one fallen log under a low canopy, and
-        // Luiz ruled for the fallen log (2026-08-02) — so this reads as no tree, knowingly.
+    void aJungleBushIsATreeOfItsOwn() {
+        // The bush shape from the jungle floor: one log crowned directly in leaves, no column at
+        // all. It stands lateral-alone. That is what tells it from one cell of a fallen run.
         log(0, 64, 0);
         leaf(0, 65, 0);
         leaf(1, 65, 0);
+        leaf(-1, 65, 0);
+        leaf(1, 64, 0);
 
-        assertTrue(TreeShape.split(mass, probe).isEmpty());
+        List<TreeShape.Trunk> trees = TreeShape.split(mass, probe);
+
+        assertEquals(1, trees.size());
+        assertEquals(1, trees.get(0).logCount());
+        assertEquals(4, trees.get(0).leaves().size(), "the whole blob is its crown");
+    }
+
+    @Test
+    void aFallenRunUnderALowCanopyIsStillNoBush() {
+        // Two grounded column-less logs side by side disqualify each other: the bush rule
+        // never resurrects the fallen run, leaves overhead or not.
+        log(0, 64, 0);
+        log(1, 64, 0);
+        leaf(0, 65, 0);
+        leaf(1, 65, 0);
+
+        assertTrue(TreeShape.split(mass, probe).isEmpty(),
+                "a run is a run, however green its blanket");
     }
 
     @Test

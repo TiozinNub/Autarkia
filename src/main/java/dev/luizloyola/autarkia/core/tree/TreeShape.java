@@ -17,30 +17,23 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Splits a scanned mass of logs and leaves into individual trees. {@link TreeRule} individuates
- * through this and whatever fells them must too, so perception and the axe never disagree about
- * where one tree ends. Worldgen and 26-way growth ({@link RegionGrowth}) fuse canopies; this is the
- * seam that puts them back.
+ * Splits a scanned mass of logs and leaves into individual trees — the single answer to "whose
+ * wood is this?". {@link TreeRule} and whatever fells a tree both individuate through this, or
+ * perception and the axe disagree about where one tree ends and its neighbour begins.
  *
- * <p>A <b>trunk</b> is the vertical log run above a <em>grounded base</em>: a log whose support is
- * real ground (the probe says {@link BlockKind#OTHER}) and whose overhead cell is the next log of
- * its column. Grounded alone is not base, or a fallen log would read as an N-wide stump; overhead
- * must be WOOD, since a leaf would let a fallen log under a low canopy back in. Adjacent base cells
- * cluster, so a 2×2 giant is one trunk of four columns.
+ * <p>A <b>trunk</b> is the log run above a <em>grounded base</em>: a log on real ground
+ * ({@link BlockKind#OTHER}) that is either the foot of its column or a lone <em>bush</em> log
+ * crowned in leaves. Grounded alone is never base, or a fallen log would read as an N-wide stump;
+ * adjacent bases cluster, so a 2×2 giant is one trunk. Every other cell is assigned by GROWTH
+ * along {@link #attached} steps, so a tree is connected by construction — nearest-centroid alone
+ * gave a tall spruce's top canopy to a bushy neighbour thirty cells of air away (split survey,
+ * 2026-08-02). Cells two waves reach in the same round go to the nearest base centroid, ties to
+ * the earlier trunk.
  *
- * <p>Every other cell is assigned by GROWTH: ownership spreads from each trunk wave by wave along
- * {@link #attached} steps (wood to wood 26-way, leaves through their six faces only), so a tree is
- * connected by construction — pure nearest-centroid handed a tall spruce's top canopy to a short
- * bushy neighbour thirty cells of air away. Two waves reaching a cell in the same round is the true
- * contested boundary: nearest base centroid decides, ties to the earlier trunk.
- *
- * <p>A mass with no grounded base splits into nothing, and so does a grounded trunk that ends the
- * wave with no leaves — a fallen log lies flat with every log "grounded", and leaves are what prove
- * a tree rather than a woodpile. A cell whose only paths run through a foreign trunk's wood stays
- * unassigned; {@link SplitReport} carries it so nothing goes silent.
- *
- * <p>Deterministic throughout, because the anchor this produces is a memory's identity and must not
- * depend on hash order.
+ * <p>A mass with no grounded base, or a trunk that ends the wave leafless, splits into nothing:
+ * leaves prove a tree rather than a woodpile. A cell reachable only through a foreign trunk's wood
+ * stays unassigned and is reported in {@link SplitReport}. Deterministic throughout, because the
+ * anchor this produces is a memory's identity.
  */
 public final class TreeShape {
     /** Low-to-high, then west-to-east, then north-to-south: a total order over cells. */
@@ -73,20 +66,46 @@ public final class TreeShape {
                 leaves.add(entry.getKey());
             }
         }
-        List<Pos> baseCells = new ArrayList<>();
+        // Grounded is not enough for base — a fallen log is grounded along its whole length and
+        // used to cluster into a neighbour's base as extra "stump" cells (the replant pattern is
+        // one sapling per base cell). A base cell is the foot of a COLUMN or the BUSH shape: a
+        // single grounded log crowned in leaves, standing lateral-alone. The lateral test tells a
+        // jungle bush from a fallen run under a low canopy — a run's cells have grounded,
+        // column-less partners beside them and disqualify each other. Decisions: Luiz, 2026-08-02.
+        Set<Pos> grounded = new LinkedHashSet<>();
+        Set<Pos> columnFeet = new HashSet<>();
         for (Pos log : logs) {
             Pos below = new Pos(log.x(), log.y() - 1, log.z());
             if (logs.contains(below)
                     || probe.at(below.x(), below.y(), below.z()) != BlockKind.OTHER) {
                 continue; // not standing on real ground: no stump candidate
             }
-            // Grounded is not enough — a base cell is the foot of a COLUMN, so the cell overhead
-            // must be the next log, wood and nothing else (decision: Luiz). A fallen log is
-            // grounded along its length and used to cluster into a neighbour's base as extra stump
-            // cells, one sapling replanted each. An overhead LEAF would let it back in under a low
-            // canopy, so a directly crowned one-log trunk (an azalea) is KNOWINGLY sacrificed;
-            // fallen wood still joins the tree it touches, as branches.
+            grounded.add(log);
             if (blocks.get(new Pos(log.x(), log.y() + 1, log.z())) == BlockKind.LOG) {
+                columnFeet.add(log);
+            }
+        }
+        List<Pos> baseCells = new ArrayList<>();
+        for (Pos log : grounded) {
+            if (columnFeet.contains(log)) {
+                baseCells.add(log);
+                continue;
+            }
+            if (blocks.get(new Pos(log.x(), log.y() + 1, log.z())) != BlockKind.LEAVES) {
+                continue; // bare grounded wood: a fallen log or a stump, never a trunk
+            }
+            boolean lateralRun = false;
+            for (int dx = -1; dx <= 1 && !lateralRun; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    Pos beside = new Pos(log.x() + dx, log.y(), log.z() + dz);
+                    if (!beside.equals(log) && grounded.contains(beside)
+                            && !columnFeet.contains(beside)) {
+                        lateralRun = true;
+                        break;
+                    }
+                }
+            }
+            if (!lateralRun) {
                 baseCells.add(log);
             }
         }

@@ -253,7 +253,7 @@ public final class TreeSplitViewer {
         List<Pos> column = tree.column().isEmpty() ? tree.base() : tree.column();
         Pos top = column.get(column.size() - 1);
         String text = (tree.base().size() > 1 ? tree.base().size() + "-wide · " : "")
-                + tree.logCount() + " logs";
+                + tree.logCount() + (tree.logCount() == 1 ? " log" : " logs");
         labels.add(new CellOverlayPayload.Label(text,
                 Mth.hsvToArgb(hue, 0.85F, 1.0F, 0xFF),
                 new BlockPos(top.x(), top.y() + 1, top.z())));
