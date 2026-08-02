@@ -168,7 +168,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         while (!mastAhead.isEmpty() && mastAhead.peek().y() <= plan.entry().y() + 1) {
             Pos cell = mastAhead.peek();
             if (probe.at(cell.x(), cell.y(), cell.z()) == BlockKind.LOG) {
-                return beginBreak(ctx, cell, "the way in");
+                return breakWithinReach(ctx, cell, "the way in");
             }
             mastAhead.poll();
         }
@@ -443,6 +443,32 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 yield false;
             }
         };
+    }
+
+    /**
+     * Break a cell, walking into arm's reach first when needed: the approach accepts stopping a few
+     * blocks shy, but the arm does not stretch — the entry refused from six blocks out.
+     */
+    private TaskStatus breakWithinReach(BrainContext ctx, Pos cell, String what) {
+        if (inReach(ctx, cell)) {
+            walkIssued = false;
+            return beginBreak(ctx, cell, what);
+        }
+        if (!walkIssued) {
+            ctx.actuators().mover().moveTo(cell.x(), cell.y(), cell.z());
+            walkIssued = true;
+            walkTicks = 0;
+            return TaskStatus.RUNNING;
+        }
+        if (ctx.actuators().mover().state() == MoveState.MOVING
+                && ++walkTicks < WALK_TIMEOUT_TICKS) {
+            return TaskStatus.RUNNING;
+        }
+        walkIssued = false;
+        if (inReach(ctx, cell)) {
+            return beginBreak(ctx, cell, what);
+        }
+        return fail("cannot get near " + what + " at " + shortPos(cell));
     }
 
     private TaskStatus beginBreak(BrainContext ctx, Pos cell, String what) {
