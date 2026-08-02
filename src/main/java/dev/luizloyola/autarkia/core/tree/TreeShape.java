@@ -11,23 +11,36 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Splits a scanned mass of logs and leaves into individual trees. {@link TreeRule} individuates
- * through this and whatever fells them must too, so perception and the axe never disagree.
- * Worldgen and 26-way growth ({@link RegionGrowth}) fuse canopies; this is the seam that puts them
- * back.
+ * through this and whatever fells them must too, so perception and the axe never disagree about
+ * where one tree ends. Worldgen and 26-way growth ({@link RegionGrowth}) fuse canopies; this is the
+ * seam that puts them back.
  *
- * <p>A <b>trunk</b> is the log run above a <em>grounded base</em> — a log whose support is real
- * ground (the probe says {@link BlockKind#OTHER}) — bases clustered so a 2×2 giant is one trunk of
- * four columns. Every other cell belongs to the trunk whose base centroid is horizontally nearest.
- * A mass with no grounded base splits into nothing.
+ * <p>A <b>trunk</b> is the vertical log run above a <em>grounded base</em>: a log whose support is
+ * real ground (the probe says {@link BlockKind#OTHER}) and whose overhead cell is the next log of
+ * its column. Grounded alone is not base, or a fallen log would read as an N-wide stump; overhead
+ * must be WOOD, since a leaf would let a fallen log under a low canopy back in. Adjacent base cells
+ * cluster, so a 2×2 giant is one trunk of four columns.
  *
- * <p>Deterministic: cells are sorted before assignment, because the anchor is a memory's identity
- * and must not depend on hash order.
+ * <p>Every other cell is assigned by GROWTH: ownership spreads from each trunk wave by wave along
+ * {@link #attached} steps (wood to wood 26-way, leaves through their six faces only), so a tree is
+ * connected by construction — pure nearest-centroid handed a tall spruce's top canopy to a short
+ * bushy neighbour thirty cells of air away. Two waves reaching a cell in the same round is the true
+ * contested boundary: nearest base centroid decides, ties to the earlier trunk.
+ *
+ * <p>A mass with no grounded base splits into nothing, and so does a grounded trunk that ends the
+ * wave with no leaves — a fallen log lies flat with every log "grounded", and leaves are what prove
+ * a tree rather than a woodpile. A cell whose only paths run through a foreign trunk's wood stays
+ * unassigned; {@link SplitReport} carries it so nothing goes silent.
+ *
+ * <p>Deterministic throughout, because the anchor this produces is a memory's identity and must not
+ * depend on hash order.
  */
 public final class TreeShape {
     /** Low-to-high, then west-to-east, then north-to-south: a total order over cells. */
@@ -38,11 +51,10 @@ public final class TreeShape {
     }
 
     /**
-     * One individuated tree inside a scanned mass: its stump layer ({@code base} — one cell per
-     * 1×1 tree, four for a 2×2 giant), the logs standing directly above those cells
-     * ({@code column}), the logs assigned to it that stand anywhere else ({@code branches}), and
-     * the leaves assigned to it ({@code leaves} — its crown, the thing that proves it a tree
-     * rather than a woodpile).
+     * One individuated tree inside a scanned mass: {@code base} is its stump layer (one cell per
+     * 1×1 tree, four for a 2×2 giant), {@code column} the logs standing directly above them,
+     * {@code branches} the logs assigned to it anywhere else, {@code leaves} its crown —
+     * {@link #split} never returns a trunk with an empty crown.
      */
     public record Trunk(List<Pos> base, List<Pos> column, List<Pos> branches, List<Pos> leaves) {
         public int logCount() {
@@ -64,9 +76,18 @@ public final class TreeShape {
         List<Pos> baseCells = new ArrayList<>();
         for (Pos log : logs) {
             Pos below = new Pos(log.x(), log.y() - 1, log.z());
-            if (!logs.contains(below)
-                    && probe.at(below.x(), below.y(), below.z()) == BlockKind.OTHER) {
-                baseCells.add(log); // stands on a non-tree block: a stump candidate
+            if (logs.contains(below)
+                    || probe.at(below.x(), below.y(), below.z()) != BlockKind.OTHER) {
+                continue; // not standing on real ground: no stump candidate
+            }
+            // Grounded is not enough — a base cell is the foot of a COLUMN, so the cell overhead
+            // must be the next log, wood and nothing else (decision: Luiz). A fallen log is
+            // grounded along its length and used to cluster into a neighbour's base as extra stump
+            // cells, one sapling replanted each. An overhead LEAF would let it back in under a low
+            // canopy, so a directly crowned one-log trunk (an azalea) is KNOWINGLY sacrificed;
+            // fallen wood still joins the tree it touches, as branches.
+            if (blocks.get(new Pos(log.x(), log.y() + 1, log.z())) == BlockKind.LOG) {
+                baseCells.add(log);
             }
         }
         baseCells.sort(ORDER);
@@ -97,28 +118,108 @@ public final class TreeShape {
             branches.add(new ArrayList<>());
             crowns.add(new ArrayList<>());
         }
+        // What the waves may claim: everything except trunks (pre-owned) and foreign wood, which
+        // is excluded outright and OPAQUE to growth — whatever stands past it is the foreign
+        // tree's to explain.
+        Set<Pos> assignable = new LinkedHashSet<>();
         for (Pos log : logs) {
-            if (!trunkCells.contains(log)) {
-                if (restsOnForeignTrunk(log, logs, probe)) {
-                    continue; // a trunk the scan cut in half — its own tree, never a branch
-                }
-                int owner = nearest(centers, log);
-                if (owner >= 0) {
-                    branches.get(owner).add(log);
-                }
+            if (!trunkCells.contains(log) && !restsOnForeignTrunk(log, logs, probe)) {
+                assignable.add(log);
             }
         }
-        for (Pos leaf : leaves) {
-            int owner = nearest(centers, leaf);
-            if (owner >= 0) {
-                crowns.get(owner).add(leaf);
+        assignable.addAll(leaves);
+
+        Map<Pos, Integer> owner = new LinkedHashMap<>();
+        List<Pos> frontier = new ArrayList<>();
+        for (int i = 0; i < clusters.size(); i++) {
+            for (Pos cell : clusters.get(i)) {
+                owner.put(cell, i);
+                frontier.add(cell);
             }
+            for (Pos cell : columns.get(i)) {
+                owner.put(cell, i);
+                frontier.add(cell);
+            }
+        }
+        frontier.sort(ORDER);
+        while (!frontier.isEmpty()) {
+            // One wave: every tree grows one attachment step. A cell two waves reach in the
+            // same round is the genuinely contested boundary, and only there does the old
+            // nearest-centroid rule speak (ties to the earlier trunk). The claim map makes the
+            // outcome independent of iteration order.
+            Map<Pos, Integer> claims = new LinkedHashMap<>();
+            for (Pos cell : frontier) {
+                int tree = owner.get(cell);
+                BlockKind kind = blocks.get(cell);
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            Pos next = new Pos(cell.x() + dx, cell.y() + dy, cell.z() + dz);
+                            BlockKind nextKind = blocks.get(next);
+                            if (!attached(kind, nextKind, dx, dy, dz)
+                                    || !assignable.contains(next) || owner.containsKey(next)) {
+                                continue;
+                            }
+                            // Ownership enters a LOG only from another LOG: branches hang
+                            // from wood, never from leaves. A crownless stump under a grove's
+                            // canopy is in the mass (the leaves touch it), but it is
+                            // nobody's branch (the lone-stump lesson, again).
+                            if (nextKind == BlockKind.LOG && kind != BlockKind.LOG) {
+                                continue;
+                            }
+                            Integer rival = claims.get(next);
+                            claims.put(next, rival == null ? tree
+                                    : closer(centers, next, rival, tree));
+                        }
+                    }
+                }
+            }
+            owner.putAll(claims);
+            frontier = new ArrayList<>(claims.keySet());
+            frontier.sort(ORDER);
+        }
+        for (Map.Entry<Pos, Integer> claimed : owner.entrySet()) {
+            Pos cell = claimed.getKey();
+            if (trunkCells.contains(cell)) {
+                continue;
+            }
+            (logs.contains(cell) ? branches : crowns).get(claimed.getValue()).add(cell);
         }
         List<Trunk> trunks = new ArrayList<>(clusters.size());
         for (int i = 0; i < clusters.size(); i++) {
+            if (crowns.get(i).isEmpty()) {
+                // A crownless trunk is a woodpile, not a tree: a fallen log lies flat, every
+                // log "grounded", and read as an N-wide tree (decision: Luiz, 2026-08-02). Its
+                // wood goes unclaimed and the report carries it as stray.
+                continue;
+            }
+            branches.get(i).sort(ORDER);
+            crowns.get(i).sort(ORDER);
             trunks.add(new Trunk(clusters.get(i), columns.get(i), branches.get(i), crowns.get(i)));
         }
         return trunks;
+    }
+
+    /**
+     * Whether ownership may pass between two touching cells (decision: Luiz, 2026-08-02). Wood
+     * attaches to wood across all 26 neighbours, because real branches step diagonally; a LEAF
+     * attaches through its six faces only (vanilla's own leaf-distance rule), so interleaving
+     * canopies never bleed into each other.
+     */
+    static boolean attached(BlockKind from, BlockKind to, int dx, int dy, int dz) {
+        boolean face = Math.abs(dx) + Math.abs(dy) + Math.abs(dz) == 1;
+        return face || (from == BlockKind.LOG && to == BlockKind.LOG
+                && (dx != 0 || dy != 0 || dz != 0));
+    }
+
+    /** Which of two same-round claimants is nearer the cell — the seam's tie-break. */
+    private static int closer(List<Pos> centers, Pos cell, int a, int b) {
+        long distA = horizontalDistSq(cell, centers.get(a));
+        long distB = horizontalDistSq(cell, centers.get(b));
+        if (distA != distB) {
+            return distA < distB ? a : b;
+        }
+        return Math.min(a, b);
     }
 
     /**
@@ -157,20 +258,6 @@ public final class TreeShape {
         long dx = a.x() - b.x();
         long dz = a.z() - b.z();
         return dx * dx + dz * dz;
-    }
-
-    /** Index of the nearest centre, or -1 when there are none; ties go to the earlier trunk. */
-    private static int nearest(List<Pos> centers, Pos cell) {
-        int owner = -1;
-        long best = Long.MAX_VALUE;
-        for (int i = 0; i < centers.size(); i++) {
-            long dist = horizontalDistSq(cell, centers.get(i));
-            if (dist < best) {
-                best = dist;
-                owner = i;
-            }
-        }
-        return owner;
     }
 
     /** Groups base cells that touch (Chebyshev ≤ 1) — one group per trunk, 2×2 giants included. */

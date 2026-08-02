@@ -45,6 +45,7 @@ import dev.luizloyola.anima.mod.brain.Knowledges;
 import dev.luizloyola.anima.mod.brain.BeingViewer;
 import dev.luizloyola.anima.mod.debug.DebugLayer;
 import dev.luizloyola.anima.mod.debug.DebugView;
+import dev.luizloyola.autarkia.mod.debug.TreeSplitViewer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.autarkia.mod.entity.Person;
@@ -175,6 +176,17 @@ public final class AutarkiaCommands {
                         // SELECTED Person. Per-player, and the only way to raise several layers at
                         // once (the wand's shift-click cycles them one at a time).
                         .then(AgentCommands.debug())
+                        // How the ground around you would carve into individual trees —
+                        // TreeShape's split painted over the live world, no Person or perception
+                        // involved. Ours alone, like board: Anima has no idea what a tree is.
+                        .then(Commands.literal("tree")
+                                .then(Commands.literal("view")
+                                        .executes(ctx -> treeView(ctx.getSource(), 0))
+                                        .then(Commands.argument("radius",
+                                                        IntegerArgumentType.integer(4, 32))
+                                                .executes(ctx -> treeView(ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(
+                                                                ctx, "radius"))))))
                         // What a PERSON is like, in our own file; /anima config holds the
                         // server-wide limits, the journal and the flee weights. Same subcommand,
                         // built for whichever set it is handed.
@@ -307,6 +319,20 @@ public final class AutarkiaCommands {
         String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
         Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
+        return 1;
+    }
+
+    /**
+     * Toggles the {@link TreeSplitViewer} survey around the calling player, or retunes its
+     * radius while it is on. {@code radius} 0 means "no radius given" — plain toggle.
+     */
+    private static int treeView(CommandSourceStack source, int radius)
+            throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        int active = TreeSplitViewer.toggle(source.getServer(), player, radius);
+        Replies.send(source, () -> Component.literal(active > 0
+                ? "Surveying the trees within " + active + " blocks — every tree its own colour."
+                : "The tree survey is off.").withStyle(ChatFormatting.GRAY));
         return 1;
     }
 

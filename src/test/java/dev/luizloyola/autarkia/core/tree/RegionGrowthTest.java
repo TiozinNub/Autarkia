@@ -86,8 +86,10 @@ class RegionGrowthTest {
     }
 
     /**
-     * A stump left standing inside a live grove is connected and grounded, and still not a tree:
-     * it has no crown. Ruled: do not detect stumps; do not let the chop leave them.
+     * A crownless stump inside a live grove is connected and grounded but is not a tree of its
+     * own: no crown, so it anchors no memory. Its WOOD is still the oak's — reached from it
+     * through wood (the corner-hung branch), and wood the ownership wave reaches through wood
+     * belongs to that tree — so felling the oak clears the stump with it.
      */
     @Test
     void aCrownlessStumpInsideAGroveIsNotATreeOfItsOwn() {
@@ -100,10 +102,10 @@ class RegionGrowthTest {
                 probe, 10_000);
 
         GrownRegion.Part tree = only(region);
-        assertEquals(new Pos(10, 64, 10), tree.anchor());
-        assertEquals(5, tree.units(), "the oak and its branch — the stump is nobody's");
-        assertFalse(tree.blocks().containsKey(new Pos(12, 64, 10)),
-                "the stump belongs to no tree, so the sensor claims it negatively and moves on");
+        assertEquals(new Pos(10, 64, 10), tree.anchor(), "the stump anchors nothing");
+        assertEquals(6, tree.units(), "the oak, its branch, and the stump its wood reaches");
+        assertTrue(tree.blocks().containsKey(new Pos(12, 64, 10)),
+                "the stump is the oak's wood now — felling the oak leaves no stump behind");
     }
 
     @Test
