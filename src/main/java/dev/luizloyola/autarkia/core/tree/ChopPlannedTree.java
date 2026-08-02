@@ -200,6 +200,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
         if (ctx.actuators().mover().state() == MoveState.MOVING && ++walkTicks < WALK_TIMEOUT_TICKS) {
             return TaskStatus.RUNNING;
         }
+        // Hemmed beside the doorway (a low canopy walls the one-block step): chew the tree's
+        // own cell between her and the entry, then try the step again — each bite is finite.
+        Pos doorway = firstBlockerToward(ctx, plan.entry());
+        if (doorway != null && ctx.actuators().breaker().begin(doorway)) {
+            breaking = true;
+            return TaskStatus.RUNNING;
+        }
         return fail("could not step into the shaft at " + shortPos(plan.entry()));
     }
 
@@ -457,19 +464,16 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private TaskStatus breakWithinReach(BrainContext ctx, Pos cell, String what) {
         if (inReach(ctx, cell)) {
             walkIssued = false;
-            if (ctx.actuators().breaker().begin(cell)) {
-                breaking = true;
-                return TaskStatus.RUNNING;
-            }
-            // In reach and refused: almost always the ARM PATH — the breaker will not swing
-            // through the canopy. The first of this tree's cells on the eye line is, by being
-            // first, the one cell whose own arm path is clear: chew it and the line shortens.
+            // Break every leaf in the way before the mark, not merely when the breaker refuses:
+            // the arm can thread a diagonal seam the eye line crosses, and breaking wood through a
+            // corner reads as a glitch. Chewing first opens the line cell by cell, mark last.
             Pos blocker = firstBlockerToward(ctx, cell);
-            if (blocker != null && ctx.actuators().breaker().begin(blocker)) {
+            Pos mark = blocker != null ? blocker : cell;
+            if (ctx.actuators().breaker().begin(mark)) {
                 breaking = true;
                 return TaskStatus.RUNNING;
             }
-            return fail("the arm refused " + what + " at " + shortPos(cell));
+            return fail("the arm refused " + what + " at " + shortPos(mark));
         }
         Pos blocker = firstBlockerToward(ctx, cell);
         if (blocker != null && inReach(ctx, blocker)
@@ -548,16 +552,14 @@ public final class ChopPlannedTree implements PrimitiveTask {
      * chew refuses, the move gives way.
      */
     private void beginWorkBreak(BrainContext ctx, Pos cell, String what) {
-        if (ctx.actuators().breaker().begin(cell)) {
-            breaking = true;
-            return;
-        }
+        // Chew-first, same as the shaft: the leaves on the line fall before the mark does.
         Pos blocker = firstBlockerToward(ctx, cell);
-        if (blocker != null && ctx.actuators().breaker().begin(blocker)) {
+        Pos mark = blocker != null ? blocker : cell;
+        if (ctx.actuators().breaker().begin(mark)) {
             breaking = true;
             return;
         }
-        giveUpMove(ctx, "the arm refused " + what + " at " + shortPos(cell));
+        giveUpMove(ctx, "the arm refused " + what + " at " + shortPos(mark));
     }
 
     /** Abandon the current move cleanly: its target is a leftover, the dance goes on. */
