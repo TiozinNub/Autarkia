@@ -335,7 +335,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 continue;
             }
             if (inReach(ctx, dig)) {
-                return beginBreak(ctx, dig, "the way through");
+                beginWorkBreak(ctx, dig, "the way through");
+                return TaskStatus.RUNNING;
             }
             break; // walk closer before the next dig
         }
@@ -354,7 +355,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         if (inReach(ctx, target) && (!move.boost() || boostUp)) {
-            return beginBreak(ctx, target, "the mark");
+            beginWorkBreak(ctx, target, "the mark");
+            return TaskStatus.RUNNING;
         }
         if (!walkIssued) {
             if (atStand(ctx, move)) {
@@ -455,12 +457,26 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private TaskStatus breakWithinReach(BrainContext ctx, Pos cell, String what) {
         if (inReach(ctx, cell)) {
             walkIssued = false;
-            return beginBreak(ctx, cell, what);
+            if (ctx.actuators().breaker().begin(cell)) {
+                breaking = true;
+                return TaskStatus.RUNNING;
+            }
+            // In reach and refused: almost always the ARM PATH — the breaker will not swing
+            // through the canopy. The first of this tree's cells on the eye line is, by being
+            // first, the one cell whose own arm path is clear: chew it and the line shortens.
+            Pos blocker = firstBlockerToward(ctx, cell);
+            if (blocker != null && ctx.actuators().breaker().begin(blocker)) {
+                breaking = true;
+                return TaskStatus.RUNNING;
+            }
+            return fail("the arm refused " + what + " at " + shortPos(cell));
         }
         Pos blocker = firstBlockerToward(ctx, cell);
-        if (blocker != null && inReach(ctx, blocker)) {
+        if (blocker != null && inReach(ctx, blocker)
+                && ctx.actuators().breaker().begin(blocker)) {
             walkIssued = false;
-            return beginBreak(ctx, blocker, "the way to " + what);
+            breaking = true;
+            return TaskStatus.RUNNING;
         }
         if (!walkIssued) {
             ctx.actuators().mover().moveTo(cell.x(), cell.y(), cell.z());
@@ -473,12 +489,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         walkIssued = false;
-        if (inReach(ctx, cell)) {
-            return beginBreak(ctx, cell, what);
-        }
-        blocker = firstBlockerToward(ctx, cell);
-        if (blocker != null && inReach(ctx, blocker)) {
-            return beginBreak(ctx, blocker, "the way to " + what);
+        if (inReach(ctx, cell) || (blocker != null && inReach(ctx, blocker))) {
+            return TaskStatus.RUNNING; // try the arm again from where the walk ended
         }
         return fail("cannot get near " + what + " at " + shortPos(cell));
     }
@@ -528,6 +540,24 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         return fail("the arm refused " + what + " at " + shortPos(cell));
+    }
+
+    /**
+     * Begin a WORK-phase break, chewing the eye line when the arm path refuses: the card's digs
+     * were planned from its stands, and real feet leave one more leaf on the line. When even the
+     * chew refuses, the move gives way.
+     */
+    private void beginWorkBreak(BrainContext ctx, Pos cell, String what) {
+        if (ctx.actuators().breaker().begin(cell)) {
+            breaking = true;
+            return;
+        }
+        Pos blocker = firstBlockerToward(ctx, cell);
+        if (blocker != null && ctx.actuators().breaker().begin(blocker)) {
+            breaking = true;
+            return;
+        }
+        giveUpMove(ctx, "the arm refused " + what + " at " + shortPos(cell));
     }
 
     /** Abandon the current move cleanly: its target is a leftover, the dance goes on. */
