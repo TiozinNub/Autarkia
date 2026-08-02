@@ -33,6 +33,7 @@ import dev.luizloyola.autarkia.core.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
+import dev.luizloyola.anima.mod.brain.AgentRiser;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
@@ -253,6 +254,7 @@ public class Person extends Avatar implements AgentBody {
      * actuator port by the {@link #brain} driver.
      */
     private final AgentBlockBreaker blockBreaker = new AgentBlockBreaker(this);
+    private final AgentRiser riser = new AgentRiser(this);
 
     /**
      * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
@@ -403,6 +405,10 @@ public class Person extends Avatar implements AgentBody {
         this.blockBreaker.tick();
         // The navigator owns the forward input.
         this.navigator.tick();
+        // The riser after the navigator: an idle Navigator's tick stops all movement inputs
+        // ("never coast on stale input"), which would wipe the rise's centring shuffle and its
+        // held jump every tick.
+        this.riser.tick();
         // Buoyancy last: it owns the vertical input while submerged, whatever drove the horizontal.
         floatInWater();
     }
@@ -452,6 +458,12 @@ public class Person extends Avatar implements AgentBody {
     /** This person's working arm — the break machinery the brain drives as a port. See {@link AgentBlockBreaker}. */
     public AgentBlockBreaker blockBreaker() {
         return this.blockBreaker;
+    }
+
+    /** This person's rise-one machinery — jump-and-place-underfoot, brain-driven as a port. */
+    @Override
+    public AgentRiser riser() {
+        return this.riser;
     }
 
     /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */

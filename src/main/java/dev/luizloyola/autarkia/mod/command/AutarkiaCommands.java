@@ -33,6 +33,9 @@ import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.Stock;
+import dev.luizloyola.autarkia.core.tree.ChopPlannedTree;
+import dev.luizloyola.autarkia.core.tree.Pois;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.Entry;
 import dev.luizloyola.anima.core.log.JournalService;
@@ -155,6 +158,10 @@ public final class AutarkiaCommands {
                         // shared brain verbs, plus the one that is ours: obtain is a log quota,
                         // not the library's business.
                         .then(AgentCommands.brain()
+                                // Fell the nearest remembered tree by walking its compiled dance
+                                // card (ChopPlannedTree).
+                                .then(Commands.literal("chop")
+                                        .executes(ctx -> brainChop(ctx.getSource())))
                                 .then(Commands.literal("obtain")
                                         .then(Commands.literal("logs")
                                                 .executes(ctx -> brainObtain(ctx.getSource(), 16))
@@ -318,6 +325,29 @@ public final class AutarkiaCommands {
         Replies.send(source, () -> Component.literal(person.getName().getString()
                         + " drops #" + handle + " — " + cancelled.get().describe())
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
+    /**
+     * Runs {@link ChopPlannedTree} on the resolved Person's nearest remembered tree — the
+     * dance-card executor, ordered directly for staging.
+     */
+    private static int brainChop(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        Pos feet = new Pos(person.blockPosition().getX(), person.blockPosition().getY(),
+                person.blockPosition().getZ());
+        var memory = Knowledges.of(source.getServer()).forPerson(person.agentId())
+                .nearest(Pois.TREE, feet);
+        if (memory.isEmpty()) {
+            Replies.fail(source, Component.literal(
+                    person.getName().getString() + " knows no tree to fell."));
+            return 0;
+        }
+        boolean autoDisabled = person.brain().run(new ChopPlannedTree(memory.get().anchor()));
+        String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
+        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
         return 1;
     }
 
