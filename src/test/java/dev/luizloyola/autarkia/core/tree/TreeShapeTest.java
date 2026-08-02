@@ -197,6 +197,34 @@ class TreeShapeTest {
     }
 
     @Test
+    void woodLineageOutranksANeighboursLeafAdoption() {
+        // Wood lineage runs first: a log any trunk reaches through wood is that lineage's before
+        // a single leaf speaks. The contested cell sits the same wave-distance from B's wood as
+        // from A's leaves, and A's nearer centroid made the old single wave adopt it.
+        log(10, 64, 0); // tree B: an acacia-ish diagonal
+        log(10, 65, 0);
+        leaf(10, 66, 0); // B's crown
+        log(11, 66, 1); // the diagonal step...
+        log(12, 67, 2); // ...and the contested airborne cell (air below)
+        log(14, 64, 2); // tree A: a straight trunk beside it
+        log(14, 65, 2);
+        log(14, 66, 2);
+        log(14, 67, 2);
+        leaf(14, 68, 2); // A's crown
+        leaf(13, 67, 2); // A's canopy reaching the contested cell's face
+        leaf(13, 66, 2); // the face-contact fusing the two into one mass
+        leaf(12, 66, 1);
+
+        List<TreeShape.Trunk> trees = TreeShape.split(mass, probe);
+
+        assertEquals(2, trees.size());
+        TreeShape.Trunk acaciaB = trees.get(0); // base (10,64,0) sorts first
+        assertTrue(acaciaB.branches().contains(new Pos(12, 67, 2)),
+                "the diagonal's own wood keeps its tip");
+        assertTrue(acaciaB.branches().contains(new Pos(11, 66, 1)));
+    }
+
+    @Test
     void attachmentIsSixWayForLeavesAndTwentySixWayForWood() {
         assertTrue(TreeShape.attached(BlockKind.LOG, BlockKind.LOG, 1, 1, 1),
                 "a branch steps diagonally");

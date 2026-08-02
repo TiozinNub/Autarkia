@@ -149,23 +149,61 @@ public final class TreeShape {
         assignable.addAll(leaves);
 
         Map<Pos, Integer> owner = new LinkedHashMap<>();
-        List<Pos> frontier = new ArrayList<>();
+        List<Pos> seeds = new ArrayList<>();
         for (int i = 0; i < clusters.size(); i++) {
             for (Pos cell : clusters.get(i)) {
                 owner.put(cell, i);
-                frontier.add(cell);
+                seeds.add(cell);
             }
             for (Pos cell : columns.get(i)) {
                 owner.put(cell, i);
-                frontier.add(cell);
+                seeds.add(cell);
             }
         }
-        frontier.sort(ORDER);
+        seeds.sort(ORDER);
+        // WOOD LINEAGE first: the first wave spreads only log-to-log, so every log a trunk can
+        // reach through wood is claimed before any leaf carries ownership. Without the split a
+        // neighbour's leaf-wave outraced a tree's own wood and adopted an airborne log OF its
+        // TRUNK through the shared canopy (an acacia at 233,70, caught live 2026-08-02). The
+        // second wave then grows leaves and leaf-mediated adoption over the rest.
+        wave(blocks, probe, logs, assignable, centers, owner, seeds, true);
+        List<Pos> everyOwned = new ArrayList<>(owner.keySet());
+        everyOwned.sort(ORDER);
+        wave(blocks, probe, logs, assignable, centers, owner, everyOwned, false);
+        for (Map.Entry<Pos, Integer> claimed : owner.entrySet()) {
+            Pos cell = claimed.getKey();
+            if (trunkCells.contains(cell)) {
+                continue;
+            }
+            (logs.contains(cell) ? branches : crowns).get(claimed.getValue()).add(cell);
+        }
+        List<Trunk> trunks = new ArrayList<>(clusters.size());
+        for (int i = 0; i < clusters.size(); i++) {
+            if (crowns.get(i).isEmpty()) {
+                // A crownless trunk is a woodpile, not a tree: a fallen log lies flat, every
+                // log "grounded", and read as an N-wide tree (decision: Luiz, 2026-08-02). Its
+                // wood goes unclaimed and the report carries it as stray.
+                continue;
+            }
+            branches.get(i).sort(ORDER);
+            crowns.get(i).sort(ORDER);
+            trunks.add(new Trunk(clusters.get(i), columns.get(i), branches.get(i), crowns.get(i)));
+        }
+        return trunks;
+    }
+
+    /**
+     * One ownership wave over the mass, round by round until nothing more can be claimed. A cell
+     * two waves reach in the same round is the contested boundary, and only there does
+     * nearest-centroid speak (ties to the earlier trunk); the claim map keeps the outcome
+     * independent of iteration order. {@code woodOnly} restricts the wave to log-to-log — the
+     * lineage pass before any leaf carries ownership.
+     */
+    private static void wave(Map<Pos, BlockKind> blocks, BlockProbe probe, Set<Pos> logs,
+                             Set<Pos> assignable, List<Pos> centers, Map<Pos, Integer> owner,
+                             List<Pos> seeds, boolean woodOnly) {
+        List<Pos> frontier = seeds;
         while (!frontier.isEmpty()) {
-            // One wave: every tree grows one attachment step. A cell two waves reach in the
-            // same round is the genuinely contested boundary, and only there does the old
-            // nearest-centroid rule speak (ties to the earlier trunk). The claim map makes the
-            // outcome independent of iteration order.
             Map<Pos, Integer> claims = new LinkedHashMap<>();
             for (Pos cell : frontier) {
                 int tree = owner.get(cell);
@@ -177,6 +215,10 @@ public final class TreeShape {
                             BlockKind nextKind = blocks.get(next);
                             if (!attached(kind, nextKind, dx, dy, dz)
                                     || !assignable.contains(next) || owner.containsKey(next)) {
+                                continue;
+                            }
+                            if (woodOnly
+                                    && !(kind == BlockKind.LOG && nextKind == BlockKind.LOG)) {
                                 continue;
                             }
                             // Ownership enters a GROUNDED log only from another LOG — branches
@@ -200,26 +242,6 @@ public final class TreeShape {
             frontier = new ArrayList<>(claims.keySet());
             frontier.sort(ORDER);
         }
-        for (Map.Entry<Pos, Integer> claimed : owner.entrySet()) {
-            Pos cell = claimed.getKey();
-            if (trunkCells.contains(cell)) {
-                continue;
-            }
-            (logs.contains(cell) ? branches : crowns).get(claimed.getValue()).add(cell);
-        }
-        List<Trunk> trunks = new ArrayList<>(clusters.size());
-        for (int i = 0; i < clusters.size(); i++) {
-            if (crowns.get(i).isEmpty()) {
-                // A crownless trunk is a woodpile, not a tree: a fallen log lies flat, every
-                // log "grounded", and read as an N-wide tree (decision: Luiz, 2026-08-02). Its
-                // wood goes unclaimed and the report carries it as stray.
-                continue;
-            }
-            branches.get(i).sort(ORDER);
-            crowns.get(i).sort(ORDER);
-            trunks.add(new Trunk(clusters.get(i), columns.get(i), branches.get(i), crowns.get(i)));
-        }
-        return trunks;
     }
 
     /**
