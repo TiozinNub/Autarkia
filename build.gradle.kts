@@ -122,6 +122,14 @@ tasks.named<Test>("test") {
     useJUnitPlatform()
 }
 
+// See the same block in anima/build.gradle.kts for the full story: Gradle rewrites an archive in
+// place, a running dev game reads mod classes out of it lazily, and the two together corrupt
+// every class the live JVM has not loaded yet. Unlinking first puts the rewrite on a new inode,
+// which the running game's open file descriptor never follows.
+tasks.withType<Jar>().configureEach {
+    doFirst { archiveFile.get().asFile.delete() }
+}
+
 loom {
     // The BRANCH's own source dir (`autarkia/src`) — `sc.branch.project` is the safe way to
     // say `project(":autarkia")` from inside a node.
@@ -138,9 +146,23 @@ loom {
     runConfigs.all {
         preferGradleTask = true
         generateRunConfig = true
-        // Shared between versions, but client and server each get their own directory
-        runDirectory = rootProject.file("run/$name")
+        // Shared between versions, but client and server each get their own directory.
+        // -PrunDir moves it. That is what lets a SECOND, isolated server run beside the shared
+        // one — its own world, port and state. scripts/server-headless.sh already offers that
+        // through AUTARKIA_SERVER_DIR; without this the override reached the harness but not the
+        // game, and both servers landed in run/server on top of each other.
+        runDirectory = rootProject.file(providers.gradleProperty("runDir").getOrElse("run/$name"))
         jvmArguments.add("-Dmixin.debug.export=true") // Exports transformed classes for debugging
+
+        // Hot swap (-Photswap, or scripts/{client,server}.sh --hotswap): open a JDWP port so
+        // scripts/hotswap.sh can push recompiled classes into the RUNNING game, and turn on
+        // enhanced class redefinition so a swap may add methods and fields — stock HotSpot
+        // allows method bodies only. Client and server get their own port so both can be
+        // swapped at once. suspend=n: the game boots without waiting for anyone to attach.
+        if (providers.gradleProperty("hotswap").isPresent) {
+            jvmArguments.add("-XX:+AllowEnhancedClassRedefinition")
+            jvmArguments.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:${if (name == "client") 5006 else 5005}")
+        }
 
         // Real Microsoft-account login via DevAuth Neo: scripts/client.sh --auth
         if (name == "client" && providers.gradleProperty("devauth").isPresent) {
@@ -159,6 +181,21 @@ java {
     toolchain {
         vendor = JvmVendorSpec.ADOPTIUM
         languageVersion = JavaLanguageVersion.of(requiredJava.majorVersion)
+    }
+}
+
+// Under -Photswap the GAME runs on the JetBrains Runtime instead of the Adoptium toolchain.
+// JBR is HotSpot with DCEVM merged in, so `-XX:+AllowEnhancedClassRedefinition` (set above)
+// lets a redefinition add methods and fields rather than only rewrite method bodies. Nothing
+// else moves: compilation, the jars and CI stay on Adoptium, so a hot-swapped session and a
+// normal one build byte-identical output. Install with scripts/install-jbr.sh.
+if (providers.gradleProperty("hotswap").isPresent) {
+    val jbr = javaToolchains.launcherFor {
+        vendor = JvmVendorSpec.JETBRAINS
+        languageVersion = JavaLanguageVersion.of(requiredJava.majorVersion)
+    }
+    tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
+        javaLauncher = jbr
     }
 }
 
