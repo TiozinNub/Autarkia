@@ -181,6 +181,7 @@ public final class AutarkiaCommands {
                         // What the resolved Person REMEMBERS (the knowledge store) — beliefs, not
                         // world state; "view" renders those beliefs as particles + discovery chat.
                         .then(AgentCommands.knowledge())
+                        .then(AgentCommands.horizon())
                         // Who is holding what — site claims and item leases, one semantics, two
                         // keyspaces. The readout contention never had.
                         .then(AgentCommands.claims())
