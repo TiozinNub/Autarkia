@@ -393,7 +393,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             // trunk top is the card's mast extension, and walking can never gain that height.
             if (feet.y() != layer.y()) {
                 if (!onAxis) {
-                    return walkToAxis(ctx, "the mast at layer " + layer.y());
+                    return walkToAxis(ctx, layer.y(), "the mast at layer " + layer.y());
                 }
                 walkIssued = false;
                 if (feet.y() > layer.y()) {
@@ -591,11 +591,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return fail(ctx, "the climb refused toward " + toward);
     }
 
-    /** Walk back over the shaft at the current height — the between-layers return to center. */
-    private TaskStatus walkToAxis(BrainContext ctx, String why) {
-        Pos feet = ctx.percepts().position();
+    /**
+     * Walk back to the axis AT the LAYER'S HEIGHT, atop whatever pillar remains, never into it:
+     * the site's ground cell is the pillar base, a solid log no path can end inside.
+     */
+    private TaskStatus walkToAxis(BrainContext ctx, int targetY, String why) {
         if (!walkIssued) {
-            ctx.actuators().mover().moveTo(siteX, feet.y(), siteZ);
+            ctx.actuators().mover().moveTo(siteX, targetY, siteZ);
             walkIssued = true;
             walkTicks = 0;
             return TaskStatus.RUNNING;
@@ -608,12 +610,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
         Pos now = ctx.percepts().position();
         if (!(now.x() == siteX && now.z() == siteZ)) {
             if (!axisFallback) {
-                // No path at this height (a drop chase can end on an awkward canopy pocket):
-                // go down to the site's ground instead — dropping off an edge is a move the
-                // pathfinder knows — and the between-layers logic re-climbs the pillar.
+                // One more try from wherever the first walk ended — a drop chase can strand
+                // her on a canopy pocket whose first path attempt fails mid-decay.
                 axisFallback = true;
-                Pos ground = plan.mast().isEmpty() ? plan.entry() : plan.mast().get(0);
-                ctx.actuators().mover().moveTo(ground.x(), ground.y(), ground.z());
+                ctx.actuators().mover().moveTo(siteX, targetY, siteZ);
                 walkIssued = true;
                 walkTicks = 0;
                 return TaskStatus.RUNNING;
