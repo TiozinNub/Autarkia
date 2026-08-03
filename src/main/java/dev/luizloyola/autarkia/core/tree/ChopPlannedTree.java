@@ -107,6 +107,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private int gatherWalks;
     /** Walks spent on this layer's canopy drops before descending — Luiz's original step 4. */
     private int layerGatherWalks;
+    /** The return-to-axis walk gets one fallback: down to the site's ground, then re-climb. */
+    private boolean axisFallback;
     /** Where the feet last were, and since when — the stuck watchdog's memory. */
     private Pos lastSpot;
     private long restingSince = -1;
@@ -605,8 +607,20 @@ public final class ChopPlannedTree implements PrimitiveTask {
         walkIssued = false;
         Pos now = ctx.percepts().position();
         if (!(now.x() == siteX && now.z() == siteZ)) {
+            if (!axisFallback) {
+                // No path at this height (a drop chase can end on an awkward canopy pocket):
+                // go down to the site's ground instead — dropping off an edge is a move the
+                // pathfinder knows — and the between-layers logic re-climbs the pillar.
+                axisFallback = true;
+                Pos ground = plan.mast().isEmpty() ? plan.entry() : plan.mast().get(0);
+                ctx.actuators().mover().moveTo(ground.x(), ground.y(), ground.z());
+                walkIssued = true;
+                walkTicks = 0;
+                return TaskStatus.RUNNING;
+            }
             return fail(ctx, "could not return to " + why);
         }
+        axisFallback = false;
         return TaskStatus.RUNNING;
     }
 
