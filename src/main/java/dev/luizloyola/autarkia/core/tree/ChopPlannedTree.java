@@ -747,7 +747,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 standing.add(cell);
             }
         }
-        if (standing.isEmpty() && plan.refusals().isEmpty() && leftovers.isEmpty()) {
+        // The world's census is the only judge: a "leftover" whose cell a later chew broke
+        // anyway is a breadcrumb, not a debt — 0 standing with 1 listed once read as partial.
+        if (standing.isEmpty() && plan.refusals().isEmpty()) {
             ctx.journal().record(Category.BRAIN, "chop", "felled clean at " + shortPos(anchor)
                     + " — the canopy is decay's problem now");
             ctx.knowledge().forget(Pois.TREE, anchor);
