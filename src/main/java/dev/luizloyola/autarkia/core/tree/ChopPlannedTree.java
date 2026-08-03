@@ -519,8 +519,12 @@ public final class ChopPlannedTree implements PrimitiveTask {
             for (int dy = 0; dy <= 1; dy++) {
                 Pos c = new Pos(stand.x(), stand.y() + dy, stand.z());
                 BlockKind k = probe.at(c.x(), c.y(), c.z());
-                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
-                        && tryArm(ctx, c)) {
+                // On the SITE column a log is either the tree's or her own pillar — a gather can
+                // bring her back at height with no descent to reclaim it — and either way it is
+                // hers to bite.
+                boolean hers = treeBlocks.contains(c)
+                        || (c.x() == siteX && c.z() == siteZ);
+                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && hers && tryArm(ctx, c)) {
                     return TaskStatus.RUNNING;
                 }
             }
