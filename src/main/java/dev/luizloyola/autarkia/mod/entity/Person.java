@@ -968,24 +968,29 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * Collects nearby dropped items into the carried inventory — a Person gathers loot by walking
-     * over it, exactly as a player does. Deliberately <b>not</b> gated on the {@code mobGriefing}
-     * gamerule: picking things up is intended behaviour, not the incidental griefing that gate guards
-     * against.
+     * Collects nearby dropped items into the carried inventory — the counterpart to
+     * {@link #dropCustomDeathLoot drop-on-death}: a Person gathers loot by walking over it, as a
+     * player does. Deliberately <b>not</b> gated on the {@code mobGriefing} gamerule: a Person
+     * surviving by picking things up is intended behaviour, not incidental griefing.
      *
-     * <p>The scan mirrors vanilla's {@code Mob} looting reach — a one-block horizontal box around the
-     * body — skipping empty stacks and any still within their pickup delay, so fresh death drops and
-     * a player's Q-tossed item aren't snatched instantly. Whatever <em>fits</em> is removed from the
-     * ground stack and flies in on every client ({@link #take}); a full inventory leaves the item
-     * lying. Items {@code target}ed at a player aren't special-cased — {@code ItemEntity} exposes no
-     * accessor for it, and vanilla's own mob looting ignores it the same way.
+     * <p>The scan mirrors vanilla's <b>{@code Player}</b> reach — one block horizontally, half a
+     * block vertically ({@code Player.aiStep}'s on-foot box; the flat {@code Mob} looting box has
+     * no vertical slack). The half block is not cosmetic: an item on a leaf one block above the
+     * feet sits about 0.2 above the head, inside a player's reach and outside a mob's, and fifty
+     * Persons pathed forever at a felled log caught in the canopy.
+     *
+     * <p>Empty stacks and any still within their pickup delay are skipped. Each catch is added to
+     * the core {@link Inventory}, losslessly translated; whatever <em>fits</em> leaves the ground
+     * stack and flies in on every client ({@link #take}), and a full inventory leaves the item
+     * lying there. Items {@code target}ed at a player are not special-cased — {@code ItemEntity}
+     * exposes no accessor, and vanilla's own mob looting ignores it too.
      */
     private void pickUpNearbyItems(ServerLevel level) {
         if (!isAlive()) {
             return;
         }
         for (ItemEntity itemEntity :
-                level.getEntitiesOfClass(ItemEntity.class, getBoundingBox().inflate(1.0, 0.0, 1.0))) {
+                level.getEntitiesOfClass(ItemEntity.class, getBoundingBox().inflate(1.0, 0.5, 1.0))) {
             if (itemEntity.isRemoved() || itemEntity.hasPickUpDelay()) {
                 continue;
             }
