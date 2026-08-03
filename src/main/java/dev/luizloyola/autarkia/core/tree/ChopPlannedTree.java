@@ -82,9 +82,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private java.util.Set<Pos> treeBlocks;
     private boolean boostUp;
     private Pos boostCell;
-    /** One exact re-walk to the stand before a refusal becomes a give-up — stand slop is real. */
-    private boolean standRetried;
-    private boolean retryWalking;
+    /** Whether the rise in flight is a boost (stand +1) or a climb up the mast to a layer. */
+    private boolean riseForBoost;
     /** Everything the card promised that this run could not serve — the reckoning of the exit. */
     private final List<Pos> leftovers = new ArrayList<>();
     private String ending;
@@ -353,58 +352,38 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return TaskStatus.RUNNING;
             }
             riseIssued = false;
-            boostUp = rise == RiseState.RISEN;
-            if (!boostUp) {
+            if (rise == RiseState.RISEN) {
+                boostUp = riseForBoost;
+            } else if (riseForBoost) {
                 giveUpMove(ctx, "the boost refused");
-                return TaskStatus.RUNNING;
+            } else {
+                return fail(ctx, "the climb refused on the way to a high layer");
             }
         }
         if (layerIndex >= plan.layers().size()) {
             return descendToGround(ctx);
         }
         ChopPlan.Layer layer = plan.layers().get(layerIndex);
+        Pos feet = ctx.percepts().position();
+        boolean onAxis = feet.x() == plan.entry().x() && feet.z() == plan.entry().z();
         if (moveIndex < 0) {
-            // Between layers: back to center, then mine the pillar underfoot down to this layer.
-            Pos feet = ctx.percepts().position();
-            boolean onAxis = feet.x() == plan.entry().x() && feet.z() == plan.entry().z();
-            if (feet.y() > layer.y()) {
-                if (onAxis) {
-                    walkIssued = false;
+            // Between layers: back to center, then to the layer's height — mining the pillar
+            // underfoot on the way down, RISING on her own logs on the way up: a layer above the
+            // trunk top is the card's mast extension, and walking can never gain that height.
+            if (feet.y() != layer.y()) {
+                if (!onAxis) {
+                    return walkToAxis(ctx, "the mast at layer " + layer.y());
+                }
+                walkIssued = false;
+                if (feet.y() > layer.y()) {
                     Pos below = new Pos(feet.x(), feet.y() - 1, feet.z());
                     if (ctx.percepts().blocks().at(below.x(), below.y(), below.z())
                             != BlockKind.AIR) {
                         return beginBreak(ctx, below, "the pillar underfoot");
                     }
-                    // Air below the feet CELL yet not falling: she is straddling the cell
-                    // edge, held up by a neighbour (run 3 froze at x .51 exactly so). Walk to
-                    // the shaft's own centre and gravity does the rest.
-                    if (!walkIssued) {
-                        ctx.actuators().mover().moveTo(feet.x(), feet.y(), feet.z());
-                        walkIssued = true;
-                        walkTicks = 0;
-                    } else if (ctx.actuators().mover().state() != MoveState.MOVING
-                            || ++walkTicks >= 40) {
-                        walkIssued = false;
-                    }
-                    return TaskStatus.RUNNING;
+                    return TaskStatus.RUNNING; // mid-fall between pillar cells
                 }
-                if (!walkIssued) {
-                    ctx.actuators().mover().moveTo(
-                            plan.entry().x(), feet.y(), plan.entry().z());
-                    walkIssued = true;
-                    walkTicks = 0;
-                    return TaskStatus.RUNNING;
-                }
-                if (ctx.actuators().mover().state() == MoveState.MOVING
-                        && ++walkTicks < WALK_TIMEOUT_TICKS) {
-                    return TaskStatus.RUNNING;
-                }
-                walkIssued = false;
-                if (!(ctx.percepts().position().x() == plan.entry().x()
-                        && ctx.percepts().position().z() == plan.entry().z())) {
-                    return fail(ctx, "could not return to the mast at layer " + layer.y());
-                }
-                return TaskStatus.RUNNING;
+                return climbOne(ctx, "layer " + layer.y());
             }
             moveIndex = 0;
             return TaskStatus.RUNNING;
@@ -424,16 +403,24 @@ public final class ChopPlannedTree implements PrimitiveTask {
             finishMove(ctx);
             return TaskStatus.RUNNING;
         }
-        // STAND first, then dig, then swing: every line was computed from the card's stand, and
-        // swinging from elsewhere cost the fancy oak two moves. En route the stand's column is
-        // chewed standable and in-reach tunnel digs are eaten — they ARE the way there.
+        // ARM first: the chew-chained swing from wherever she stands is the cheapest answer, and
+        // begin() is the one authority on whether it lands — demanding the exact stand for
+        // swings the arm could already serve is what the "no way to the stand" partials were.
+        if ((!move.boost() || boostUp) && tryArm(ctx, target)) {
+            return TaskStatus.RUNNING;
+        }
         if (!atStand(ctx, move)) {
+            Pos stand = move.stand();
+            if (stand.x() == plan.entry().x() && stand.z() == plan.entry().z()
+                    && stand.y() > feet.y() && onAxis) {
+                // The stand is the mast itself, above her: this layer rides the extension.
+                return climbOne(ctx, "the stand at " + shortPos(stand));
+            }
             for (int dy = 0; dy <= 1; dy++) {
-                Pos c = new Pos(move.stand().x(), move.stand().y() + dy, move.stand().z());
+                Pos c = new Pos(stand.x(), stand.y() + dy, stand.z());
                 BlockKind k = probe.at(c.x(), c.y(), c.z());
                 if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
-                        && inReach(ctx, c)) {
-                    beginWorkBreak(ctx, c, "the stand");
+                        && tryArm(ctx, c)) {
                     return TaskStatus.RUNNING;
                 }
             }
@@ -443,15 +430,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
                     digsAhead.poll();
                     continue;
                 }
-                if (inReach(ctx, dig)) {
-                    beginWorkBreak(ctx, dig, "the way through");
+                if (inReach(ctx, dig) && tryArm(ctx, dig)) {
                     return TaskStatus.RUNNING;
                 }
                 break;
             }
             if (!walkIssued) {
-                ctx.actuators().mover().moveTo(
-                        move.stand().x(), move.stand().y(), move.stand().z());
+                ctx.actuators().mover().moveTo(stand.x(), stand.y(), stand.z());
                 walkIssued = true;
                 walkTicks = 0;
                 return TaskStatus.RUNNING;
@@ -461,19 +446,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return TaskStatus.RUNNING;
             }
             walkIssued = false;
-            if (!atStand(ctx, move) && !inReach(ctx, target)) {
-                giveUpMove(ctx, "no way to the stand at " + shortPos(move.stand()));
+            if (!atStand(ctx, move)) {
+                giveUpMove(ctx, "no way to the stand at " + shortPos(stand)
+                        + " " + armForensics(ctx, target));
             }
             return TaskStatus.RUNNING;
         }
         walkIssued = false;
-        if (retryWalking) {
-            if (ctx.actuators().mover().state() == MoveState.MOVING
-                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
-                return TaskStatus.RUNNING;
-            }
-            retryWalking = false; // landed (or gave up landing) — one more try at the arm work
-        }
         // At the stand. Digs still standing and in reach are the swing's line; digs beyond
         // reach were the tunnel here, and standing here proves that access — drop them.
         while (!digsAhead.isEmpty()) {
@@ -482,7 +461,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 digsAhead.poll();
                 continue;
             }
-            beginWorkBreak(ctx, dig, "the way through");
+            if (tryArm(ctx, dig)) {
+                return TaskStatus.RUNNING;
+            }
+            giveUpMove(ctx, "the arm refused the way through " + armForensics(ctx, dig));
             return TaskStatus.RUNNING;
         }
         if (move.boost() && !boostUp) {
@@ -491,12 +473,49 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 giveUpMove(ctx, "no boost from " + shortPos(move.stand()));
                 return TaskStatus.RUNNING;
             }
+            riseForBoost = true;
             riseIssued = true;
             return TaskStatus.RUNNING;
         }
-        // The swing: no second-guessing the arm's reach — begin() decides, the chew inside
-        // handles the path, and its give-up is the only "cannot serve" left.
-        beginWorkBreak(ctx, target, "the mark");
+        if (tryArm(ctx, target)) {
+            return TaskStatus.RUNNING;
+        }
+        giveUpMove(ctx, "the arm refused the mark " + armForensics(ctx, target));
+        return TaskStatus.RUNNING;
+    }
+
+    /** One rise on her own log toward something above — a climb, not a boost. */
+    private TaskStatus climbOne(BrainContext ctx, String toward) {
+        String log = carriedLog(ctx);
+        if (log == null) {
+            return fail(ctx, "no log to climb on toward " + toward);
+        }
+        if (ctx.actuators().riser().up(log)) {
+            riseForBoost = false;
+            riseIssued = true;
+            return TaskStatus.RUNNING;
+        }
+        return fail(ctx, "the climb refused toward " + toward);
+    }
+
+    /** Walk back over the shaft at the current height — the between-layers return to center. */
+    private TaskStatus walkToAxis(BrainContext ctx, String why) {
+        Pos feet = ctx.percepts().position();
+        if (!walkIssued) {
+            ctx.actuators().mover().moveTo(plan.entry().x(), feet.y(), plan.entry().z());
+            walkIssued = true;
+            walkTicks = 0;
+            return TaskStatus.RUNNING;
+        }
+        if (ctx.actuators().mover().state() == MoveState.MOVING
+                && ++walkTicks < WALK_TIMEOUT_TICKS) {
+            return TaskStatus.RUNNING;
+        }
+        walkIssued = false;
+        Pos now = ctx.percepts().position();
+        if (!(now.x() == plan.entry().x() && now.z() == plan.entry().z())) {
+            return fail(ctx, "could not return to " + why);
+        }
         return TaskStatus.RUNNING;
     }
 
@@ -634,36 +653,26 @@ public final class ChopPlannedTree implements PrimitiveTask {
     }
 
     /**
-     * Begin a WORK-phase break, chewing the eye line when the arm path refuses: the card's digs
-     * were planned from its stands, and real feet leave one more leaf on the line. When even the
-     * chew refuses, the move gives way.
+     * One real swing attempt from wherever she stands: chew-chain the mark, then let
+     * {@code begin()} decide. True means the arm is working; false means this spot cannot serve
+     * the cell.
      */
-    private void beginWorkBreak(BrainContext ctx, Pos cell, String what) {
-        // Chew-first, same as the shaft, and the blocker is the ARM'S own ANSWER: a self-sampled
-        // line measures from somewhere the eyes are not and disagrees with the refusal it cures.
+    private boolean tryArm(BrainContext ctx, Pos cell) {
         Pos mark = chewMark(ctx, cell);
         if (ctx.actuators().breaker().begin(mark)) {
             breaking = true;
-            return;
+            return true;
         }
-        Pos blocker = mark.equals(cell) ? null : mark;
-        if (!standRetried) {
-            // Once per move: walk the stand again, exactly, before surrendering — the first
-            // walk's arrival tolerance is a whole cell of slop the arm does not have.
-            standRetried = true;
-            retryWalking = true;
-            ChopPlan.Move move = plan.layers().get(layerIndex).moves().get(moveIndex);
-            ctx.actuators().mover().moveTo(move.stand().x(), move.stand().y(), move.stand().z());
-            walkTicks = 0;
-            return;
-        }
-        // Forensic give-up: enough evidence that the next grind run convicts a cause, not a
-        // symptom.
+        return false;
+    }
+
+    /** The give-up evidence: feet, the arm's path answer, and what the probe calls the mark. */
+    private String armForensics(BrainContext ctx, Pos cell) {
+        Pos mark = chewMark(ctx, cell);
         Pos feet = ctx.percepts().position();
-        giveUpMove(ctx, "the arm refused " + what + " at " + shortPos(mark)
-                + " [feet " + shortPos(feet)
-                + ", path " + (blocker == null ? "clear" : "blocked by " + shortPos(blocker))
-                + ", mark is " + ctx.percepts().blocks().at(mark.x(), mark.y(), mark.z()) + "]");
+        return "[feet " + shortPos(feet)
+                + ", path " + (mark.equals(cell) ? "clear" : "blocked by " + shortPos(mark))
+                + ", mark is " + ctx.percepts().blocks().at(mark.x(), mark.y(), mark.z()) + "]";
     }
 
     /** Abandon the current move cleanly: its target is a leftover, the dance goes on. */
@@ -675,8 +684,6 @@ public final class ChopPlannedTree implements PrimitiveTask {
         digsAhead = null;
         walkIssued = false;
         boostUp = false;
-        standRetried = false;
-        retryWalking = false;
         moveIndex++;
     }
 
@@ -693,8 +700,6 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         digsAhead = null;
         walkIssued = false;
-        standRetried = false;
-        retryWalking = false;
         moveIndex++;
     }
 
