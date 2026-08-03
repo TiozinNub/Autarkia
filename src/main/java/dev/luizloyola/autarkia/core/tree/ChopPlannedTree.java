@@ -393,7 +393,11 @@ public final class ChopPlannedTree implements PrimitiveTask {
             // trunk top is the card's mast extension, and walking can never gain that height.
             if (feet.y() != layer.y()) {
                 if (!onAxis) {
-                    return walkToAxis(ctx, layer.y(), "the mast at layer " + layer.y());
+                    // Descending: atop the pillar remnant at the layer's height. Climbing: the
+                    // axis at HER height — the rise happens after arrival, and a mid-air goal above
+                    // an unbuilt pillar has no path.
+                    return walkToAxis(ctx, Math.min(feet.y(), layer.y()),
+                            "the mast at layer " + layer.y());
                 }
                 walkIssued = false;
                 if (feet.y() > layer.y()) {
