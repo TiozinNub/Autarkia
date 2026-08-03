@@ -212,7 +212,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
             // and a sapling oak was refused from 0.34 off-centre.
             if (besideEntry(ctx)) {
                 walkIssued = false;
-                return beginBreak(ctx, pairCell, "the way in");
+                if (tryArm(ctx, pairCell)) {
+                    return TaskStatus.RUNNING;
+                }
+                return fail(ctx, "the arm refused the way in " + armForensics(ctx, pairCell));
             }
             Pos stand = nearestDoorstep(ctx);
             // The doorstep must be STANDABLE before a walk can deliver her — a sapling oak's own
@@ -380,6 +383,19 @@ public final class ChopPlannedTree implements PrimitiveTask {
                     if (ctx.percepts().blocks().at(below.x(), below.y(), below.z())
                             != BlockKind.AIR) {
                         return beginBreak(ctx, below, "the pillar underfoot");
+                    }
+                    // Air below the feet cell, yet not falling: a neighbouring block's edge
+                    // is holding her up (the recurring stuck-at-height). Mine the supporter —
+                    // it is tree wood or her own pillar, so it is harvest either way — and
+                    // gravity settles her into the shaft.
+                    for (int[] side : new int[][] {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                        Pos support = new Pos(feet.x() + side[0], feet.y() - 1,
+                                feet.z() + side[1]);
+                        BlockKind kind = ctx.percepts().blocks()
+                                .at(support.x(), support.y(), support.z());
+                        if (kind != BlockKind.AIR && tryArm(ctx, support)) {
+                            return TaskStatus.RUNNING;
+                        }
                     }
                     return TaskStatus.RUNNING; // mid-fall between pillar cells
                 }
