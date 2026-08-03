@@ -654,6 +654,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             // The mark is down, but the card charged this move with en-route WOOD (bonus chops
             // riding the digs list). Those are promised logs, not access: break what still
             // stands before the move closes, or the verify finds wood nobody was assigned.
+            boolean walkForIt = false;
             while (digsAhead != null && !digsAhead.isEmpty()) {
                 Pos dig = digsAhead.peek();
                 if (probe.at(dig.x(), dig.y(), dig.z()) != BlockKind.LOG) {
@@ -663,14 +664,26 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 if (tryArm(ctx, dig)) {
                     return TaskStatus.RUNNING;
                 }
+                // Out of the arm's range is not a refusal — it is a distance. The card put a
+                // STAND on this move that reaches its cells, and a target already broken by an
+                // earlier swing means she never walked there: go, then ask again, because the
+                // giving-up belongs at the stand. Common in a crowded grove, where a dense
+                // canopy drops more logs as somebody else's swing-line bonus — one abandoned
+                // base log exited a whole fell partial.
+                if (!atStand(ctx, move) && !inReach(ctx, dig)) {
+                    walkForIt = true;
+                    break;
+                }
                 leftovers.add(dig);
                 ctx.journal().record(Category.BRAIN, "chop", "left " + shortPos(dig)
                         + " standing — a promised bonus chop out of the arm's answers "
                         + armForensics(ctx, dig));
                 digsAhead.poll();
             }
-            finishMove(ctx);
-            return TaskStatus.RUNNING;
+            if (!walkForIt) {
+                finishMove(ctx);
+                return TaskStatus.RUNNING;
+            }
         }
         // ARM first: the chew-chained swing from wherever she stands is the cheapest answer, and
         // begin() is the one authority on whether it lands — demanding the exact stand for
@@ -887,7 +900,14 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return beginBreak(ctx, below, "the last of the pillar");
             }
         }
-        if (!onAxis && pillarStands(ctx)) {
+        // Anything of hers still standing in the column, bottom-up — underfoot when she rode it
+        // down, from beside or below when she came back to its foot. A pillar is only ever a few
+        // rungs, so the arm covers it from the ground.
+        Pos rung = lowestOwnRung(ctx);
+        if (rung != null) {
+            if (inReach(ctx, rung) && tryArm(ctx, rung)) {
+                return TaskStatus.RUNNING;
+            }
             if (!walkIssued) {
                 ctx.actuators().mover().moveTo(siteX, plan.entry().y(), siteZ);
                 walkIssued = true;
@@ -899,24 +919,16 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return TaskStatus.RUNNING;
             }
             walkIssued = false;
-            // Within arm's length is as good as underfoot — a rung she can reach from beside
-            // the column comes down without the walk landing exactly.
-            Pos rung = lowestOwnRung(ctx);
-            if (rung != null && inReach(ctx, rung) && tryArm(ctx, rung)) {
+            if (inReach(ctx, rung) && tryArm(ctx, rung)) {
                 return TaskStatus.RUNNING;
             }
             ctx.journal().record(Category.BRAIN, "chop", "could not get back to the pillar at "
-                    + shortPos(new Pos(siteX, plan.entry().y(), siteZ))
-                    + " — leaving it to the verify sweep");
+                    + shortPos(rung) + " — leaving it to the verify sweep");
         }
         walkIssued = false;
         phase = Phase.GATHER;
         gatherWalks = 0;
         return TaskStatus.RUNNING;
-    }
-
-    private boolean pillarStands(BrainContext ctx) {
-        return lowestOwnRung(ctx) != null;
     }
 
     /** The lowest log still standing in the working column, ground upward — or null. */
@@ -1129,12 +1141,22 @@ public final class ChopPlannedTree implements PrimitiveTask {
         Pos mark = cell;
         for (int hop = 0; hop < 4; hop++) {
             Pos b = ctx.actuators().breaker().obstruction(mark);
-            if (b == null || b.equals(mark) || !treeBlocks.contains(b)) {
+            if (b == null || b.equals(mark) || !mine(b)) {
                 break;
             }
             mark = b;
         }
         return mark;
+    }
+
+    /**
+     * Whether this cell is HERS to bite on the way to something else: the tree she is felling, or
+     * her own working column. The column had to be added — the wood she places there is not the
+     * tree's, so the chew chain stopped dead at her own pillar and called a rung well inside the
+     * arm unreachable, because the rung BELOW it blocked the line and was not on the menu.
+     */
+    private boolean mine(Pos cell) {
+        return treeBlocks.contains(cell) || (cell.x() == siteX && cell.z() == siteZ);
     }
 
     private TaskStatus beginBreak(BrainContext ctx, Pos cell, String what) {
