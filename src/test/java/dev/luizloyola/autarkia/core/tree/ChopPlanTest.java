@@ -119,17 +119,31 @@ class ChopPlanTest {
     }
 
     @Test
-    void aFloatingRemnantIsNeverClimbedThroughItsOwnFoot() {
-        // A remnant: its lowest log is in mid-air, so there is no stump to cut a doorway in and
-        // nothing to walk to. Plain or not, a remnant gets the mast beside it.
+    void aFloatingRemnantIsPlannedFromTheGroundSheStandsOn() {
+        // A floating remnant, lowest log six blocks off the floor. Told the ground Y, it plans as
+        // a tree whose wood begins high — a pillar from the ground, no cell of air ever taken for
+        // a floor. Told nothing, it planned a work layer in mid-air.
         TreeShape.Trunk remnant = new TreeShape.Trunk(
                 List.of(new Pos(0, 66, 0)), column(0, 0, 67, 72),
                 List.of(), List.of(new Pos(0, 73, 0)));
 
         assertTrue(ChopPlan.of(remnant).climbsTheTrunk(),
                 "standing on the ground, a plain trunk climbs itself");
-        assertFalse(ChopPlan.of(remnant, false).climbsTheTrunk(),
+
+        ChopPlan plan = ChopPlan.of(remnant, 60);
+
+        assertFalse(plan.climbsTheTrunk(),
                 "hanging in the air, the same shape takes the pillar beside it");
+        assertEquals(60, plan.mast().get(0).y(), "the pillar is footed on the floor, not the wood");
+        assertEquals(8, plan.mast().size(), "and rises until the arm sees the top");
+        assertTrue(plan.refusals().isEmpty());
+        for (ChopPlan.Layer layer : plan.layers()) {
+            assertTrue(layer.y() >= 60, "no layer is planned in mid-air: " + layer.y());
+        }
+        Set<Pos> felled = felled(plan);
+        for (Pos log : column(0, 0, 66, 72)) {
+            assertTrue(felled.contains(log), "every hanging log comes down: " + log);
+        }
     }
 
     @Test

@@ -150,15 +150,24 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
 
     /** Compiles the dance card for one tree. Pure and deterministic: no world, no randomness. */
     public static ChopPlan of(TreeShape.Trunk tree) {
-        return of(tree, true);
+        List<Pos> base = new ArrayList<>(tree.base());
+        base.sort(ORDER);
+        return of(tree, base.get(0).y());
     }
 
     /**
-     * The same card for wood that does not stand on the ground — a half-felled remnant, resumed on
-     * the memory and the claim (individuation refuses to call floating wood a tree). Its "stump" is
-     * mid-air: no doorway, no climbing through, so a remnant always gets the mast beside it.
+     * The same card for wood whose lowest log is not standing on the ground — a half-felled
+     * remnant resumed on the authority of the memory and the claim, since individuation rightly
+     * refuses to call floating wood a tree. Everything the card calls free is free at the level
+     * she can actually WALK on, so that level is an input, not the stump's: assuming otherwise
+     * planned a layer in mid-air and stood her on the ground reaching for it.
+     *
+     * <p>A remnant is never climbed through either — its stump is a cell of air, so only wood
+     * standing on the ground is its own elevator.
+     *
+     * @param groundY the level she can stand on beside this wood — the mast's own footing
      */
-    public static ChopPlan of(TreeShape.Trunk tree, boolean grounded) {
+    public static ChopPlan of(TreeShape.Trunk tree, int groundY) {
         List<Pos> base = new ArrayList<>(tree.base());
         base.sort(ORDER);
         Pos entry = base.get(0);
@@ -189,8 +198,8 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         // tree loses cells only from the top and any abandonment leaves a shorter TREE. Site:
         // the neighbouring column with the least tree matter to dig through, ties by the total
         // order.
-        int rungs = pillarCost(trunkTop - baseY);
-        boolean climbTheTrunk = rungs > 0 && grounded
+        int rungs = pillarCost(trunkTop - groundY);
+        boolean climbTheTrunk = rungs > 0 && groundY == baseY
                 && tree.base().size() == 1 && tree.branches().isEmpty();
         int mx = entry.x();
         int mz = entry.z();
@@ -227,12 +236,12 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         // overhead.
         List<Pos> mast = new ArrayList<>();
         if (rungs > 0) {
-            int mastTop = climbTheTrunk ? trunkTop - 1 : baseY + rungs;
-            for (int y = baseY; y < mastTop; y++) {
+            int mastTop = climbTheTrunk ? trunkTop - 1 : groundY + rungs;
+            for (int y = groundY; y < mastTop; y++) {
                 mast.add(new Pos(mx, y, mz));
             }
         }
-        int topFeet = mast.isEmpty() ? baseY : mast.get(mast.size() - 1).y() + 1;
+        int topFeet = mast.isEmpty() ? groundY : mast.get(mast.size() - 1).y() + 1;
 
         // Every log is a target (base, columns, branches) less what the ascent eats, struck
         // off by the simulation below: the mast column's leaves beside the tree, the whole trunk
@@ -267,7 +276,7 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         // and still there to be dug.
         List<Refusal> refusals = new ArrayList<>();
         Set<Pos> consumed = new HashSet<>();
-        for (int y = baseY; !mast.isEmpty() && y <= trunkTop + 2; y++) {
+        for (int y = groundY; !mast.isEmpty() && y <= trunkTop + 2; y++) {
             Pos c = new Pos(mx, y, mz);
             if (logs.contains(c) || canopy.contains(c)) {
                 consumed.add(c);
@@ -284,11 +293,11 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
             // reaches wood well above the feet, and walking lower is free), and only then up
             // past the trunk top, where every rung is a placed block.
             Move move = null;
-            int f0 = Math.max(baseY, Math.min(target.y(), topFeet));
+            int f0 = Math.max(groundY, Math.min(target.y(), topFeet));
             int servingFeet = f0;
             List<Integer> feetCandidates = new ArrayList<>();
             feetCandidates.add(f0);
-            for (int down = 1; down <= 4 && f0 - down >= baseY; down++) {
+            for (int down = 1; down <= 4 && f0 - down >= groundY; down++) {
                 feetCandidates.add(f0 - down);
             }
             for (int up = f0 + 1; up <= target.y(); up++) {
@@ -296,7 +305,7 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
             }
             for (int feet : feetCandidates) {
                 for (int attempt = 0; attempt < 4 && move == null; attempt++) {
-                    move = route(target, feet, mx, mz, baseY, radius, (attempt & 1) != 0,
+                    move = route(target, feet, mx, mz, groundY, radius, (attempt & 1) != 0,
                             attempt >> 1, logs, canopy, consumed);
                 }
                 if (move != null) {
@@ -332,7 +341,7 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
      * line from the stand. A {@code boost} of one plans the whole swing from one block higher, on
      * her own log placed underfoot and reclaimed on the way down.
      */
-    private static Move route(Pos target, int feet, int mx, int mz, int baseY, int radius,
+    private static Move route(Pos target, int feet, int mx, int mz, int groundY, int radius,
                               boolean allowLeap, int boost, Set<Pos> logs, Set<Pos> canopy,
                               Set<Pos> consumed) {
         record Cell(int x, int z) {
@@ -345,7 +354,7 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         Cell stand = null;
         while (!frontier.isEmpty() && stand == null) {
             Cell cell = frontier.poll();
-            boolean floored = floored(cell.x(), feet, cell.z(), mx, mz, baseY,
+            boolean floored = floored(cell.x(), feet, cell.z(), mx, mz, groundY,
                     logs, canopy, consumed);
             if (floored && inReach(cell.x(), feet + boost, cell.z(), target)) {
                 stand = cell;
@@ -372,7 +381,7 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
                 }
                 // A hole may only be entered from floor, and only once the no-leap pass has
                 // come up empty.
-                boolean nextFloored = floored(next.x(), feet, next.z(), mx, mz, baseY,
+                boolean nextFloored = floored(next.x(), feet, next.z(), mx, mz, groundY,
                         logs, canopy, consumed);
                 if (!nextFloored && (!allowLeap || !floored)) {
                     continue;
@@ -393,7 +402,8 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         boolean leaped = false;
         for (int i = path.size() - 2; i >= 0; i--) {
             Cell cell = path.get(i);
-            leaped |= !floored(cell.x(), feet, cell.z(), mx, mz, baseY, logs, canopy, consumed);
+            leaped |= !floored(cell.x(), feet, cell.z(), mx, mz, groundY, logs, canopy,
+                    consumed);
             consume(new Pos(cell.x(), feet, cell.z()), logs, canopy, consumed, dug, digs);
             consume(new Pos(cell.x(), feet + 1, cell.z()), logs, canopy, consumed, dug, digs);
         }
@@ -410,10 +420,10 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
     }
 
     /** Whether a cell at this feet level can hold her: pillar, ground level, or living tree. */
-    private static boolean floored(int x, int feet, int z, int mx, int mz, int baseY,
+    private static boolean floored(int x, int feet, int z, int mx, int mz, int groundY,
                                    Set<Pos> logs, Set<Pos> canopy, Set<Pos> consumed) {
         return x == mx && z == mz
-                || feet <= baseY
+                || feet <= groundY
                 || isStanding(new Pos(x, feet - 1, z), logs, canopy, consumed);
     }
 

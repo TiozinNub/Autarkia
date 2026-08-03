@@ -233,7 +233,11 @@ public final class ChopPlannedTree implements PrimitiveTask {
         treeBlocks.addAll(tree.base());
         treeBlocks.addAll(tree.column());
         treeBlocks.addAll(tree.branches());
-        plan = ChopPlan.of(tree, grounded);
+        // A remnant's lowest log hangs in mid-air, so the card cannot take it for the floor: it
+        // is told the level she surveyed from, which she walked to and can therefore walk on. A
+        // real tree's stump is the floor.
+        plan = grounded ? ChopPlan.of(tree)
+                : ChopPlan.of(tree, ctx.percepts().position().y());
         mastAhead = new ArrayDeque<>(plan.mast());
         Pos site = plan.mast().isEmpty() ? plan.entry() : plan.mast().get(0);
         siteX = site.x();
