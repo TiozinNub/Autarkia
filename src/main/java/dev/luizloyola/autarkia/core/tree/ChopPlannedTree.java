@@ -172,12 +172,44 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         BlockProbe probe = ctx.percepts().blocks();
+        Pos pairCell = null;
         while (!mastAhead.isEmpty() && mastAhead.peek().y() <= plan.entry().y() + 1) {
             Pos cell = mastAhead.peek();
             if (probe.at(cell.x(), cell.y(), cell.z()) == BlockKind.LOG) {
-                return breakWithinReach(ctx, cell, "the way in");
+                pairCell = cell;
+                break;
             }
             mastAhead.poll();
+        }
+        if (pairCell != null) {
+            // Stand FACE-ADJACENT before swinging: a face-adjacent break cannot be corner-blocked,
+            // and a sapling oak was refused from 0.34 off-centre.
+            if (besideEntry(ctx)) {
+                walkIssued = false;
+                return beginBreak(ctx, pairCell, "the way in");
+            }
+            Pos stand = nearestDoorstep(ctx);
+            if (!walkIssued) {
+                ctx.actuators().mover().moveTo(stand.x(), stand.y(), stand.z());
+                walkIssued = true;
+                walkTicks = 0;
+                return TaskStatus.RUNNING;
+            }
+            if (ctx.actuators().mover().state() == MoveState.MOVING
+                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
+                return TaskStatus.RUNNING;
+            }
+            walkIssued = false;
+            if (besideEntry(ctx)) {
+                return beginBreak(ctx, pairCell, "the way in");
+            }
+            // Hemmed short of the doorstep: chew the tree's own cell in the way and retry.
+            Pos blocker = firstBlockerToward(ctx, stand);
+            if (blocker != null && ctx.actuators().breaker().begin(blocker)) {
+                breaking = true;
+                return TaskStatus.RUNNING;
+            }
+            return fail("cannot stand beside the doorway at " + shortPos(plan.entry()));
         }
         if (plan.mast().size() < 3) {
             phase = Phase.WORK;
@@ -461,42 +493,29 @@ public final class ChopPlannedTree implements PrimitiveTask {
         };
     }
 
-    private TaskStatus breakWithinReach(BrainContext ctx, Pos cell, String what) {
-        if (inReach(ctx, cell)) {
-            walkIssued = false;
-            // Break every leaf in the way before the mark, not merely when the breaker refuses:
-            // the arm can thread a diagonal seam the eye line crosses, and breaking wood through a
-            // corner reads as a glitch. Chewing first opens the line cell by cell, mark last.
-            Pos blocker = firstBlockerToward(ctx, cell);
-            Pos mark = blocker != null ? blocker : cell;
-            if (ctx.actuators().breaker().begin(mark)) {
-                breaking = true;
-                return TaskStatus.RUNNING;
+    private boolean besideEntry(BrainContext ctx) {
+        Pos feet = ctx.percepts().position();
+        return Math.abs(feet.x() - plan.entry().x()) + Math.abs(feet.z() - plan.entry().z()) == 1
+                && Math.abs(feet.y() - plan.entry().y()) <= 1;
+    }
+
+    private Pos nearestDoorstep(BrainContext ctx) {
+        Pos feet = ctx.percepts().position();
+        Pos best = null;
+        long bestDist = Long.MAX_VALUE;
+        int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int[] side : sides) {
+            Pos cell = new Pos(plan.entry().x() + side[0], plan.entry().y(),
+                    plan.entry().z() + side[1]);
+            long dx = cell.x() - feet.x();
+            long dz = cell.z() - feet.z();
+            long dist = dx * dx + dz * dz;
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = cell;
             }
-            return fail("the arm refused " + what + " at " + shortPos(mark));
         }
-        Pos blocker = firstBlockerToward(ctx, cell);
-        if (blocker != null && inReach(ctx, blocker)
-                && ctx.actuators().breaker().begin(blocker)) {
-            walkIssued = false;
-            breaking = true;
-            return TaskStatus.RUNNING;
-        }
-        if (!walkIssued) {
-            ctx.actuators().mover().moveTo(cell.x(), cell.y(), cell.z());
-            walkIssued = true;
-            walkTicks = 0;
-            return TaskStatus.RUNNING;
-        }
-        if (ctx.actuators().mover().state() == MoveState.MOVING
-                && ++walkTicks < WALK_TIMEOUT_TICKS) {
-            return TaskStatus.RUNNING;
-        }
-        walkIssued = false;
-        if (inReach(ctx, cell) || (blocker != null && inReach(ctx, blocker))) {
-            return TaskStatus.RUNNING; // try the arm again from where the walk ended
-        }
-        return fail("cannot get near " + what + " at " + shortPos(cell));
+        return best;
     }
 
     /**
