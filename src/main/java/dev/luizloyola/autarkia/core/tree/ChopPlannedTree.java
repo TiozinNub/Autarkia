@@ -754,8 +754,27 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return TaskStatus.RUNNING;
     }
 
-    /** One rise on her own log toward something above — a climb, not a boost. */
+    /**
+     * One rise on her own log toward something above — a climb, not a boost. It CHEWS first, for
+     * the same reason the ascent does: a rise needs the two cells overhead empty, and in a
+     * tree's column that is usually one of its leaves. Sizing the mast to the arm moved the
+     * climbing here from the ascent, and one leaf at head height stopped a Person dead on her
+     * own pillar with an axe and seventy-nine logs in the pack.
+     */
     private TaskStatus climbOne(BrainContext ctx, String toward) {
+        Pos feet = ctx.percepts().position();
+        BlockProbe probe = ctx.percepts().blocks();
+        for (int dy = 1; dy <= 2; dy++) {
+            Pos c = new Pos(siteX, feet.y() + dy, siteZ);
+            BlockKind k = probe.at(c.x(), c.y(), c.z());
+            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)) {
+                if (tryArm(ctx, c)) {
+                    return TaskStatus.RUNNING;
+                }
+                return fail(ctx, "cannot clear the climb's headroom at " + shortPos(c)
+                        + " " + armForensics(ctx, c));
+            }
+        }
         String log = carriedLog(ctx);
         if (log == null) {
             return fail(ctx, "no log to climb on toward " + toward);
@@ -765,7 +784,11 @@ public final class ChopPlannedTree implements PrimitiveTask {
             riseIssued = true;
             return TaskStatus.RUNNING;
         }
-        return fail(ctx, "the climb refused toward " + toward);
+        return fail(ctx, "the climb refused toward " + toward + " — overhead "
+                + shortPos(new Pos(siteX, feet.y() + 1, siteZ)) + " is "
+                + probe.at(siteX, feet.y() + 1, siteZ) + ", "
+                + shortPos(new Pos(siteX, feet.y() + 2, siteZ)) + " is "
+                + probe.at(siteX, feet.y() + 2, siteZ));
     }
 
     /**
