@@ -122,7 +122,11 @@ public final class ChopPlannedTree implements PrimitiveTask {
         boolean busy = breaking || riseIssued
                 || ctx.actuators().breaker().state() == BreakState.BREAKING
                 || ctx.actuators().riser().state() == RiseState.RISING;
-        if (!here.equals(lastSpot) || busy || phase == Phase.SURVEY) {
+        boolean moved = !here.equals(lastSpot);
+        if (moved) {
+            walkTicks = 0; // a walk that is moving is not stuck — sprint cannot expire it
+        }
+        if (moved || busy || phase == Phase.SURVEY) {
             lastSpot = here;
             restingSince = now;
         } else if (restingSince > 0 && now - restingSince > STUCK_TICKS) {
@@ -185,6 +189,17 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         SplitReport report = SplitReport.of(scan.result().blocks(), probe);
         tree = nearestTrunk(report.trees());
+        if (tree != null
+                && TreeShape.horizontalDistSq(tree.base().get(0), anchor) > 9) {
+            tree = null; // a NEIGHBOUR'S trunk in the same mass — not the tree this claim is for
+        }
+        if (tree == null) {
+            tree = remnantTrunk(scan.result().blocks());
+            if (tree != null) {
+                ctx.journal().record(Category.BRAIN, "chop", "resuming a half-felled remnant ("
+                        + tree.logCount() + " logs still up)");
+            }
+        }
         if (tree == null) {
             return ghost(ctx);
         }
@@ -886,6 +901,49 @@ public final class ChopPlannedTree implements PrimitiveTask {
             }
         }
         return best;
+    }
+
+    /**
+     * A mid-dance remnant, reclaimed. A tree whose entry was already eaten FLOATS, and
+     * individuation rightly refuses floating wood, so resumption authority comes from the memory
+     * and the claim, never from re-individuation. The remnant's lowest log becomes the entry, the
+     * vertical run above it the mast; the ascent already knows how to pillar through the air gap.
+     */
+    private TreeShape.Trunk remnantTrunk(java.util.Map<Pos, BlockKind> blocks) {
+        List<Pos> logs = new ArrayList<>();
+        for (var cell : blocks.entrySet()) {
+            if (cell.getValue() == BlockKind.LOG
+                    && TreeShape.horizontalDistSq(cell.getKey(), anchor) <= 64) {
+                logs.add(cell.getKey());
+            }
+        }
+        if (logs.isEmpty()) {
+            return null;
+        }
+        logs.sort(java.util.Comparator.comparingInt(Pos::y)
+                .thenComparingLong(cell -> TreeShape.horizontalDistSq(cell, anchor)));
+        Pos entry = logs.get(0);
+        List<Pos> column = new ArrayList<>();
+        List<Pos> branches = new ArrayList<>();
+        java.util.Set<Pos> logSet = new HashSet<>(logs);
+        Pos up = new Pos(entry.x(), entry.y() + 1, entry.z());
+        while (logSet.contains(up)) {
+            column.add(up);
+            up = new Pos(up.x(), up.y() + 1, up.z());
+        }
+        for (Pos log : logs) {
+            if (!log.equals(entry) && !column.contains(log)) {
+                branches.add(log);
+            }
+        }
+        List<Pos> leaves = new ArrayList<>();
+        for (var cell : blocks.entrySet()) {
+            if (cell.getValue() == BlockKind.LEAVES
+                    && TreeShape.horizontalDistSq(cell.getKey(), anchor) <= 64) {
+                leaves.add(cell.getKey());
+            }
+        }
+        return new TreeShape.Trunk(List.of(entry), column, branches, leaves);
     }
 
     /** The memory was wrong — no tree here. Heal the belief and end. */
