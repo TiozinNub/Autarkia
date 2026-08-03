@@ -416,6 +416,24 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         Pos target = move.target();
         if (probe.at(target.x(), target.y(), target.z()) == BlockKind.AIR) {
+            // The mark is down, but the card charged this move with en-route WOOD (bonus chops
+            // riding the digs list). Those are promised logs, not access: break what still
+            // stands before the move closes, or the verify finds wood nobody was assigned.
+            while (digsAhead != null && !digsAhead.isEmpty()) {
+                Pos dig = digsAhead.peek();
+                if (probe.at(dig.x(), dig.y(), dig.z()) != BlockKind.LOG) {
+                    digsAhead.poll();
+                    continue;
+                }
+                if (tryArm(ctx, dig)) {
+                    return TaskStatus.RUNNING;
+                }
+                leftovers.add(dig);
+                ctx.journal().record(Category.BRAIN, "chop", "left " + shortPos(dig)
+                        + " standing — a promised bonus chop out of the arm's answers "
+                        + armForensics(ctx, dig));
+                digsAhead.poll();
+            }
             finishMove(ctx);
             return TaskStatus.RUNNING;
         }
