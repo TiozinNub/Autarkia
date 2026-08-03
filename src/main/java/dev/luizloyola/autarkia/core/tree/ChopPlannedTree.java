@@ -101,7 +101,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         // Selection is commitment: the claim heartbeats every tick so a dead claimant lapses
         // in one TTL, and a rival's live claim ends this task before it swings once.
         if (!ctx.claims().claim(Pois.TREE, anchor, ctx.percepts().time())) {
-            return fail("the tree at " + shortPos(anchor) + " is claimed by someone else");
+            return fail(ctx, "the tree at " + shortPos(anchor) + " is claimed by someone else");
         }
         // The stuck watchdog: feet in one cell with no arm or rise working, for longer than
         // any legitimate wait — end the run outright; a re-order replans from the remnant.
@@ -114,7 +114,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             lastSpot = here;
             restingSince = now;
         } else if (restingSince > 0 && now - restingSince > STUCK_TICKS) {
-            return fail("stuck at " + shortPos(here) + " during " + phase
+            return fail(ctx, "stuck at " + shortPos(here) + " during " + phase
                     + " — nothing moved for " + STUCK_TICKS + " ticks");
         }
         return switch (phase) {
@@ -153,7 +153,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             phase = Phase.SURVEY;
             return TaskStatus.RUNNING;
         }
-        return fail("could not reach the tree at " + shortPos(anchor));
+        return fail(ctx, "could not reach the tree at " + shortPos(anchor));
     }
 
     private TaskStatus survey(BrainContext ctx) {
@@ -229,7 +229,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                         breaking = true;
                         return TaskStatus.RUNNING;
                     }
-                    return fail("the arm refused the doorstep at " + shortPos(mark));
+                    return fail(ctx, "the arm refused the doorstep at " + shortPos(mark));
                 }
             }
             if (!walkIssued) {
@@ -253,7 +253,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 breaking = true;
                 return TaskStatus.RUNNING;
             }
-            return fail("cannot stand beside the doorway at " + shortPos(plan.entry()));
+            return fail(ctx, "cannot stand beside the doorway at " + shortPos(plan.entry()));
         }
         if (plan.mast().size() < 3) {
             phase = Phase.WORK;
@@ -284,7 +284,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             breaking = true;
             return TaskStatus.RUNNING;
         }
-        return fail("could not step into the shaft at " + shortPos(plan.entry()));
+        return fail(ctx, "could not step into the shaft at " + shortPos(plan.entry()));
     }
 
     /**
@@ -331,14 +331,14 @@ public final class ChopPlannedTree implements PrimitiveTask {
             if (++pickupWait <= PICKUP_WAIT_TICKS) {
                 return TaskStatus.RUNNING; // the broken logs are still hopping into the pack
             }
-            return fail("no log to rise on below " + shortPos(mastAhead.peek()));
+            return fail(ctx, "no log to rise on below " + shortPos(mastAhead.peek()));
         }
         pickupWait = 0;
         if (ctx.actuators().riser().up(log)) {
             riseIssued = true;
             return TaskStatus.RUNNING;
         }
-        return fail("the rise refused below " + shortPos(mastAhead.peek()));
+        return fail(ctx, "the rise refused below " + shortPos(mastAhead.peek()));
     }
 
     /**
@@ -394,7 +394,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 walkIssued = false;
                 if (!(ctx.percepts().position().x() == plan.entry().x()
                         && ctx.percepts().position().z() == plan.entry().z())) {
-                    return fail("could not return to the mast at layer " + layer.y());
+                    return fail(ctx, "could not return to the mast at layer " + layer.y());
                 }
                 return TaskStatus.RUNNING;
             }
@@ -603,7 +603,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             giveUpMove(ctx, "the arm refused " + what + " at " + shortPos(cell));
             return TaskStatus.RUNNING;
         }
-        return fail("the arm refused " + what + " at " + shortPos(cell));
+        return fail(ctx, "the arm refused " + what + " at " + shortPos(cell));
     }
 
     /**
@@ -747,8 +747,11 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return TaskStatus.FAILED;
     }
 
-    private TaskStatus fail(String why) {
+    private TaskStatus fail(BrainContext ctx, String why) {
+        // Every ending reaches the ring: a failure nobody journals is a stall nobody can
+        // diagnose (two grind batches called these "STALLED" before this line existed).
         ending = why;
+        ctx.journal().record(Category.BRAIN, "chop", "FAILED — " + why);
         return TaskStatus.FAILED;
     }
 
