@@ -19,6 +19,9 @@ import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.anima.core.brain.task.Producers;
+import dev.luizloyola.autarkia.core.tree.ChopForLogs;
+import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.autarkia.core.tree.TreeRule;
 import dev.luizloyola.autarkia.core.tree.WaterRule;
@@ -82,12 +85,12 @@ public class AutarkiaMod implements ModInitializer {
         // tier stays ours to sync. Providers chain, so a future pets mod answers for its own ids
         // beside this one.
         AgentDirectory.provide(PersonDirectory::get);
-        // Where logs come from is a fact about this world, not about having a mind: Anima knows how
-        // to WANT an item and pick one up. The old chop choreography was removed for redesign, so
-        // there is no log producer today (obtain degrades to scavenging), and the seam is
-        // Producers.register(Stock.LOGS, <the new task>::new).
-        // What a settler finds worth remembering, and what grows into it: Anima owns the sampler,
-        // the region flood and the merge rule, and has no idea what a tree is.
+        // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
+        // this world, not about having a mind, so it belongs here rather than in the library.
+        // Since the seventh choreography (2026-08-02), obtain orders the dance card itself.
+        Producers.register(Stock.LOGS, ChopForLogs::new);
+        // Declare what a settler finds worth remembering, and what grows into it. Anima owns the
+        // crescent sampler, the region flood and the merge rule; it has no idea what a tree is.
         Pois.init();
         GrowthRules.register(BlockKind.LOG, TreeRule.INSTANCE);
         GrowthRules.register(BlockKind.LEAVES, TreeRule.INSTANCE);
