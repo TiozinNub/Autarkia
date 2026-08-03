@@ -647,29 +647,49 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return mark;
     }
 
+    /** Whether her feet are face-adjacent to the entry column, within the slope window. */
     private boolean besideEntry(BrainContext ctx) {
         Pos feet = ctx.percepts().position();
         return Math.abs(feet.x() - plan.entry().x()) + Math.abs(feet.z() - plan.entry().z()) == 1
-                && Math.abs(feet.y() - plan.entry().y()) <= 1;
+                && Math.abs(feet.y() - plan.entry().y()) <= 2;
     }
 
+    /**
+     * The nearest standable cell face-adjacent to the entry. TERRAIN-AWARE: each side's standing
+     * level is found within a two-block slope window, since demanding the entry's exact height
+     * refused the first wild tree on a hillside. A cell holding this tree's leaves counts — the
+     * chew makes it standable.
+     */
     private Pos nearestDoorstep(BrainContext ctx) {
+        BlockProbe probe = ctx.percepts().blocks();
         Pos feet = ctx.percepts().position();
         Pos best = null;
         long bestDist = Long.MAX_VALUE;
         int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         for (int[] side : sides) {
-            Pos cell = new Pos(plan.entry().x() + side[0], plan.entry().y(),
-                    plan.entry().z() + side[1]);
-            long dx = cell.x() - feet.x();
-            long dz = cell.z() - feet.z();
-            long dist = dx * dx + dz * dz;
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = cell;
+            int x = plan.entry().x() + side[0];
+            int z = plan.entry().z() + side[1];
+            for (int y = plan.entry().y() + 2; y >= plan.entry().y() - 2; y--) {
+                BlockKind at = probe.at(x, y, z);
+                BlockKind below = probe.at(x, y - 1, z);
+                boolean standable = (at == BlockKind.AIR || at == BlockKind.LEAVES)
+                        && below != BlockKind.AIR;
+                if (!standable) {
+                    continue;
+                }
+                long dx = x - feet.x();
+                long dz = z - feet.z();
+                long dy = y - plan.entry().y();
+                long dist = dx * dx + dz * dz + dy * dy;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = new Pos(x, y, z);
+                }
+                break; // the topmost standable spot is this side's doorstep
             }
         }
-        return best;
+        return best != null ? best
+                : new Pos(plan.entry().x() + 1, plan.entry().y(), plan.entry().z());
     }
 
     private TaskStatus beginBreak(BrainContext ctx, Pos cell, String what) {
