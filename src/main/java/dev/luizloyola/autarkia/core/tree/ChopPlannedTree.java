@@ -628,6 +628,17 @@ public final class ChopPlannedTree implements PrimitiveTask {
         walkIssued = false;
         Pos now = ctx.percepts().position();
         if (!(now.x() == siteX && now.z() == siteZ)) {
+            // The site column itself can be hemmed (pillar below, canopy above): bite the tree's
+            // own matter out and retry. The pillar is never bitten — mine-below owns that.
+            BlockProbe siteProbe = ctx.percepts().blocks();
+            for (int y = now.y() + 2; y >= plan.entry().y(); y--) {
+                Pos c = new Pos(siteX, y, siteZ);
+                BlockKind k = siteProbe.at(c.x(), c.y(), c.z());
+                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
+                        && tryArm(ctx, c)) {
+                    return TaskStatus.RUNNING;
+                }
+            }
             if (!axisFallback) {
                 // One more try from wherever the first walk ended — a drop chase can strand
                 // her on a canopy pocket whose first path attempt fails mid-decay.
