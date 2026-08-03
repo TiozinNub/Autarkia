@@ -55,6 +55,11 @@ public final class PersonSpecies {
             // tree in it. ~15 heightmap samples per bearing and no rays, so the reach is nearly
             // free — the aperture is what pays.
             .set(ProfileAspect.PLACES_HORIZON_RADIUS, 64)
+            // The same 8 blocks the halo reaches: about as far as a settler resolves a thing into
+            // parts rather than outline. Past it a wood is a green wall, so standing in
+            // one leaves nearly no skyline. Its own number, so better eyes see into more without
+            // noticing more behind.
+            .set(ProfileAspect.PLACES_SEE_THROUGH_RADIUS, 8)
             .set(ProfileAspect.PLACES_REGION_MAX_SPREAD, 24)
             .set(ProfileAspect.PLACES_MAX_PER_KIND, 160)
             // --- danger: armored < with sword < with bow (decision: Luiz) ---------------------
