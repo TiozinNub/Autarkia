@@ -189,6 +189,22 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return beginBreak(ctx, pairCell, "the way in");
             }
             Pos stand = nearestDoorstep(ctx);
+            // The doorstep must be STANDABLE before a walk can deliver her — a sapling oak's own
+            // canopy fills the cells beside its trunk. Chew that column first.
+            for (int dy = 0; dy <= 1; dy++) {
+                Pos c = new Pos(stand.x(), stand.y() + dy, stand.z());
+                BlockKind k = probe.at(c.x(), c.y(), c.z());
+                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
+                        && inReach(ctx, c)) {
+                    Pos blocker = firstBlockerToward(ctx, c);
+                    Pos mark = blocker != null ? blocker : c;
+                    if (ctx.actuators().breaker().begin(mark)) {
+                        breaking = true;
+                        return TaskStatus.RUNNING;
+                    }
+                    return fail("the arm refused the doorstep at " + shortPos(mark));
+                }
+            }
             if (!walkIssued) {
                 ctx.actuators().mover().moveTo(stand.x(), stand.y(), stand.z());
                 walkIssued = true;
