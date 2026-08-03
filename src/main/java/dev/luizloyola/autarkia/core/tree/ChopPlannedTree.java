@@ -60,10 +60,16 @@ public final class ChopPlannedTree implements PrimitiveTask {
 
     /** How far from the anchor the tail chases this fell's log drops, and how many walks. */
     private static final int GATHER_RADIUS = 10;
-    private static final int GATHER_WALKS_MAX = 8;
+    private static final int GATHER_WALKS_MAX = 16;
 
     /** Per-layer canopy-drop walks before descending — the original "logs on this canopy". */
     private static final int LAYER_GATHER_WALKS = 4;
+
+    /**
+     * How long the tail loiters for the dying canopy to rain its wood down. Decay is
+     * random-tick, so this scales with the game clock; a felled crown empties well inside it.
+     */
+    private static final int DECAY_WAIT_TICKS = 1600;
 
     /** How long a tree that beat this task stays off the producer's menu. */
     private static final int AVOID_TICKS = 2400;
@@ -105,6 +111,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private String bailReason;
     /** Walks spent collecting the fell's drops — the tail's budget. */
     private int gatherWalks;
+    /** Ticks spent standing by for the canopy to drop what it holds. */
+    private int decayWait;
     /** Walks spent on this layer's canopy drops before descending — Luiz's original step 4. */
     private int layerGatherWalks;
     /** The return-to-axis walk gets one fallback: down to the site's ground, then re-climb. */
@@ -137,7 +145,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         if (moved) {
             walkTicks = 0; // a walk that is moving is not stuck — sprint cannot expire it
         }
-        if (moved || busy || phase == Phase.SURVEY) {
+        if (moved || busy || phase == Phase.SURVEY || phase == Phase.GATHER) {
             lastSpot = here;
             restingSince = now;
         } else if (restingSince > 0 && now - restingSince > STUCK_TICKS) {
@@ -714,11 +722,22 @@ public final class ChopPlannedTree implements PrimitiveTask {
             }
         }
         if (nearest == null || gatherWalks >= GATHER_WALKS_MAX) {
+            // Nothing walkable right now — but the dying canopy may still HOLD wood, and it
+            // rains down as decay eats the leaves. Loiter for it (bounded), gathering each
+            // log as it lands, and only call the tail done when the crown is empty or the
+            // patience is spent.
+            if (nearest == null && gatherWalks < GATHER_WALKS_MAX
+                    && perchedWoodRemains(ctx) && ++decayWait <= DECAY_WAIT_TICKS) {
+                ctx.actuators().mover().stop();
+                walkIssued = false;
+                return TaskStatus.RUNNING;
+            }
             ctx.actuators().mover().stop();
             walkIssued = false;
             phase = Phase.VERIFY;
             return TaskStatus.RUNNING;
         }
+        decayWait = 0;
         if (!walkIssued) {
             ctx.actuators().mover().moveTo(nearest.x(), nearest.y(), nearest.z());
             walkIssued = true;
@@ -732,6 +751,18 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         walkIssued = false;
         return TaskStatus.RUNNING;
+    }
+
+    /** Whether any of this fell's wood still sits somewhere a walk cannot yet reach. */
+    private boolean perchedWoodRemains(BrainContext ctx) {
+        for (var drop : ctx.percepts().drops()) {
+            if (Stock.LOGS.matches(drop.itemId())
+                    && TreeShape.horizontalDistSq(drop.pos(), anchor)
+                            <= (long) GATHER_RADIUS * GATHER_RADIUS) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
