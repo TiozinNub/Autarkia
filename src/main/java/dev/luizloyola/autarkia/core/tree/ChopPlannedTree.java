@@ -246,7 +246,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 "the card says "
                         + (plan.chopCount() + plan.mast().size() + plan.ascentChops())
                         + (plan.climbsTheTrunk() ? " chops up its own trunk, " : " chops, ")
-                        + plan.digCount() + " digs"
+                        + plan.digCount() + " digs, "
+                        + plan.layers().size() + " layers"
+                        + (plan.climbsAboveTheMast() == 0 ? ""
+                                : " (" + plan.climbsAboveTheMast() + " climbed mid-fell)")
                         + (plan.refusals().isEmpty() ? ""
                                 : ", " + plan.refusals().size() + " refused"));
         phase = Phase.ENTER;
@@ -862,19 +865,73 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return TaskStatus.RUNNING;
     }
 
-    /** After the last layer: mine whatever pillar still stands underfoot, down to the ground. */
+    /**
+     * After the last layer: go back to the working column and mine whatever pillar still stands
+     * there, down to the ground.
+     *
+     * <p>Mining only what happened to be under HER abandoned the pillar, since the last move of
+     * a fell almost never leaves her on the axis, and the verify's own-log sweep sits behind the
+     * gather and the decay loiter, so the wood came home a minute or more later. The return is
+     * best-effort — the tree is already down, so a walk that cannot make it is not worth failing
+     * a finished fell over.
+     */
     private TaskStatus descendToGround(BrainContext ctx) {
+        if (pollBreak(ctx)) {
+            return TaskStatus.RUNNING;
+        }
         Pos feet = ctx.percepts().position();
-        if (feet.x() == siteX && feet.z() == siteZ
-                && feet.y() > plan.entry().y()) {
+        boolean onAxis = feet.x() == siteX && feet.z() == siteZ;
+        if (onAxis && feet.y() > plan.entry().y()) {
             Pos below = new Pos(feet.x(), feet.y() - 1, feet.z());
             if (ctx.percepts().blocks().at(below.x(), below.y(), below.z()) != BlockKind.AIR) {
                 return beginBreak(ctx, below, "the last of the pillar");
             }
         }
+        if (!onAxis && pillarStands(ctx)) {
+            if (!walkIssued) {
+                ctx.actuators().mover().moveTo(siteX, plan.entry().y(), siteZ);
+                walkIssued = true;
+                walkTicks = 0;
+                return TaskStatus.RUNNING;
+            }
+            if (ctx.actuators().mover().state() == MoveState.MOVING
+                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
+                return TaskStatus.RUNNING;
+            }
+            walkIssued = false;
+            // Within arm's length is as good as underfoot — a rung she can reach from beside
+            // the column comes down without the walk landing exactly.
+            Pos rung = lowestOwnRung(ctx);
+            if (rung != null && inReach(ctx, rung) && tryArm(ctx, rung)) {
+                return TaskStatus.RUNNING;
+            }
+            ctx.journal().record(Category.BRAIN, "chop", "could not get back to the pillar at "
+                    + shortPos(new Pos(siteX, plan.entry().y(), siteZ))
+                    + " — leaving it to the verify sweep");
+        }
+        walkIssued = false;
         phase = Phase.GATHER;
         gatherWalks = 0;
         return TaskStatus.RUNNING;
+    }
+
+    private boolean pillarStands(BrainContext ctx) {
+        return lowestOwnRung(ctx) != null;
+    }
+
+    /** The lowest log still standing in the working column, ground upward — or null. */
+    private Pos lowestOwnRung(BrainContext ctx) {
+        BlockProbe probe = ctx.percepts().blocks();
+        int top = plan.entry().y() + plan.mast().size() + 2;
+        for (ChopPlan.Layer layer : plan.layers()) {
+            top = Math.max(top, layer.y());
+        }
+        for (int y = plan.entry().y(); y <= top; y++) {
+            if (probe.at(siteX, y, siteZ) == BlockKind.LOG) {
+                return new Pos(siteX, y, siteZ);
+            }
+        }
+        return null;
     }
 
     /**

@@ -130,6 +130,22 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         return climbsTheTrunk() ? mast.size() + 2 : 0;
     }
 
+    /**
+     * How many work layers sit ABOVE the mast's last rung. Each is a climb paid mid-fell — a
+     * walk back to the column, a rung placed, the same again coming down — so this measures how
+     * much of a card is climbing rather than chopping.
+     */
+    public int climbsAboveTheMast() {
+        int top = mast.isEmpty() ? entry.y() : mast.get(mast.size() - 1).y() + 1;
+        int count = 0;
+        for (Layer layer : layers) {
+            if (layer.y() > top) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     public int chopCount() {
         int chops = 0;
         for (Layer layer : layers) {
