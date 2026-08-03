@@ -400,11 +400,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             // trunk top is the card's mast extension, and walking can never gain that height.
             if (feet.y() != layer.y()) {
                 if (!onAxis) {
-                    // Descending: atop the pillar remnant at the layer's height. Climbing: the
-                    // axis at HER height — the rise happens after arrival, and a mid-air goal above
-                    // an unbuilt pillar has no path.
-                    return walkToAxis(ctx, Math.min(feet.y(), layer.y()),
-                            "the mast at layer " + layer.y());
+                    return walkToAxis(ctx, "the mast at layer " + layer.y());
                 }
                 walkIssued = false;
                 if (feet.y() > layer.y()) {
@@ -603,12 +599,24 @@ public final class ChopPlannedTree implements PrimitiveTask {
     }
 
     /**
-     * Walk back to the axis AT the LAYER'S HEIGHT, atop whatever pillar remains, never into it:
-     * the site's ground cell is the pillar base, a solid log no path can end inside.
+     * Walk back onto the site column, aiming at its HIGHEST STANDABLE CELL within a jump of her,
+     * probed from the world: atop the pillar mid-descent, atop the remnant after mine-below,
+     * plain ground when nothing stands. Every computed formula (layer height, her height, the
+     * ground cell) had a moment where it pointed inside her own pillar or into mid-air.
      */
-    private TaskStatus walkToAxis(BrainContext ctx, int targetY, String why) {
+    private TaskStatus walkToAxis(BrainContext ctx, String why) {
         if (!walkIssued) {
-            ctx.actuators().mover().moveTo(siteX, targetY, siteZ);
+            Pos feet = ctx.percepts().position();
+            BlockProbe probe = ctx.percepts().blocks();
+            int goalY = plan.entry().y();
+            for (int y = feet.y() + 1; y >= plan.entry().y(); y--) {
+                if (probe.at(siteX, y, siteZ) == BlockKind.AIR
+                        && probe.at(siteX, y - 1, siteZ) != BlockKind.AIR) {
+                    goalY = y;
+                    break;
+                }
+            }
+            ctx.actuators().mover().moveTo(siteX, goalY, siteZ);
             walkIssued = true;
             walkTicks = 0;
             return TaskStatus.RUNNING;
@@ -624,9 +632,6 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 // One more try from wherever the first walk ended — a drop chase can strand
                 // her on a canopy pocket whose first path attempt fails mid-decay.
                 axisFallback = true;
-                ctx.actuators().mover().moveTo(siteX, targetY, siteZ);
-                walkIssued = true;
-                walkTicks = 0;
                 return TaskStatus.RUNNING;
             }
             return fail(ctx, "could not return to " + why);
