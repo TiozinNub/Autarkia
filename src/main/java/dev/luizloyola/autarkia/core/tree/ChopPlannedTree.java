@@ -97,6 +97,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
     /** The pillar site's column — the working axis beside the tree. Entry when mast-free. */
     private int siteX;
     private int siteZ;
+    /** A failing ascent unwinds first: the pillar is mined back down, every log refunded. */
+    private boolean bailing;
+    private String bailReason;
     /** Walks spent collecting the fell's drops — the tail's budget. */
     private int gatherWalks;
     /** Where the feet last were, and since when — the stuck watchdog's memory. */
@@ -293,6 +296,20 @@ public final class ChopPlannedTree implements PrimitiveTask {
             }
         }
         Pos feet = ctx.percepts().position();
+        if (bailing) {
+            // The ascent is over but the pillar is hers: mine it back down before failing,
+            // so the spent logs come home and nothing of hers is left standing either.
+            if (feet.y() > plan.mast().get(0).y()
+                    && feet.x() == siteX && feet.z() == siteZ) {
+                Pos below = new Pos(feet.x(), feet.y() - 1, feet.z());
+                if (ctx.percepts().blocks().at(below.x(), below.y(), below.z())
+                        != BlockKind.AIR) {
+                    return beginBreak(ctx, below, "the pillar, refunded");
+                }
+                return TaskStatus.RUNNING;
+            }
+            return fail(ctx, bailReason);
+        }
         int targetFeet = plan.mast().get(plan.mast().size() - 1).y() + 1;
         if (feet.y() >= targetFeet) {
             phase = Phase.WORK;
@@ -308,7 +325,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 if (tryArm(ctx, c)) {
                     return TaskStatus.RUNNING;
                 }
-                return fail(ctx, "cannot clear the pillar's headroom at " + shortPos(c));
+                return bailOut("cannot clear the pillar's headroom at " + shortPos(c));
             }
         }
         String log = carriedLog(ctx);
@@ -316,14 +333,22 @@ public final class ChopPlannedTree implements PrimitiveTask {
             if (++pickupWait <= PICKUP_WAIT_TICKS) {
                 return TaskStatus.RUNNING;
             }
-            return fail(ctx, "nothing to pillar on — a tree this tall needs a carried log");
+            return bailOut("out of logs mid-pillar — a tree this tall needs "
+                    + plan.mast().size() + " carried");
         }
         pickupWait = 0;
         if (ctx.actuators().riser().up(log)) {
             riseIssued = true;
             return TaskStatus.RUNNING;
         }
-        return fail(ctx, "the rise refused at " + shortPos(feet));
+        return bailOut("the rise refused at " + shortPos(feet));
+    }
+
+    /** Flip the ascent into its unwind: the failure is delivered once the pillar is down. */
+    private TaskStatus bailOut(String why) {
+        bailing = true;
+        bailReason = why;
+        return TaskStatus.RUNNING;
     }
 
     /**
