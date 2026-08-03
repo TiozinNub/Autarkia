@@ -196,8 +196,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 BlockKind k = probe.at(c.x(), c.y(), c.z());
                 if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
                         && inReach(ctx, c)) {
-                    Pos blocker = firstBlockerToward(ctx, c);
-                    Pos mark = blocker != null ? blocker : c;
+                    Pos blocker = ctx.actuators().breaker().obstruction(c);
+                    Pos mark = blocker != null && treeBlocks.contains(blocker) ? blocker : c;
                     if (ctx.actuators().breaker().begin(mark)) {
                         breaking = true;
                         return TaskStatus.RUNNING;
@@ -220,8 +220,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return beginBreak(ctx, pairCell, "the way in");
             }
             // Hemmed short of the doorstep: chew the tree's own cell in the way and retry.
-            Pos blocker = firstBlockerToward(ctx, stand);
-            if (blocker != null && ctx.actuators().breaker().begin(blocker)) {
+            Pos blocker = ctx.actuators().breaker().obstruction(stand);
+            if (blocker != null && treeBlocks.contains(blocker)
+                    && ctx.actuators().breaker().begin(blocker)) {
                 breaking = true;
                 return TaskStatus.RUNNING;
             }
@@ -250,8 +251,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         // Hemmed beside the doorway (a low canopy walls the one-block step): chew the tree's
         // own cell between her and the entry, then try the step again — each bite is finite.
-        Pos doorway = firstBlockerToward(ctx, plan.entry());
-        if (doorway != null && ctx.actuators().breaker().begin(doorway)) {
+        Pos doorway = ctx.actuators().breaker().obstruction(plan.entry());
+        if (doorway != null && treeBlocks.contains(doorway)
+                && ctx.actuators().breaker().begin(doorway)) {
             breaking = true;
             return TaskStatus.RUNNING;
         }
@@ -382,25 +384,66 @@ public final class ChopPlannedTree implements PrimitiveTask {
         if (digsAhead == null) {
             digsAhead = new ArrayDeque<>(move.digs());
         }
-        // Digs in card order, each from wherever she stands when it comes up in reach.
-        while (!digsAhead.isEmpty()) {
-            Pos dig = digsAhead.peek();
-            if (probe.at(dig.x(), dig.y(), dig.z()) == BlockKind.AIR) {
-                digsAhead.poll();
-                continue;
-            }
-            if (inReach(ctx, dig)) {
-                beginWorkBreak(ctx, dig, "the way through");
-                return TaskStatus.RUNNING;
-            }
-            break; // walk closer before the next dig
-        }
         Pos target = move.target();
         if (probe.at(target.x(), target.y(), target.z()) == BlockKind.AIR) {
             finishMove(ctx);
             return TaskStatus.RUNNING;
         }
-        if (move.boost() && !boostUp && atStand(ctx, move)) {
+        // STAND first, then dig, then swing: every line was computed from the card's stand, and
+        // swinging from elsewhere cost the fancy oak two moves. En route the stand's column is
+        // chewed standable and in-reach tunnel digs are eaten — they ARE the way there.
+        if (!atStand(ctx, move)) {
+            for (int dy = 0; dy <= 1; dy++) {
+                Pos c = new Pos(move.stand().x(), move.stand().y() + dy, move.stand().z());
+                BlockKind k = probe.at(c.x(), c.y(), c.z());
+                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
+                        && inReach(ctx, c)) {
+                    beginWorkBreak(ctx, c, "the stand");
+                    return TaskStatus.RUNNING;
+                }
+            }
+            while (!digsAhead.isEmpty()) {
+                Pos dig = digsAhead.peek();
+                if (probe.at(dig.x(), dig.y(), dig.z()) == BlockKind.AIR) {
+                    digsAhead.poll();
+                    continue;
+                }
+                if (inReach(ctx, dig)) {
+                    beginWorkBreak(ctx, dig, "the way through");
+                    return TaskStatus.RUNNING;
+                }
+                break;
+            }
+            if (!walkIssued) {
+                ctx.actuators().mover().moveTo(
+                        move.stand().x(), move.stand().y(), move.stand().z());
+                walkIssued = true;
+                walkTicks = 0;
+                return TaskStatus.RUNNING;
+            }
+            if (ctx.actuators().mover().state() == MoveState.MOVING
+                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
+                return TaskStatus.RUNNING;
+            }
+            walkIssued = false;
+            if (!atStand(ctx, move) && !inReach(ctx, target)) {
+                giveUpMove(ctx, "no way to the stand at " + shortPos(move.stand()));
+            }
+            return TaskStatus.RUNNING;
+        }
+        walkIssued = false;
+        // At the stand. Digs still standing and in reach are the swing's line; digs beyond
+        // reach were the tunnel here, and standing here proves that access — drop them.
+        while (!digsAhead.isEmpty()) {
+            Pos dig = digsAhead.peek();
+            if (probe.at(dig.x(), dig.y(), dig.z()) == BlockKind.AIR || !inReach(ctx, dig)) {
+                digsAhead.poll();
+                continue;
+            }
+            beginWorkBreak(ctx, dig, "the way through");
+            return TaskStatus.RUNNING;
+        }
+        if (move.boost() && !boostUp) {
             String log = carriedLog(ctx);
             if (log == null || !ctx.actuators().riser().up(log)) {
                 giveUpMove(ctx, "no boost from " + shortPos(move.stand()));
@@ -409,28 +452,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
             riseIssued = true;
             return TaskStatus.RUNNING;
         }
-        if (inReach(ctx, target) && (!move.boost() || boostUp)) {
-            beginWorkBreak(ctx, target, "the mark");
-            return TaskStatus.RUNNING;
-        }
-        if (!walkIssued) {
-            if (atStand(ctx, move)) {
-                // At the stand and still short an arm: the world drifted from the card.
-                giveUpMove(ctx, "cannot serve " + shortPos(target) + " from " + shortPos(move.stand()));
-                return TaskStatus.RUNNING;
-            }
-            ctx.actuators().mover().moveTo(move.stand().x(), move.stand().y(), move.stand().z());
-            walkIssued = true;
-            walkTicks = 0;
-            return TaskStatus.RUNNING;
-        }
-        if (ctx.actuators().mover().state() == MoveState.MOVING && ++walkTicks < WALK_TIMEOUT_TICKS) {
-            return TaskStatus.RUNNING;
-        }
-        walkIssued = false;
-        if (!atStand(ctx, move) && !inReach(ctx, target)) {
-            giveUpMove(ctx, "no way to the stand at " + shortPos(move.stand()));
-        }
+        // The swing: no second-guessing the arm's reach — begin() decides, the chew inside
+        // handles the path, and its give-up is the only "cannot serve" left.
+        beginWorkBreak(ctx, target, "the mark");
         return TaskStatus.RUNNING;
     }
 
@@ -534,39 +558,6 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return best;
     }
 
-    /**
-     * The first of this tree's own cells still standing on the eye line toward {@code cell} —
-     * what "break all the blocks in the way" eats next. Null when the line is clear (the
-     * distance itself is the problem) or the blocker is somebody else's.
-     */
-    private Pos firstBlockerToward(BrainContext ctx, Pos cell) {
-        Pos feet = ctx.percepts().position();
-        double ex = feet.x() + 0.5;
-        double ey = feet.y() + EYE;
-        double ez = feet.z() + 0.5;
-        double dx = cell.x() + 0.5 - ex;
-        double dy = cell.y() + 0.5 - ey;
-        double dz = cell.z() + 0.5 - ez;
-        int steps = (int) Math.ceil(Math.sqrt(dx * dx + dy * dy + dz * dz) / 0.25);
-        BlockProbe probe = ctx.percepts().blocks();
-        Pos last = null;
-        for (int i = 1; i < steps; i++) {
-            double t = i / (double) steps;
-            Pos on = new Pos((int) Math.floor(ex + dx * t), (int) Math.floor(ey + dy * t),
-                    (int) Math.floor(ez + dz * t));
-            if (on.equals(last) || on.equals(cell)) {
-                last = on;
-                continue;
-            }
-            last = on;
-            BlockKind kind = probe.at(on.x(), on.y(), on.z());
-            if ((kind == BlockKind.LEAVES || kind == BlockKind.LOG) && treeBlocks.contains(on)) {
-                return on;
-            }
-        }
-        return null;
-    }
-
     private TaskStatus beginBreak(BrainContext ctx, Pos cell, String what) {
         if (ctx.actuators().breaker().begin(cell)) {
             breaking = true;
@@ -587,9 +578,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
      * chew refuses, the move gives way.
      */
     private void beginWorkBreak(BrainContext ctx, Pos cell, String what) {
-        // Chew-first, same as the shaft: the leaves on the line fall before the mark does.
-        Pos blocker = firstBlockerToward(ctx, cell);
-        Pos mark = blocker != null ? blocker : cell;
+        // Chew-first, same as the shaft, and the blocker is the ARM'S own ANSWER: a self-sampled
+        // line measures from somewhere the eyes are not and disagrees with the refusal it cures.
+        Pos blocker = ctx.actuators().breaker().obstruction(cell);
+        Pos mark = blocker != null && treeBlocks.contains(blocker) ? blocker : cell;
         if (ctx.actuators().breaker().begin(mark)) {
             breaking = true;
             return;
