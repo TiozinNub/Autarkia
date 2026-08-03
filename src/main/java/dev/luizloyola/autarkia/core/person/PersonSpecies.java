@@ -44,9 +44,13 @@ public final class PersonSpecies {
             // settler is not permanently haunted by one bad afternoon.
             .set(ProfileAspect.SENSES_ATTACK_DECAY_TICKS, 600)
             .set(ProfileAspect.SENSES_HERD_LINK_RADIUS, 12)
-            // --- places: sized above the trees a settler works among (an 81-tree grid starved
-            //     its far corners at 64, churning forget/rediscover forever) --------------------
-            .set(ProfileAspect.PLACES_RADIUS, 12)
+            // --- places: the same reach and aperture as the eyes above, because they ARE the
+            //     eyes — a settler who spots a cow at 24 blocks and misses the tree beside it
+            //     reads as broken, and did. The 8-block halo is the boot and the periphery: what
+            //     you are standing next to is noticed whichever way you face -------------------
+            .set(ProfileAspect.PLACES_RADIUS, 24)
+            .set(ProfileAspect.PLACES_CONE_DEGREES, 150)
+            .set(ProfileAspect.PLACES_NEAR_RADIUS, 8)
             .set(ProfileAspect.PLACES_REGION_MAX_SPREAD, 24)
             .set(ProfileAspect.PLACES_MAX_PER_KIND, 160)
             // --- danger: armored < with sword < with bow (decision: Luiz) ---------------------

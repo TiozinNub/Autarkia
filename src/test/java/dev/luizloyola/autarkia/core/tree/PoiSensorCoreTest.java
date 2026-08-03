@@ -43,6 +43,12 @@ class PoiSensorCoreTest {
      *  rules' own surface checks ride uncounted (bounded by region size), hence the slack. */
     private static final int READ_CEILING = PoiSensorCore.readsPerTick() + 40;
 
+    /**
+     * Any bearing at all: {@link TestSpecies} notices places omnidirectionally, so these place
+     * things freely around a fixed body and stay tests of noticing rather than of aperture.
+     */
+    private static final double FACING = 0.0;
+
     private final AgentKnowledge knowledge = new AgentKnowledge();
     private final PoiSensorCore sensor = new PoiSensorCore(knowledge, TestSpecies.PROFILE);
     private long now;
@@ -52,7 +58,7 @@ class PoiSensorCoreTest {
         List<SenseEvent> events = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             int before = probe.reads;
-            events.addAll(sensor.tick(feet, now++, probe));
+            events.addAll(sensor.tick(feet, FACING, now++, probe));
             int spent = probe.reads - before;
             assertTrue(spent <= READ_CEILING, "tick spent " + spent + " reads");
             if (spent == 0) {
@@ -110,7 +116,7 @@ class PoiSensorCoreTest {
 
         int before = probe.reads;
         for (int i = 0; i < 50; i++) {
-            sensor.tick(new Pos(0, 64, 0), now++, probe);
+            sensor.tick(new Pos(0, 64, 0), FACING, now++, probe);
         }
         assertEquals(before, probe.reads, "no movement, no reads — the idle-settlement property");
     }
@@ -283,7 +289,7 @@ class PoiSensorCoreTest {
         }
         List<SenseEvent> events = new ArrayList<>();
         for (int i = 0; i < PoiSensorCore.RAY_RETRY_DELAY_TICKS + 40; i++) {
-            events.addAll(sensor.tick(new Pos(0, 64, 0), now++, probe));
+            events.addAll(sensor.tick(new Pos(0, 64, 0), FACING, now++, probe));
         }
         assertEquals(1, knowledge.size(), "the retry found it without them moving an inch");
         assertTrue(events.stream().anyMatch(e -> e.type() == SenseEvent.Type.NOTED));

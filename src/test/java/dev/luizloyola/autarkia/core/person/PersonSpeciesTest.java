@@ -44,7 +44,9 @@ class PersonSpeciesTest {
         assertEquals(20, PERSON.i(ProfileAspect.SENSES_FAR_INTERVAL), "far_interval_ticks");
         assertEquals(12, PERSON.i(ProfileAspect.SENSES_HERD_LINK_RADIUS), "herd_link_radius");
 
-        assertEquals(12, PERSON.i(ProfileAspect.PLACES_RADIUS), "perception.sense_radius");
+        assertEquals(24, PERSON.i(ProfileAspect.PLACES_RADIUS), "places.radius");
+        assertEquals(150, PERSON.i(ProfileAspect.PLACES_CONE_DEGREES), "places.cone_degrees");
+        assertEquals(8, PERSON.i(ProfileAspect.PLACES_NEAR_RADIUS), "places.near_radius");
         assertEquals(24, PERSON.i(ProfileAspect.PLACES_REGION_MAX_SPREAD), "region_max_spread");
         assertEquals(160, PERSON.i(ProfileAspect.PLACES_MAX_PER_KIND), "knowledge_max_per_kind");
 
