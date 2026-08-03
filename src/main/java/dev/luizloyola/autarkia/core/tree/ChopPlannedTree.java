@@ -94,8 +94,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
     /** Everything the card promised that this run could not serve — the reckoning of the exit. */
     private final List<Pos> leftovers = new ArrayList<>();
     private String ending;
-    /** Doorstep sides already found unreachable this run — the next-nearest is tried next. */
-    private int doorstepsTried;
+    /** The pillar site's column — the working axis beside the tree. Entry when mast-free. */
+    private int siteX;
+    private int siteZ;
     /** Walks spent collecting the fell's drops — the tail's budget. */
     private int gatherWalks;
     /** Where the feet last were, and since when — the stuck watchdog's memory. */
@@ -209,6 +210,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
         treeBlocks.addAll(tree.branches());
         plan = ChopPlan.of(tree);
         mastAhead = new ArrayDeque<>(plan.mast());
+        Pos site = plan.mast().isEmpty() ? plan.entry() : plan.mast().get(0);
+        siteX = site.x();
+        siteZ = site.z();
         ctx.journal().record(Category.BRAIN, "chop",
                 "the card says " + (plan.chopCount() + plan.mast().size()) + " chops, "
                         + plan.digCount() + " digs"
@@ -219,112 +223,61 @@ public final class ChopPlannedTree implements PrimitiveTask {
     }
 
     /**
-     * Break into the shaft: the entry cell and the one above it, then step inside. A mast too
-     * short to stand in (a bush) skips the step-in — everything is worked from outside.
+     * Reach the pillar site — the column BESIDE the tree the whole dance works from. Nothing of
+     * the trunk is touched on the way in: the grounding invariant is that the tree floats at no
+     * instant of the dance. A mast-free card (a short tree) skips straight to the work.
      */
     private TaskStatus enter(BrainContext ctx) {
         if (pollBreak(ctx)) {
             return TaskStatus.RUNNING;
         }
-        BlockProbe probe = ctx.percepts().blocks();
-        Pos pairCell = null;
-        while (!mastAhead.isEmpty() && mastAhead.peek().y() <= plan.entry().y() + 1) {
-            Pos cell = mastAhead.peek();
-            if (probe.at(cell.x(), cell.y(), cell.z()) == BlockKind.LOG) {
-                pairCell = cell;
-                break;
-            }
-            mastAhead.poll();
-        }
-        if (pairCell != null) {
-            // Stand FACE-ADJACENT before swinging: a face-adjacent break cannot be corner-blocked,
-            // and a sapling oak was refused from 0.34 off-centre.
-            if (besideEntry(ctx)) {
-                walkIssued = false;
-                if (tryArm(ctx, pairCell)) {
-                    return TaskStatus.RUNNING;
-                }
-                return fail(ctx, "the arm refused the way in " + armForensics(ctx, pairCell));
-            }
-            Pos stand = nearestDoorstep(ctx, doorstepsTried);
-            // The doorstep must be STANDABLE before a walk can deliver her — a sapling oak's own
-            // canopy fills the cells beside its trunk. Chew that column first.
-            for (int dy = 0; dy <= 1; dy++) {
-                Pos c = new Pos(stand.x(), stand.y() + dy, stand.z());
-                BlockKind k = probe.at(c.x(), c.y(), c.z());
-                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
-                        && inReach(ctx, c)) {
-                    Pos mark = chewMark(ctx, c);
-                    if (ctx.actuators().breaker().begin(mark)) {
-                        breaking = true;
-                        return TaskStatus.RUNNING;
-                    }
-                    return fail(ctx, "the arm refused the doorstep at " + shortPos(mark));
-                }
-            }
-            if (!walkIssued) {
-                ctx.actuators().mover().moveTo(stand.x(), stand.y(), stand.z());
-                walkIssued = true;
-                walkTicks = 0;
-                return TaskStatus.RUNNING;
-            }
-            if (ctx.actuators().mover().state() == MoveState.MOVING
-                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
-                return TaskStatus.RUNNING;
-            }
-            walkIssued = false;
-            if (besideEntry(ctx)) {
-                return beginBreak(ctx, pairCell, "the way in");
-            }
-            // Hemmed short of the doorstep: chew the tree's own cell in the way and retry.
-            Pos blocker = chewMark(ctx, stand);
-            if (!blocker.equals(stand) && ctx.actuators().breaker().begin(blocker)) {
-                breaking = true;
-                return TaskStatus.RUNNING;
-            }
-            // This side is a dead end; three more exist, and only when all four fail does the tree
-            // win.
-            if (++doorstepsTried < 4) {
-                return TaskStatus.RUNNING;
-            }
-            return fail(ctx, "cannot stand beside the doorway at " + shortPos(plan.entry()));
-        }
-        if (plan.mast().size() < 3) {
-            phase = Phase.WORK;
-            return TaskStatus.RUNNING;
-        }
-        Pos here = ctx.percepts().position();
-        if (here.x() == plan.entry().x() && here.z() == plan.entry().z()) {
+        Pos feet = ctx.percepts().position();
+        if (plan.mast().isEmpty() || (feet.x() == siteX && feet.z() == siteZ)) {
             ctx.actuators().mover().stop();
             walkIssued = false;
             pickupWait = 0;
-            phase = Phase.ASCEND;
+            if (plan.mast().isEmpty()) {
+                phase = Phase.WORK;
+                layerIndex = 0;
+                moveIndex = -1;
+            } else {
+                phase = Phase.ASCEND;
+            }
             return TaskStatus.RUNNING;
         }
+        BlockProbe probe = ctx.percepts().blocks();
+        Pos siteGround = plan.mast().get(0);
+        for (int dy = 0; dy <= 1; dy++) {
+            Pos c = new Pos(siteX, siteGround.y() + dy, siteZ);
+            BlockKind k = probe.at(c.x(), c.y(), c.z());
+            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
+                    && tryArm(ctx, c)) {
+                return TaskStatus.RUNNING;
+            }
+        }
         if (!walkIssued) {
-            ctx.actuators().mover().moveTo(plan.entry().x(), plan.entry().y(), plan.entry().z());
+            ctx.actuators().mover().moveTo(siteGround.x(), siteGround.y(), siteGround.z());
             walkIssued = true;
             walkTicks = 0;
             return TaskStatus.RUNNING;
         }
-        if (ctx.actuators().mover().state() == MoveState.MOVING && ++walkTicks < WALK_TIMEOUT_TICKS) {
+        if (ctx.actuators().mover().state() == MoveState.MOVING
+                && ++walkTicks < WALK_TIMEOUT_TICKS) {
             return TaskStatus.RUNNING;
         }
-        // Hemmed beside the doorway (a low canopy walls the one-block step): chew the tree's
-        // own cell between her and the entry, then try the step again — each bite is finite.
-        Pos doorway = chewMark(ctx, plan.entry());
-        if (!doorway.equals(plan.entry()) && ctx.actuators().breaker().begin(doorway)) {
+        walkIssued = false;
+        Pos blocker = chewMark(ctx, siteGround);
+        if (!blocker.equals(siteGround) && ctx.actuators().breaker().begin(blocker)) {
             breaking = true;
             return TaskStatus.RUNNING;
         }
-        return fail(ctx, "could not step into the shaft at " + shortPos(plan.entry()));
+        return fail(ctx, "cannot reach the pillar site at " + shortPos(siteGround));
     }
 
     /**
-     * Ride the mast: break the next shaft cell above, then rise one on a log of her own —
-     * repeat until the column's top is broken. The rise refusing with an empty pack waits a
-     * moment for the drops underfoot to hop in; refusing for any other reason ends the run
-     * (the body has already retried the cell itself — see the riser's contract).
+     * Raise the pillar beside the tree: clear this tree's matter out of the headroom, rise one on a
+     * carried log, until her feet face the trunk's top. The trunk is untouched, so a tall tree
+     * needs a log IN the PACK to start; the harvest finances every pillar after the first.
      */
     private TaskStatus ascend(BrainContext ctx) {
         if (pollBreak(ctx)) {
@@ -336,42 +289,41 @@ public final class ChopPlannedTree implements PrimitiveTask {
                     return TaskStatus.RUNNING;
                 }
                 case RISEN, IDLE -> riseIssued = false;
-                case FAILED -> {
-                    riseIssued = false; // one more ask below; the body caps its own retries
-                }
+                case FAILED -> riseIssued = false; // ask once more; the body caps its retries
             }
         }
-        BlockProbe probe = ctx.percepts().blocks();
-        while (!mastAhead.isEmpty()) {
-            Pos cell = mastAhead.peek();
-            if (probe.at(cell.x(), cell.y(), cell.z()) == BlockKind.LOG) {
-                Pos feet = ctx.percepts().position();
-                if (cell.y() - feet.y() <= 2) {
-                    return beginBreak(ctx, cell, "the shaft");
-                }
-                break; // above the arm: rise first
-            }
-            mastAhead.poll();
-        }
-        if (mastAhead.isEmpty()) {
+        Pos feet = ctx.percepts().position();
+        int targetFeet = plan.mast().get(plan.mast().size() - 1).y() + 1;
+        if (feet.y() >= targetFeet) {
             phase = Phase.WORK;
             layerIndex = 0;
             moveIndex = -1;
             return TaskStatus.RUNNING;
         }
+        BlockProbe probe = ctx.percepts().blocks();
+        for (int dy = 1; dy <= 2; dy++) {
+            Pos c = new Pos(siteX, feet.y() + dy, siteZ);
+            BlockKind k = probe.at(c.x(), c.y(), c.z());
+            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)) {
+                if (tryArm(ctx, c)) {
+                    return TaskStatus.RUNNING;
+                }
+                return fail(ctx, "cannot clear the pillar's headroom at " + shortPos(c));
+            }
+        }
         String log = carriedLog(ctx);
         if (log == null) {
             if (++pickupWait <= PICKUP_WAIT_TICKS) {
-                return TaskStatus.RUNNING; // the broken logs are still hopping into the pack
+                return TaskStatus.RUNNING;
             }
-            return fail(ctx, "no log to rise on below " + shortPos(mastAhead.peek()));
+            return fail(ctx, "nothing to pillar on — a tree this tall needs a carried log");
         }
         pickupWait = 0;
         if (ctx.actuators().riser().up(log)) {
             riseIssued = true;
             return TaskStatus.RUNNING;
         }
-        return fail(ctx, "the rise refused below " + shortPos(mastAhead.peek()));
+        return fail(ctx, "the rise refused at " + shortPos(feet));
     }
 
     /**
@@ -402,7 +354,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         ChopPlan.Layer layer = plan.layers().get(layerIndex);
         Pos feet = ctx.percepts().position();
-        boolean onAxis = feet.x() == plan.entry().x() && feet.z() == plan.entry().z();
+        boolean onAxis = feet.x() == siteX && feet.z() == siteZ;
         if (moveIndex < 0) {
             // Between layers: back to center, then to the layer's height — mining the pillar
             // underfoot on the way down, RISING on her own logs on the way up: a layer above the
@@ -479,7 +431,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         if (!atStand(ctx, move)) {
             Pos stand = move.stand();
-            if (stand.x() == plan.entry().x() && stand.z() == plan.entry().z()
+            if (stand.x() == siteX && stand.z() == siteZ
                     && stand.y() > feet.y() && onAxis) {
                 // The stand is the mast itself, above her: this layer rides the extension.
                 return climbOne(ctx, "the stand at " + shortPos(stand));
@@ -570,7 +522,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private TaskStatus walkToAxis(BrainContext ctx, String why) {
         Pos feet = ctx.percepts().position();
         if (!walkIssued) {
-            ctx.actuators().mover().moveTo(plan.entry().x(), feet.y(), plan.entry().z());
+            ctx.actuators().mover().moveTo(siteX, feet.y(), siteZ);
             walkIssued = true;
             walkTicks = 0;
             return TaskStatus.RUNNING;
@@ -581,7 +533,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         walkIssued = false;
         Pos now = ctx.percepts().position();
-        if (!(now.x() == plan.entry().x() && now.z() == plan.entry().z())) {
+        if (!(now.x() == siteX && now.z() == siteZ)) {
             return fail(ctx, "could not return to " + why);
         }
         return TaskStatus.RUNNING;
@@ -590,7 +542,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
     /** After the last layer: mine whatever pillar still stands underfoot, down to the ground. */
     private TaskStatus descendToGround(BrainContext ctx) {
         Pos feet = ctx.percepts().position();
-        if (feet.x() == plan.entry().x() && feet.z() == plan.entry().z()
+        if (feet.x() == siteX && feet.z() == siteZ
                 && feet.y() > plan.entry().y()) {
             Pos below = new Pos(feet.x(), feet.y() - 1, feet.z());
             if (ctx.percepts().blocks().at(below.x(), below.y(), below.z()) != BlockKind.AIR) {
@@ -726,50 +678,6 @@ public final class ChopPlannedTree implements PrimitiveTask {
             mark = b;
         }
         return mark;
-    }
-
-    /** Whether her feet are face-adjacent to the entry column, within the slope window. */
-    private boolean besideEntry(BrainContext ctx) {
-        Pos feet = ctx.percepts().position();
-        return Math.abs(feet.x() - plan.entry().x()) + Math.abs(feet.z() - plan.entry().z()) == 1
-                && Math.abs(feet.y() - plan.entry().y()) <= 2;
-    }
-
-    /**
-     * The nearest standable cell face-adjacent to the entry. TERRAIN-AWARE: each side's standing
-     * level is found within a two-block slope window, since demanding the entry's exact height
-     * refused the first wild tree on a hillside. A cell holding this tree's leaves counts — the
-     * chew makes it standable.
-     */
-    private Pos nearestDoorstep(BrainContext ctx, int skip) {
-        BlockProbe probe = ctx.percepts().blocks();
-        Pos feet = ctx.percepts().position();
-        java.util.List<long[]> ranked = new ArrayList<>();
-        int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        for (int[] side : sides) {
-            int x = plan.entry().x() + side[0];
-            int z = plan.entry().z() + side[1];
-            for (int y = plan.entry().y() + 2; y >= plan.entry().y() - 2; y--) {
-                BlockKind at = probe.at(x, y, z);
-                BlockKind below = probe.at(x, y - 1, z);
-                boolean standable = (at == BlockKind.AIR || at == BlockKind.LEAVES)
-                        && below != BlockKind.AIR;
-                if (!standable) {
-                    continue;
-                }
-                long dx = x - feet.x();
-                long dz = z - feet.z();
-                long dy = y - plan.entry().y();
-                ranked.add(new long[] {dx * dx + dz * dz + dy * dy, x, y, z});
-                break; // the topmost standable spot is this side's doorstep
-            }
-        }
-        ranked.sort(java.util.Comparator.comparingLong(r -> r[0]));
-        if (ranked.isEmpty()) {
-            return new Pos(plan.entry().x() + 1, plan.entry().y(), plan.entry().z());
-        }
-        long[] pick = ranked.get(Math.min(skip, ranked.size() - 1));
-        return new Pos((int) pick[1], (int) pick[2], (int) pick[3]);
     }
 
     private TaskStatus beginBreak(BrainContext ctx, Pos cell, String what) {

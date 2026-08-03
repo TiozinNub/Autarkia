@@ -206,14 +206,17 @@ public final class TreeChopPlanViewer {
         }
 
         // Layers above the broken trunk top imply the mast extending on her own logs.
-        int mastTop = plan.mast().get(plan.mast().size() - 1).y();
-        int topLayer = plan.layers().isEmpty() ? mastTop : plan.layers().get(0).y();
-        if (topLayer - 1 > mastTop) {
-            List<BlockPos> extension = new ArrayList<>();
-            for (int y = mastTop + 1; y <= topLayer - 1; y++) {
-                extension.add(new BlockPos(plan.entry().x(), y, plan.entry().z()));
+        if (!plan.mast().isEmpty()) {
+            Pos site = plan.mast().get(plan.mast().size() - 1);
+            int topLayer = plan.layers().isEmpty() ? site.y() : plan.layers().get(0).y();
+            if (topLayer - 1 > site.y()) {
+                List<BlockPos> extension = new ArrayList<>();
+                for (int y = site.y() + 1; y <= topLayer - 1; y++) {
+                    extension.add(new BlockPos(site.x(), y, site.z()));
+                }
+                groups.add(new CellOverlayPayload.Group(
+                        MAST_STROKE, THIN_WIDTH, 0, true, extension));
             }
-            groups.add(new CellOverlayPayload.Group(MAST_STROKE, THIN_WIDTH, 0, true, extension));
         }
 
         Pos top = plan.mast().get(plan.mast().size() - 1);

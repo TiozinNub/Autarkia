@@ -107,43 +107,67 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         List<Pos> base = new ArrayList<>(tree.base());
         base.sort(ORDER);
         Pos entry = base.get(0);
-        int mx = entry.x();
-        int mz = entry.z();
-
-        List<Pos> mast = new ArrayList<>();
-        mast.add(entry);
-        for (Pos cell : tree.column()) {
-            if (cell.x() == mx && cell.z() == mz) {
-                mast.add(cell);
-            }
-        }
-        mast.sort(ORDER);
         int baseY = entry.y();
-        int mastTop = mast.get(mast.size() - 1).y();
-        // The highest feet level the shaft offers: her final rise leaves her standing one below
-        // the broken top. A bush (mast of one) never ascends — feet stay at ground level.
-        int topFeet = Math.max(baseY, mastTop - 1);
-
-        // Everything wooden that is not the mast is a target: the sibling base cells, a 2x2
-        // giant's other three columns, and every branch.
-        List<Pos> targets = new ArrayList<>();
-        for (Pos cell : tree.base()) {
-            if (!(cell.x() == mx && cell.z() == mz)) {
-                targets.add(cell);
-            }
-        }
-        for (Pos cell : tree.column()) {
-            if (!(cell.x() == mx && cell.z() == mz)) {
-                targets.add(cell);
-            }
-        }
-        targets.addAll(tree.branches());
-        targets.sort(ORDER);
 
         Set<Pos> logs = new LinkedHashSet<>(tree.base());
         logs.addAll(tree.column());
         logs.addAll(tree.branches());
         Set<Pos> canopy = new HashSet<>(tree.leaves());
+
+        // the PILLAR STANDS BESIDE the TREE — the grounding invariant (Luiz): a floating remnant
+        // must be IMPOSSIBLE, not recoverable. The old in-trunk elevator ate the entry and floated
+        // everything above it; a mast outside the footprint takes the tree only from the top, so
+        // abandonment leaves a shorter TREE perception re-detects. Site: the neighbouring column
+        // with least tree matter, ties by the total order.
+        int trunkTop = baseY;
+        for (Pos cell : tree.column()) {
+            trunkTop = Math.max(trunkTop, cell.y());
+        }
+        int mx = entry.x();
+        int mz = entry.z();
+        {
+            int bestCount = Integer.MAX_VALUE;
+            int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            List<int[]> ranked = new ArrayList<>();
+            for (int[] side : sides) {
+                int sx = entry.x() + side[0];
+                int sz = entry.z() + side[1];
+                if (logs.contains(new Pos(sx, baseY, sz))) {
+                    continue; // inside a giant's own footprint — no room for a pillar
+                }
+                int count = 0;
+                for (int y = baseY; y <= trunkTop + 2; y++) {
+                    Pos c = new Pos(sx, y, sz);
+                    if (logs.contains(c) || canopy.contains(c)) {
+                        count++;
+                    }
+                }
+                ranked.add(new int[] {count, sx, sz});
+            }
+            ranked.sort(java.util.Comparator.<int[]>comparingInt(r -> r[0])
+                    .thenComparingInt(r -> r[1]).thenComparingInt(r -> r[2]));
+            if (!ranked.isEmpty()) {
+                mx = ranked.get(0)[1];
+                mz = ranked.get(0)[2];
+            }
+        }
+        // A short trunk needs no pillar: the arm serves from the ground and escalation climbs only
+        // where it must. A tall one plans the full pillar, whose first rise needs a CARRIED log —
+        // the price of not eating the entry.
+        List<Pos> mast = new ArrayList<>();
+        if (trunkTop - baseY > 3) {
+            for (int y = baseY; y < trunkTop; y++) {
+                mast.add(new Pos(mx, y, mz));
+            }
+        }
+        int topFeet = mast.isEmpty() ? baseY : trunkTop;
+
+        // every log is a target now — base, columns, branches: nothing is consumed by an
+        // ascent, because the ascent touches nothing of the tree but the leaves in its way.
+        List<Pos> targets = new ArrayList<>(tree.base());
+        targets.addAll(tree.column());
+        targets.addAll(tree.branches());
+        targets.sort(ORDER);
         // How far a tunnel may ever wander: the tree's own horizontal extent, with margin.
         int radius = 2;
         for (Pos cell : logs) {
@@ -165,10 +189,16 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
                 .thenComparing(ORDER));
 
         // The simulation: walk the plan in execution order, consuming what each move breaks, so
-        // later floor checks see the world as it will be then — not as it is now. The mast is
-        // consumed up front (the ascent has already eaten it by the time any layer runs).
+        // later floor checks see the world as it will be then — not as it is now. The ascent
+        // consumes only the tree matter standing in the pillar's own column and headroom.
         List<Refusal> refusals = new ArrayList<>();
-        Set<Pos> consumed = new HashSet<>(mast);
+        Set<Pos> consumed = new HashSet<>();
+        for (int y = baseY; y <= trunkTop + 2; y++) {
+            Pos c = new Pos(mx, y, mz);
+            if (logs.contains(c) || canopy.contains(c)) {
+                consumed.add(c);
+            }
+        }
         TreeMap<Integer, List<Move>> served = new TreeMap<>(Comparator.reverseOrder());
         for (Pos target : targets) {
             if (consumed.contains(target)) {
