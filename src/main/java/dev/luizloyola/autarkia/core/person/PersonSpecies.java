@@ -51,6 +51,9 @@ public final class PersonSpecies {
             .set(ProfileAspect.PLACES_RADIUS, 24)
             .set(ProfileAspect.PLACES_CONE_DEGREES, 150)
             .set(ProfileAspect.PLACES_NEAR_RADIUS, 8)
+            // Twice what she can inspect: a forest is obvious from open ground long before any one
+            // tree in it.
+            .set(ProfileAspect.PLACES_HORIZON_RADIUS, 48)
             .set(ProfileAspect.PLACES_REGION_MAX_SPREAD, 24)
             .set(ProfileAspect.PLACES_MAX_PER_KIND, 160)
             // --- danger: armored < with sword < with bow (decision: Luiz) ---------------------
