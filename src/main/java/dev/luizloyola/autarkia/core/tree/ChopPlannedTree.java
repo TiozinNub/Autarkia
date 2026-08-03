@@ -62,6 +62,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private static final int GATHER_RADIUS = 10;
     private static final int GATHER_WALKS_MAX = 8;
 
+    /** Per-layer canopy-drop walks before descending — the original "logs on this canopy". */
+    private static final int LAYER_GATHER_WALKS = 4;
+
     /** How long a tree that beat this task stays off the producer's menu. */
     private static final int AVOID_TICKS = 2400;
 
@@ -102,6 +105,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private String bailReason;
     /** Walks spent collecting the fell's drops — the tail's budget. */
     private int gatherWalks;
+    /** Walks spent on this layer's canopy drops before descending — Luiz's original step 4. */
+    private int layerGatherWalks;
     /** Where the feet last were, and since when — the stuck watchdog's memory. */
     private Pos lastSpot;
     private long restingSince = -1;
@@ -416,6 +421,47 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         if (moveIndex >= layer.moves().size()) {
+            // A branch broken outward drops onto the canopy SHE is STANDING ON, where the ground
+            // sweep after the fell can never reach it — so it is collected here, at its own
+            // layer, before the descent: bounded walks, this tree's spread only.
+            if (layerGatherWalks < LAYER_GATHER_WALKS) {
+                Pos feetNow = ctx.percepts().position();
+                Pos dropTarget = null;
+                long best = Long.MAX_VALUE;
+                for (var drop : ctx.percepts().drops()) {
+                    if (!Stock.LOGS.matches(drop.itemId())
+                            || Math.abs(drop.pos().y() - feetNow.y()) > 2) {
+                        continue;
+                    }
+                    if (TreeShape.horizontalDistSq(drop.pos(),
+                            new Pos(siteX, feetNow.y(), siteZ)) > 100) {
+                        continue;
+                    }
+                    long toMe = TreeShape.horizontalDistSq(drop.pos(), feetNow);
+                    if (toMe < best) {
+                        best = toMe;
+                        dropTarget = drop.pos();
+                    }
+                }
+                if (dropTarget != null) {
+                    if (!walkIssued) {
+                        ctx.actuators().mover().moveTo(
+                                dropTarget.x(), dropTarget.y(), dropTarget.z());
+                        walkIssued = true;
+                        walkTicks = 0;
+                        layerGatherWalks++;
+                        return TaskStatus.RUNNING;
+                    }
+                    if (ctx.actuators().mover().state() == MoveState.MOVING
+                            && ++walkTicks < WALK_TIMEOUT_TICKS) {
+                        return TaskStatus.RUNNING;
+                    }
+                    walkIssued = false;
+                    return TaskStatus.RUNNING;
+                }
+            }
+            walkIssued = false;
+            layerGatherWalks = 0;
             layerIndex++;
             moveIndex = -1;
             return TaskStatus.RUNNING;
