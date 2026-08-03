@@ -992,7 +992,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         long bestDist = Long.MAX_VALUE;
         for (var drop : ctx.percepts().drops()) {
             if (!Stock.LOGS.matches(drop.itemId())
-                    || !dev.luizloyola.anima.core.brain.task.Flocks.gatherable(drop.pos(), ctx)) {
+                    || !dev.luizloyola.anima.core.brain.task.Flocks.gatherable(drop, ctx)) {
                 continue;
             }
             long dist = TreeShape.horizontalDistSq(drop.pos(), anchor);
