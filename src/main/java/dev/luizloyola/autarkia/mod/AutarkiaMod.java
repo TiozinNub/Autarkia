@@ -11,6 +11,8 @@ import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.autarkia.mod.inv.ModMenus;
 import dev.luizloyola.anima.mod.item.AnimaItems;
+import dev.luizloyola.anima.mod.item.WandActions;
+import dev.luizloyola.autarkia.mod.item.ChopWandAction;
 import dev.luizloyola.anima.mod.brain.Claims;
 import dev.luizloyola.anima.mod.brain.DamageMarks;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
@@ -89,6 +91,10 @@ public class AutarkiaMod implements ModInitializer {
         // this world, not about having a mind, so it belongs here rather than in the library.
         // Since the seventh choreography (2026-08-02), obtain orders the dance card itself.
         Producers.register(Stock.LOGS, ChopForLogs::new);
+        // Teach the debug wand what a block MEANS to a settler — Anima's wand can point at
+        // anything and knows what none of it is. Unclaimed clicks still fall back to walking
+        // there.
+        WandActions.register(new ChopWandAction());
         // Declare what a settler finds worth remembering, and what grows into it. Anima owns the
         // crescent sampler, the region flood and the merge rule; it has no idea what a tree is.
         Pois.init();

@@ -1,3 +1,5 @@
 {
-  "entity.autarkia.person": "Person"
+  "entity.autarkia.person": "Person",
+  "item.autarkia.debug_wand.chopping": "%s — %s",
+  "item.autarkia.debug_wand.chopping_auto_off": "%s — %s (autonomy off)"
 }
