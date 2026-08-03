@@ -740,7 +740,53 @@ public final class ChopPlannedTree implements PrimitiveTask {
      * will never re-individuate for perception, so a partial tree must stay findable.
      */
     private TaskStatus verify(BrainContext ctx) {
+        if (pollBreak(ctx)) {
+            return TaskStatus.RUNNING;
+        }
         BlockProbe probe = ctx.percepts().blocks();
+        // Nothing of HERS stays either: the pillar column and every boosted stand are swept
+        // before the census. Bounded — an unreachable straggler is journaled loudly rather than
+        // blocking the verdict forever.
+        Pos hers = null;
+        for (int y = plan.entry().y(); y <= plan.entry().y() + plan.mast().size() + 6
+                && hers == null; y++) {
+            Pos c = new Pos(siteX, y, siteZ);
+            if (probe.at(c.x(), c.y(), c.z()) == BlockKind.LOG) {
+                hers = c;
+            }
+        }
+        for (ChopPlan.Layer layer : plan.layers()) {
+            for (ChopPlan.Move move : layer.moves()) {
+                if (hers != null) {
+                    break;
+                }
+                if (move.boost() && probe.at(move.stand().x(), move.stand().y(),
+                        move.stand().z()) == BlockKind.LOG) {
+                    hers = move.stand();
+                }
+            }
+        }
+        if (hers != null) {
+            if (tryArm(ctx, hers)) {
+                return TaskStatus.RUNNING;
+            }
+            if (!walkIssued) {
+                ctx.actuators().mover().moveTo(hers.x(), hers.y(), hers.z());
+                walkIssued = true;
+                walkTicks = 0;
+                return TaskStatus.RUNNING;
+            }
+            if (ctx.actuators().mover().state() == MoveState.MOVING
+                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
+                return TaskStatus.RUNNING;
+            }
+            walkIssued = false;
+            if (tryArm(ctx, hers)) {
+                return TaskStatus.RUNNING;
+            }
+            ctx.journal().record(Category.BRAIN, "chop",
+                    "left one of her own logs at " + shortPos(hers) + " — unreachable");
+        }
         List<Pos> standing = new ArrayList<>();
         for (Pos cell : allPromisedLogs()) {
             if (probe.at(cell.x(), cell.y(), cell.z()) == BlockKind.LOG) {
