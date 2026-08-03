@@ -121,6 +121,14 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private int decayWait;
     /** Walks spent on this layer's canopy drops before descending — Luiz's original step 4. */
     private int layerGatherWalks;
+    /**
+     * Log drops this fell has already found unwalkable — asked for once, never again. The layer
+     * budget resets every layer, so without this memory a log no walk reaches is re-requested
+     * four times per layer for the whole descent.
+     */
+    private final java.util.Set<Pos> unreachableDrops = new HashSet<>();
+    /** The drop the layer-gather walk in flight is for, so a refusal can be remembered. */
+    private Pos chasing;
     /** The return-to-axis walk gets one fallback: down to the site's ground, then re-climb. */
     private boolean axisFallback;
     /** Where the feet last were, and since when — the stuck watchdog's memory. */
@@ -294,7 +302,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         for (int dy = 0; dy <= 1; dy++) {
             Pos c = new Pos(siteX, siteGround.y() + dy, siteZ);
             BlockKind k = probe.at(c.x(), c.y(), c.z());
-            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
+            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && mine(c)
                     && tryArm(ctx, c)) {
                 return TaskStatus.RUNNING;
             }
@@ -502,7 +510,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         for (int dy = 1; dy <= 2; dy++) {
             Pos c = new Pos(siteX, feet.y() + dy, siteZ);
             BlockKind k = probe.at(c.x(), c.y(), c.z());
-            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)) {
+            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && mine(c)) {
                 if (tryArm(ctx, c)) {
                     return TaskStatus.RUNNING;
                 }
@@ -608,11 +616,23 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 long best = Long.MAX_VALUE;
                 for (var drop : ctx.percepts().drops()) {
                     if (!Stock.LOGS.matches(drop.itemId())
-                            || Math.abs(drop.pos().y() - feetNow.y()) > 2) {
+                            || Math.abs(drop.pos().y() - feetNow.y()) > 2
+                            || unreachableDrops.contains(drop.pos())) {
                         continue;
                     }
                     if (TreeShape.horizontalDistSq(drop.pos(),
                             new Pos(siteX, feetNow.y(), siteZ)) > 100) {
+                        continue;
+                    }
+                    // Only what rests on this TREE (or her own column). A log caught by a
+                    // NEIGHBOUR's crown looks just as close and is a one-way trip: walking out
+                    // onto a small spruce grown against a mega spruce left nothing that could
+                    // walk back to a pillar eleven blocks up across the void she had just cut.
+                    // Let it lie — the ground tail and the decay loiter are what that wood is
+                    // for.
+                    Pos under = new Pos(drop.pos().x(), drop.pos().y() - 1, drop.pos().z());
+                    if (!treeBlocks.contains(under)
+                            && !(under.x() == siteX && under.z() == siteZ)) {
                         continue;
                     }
                     long toMe = TreeShape.horizontalDistSq(drop.pos(), feetNow);
@@ -628,6 +648,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                         walkIssued = true;
                         walkTicks = 0;
                         layerGatherWalks++;
+                        chasing = dropTarget;
                         return TaskStatus.RUNNING;
                     }
                     if (ctx.actuators().mover().state() == MoveState.MOVING
@@ -635,6 +656,17 @@ public final class ChopPlannedTree implements PrimitiveTask {
                         return TaskStatus.RUNNING;
                     }
                     walkIssued = false;
+                    // The walk is over and the log is still lying there — usually resting on a
+                    // NEIGHBOUR's canopy. One refusal is enough: the budget resets every layer,
+                    // so without this she asks for the same impossible cell four times a layer
+                    // all the way down (fifty-two futile requests on one mega spruce). Cleared
+                    // per fell; the ground tail still sweeps what lands.
+                    if (chasing != null && stillLying(ctx, chasing)) {
+                        unreachableDrops.add(chasing);
+                        ctx.journal().record(Category.BRAIN, "chop", "gave up on the log at "
+                                + shortPos(chasing) + " — nothing walks there from this layer");
+                    }
+                    chasing = null;
                     return TaskStatus.RUNNING;
                 }
             }
@@ -783,7 +815,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
         for (int dy = 1; dy <= 2; dy++) {
             Pos c = new Pos(siteX, feet.y() + dy, siteZ);
             BlockKind k = probe.at(c.x(), c.y(), c.z());
-            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)) {
+            if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && mine(c)) {
                 if (tryArm(ctx, c)) {
                     return TaskStatus.RUNNING;
                 }
@@ -857,11 +889,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
                     return TaskStatus.RUNNING;
                 }
             }
-            // The site column can also be hemmed by the tree's own canopy — bite that too.
+            // The site column can be hemmed by canopy — this tree's, or the NEIGHBOUR's when
+            // a small tree grew right against the one she is felling. Either way it is in her
+            // own column and it is between her and the way back, so it comes down.
             for (int y = now.y() + 2; y >= plan.entry().y(); y--) {
                 Pos c = new Pos(siteX, y, siteZ);
                 BlockKind k = siteProbe.at(c.x(), c.y(), c.z());
-                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
+                if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && mine(c)
                         && tryArm(ctx, c)) {
                     return TaskStatus.RUNNING;
                 }
@@ -1001,6 +1035,16 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         walkIssued = false;
         return TaskStatus.RUNNING;
+    }
+
+    /** Whether a log item is still lying exactly there — proof the walk never delivered her. */
+    private boolean stillLying(BrainContext ctx, Pos cell) {
+        for (var drop : ctx.percepts().drops()) {
+            if (Stock.LOGS.matches(drop.itemId()) && drop.pos().equals(cell)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether any of this fell's wood still sits somewhere a walk cannot yet reach. */
