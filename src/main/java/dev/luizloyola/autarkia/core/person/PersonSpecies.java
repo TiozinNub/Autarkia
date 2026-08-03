@@ -51,9 +51,10 @@ public final class PersonSpecies {
             .set(ProfileAspect.PLACES_RADIUS, 24)
             .set(ProfileAspect.PLACES_CONE_DEGREES, 150)
             .set(ProfileAspect.PLACES_NEAR_RADIUS, 8)
-            // Well past inspection range: a forest is obvious from open ground long before any one
-            // tree in it. ~15 heightmap samples per bearing and no rays, so the reach is nearly
-            // free — the aperture is what pays.
+            // Well past anything they could inspect: a forest is obvious from open ground long
+            // before any one tree in it is. ~15 marched rays per bearing makes a full sweep of the
+            // cone about 10,000 reads — 160 ticks at the wallet. That is what sets REFRESH_TICKS.
+            // The reach buys freshness, not per-tick cost.
             .set(ProfileAspect.PLACES_HORIZON_RADIUS, 64)
             // The same 8 blocks the halo reaches: about as far as a settler resolves a thing into
             // parts rather than outline. Past it a wood is a green wall, so standing in
