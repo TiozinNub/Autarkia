@@ -47,12 +47,10 @@ public final class ChopForLogs implements Method {
     }
 
     /**
-     * The nearest remembered tree that is free, unavoided — and AFFORDABLE: the grounded
-     * pillar is prepaid (H rises, H carried logs), so a tree whose estimated bill exceeds the
-     * pack is not offered at all (Luiz's rule: cost is part of validity, not a discovery made
-     * by walking there and bailing). The estimate reads the memory's own bounds as a height
-     * proxy (canopy included, hence the generous discount), and the ascent's unwind-and-
-     * refund remains the net for what estimation gets wrong.
+     * The nearest remembered tree that is free, unavoided — and AFFORDABLE: a pillar is prepaid (one
+     * rise, one carried log), so a tree whose estimated bill exceeds the pack is not offered at all
+     * (Luiz's rule: cost is part of validity). Nothing else is filtered — quoting a pillar to plain
+     * trees, which climb themselves, left a Person with an empty pack unable to accept any tree.
      */
     private Optional<PoiMemory> nearestFreeTree(BrainContext ctx) {
         Pos here = ctx.percepts().position();
@@ -65,10 +63,8 @@ public final class ChopForLogs implements Method {
                     || !ctx.claims().availableTo(Pois.TREE, tree.anchor(), now)) {
                 continue;
             }
-            int height = tree.bounds().max().y() - tree.anchor().y();
-            int pillarBill = Math.max(0, height - 4);
-            if (pillarBill > carried) {
-                continue; // a giant she cannot fund yet — smaller trees pay for it first
+            if (bill(tree) > carried) {
+                continue; // a giant she cannot fund yet — plain trees pay for it first
             }
             long dist = TreeShape.horizontalDistSq(tree.anchor(), here);
             if (dist < bestDist) {
@@ -77,5 +73,23 @@ public final class ChopForLogs implements Method {
             }
         }
         return Optional.ofNullable(best);
+    }
+
+    /**
+     * What this tree would want in the pack before the first swing, read off what a memory keeps: a
+     * box and a log count, never a shape. A straight column of N logs cannot stand in a box shorter
+     * than N, and a crown always caps it, so a log count that fits the box is a bare column — free,
+     * however tall. Anything else raises a mast priced by the trunk's height, of which those two
+     * numbers are the bounds; the tighter one wins.
+     *
+     * <p>A tall trunk carrying two high branches reads plain here; the ascent's unwind-and-refund
+     * catches that at the tree.
+     */
+    private static int bill(PoiMemory tree) {
+        int box = tree.bounds().max().y() - tree.anchor().y();
+        if (tree.units() <= box) {
+            return 0; 
+        }
+        return ChopPlan.pillarCost(Math.max(0, Math.min(tree.units() - 1, box - 1)));
     }
 }

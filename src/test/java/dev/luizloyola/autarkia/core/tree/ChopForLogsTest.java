@@ -56,6 +56,22 @@ class ChopForLogsTest {
     }
 
     @Test
+    void aPlainTreeIsOfferedToAnEmptyPack() {
+        // Wood buys the pillar, so a Person with nothing must still accept a plain tree — those
+        // climb their own trunk and cost nothing to begin. Thirteen logs inside a box thirteen
+        // tall can only be one straight column.
+        FakeContext ctx = new FakeContext();
+        Pos anchor = new Pos(10, 64, 0);
+        ctx.knowledge().note(new PoiMemory(Pois.TREE, "plain", null, anchor,
+                new Region(anchor, new Pos(12, 64 + 13, 2)), 13, false, 0), 8);
+        ChopForLogs chop = new ChopForLogs();
+
+        assertTrue(chop.applicable(ctx),
+                "a plain trunk pays for its own ladder, however tall it stands");
+        assertTrue(chop.decompose(ctx).get(0) instanceof ChopPlannedTree);
+    }
+
+    @Test
     void aTreeThePackCannotFundIsNotOffered() {
         // The pillar is prepaid, and cost is part of validity (Luiz): a giant is off the menu
         // until smaller work fills the pack — never a walk-there-and-bail discovery.

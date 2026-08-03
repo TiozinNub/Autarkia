@@ -13,32 +13,40 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * The dance card for felling one tree: every move planned before the first swing, compiled from an
- * individuated {@link TreeShape.Trunk} and nothing else. DETERMINISTIC by rule (Luiz, 2026-08-02),
- * the six reactive revisions having died of improvising — a pure function of the shape,
- * unit-testable headless and paintable by the survey monocle before any executor exists.
+ * The dance card for felling one tree: every move planned before the first swing, compiled
+ * from an individuated {@link TreeShape.Trunk} and nothing else. DETERMINISTIC — a pure
+ * function of the shape, unit-testable headless and paintable by the survey monocle before any
+ * executor exists; the six reactive revisions before it died of improvising.
  *
+ * <p>The choreography:
  * <ol>
- * <li><b>Ascend the mast</b>, a level at a time, until its top is broken.
- * <li><b>Descend layer by layer, furthest target first.</b> Every log at the feet level is a
- * target, outermost first, reached by DIGGING a floor-checked tunnel from the mast through the
- * canopy, so nearer targets sit on tunnel already dug; then the trunk cells, the mast block
- * underfoot last, and she drops one. Leaves out of a tunnel's way are never chopped — decay clears
- * the canopy and drops the saplings.
- * <li><b>Escalate before refusing, refuse before improvising.</b> Each target is tried cheapest
- * first — plain walk, the one leap, a log of her own underfoot ({@link Move#boost}) — and then the
- * MAST EXTENDS level by level up to the target's own, which serves a bending trunk's tip and a
- * cherry arm from below. What still fails is a painted {@link Refusal}: the executor chops the rest
- * and exits PARTIAL, so the monocle shows what cannot be felled instead of surprising it mid-chop.
+ * <li><b>Climb only if the arm falls short, and climb the tree itself when the tree is
+ * plain.</b> A PLAIN tree (one stump, one straight column, no branches) is its own elevator
+ * shaft (break the log above, rise on the log it dropped), so the fell costs nothing to
+ * begin. Everything else masts her own logs in the neighbouring column with the least tree
+ * matter in it, eating the trunk strictly from the top: grounded at every instant, so an
+ * abandoned dance leaves a shorter TREE rather than wood hanging in a canopy.
+ * <li><b>Descend layer by layer, furthest target first.</b> Each target is reached by a
+ * floor-checked dig tunnel from the mast (leaves are the bridge, and cheap), then the trunk
+ * cells at that level, the mast block underfoot last. Leaves out of a tunnel's way are never
+ * chopped: decay clears the canopy and drops the saplings.
+ * <li><b>Escalate before refusing, refuse before improvising.</b> Plain walk, the one leap,
+ * one of her own logs underfoot ({@link Move#boost}), then the MAST EXTENDS past the broken
+ * trunk top, level by level to the target's own — what serves a bending trunk's tip. What
+ * still fails is a painted {@link Refusal}: the executor chops everything else and exits
+ * PARTIAL, never a mid-chop surprise.
  * </ol>
  *
- * <p>Tunnels are 4-way: a diagonal dig leaves corner blocks that block the body anyway. The mast
- * axis always counts as floored — her placed pillar occupies it during the descent.
+ * <p>Tunnels are 4-way: a diagonal dig leaves corner blocks that block the body anyway. The
+ * mast axis always counts as floored — her own placed pillar occupies it during the descent.
  *
- * @param entry the base cell of the mast column — where she breaks in at ground level
- * @param mast  the mast column bottom-up, entry included: the cells the ascent consumes, the
- *              shaft her pillar then occupies, and the blocks mine-below reclaims on the way down
- * @param layers non-empty work layers top-down; levels between them are implicit mine-below
+ * @param entry the tree's own stump cell — the doorway when she climbs the trunk, the landmark
+ *              the working column stands beside when she does not
+ * @param mast  the climbing column bottom-up, and what mine-below reclaims coming down. Empty
+ *              when the arm finishes the trunk from the ground; {@link #climbsTheTrunk} tells
+ *              the two kinds of climb apart
+ * @param layers work layers top-down, EMPTY when the ascent was the whole fell; levels between
+ *              them are implicit mine-below
  * @param refusals every cell this plan cannot promise, each with its reason — nothing silent
  */
 public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refusal> refusals) {
@@ -57,6 +65,26 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
 
     /** Where the eyes sit above the feet cell — what reach is measured from. */
     private static final double EYE = 1.62;
+
+    /**
+     * How high above her feet a swing still lands, in whole blocks, from the column beside the
+     * trunk: {@link #REACH} against one block of horizontal offset leaves
+     * {@code sqrt(REACH² - 1)} of vertical arm, plus {@link #EYE}. Four today — the height a
+     * pillar never has to pay for.
+     */
+    private static final int LIFT =
+            (int) Math.floor(Math.sqrt(REACH * REACH - 1.0) + EYE - 0.5);
+
+    /**
+     * What a trunk of this height costs in carried logs before the first swing: the pillar rises
+     * only until the arm can see the top, so a trunk within one ground swing is free and a giant
+     * pays for the difference alone. {@link ChopForLogs} prices a remembered tree through this
+     * same door — when the two drifted, an empty-packed Person was offered no tree at all, the
+     * plain five-log oak quoted a pillar.
+     */
+    public static int pillarCost(int trunkHeight) {
+        return Math.max(0, trunkHeight - LIFT);
+    }
 
     /** One feet level's work: its targets in execution order, outermost from the mast first. */
     public record Layer(int y, List<Move> moves) {
@@ -84,6 +112,24 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         NO_FLOOR
     }
 
+    /**
+     * Whether the mast is the trunk — a plain tree climbed through itself, entry cell first —
+     * rather than her own column raised beside it. The executor asks before the first swing:
+     * the way in is a doorway through the stump, else a walk to the next column over.
+     */
+    public boolean climbsTheTrunk() {
+        return !mast.isEmpty() && mast.get(0).equals(entry);
+    }
+
+    /**
+     * How many of the TREE's logs the ascent breaks before any layer runs: none beside the
+     * tree, and up the trunk the whole column plus the two cells her body clears overhead —
+     * which is why a plain tree's card carries no layers.
+     */
+    public int ascentChops() {
+        return climbsTheTrunk() ? mast.size() + 2 : 0;
+    }
+
     public int chopCount() {
         int chops = 0;
         for (Layer layer : layers) {
@@ -104,6 +150,15 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
 
     /** Compiles the dance card for one tree. Pure and deterministic: no world, no randomness. */
     public static ChopPlan of(TreeShape.Trunk tree) {
+        return of(tree, true);
+    }
+
+    /**
+     * The same card for wood that does not stand on the ground — a half-felled remnant, resumed on
+     * the memory and the claim (individuation refuses to call floating wood a tree). Its "stump" is
+     * mid-air: no doorway, no climbing through, so a remnant always gets the mast beside it.
+     */
+    public static ChopPlan of(TreeShape.Trunk tree, boolean grounded) {
         List<Pos> base = new ArrayList<>(tree.base());
         base.sort(ORDER);
         Pos entry = base.get(0);
@@ -114,19 +169,32 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
         logs.addAll(tree.branches());
         Set<Pos> canopy = new HashSet<>(tree.leaves());
 
-        // the PILLAR STANDS BESIDE the TREE — the grounding invariant (Luiz): a floating remnant
-        // must be IMPOSSIBLE, not recoverable. The old in-trunk elevator ate the entry and floated
-        // everything above it; a mast outside the footprint takes the tree only from the top, so
-        // abandonment leaves a shorter TREE perception re-detects. Site: the neighbouring column
-        // with least tree matter, ties by the total order.
         int trunkTop = baseY;
         for (Pos cell : tree.column()) {
             trunkTop = Math.max(trunkTop, cell.y());
         }
+        // which COLUMN SHE CLIMBS, by shape.
+        //
+        // A PLAIN tree (one stump, one straight column, not a branch on it) climbs ITSELF,
+        // ladder and harvest at once, so a Person with an empty pack can fell one however tall
+        // it is. Wood is the only thing that buys a pillar: if plain trees are not free, nothing
+        // else is reachable either. What it trades is the grounding invariant, and a bare column
+        // is where that is cheapest — an abandoned dance strands one straight run of logs over
+        // the stump, which the remnant resume already knows.
+        //
+        // EVERYTHING ELSE keeps the PILLAR BESIDE the TREE: a floating remnant must be
+        // IMPOSSIBLE, not recoverable. Wood that hangs sideways — a giant's four columns, a
+        // fancy oak's arms, a cherry's bend — strands across a canopy no walk can reach if an
+        // in-trunk climb is interrupted. The mast is her own logs OUTSIDE the footprint, so the
+        // tree loses cells only from the top and any abandonment leaves a shorter TREE. Site:
+        // the neighbouring column with the least tree matter to dig through, ties by the total
+        // order.
+        int rungs = pillarCost(trunkTop - baseY);
+        boolean climbTheTrunk = rungs > 0 && grounded
+                && tree.base().size() == 1 && tree.branches().isEmpty();
         int mx = entry.x();
         int mz = entry.z();
-        {
-            int bestCount = Integer.MAX_VALUE;
+        if (!climbTheTrunk) {
             int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
             List<int[]> ranked = new ArrayList<>();
             for (int[] side : sides) {
@@ -151,19 +219,24 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
                 mz = ranked.get(0)[2];
             }
         }
-        // A short trunk needs no pillar: the arm serves from the ground and escalation climbs only
-        // where it must. A tall one plans the full pillar, whose first rise needs a CARRIED log —
-        // the price of not eating the entry.
+        // how HIGH SHE CLIMBS — to the ARM, never to the treetop for its own sake. A trunk the
+        // arm finishes from the ground plans no climb at all, in either mode; that is most
+        // oaks, and pillaring them anyway quoted a plain tree four carried logs only a plain
+        // tree could have paid. Beside the tree the mast rises as far as the arm falls short of
+        // the top; inside it the climb is the fell, less the two cells her body clears
+        // overhead.
         List<Pos> mast = new ArrayList<>();
-        if (trunkTop - baseY > 3) {
-            for (int y = baseY; y < trunkTop; y++) {
+        if (rungs > 0) {
+            int mastTop = climbTheTrunk ? trunkTop - 1 : baseY + rungs;
+            for (int y = baseY; y < mastTop; y++) {
                 mast.add(new Pos(mx, y, mz));
             }
         }
-        int topFeet = mast.isEmpty() ? baseY : trunkTop;
+        int topFeet = mast.isEmpty() ? baseY : mast.get(mast.size() - 1).y() + 1;
 
-        // every log is a target now — base, columns, branches: nothing is consumed by an
-        // ascent, because the ascent touches nothing of the tree but the leaves in its way.
+        // Every log is a target (base, columns, branches) less what the ascent eats, struck
+        // off by the simulation below: the mast column's leaves beside the tree, the whole trunk
+        // inside it.
         List<Pos> targets = new ArrayList<>(tree.base());
         targets.addAll(tree.column());
         targets.addAll(tree.branches());
@@ -189,11 +262,12 @@ public record ChopPlan(Pos entry, List<Pos> mast, List<Layer> layers, List<Refus
                 .thenComparing(ORDER));
 
         // The simulation: walk the plan in execution order, consuming what each move breaks, so
-        // later floor checks see the world as it will be then — not as it is now. The ascent
-        // consumes only the tree matter standing in the pillar's own column and headroom.
+        // later floor checks see the world as it will be then. An ascent consumes the tree
+        // matter in its own column and headroom; with no ascent, those cells are still floor
+        // and still there to be dug.
         List<Refusal> refusals = new ArrayList<>();
         Set<Pos> consumed = new HashSet<>();
-        for (int y = baseY; y <= trunkTop + 2; y++) {
+        for (int y = baseY; !mast.isEmpty() && y <= trunkTop + 2; y++) {
             Pos c = new Pos(mx, y, mz);
             if (logs.contains(c) || canopy.contains(c)) {
                 consumed.add(c);

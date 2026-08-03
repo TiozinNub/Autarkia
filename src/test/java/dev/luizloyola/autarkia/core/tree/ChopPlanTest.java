@@ -38,6 +38,18 @@ class ChopPlanTest {
         return null;
     }
 
+    /** Every cell the card brings down, however it is charged: targets and bonus digs alike. */
+    private static Set<Pos> felled(ChopPlan plan) {
+        Set<Pos> cells = new HashSet<>();
+        for (ChopPlan.Layer layer : plan.layers()) {
+            for (ChopPlan.Move move : layer.moves()) {
+                cells.add(move.target());
+                cells.addAll(move.digs());
+            }
+        }
+        return cells;
+    }
+
     private static int layerOf(ChopPlan plan, Pos target) {
         for (ChopPlan.Layer layer : plan.layers()) {
             for (ChopPlan.Move move : layer.moves()) {
@@ -50,22 +62,51 @@ class ChopPlanTest {
     }
 
     @Test
-    void aBareColumnGetsAPillarBesideIt() {
-        // A birch: the pillar plans in the least-canopied neighbouring column (west, by the
-        // total order), the trunk is untouched by the ascent — every log is a move, eaten
-        // top-down from beside, and the tree is grounded at every instant of the dance.
+    void aPlainTallTrunkClimbsItself() {
+        // A plain trunk climbs itself (break the log overhead, rise on the log it dropped), so
+        // the ascent is the fell and no layer has work left. Nothing carried in: the tree pays
+        // for its own ladder.
         TreeShape.Trunk birch = new TreeShape.Trunk(
                 List.of(new Pos(0, 60, 0)), column(0, 0, 61, 66),
                 List.of(), List.of(new Pos(0, 67, 0), new Pos(1, 66, 0)));
 
         ChopPlan plan = ChopPlan.of(birch);
 
-        assertEquals(6, plan.mast().size(), "pillar cells from the ground to one below the top");
+        assertTrue(plan.climbsTheTrunk(), "a plain trunk is its own elevator shaft");
+        assertEquals(new Pos(0, 60, 0), plan.mast().get(0), "the doorway is the stump");
+        assertTrue(plan.mast().stream().allMatch(c -> c.x() == 0 && c.z() == 0),
+                "the shaft is the trunk, cell for cell");
+        assertEquals(5, plan.mast().size(),
+                "rungs from the stump to two below the top — the last two are headroom");
+        assertEquals(7, plan.ascentChops(), "all seven logs come down on the way up");
+        assertTrue(plan.layers().isEmpty(), "nothing is left standing to work a layer for");
+        assertTrue(plan.refusals().isEmpty());
+    }
+
+    @Test
+    void aBranchedTrunkKeepsThePillarBesideIt() {
+        // An interrupted in-trunk climb could strand a branch in the canopy, so one branch sends
+        // the mast OUTSIDE the footprint: the trunk stands grounded to its last log, every log a
+        // move.
+        TreeShape.Trunk branched = new TreeShape.Trunk(
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 66),
+                List.of(new Pos(1, 65, 0)),
+                List.of(new Pos(0, 67, 0), new Pos(2, 65, 0)));
+
+        ChopPlan plan = ChopPlan.of(branched);
+
+        assertFalse(plan.climbsTheTrunk(), "wood hangs off it: the pillar stands beside");
         assertTrue(plan.mast().stream().allMatch(c -> c.x() == -1 && c.z() == 0),
                 "the pillar stands beside the trunk, never in it");
-        assertEquals(7, plan.chopCount(), "all seven logs are moves now");
-        assertEquals(0, plan.digCount());
+        assertEquals(2, plan.mast().size(),
+                "raised to the arm, not the treetop: two rungs put the top inside a swing");
+        assertEquals(0, plan.ascentChops(), "the ascent beside the tree takes none of it");
         assertTrue(plan.refusals().isEmpty());
+        Set<Pos> felled = felled(plan);
+        for (Pos log : column(0, 0, 60, 66)) {
+            assertTrue(felled.contains(log), "the trunk comes down entirely: " + log);
+        }
+        assertTrue(felled.contains(new Pos(1, 65, 0)), "and so does the branch");
         int lastY = Integer.MAX_VALUE;
         for (ChopPlan.Layer layer : plan.layers()) {
             assertTrue(layer.y() < lastY, "layers descend");
@@ -73,6 +114,54 @@ class ChopPlanTest {
             for (ChopPlan.Move move : layer.moves()) {
                 assertEquals(new Pos(-1, layer.y(), 0), move.stand(),
                         "every swing comes from atop the pillar, face to face with the trunk");
+            }
+        }
+    }
+
+    @Test
+    void aFloatingRemnantIsNeverClimbedThroughItsOwnFoot() {
+        // A remnant: its lowest log is in mid-air, so there is no stump to cut a doorway in and
+        // nothing to walk to. Plain or not, a remnant gets the mast beside it.
+        TreeShape.Trunk remnant = new TreeShape.Trunk(
+                List.of(new Pos(0, 66, 0)), column(0, 0, 67, 72),
+                List.of(), List.of(new Pos(0, 73, 0)));
+
+        assertTrue(ChopPlan.of(remnant).climbsTheTrunk(),
+                "standing on the ground, a plain trunk climbs itself");
+        assertFalse(ChopPlan.of(remnant, false).climbsTheTrunk(),
+                "hanging in the air, the same shape takes the pillar beside it");
+    }
+
+    @Test
+    void noPlainTreeEverAsksForWoodItDoesNotOwn() {
+        // A plain trunk is ground work or its own elevator at any height; the pillar and its bill
+        // of prepaid carried logs belong to trees with wood hanging off them. Quoting a plain
+        // trunk a pillar left an empty pack unable to begin the one tree it could fell.
+        for (int height = 1; height <= 12; height++) {
+            TreeShape.Trunk plain = new TreeShape.Trunk(
+                    List.of(new Pos(0, 60, 0)), column(0, 0, 61, 60 + height),
+                    List.of(), List.of(new Pos(0, 61 + height, 0)));
+
+            ChopPlan plan = ChopPlan.of(plain);
+
+            assertTrue(plan.mast().isEmpty() || plan.climbsTheTrunk(),
+                    "a plain trunk of " + height + " raised a pillar it would have to pay for");
+            assertTrue(plan.refusals().isEmpty(), "a plain trunk of " + height + " refused wood");
+            Set<Pos> covered = new HashSet<>(plan.mast());
+            for (ChopPlan.Layer layer : plan.layers()) {
+                for (ChopPlan.Move move : layer.moves()) {
+                    covered.add(move.target());
+                    covered.addAll(move.digs());
+                }
+            }
+            if (plan.climbsTheTrunk()) {
+                Pos last = plan.mast().get(plan.mast().size() - 1);
+                covered.add(new Pos(last.x(), last.y() + 1, last.z()));
+                covered.add(new Pos(last.x(), last.y() + 2, last.z()));
+            }
+            for (Pos log : column(0, 0, 60, 60 + height)) {
+                assertTrue(covered.contains(log),
+                        "a plain trunk of " + height + " leaves " + log + " standing");
             }
         }
     }
@@ -117,7 +206,9 @@ class ChopPlanTest {
 
         ChopPlan plan = ChopPlan.of(giant);
 
-        assertEquals(10, plan.mast().size());
+        assertFalse(plan.climbsTheTrunk(), "four columns are not one plain trunk");
+        assertEquals(6, plan.mast().size(),
+                "raised to the arm: the last rung sees the top of all four columns");
         assertTrue(plan.mast().stream().allMatch(c -> c.x() == -1 && c.z() == 0));
         assertTrue(plan.refusals().isEmpty());
         Set<Pos> felled = new HashSet<>();
@@ -144,27 +235,31 @@ class ChopPlanTest {
 
     @Test
     void aFarBranchGrowsATunnelOnlyAsFarAsTheArmFallsShort() {
-        // A branch log past arm's length from the pillar. The tunnel digs outward — eating
-        // trunk cells it passes as bonus chops — only until the target comes inside REACH.
+        // The tunnel digs outward (eating trunk cells as bonus chops) only until the target is
+        // inside REACH. High on the trunk on purpose: lower down a ground swing still lands, so
+        // there is no tunnel to grow.
         TreeShape.Trunk oak = new TreeShape.Trunk(
-                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
-                List.of(new Pos(2, 64, 0), new Pos(4, 64, 0)),
-                List.of(new Pos(1, 64, 0), new Pos(3, 64, 0),
-                        new Pos(1, 63, 0), new Pos(2, 63, 0), new Pos(3, 63, 0)));
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 71),
+                List.of(new Pos(2, 70, 0), new Pos(4, 70, 0)),
+                List.of(new Pos(1, 70, 0), new Pos(3, 70, 0),
+                        new Pos(1, 69, 0), new Pos(2, 69, 0), new Pos(3, 69, 0)));
 
         ChopPlan plan = ChopPlan.of(oak);
 
         assertTrue(plan.refusals().isEmpty());
-        ChopPlan.Move far = moveFor(plan, new Pos(4, 64, 0));
+        ChopPlan.Move far = moveFor(plan, new Pos(4, 70, 0));
         assertNotNull(far);
-        assertEquals(new Pos(1, 64, 0), far.stand(), "one step past the trunk is inside reach");
-        assertTrue(far.digs().contains(new Pos(0, 64, 0)),
-                "the trunk cell on the way rides as a bonus chop");
-        assertTrue(far.digs().contains(new Pos(3, 64, 0)), "the swing-line leaf is dug");
+        assertEquals(new Pos(1, 70, 0), far.stand(), "one step past the trunk is inside reach");
+        assertTrue(far.digs().contains(new Pos(1, 70, 0)),
+                "the tunnel digs the leaf it stands on");
+        assertTrue(far.digs().contains(new Pos(3, 70, 0)), "the swing-line leaf is dug");
         assertFalse(far.leap());
-        ChopPlan.Move near = moveFor(plan, new Pos(2, 64, 0));
+        assertTrue(felled(plan).contains(new Pos(0, 70, 0)),
+                "the trunk cell in the way rides as a bonus chop, on whichever swing meets it");
+        ChopPlan.Move near = moveFor(plan, new Pos(2, 70, 0));
         assertNotNull(near);
-        assertTrue(near.digs().isEmpty(), "the near log is a plain swing from the axis");
+        assertEquals(new Pos(-1, 67, 0), near.stand(),
+                "the near log needs no tunnel at all — the pillar top already sees it");
     }
 
     @Test
@@ -198,19 +293,20 @@ class ChopPlanTest {
 
     @Test
     void aHoledFloorIsWalkedAroundNotRefused() {
-        // The straight ray to the target has no floor, the lane one step south does — the
-        // tunnel is a search, and it goes around (through the trunk, which rides as digs).
+        // The tunnel is a search: with no floor on the straight ray it goes around, through the
+        // trunk, which rides as digs. High on the trunk again — a canopy hole only matters where
+        // the canopy is the floor.
         TreeShape.Trunk oak = new TreeShape.Trunk(
-                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 65),
-                List.of(new Pos(5, 64, 0)),
-                List.of(new Pos(0, 63, 1), new Pos(1, 63, 1), new Pos(2, 63, 1)));
+                List.of(new Pos(0, 60, 0)), column(0, 0, 61, 71),
+                List.of(new Pos(5, 70, 0)),
+                List.of(new Pos(0, 69, 1), new Pos(1, 69, 1), new Pos(2, 69, 1)));
 
         ChopPlan plan = ChopPlan.of(oak);
 
         assertTrue(plan.refusals().isEmpty(), "a dogleg exists, so no refusal");
-        ChopPlan.Move move = moveFor(plan, new Pos(5, 64, 0));
+        ChopPlan.Move move = moveFor(plan, new Pos(5, 70, 0));
         assertNotNull(move);
-        assertEquals(new Pos(2, 64, 1), move.stand(), "the floored lane one step south");
+        assertEquals(new Pos(2, 70, 1), move.stand(), "the floored lane one step south");
         assertFalse(move.leap(), "walked around, never jumped");
     }
 

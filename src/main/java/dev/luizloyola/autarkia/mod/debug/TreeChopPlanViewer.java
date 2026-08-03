@@ -152,6 +152,13 @@ public final class TreeChopPlanViewer {
                     shaft.add(blockPos(cell));
                 }
             }
+            // Climbing the trunk also takes the two headroom cells above the last rung — wood
+            // coming down, so paint them or the shaft reads two short.
+            if (plan.climbsTheTrunk()) {
+                Pos last = plan.mast().get(plan.mast().size() - 1);
+                shaft.add(new BlockPos(last.x(), last.y() + 1, last.z()));
+                shaft.add(new BlockPos(last.x(), last.y() + 2, last.z()));
+            }
             groups.add(new CellOverlayPayload.Group(
                     MAST_STROKE, STROKE_WIDTH, MAST_FILL, true, shaft));
         }
@@ -219,8 +226,11 @@ public final class TreeChopPlanViewer {
             }
         }
 
-        Pos top = plan.mast().get(plan.mast().size() - 1);
-        String tally = (chops + plan.mast().size()) + " chops · " + plan.digCount() + " digs"
+        // The tally rides the top of the climb — or the stump, when there is no climb.
+        Pos top = plan.mast().isEmpty() ? plan.entry()
+                : plan.mast().get(plan.mast().size() - 1);
+        String tally = (chops + plan.mast().size() + plan.ascentChops())
+                + " chops · " + plan.digCount() + " digs"
                 + (plan.refusals().isEmpty() ? "" : " · " + plan.refusals().size() + " refused");
         labels.add(new CellOverlayPayload.Label(tally,
                 plan.refusals().isEmpty() ? MAST_STROKE : REFUSED_STROKE,
