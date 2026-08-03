@@ -242,7 +242,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         Pos feet = ctx.percepts().position();
-        if (plan.mast().isEmpty() || (feet.x() == siteX && feet.z() == siteZ)) {
+        // A mast-free tree still needs its site PREPARED when any layer sits above ground reach:
+        // the climbs work from that column, and a site buried in low canopy has no standable
+        // cell to return to.
+        boolean needSite = !plan.mast().isEmpty()
+                || (!plan.layers().isEmpty()
+                        && plan.layers().get(0).y() > plan.entry().y() + 1);
+        if (!needSite || (feet.x() == siteX && feet.z() == siteZ)) {
             ctx.actuators().mover().stop();
             walkIssued = false;
             pickupWait = 0;
@@ -256,7 +262,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         BlockProbe probe = ctx.percepts().blocks();
-        Pos siteGround = plan.mast().get(0);
+        Pos siteGround = plan.mast().isEmpty()
+                ? new Pos(siteX, plan.entry().y(), siteZ) : plan.mast().get(0);
         for (int dy = 0; dy <= 1; dy++) {
             Pos c = new Pos(siteX, siteGround.y() + dy, siteZ);
             BlockKind k = probe.at(c.x(), c.y(), c.z());
