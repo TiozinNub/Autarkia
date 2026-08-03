@@ -680,9 +680,12 @@ public final class ChopPlannedTree implements PrimitiveTask {
     }
 
     private boolean atStand(BrainContext ctx, ChopPlan.Move move) {
+        // Horizontally EXACT: a diagonal cell of slop let swings happen from cells the card never
+        // chose, past the arm — a mark 5.1 out with the path clear. Vertical half-step slop
+        // stays: steps and jumps land unevenly.
         Pos feet = ctx.percepts().position();
-        return Math.abs(feet.x() - move.stand().x()) <= 1
-                && Math.abs(feet.z() - move.stand().z()) <= 1
+        return feet.x() == move.stand().x()
+                && feet.z() == move.stand().z()
                 && Math.abs(feet.y() - move.stand().y()) <= 1;
     }
 
