@@ -31,6 +31,7 @@ class ChopForLogsTest {
     @Test
     void applicableExactlyWhenAFreeTreeIsRemembered() {
         FakeContext ctx = new FakeContext();
+        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 8, 64));
         ChopForLogs chop = new ChopForLogs();
         assertFalse(chop.applicable(ctx), "no memory, no method");
 
@@ -45,12 +46,29 @@ class ChopForLogsTest {
     @Test
     void theNearestFreeTreePricesTheMethod() {
         FakeContext ctx = new FakeContext();
+        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 8, 64));
         ctx.knowledge().note(tree(30, 64, 0, 0), 8);
         ctx.knowledge().note(tree(6, 64, 0, 0), 8);
         ChopForLogs chop = new ChopForLogs();
 
         assertEquals(6.0, chop.estimateCost(ctx), 0.01,
                 "priced by the nearest tree, like scavenging is priced by the nearest drop");
+    }
+
+    @Test
+    void aTreeThePackCannotFundIsNotOffered() {
+        // The pillar is prepaid, and cost is part of validity (Luiz): a giant is off the menu
+        // until smaller work fills the pack — never a walk-there-and-bail discovery.
+        FakeContext ctx = new FakeContext();
+        Pos anchor = new Pos(10, 64, 0);
+        ctx.knowledge().note(new PoiMemory(Pois.TREE, "giant", null, anchor,
+                new Region(anchor, new Pos(12, 64 + 14, 2)), 30, false, 0), 8);
+        ChopForLogs chop = new ChopForLogs();
+
+        assertFalse(chop.applicable(ctx), "fourteen tall on an empty pack: unaffordable");
+
+        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 12, 64));
+        assertTrue(chop.applicable(ctx), "funded, the same giant is back on the menu");
     }
 
     @Test
