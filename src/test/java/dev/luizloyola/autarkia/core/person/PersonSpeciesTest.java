@@ -47,6 +47,7 @@ class PersonSpeciesTest {
         assertEquals(24, PERSON.i(ProfileAspect.PLACES_RADIUS), "places.radius");
         assertEquals(150, PERSON.i(ProfileAspect.PLACES_CONE_DEGREES), "places.cone_degrees");
         assertEquals(8, PERSON.i(ProfileAspect.PLACES_NEAR_RADIUS), "places.near_radius");
+        assertEquals(64, PERSON.i(ProfileAspect.PLACES_HORIZON_RADIUS), "places.horizon_radius");
         assertEquals(24, PERSON.i(ProfileAspect.PLACES_REGION_MAX_SPREAD), "region_max_spread");
         assertEquals(160, PERSON.i(ProfileAspect.PLACES_MAX_PER_KIND), "knowledge_max_per_kind");
 
