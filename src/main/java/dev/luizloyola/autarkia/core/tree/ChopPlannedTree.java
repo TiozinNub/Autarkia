@@ -51,6 +51,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
     /** Ticks a single walk order may run before the move is declared unservable. */
     private static final int WALK_TIMEOUT_TICKS = 200;
 
+    /**
+     * The watchdog: this long with the feet in one cell and no break or rise in flight means
+     * some loop is waiting on something that will never come. Generous over every legitimate
+     * stationary wait — drops hopping into the pack, a walk order mid-compute.
+     */
+    private static final int STUCK_TICKS = 300;
+
     private enum Phase { APPROACH, SURVEY, ENTER, ASCEND, WORK, VERIFY }
 
     private final Pos anchor;
@@ -81,6 +88,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
     /** Everything the card promised that this run could not serve — the reckoning of the exit. */
     private final List<Pos> leftovers = new ArrayList<>();
     private String ending;
+    /** Where the feet last were, and since when — the stuck watchdog's memory. */
+    private Pos lastSpot;
+    private long restingSince = -1;
 
     public ChopPlannedTree(Pos anchor) {
         this.anchor = anchor;
@@ -92,6 +102,20 @@ public final class ChopPlannedTree implements PrimitiveTask {
         // in one TTL, and a rival's live claim ends this task before it swings once.
         if (!ctx.claims().claim(Pois.TREE, anchor, ctx.percepts().time())) {
             return fail("the tree at " + shortPos(anchor) + " is claimed by someone else");
+        }
+        // The stuck watchdog: feet in one cell with no arm or rise working, for longer than
+        // any legitimate wait — end the run outright; a re-order replans from the remnant.
+        Pos here = ctx.percepts().position();
+        long now = ctx.percepts().time();
+        boolean busy = breaking || riseIssued
+                || ctx.actuators().breaker().state() == BreakState.BREAKING
+                || ctx.actuators().riser().state() == RiseState.RISING;
+        if (!here.equals(lastSpot) || busy || phase == Phase.SURVEY) {
+            lastSpot = here;
+            restingSince = now;
+        } else if (restingSince > 0 && now - restingSince > STUCK_TICKS) {
+            return fail("stuck at " + shortPos(here) + " during " + phase
+                    + " — nothing moved for " + STUCK_TICKS + " ticks");
         }
         return switch (phase) {
             case APPROACH -> approach(ctx);
