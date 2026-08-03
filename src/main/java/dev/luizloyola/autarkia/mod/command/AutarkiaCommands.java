@@ -161,7 +161,11 @@ public final class AutarkiaCommands {
                                 // Fell the nearest remembered tree by walking its compiled dance
                                 // card (ChopPlannedTree).
                                 .then(Commands.literal("chop")
-                                        .executes(ctx -> brainChop(ctx.getSource())))
+                                        .executes(ctx -> brainChop(ctx.getSource(), null))
+                                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                                .executes(ctx -> brainChop(ctx.getSource(),
+                                                        BlockPosArgument.getBlockPos(
+                                                                ctx, "pos")))))
                                 .then(Commands.literal("obtain")
                                         .then(Commands.literal("logs")
                                                 .executes(ctx -> brainObtain(ctx.getSource(), 16))
@@ -332,19 +336,27 @@ public final class AutarkiaCommands {
      * Runs {@link ChopPlannedTree} on the resolved Person's nearest remembered tree — the
      * dance-card executor, ordered directly for staging.
      */
-    private static int brainChop(CommandSourceStack source) {
+    private static int brainChop(CommandSourceStack source, @Nullable BlockPos at) {
         Person person = resolve(source);
         if (person == null) return 0;
-        Pos feet = new Pos(person.blockPosition().getX(), person.blockPosition().getY(),
-                person.blockPosition().getZ());
-        var memory = Knowledges.of(source.getServer()).forPerson(person.agentId())
-                .nearest(Pois.TREE, feet);
-        if (memory.isEmpty()) {
-            Replies.fail(source, Component.literal(
-                    person.getName().getString() + " knows no tree to fell."));
-            return 0;
+        Pos anchor;
+        if (at != null) {
+            // Explicit coordinates: the operator's shortcut past perception — the grind
+            // harness's staging path, and a way to point a Person at any specific tree.
+            anchor = new Pos(at.getX(), at.getY(), at.getZ());
+        } else {
+            Pos feet = new Pos(person.blockPosition().getX(), person.blockPosition().getY(),
+                    person.blockPosition().getZ());
+            var memory = Knowledges.of(source.getServer()).forPerson(person.agentId())
+                    .nearest(Pois.TREE, feet);
+            if (memory.isEmpty()) {
+                Replies.fail(source, Component.literal(
+                        person.getName().getString() + " knows no tree to fell."));
+                return 0;
+            }
+            anchor = memory.get().anchor();
         }
-        boolean autoDisabled = person.brain().run(new ChopPlannedTree(memory.get().anchor()));
+        boolean autoDisabled = person.brain().run(new ChopPlannedTree(anchor));
         String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
         Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
