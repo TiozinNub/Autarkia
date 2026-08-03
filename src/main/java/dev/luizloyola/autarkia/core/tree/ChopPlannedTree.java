@@ -223,8 +223,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 BlockKind k = probe.at(c.x(), c.y(), c.z());
                 if ((k == BlockKind.LEAVES || k == BlockKind.LOG) && treeBlocks.contains(c)
                         && inReach(ctx, c)) {
-                    Pos blocker = ctx.actuators().breaker().obstruction(c);
-                    Pos mark = blocker != null && treeBlocks.contains(blocker) ? blocker : c;
+                    Pos mark = chewMark(ctx, c);
                     if (ctx.actuators().breaker().begin(mark)) {
                         breaking = true;
                         return TaskStatus.RUNNING;
@@ -247,9 +246,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return beginBreak(ctx, pairCell, "the way in");
             }
             // Hemmed short of the doorstep: chew the tree's own cell in the way and retry.
-            Pos blocker = ctx.actuators().breaker().obstruction(stand);
-            if (blocker != null && treeBlocks.contains(blocker)
-                    && ctx.actuators().breaker().begin(blocker)) {
+            Pos blocker = chewMark(ctx, stand);
+            if (!blocker.equals(stand) && ctx.actuators().breaker().begin(blocker)) {
                 breaking = true;
                 return TaskStatus.RUNNING;
             }
@@ -278,9 +276,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         // Hemmed beside the doorway (a low canopy walls the one-block step): chew the tree's
         // own cell between her and the entry, then try the step again — each bite is finite.
-        Pos doorway = ctx.actuators().breaker().obstruction(plan.entry());
-        if (doorway != null && treeBlocks.contains(doorway)
-                && ctx.actuators().breaker().begin(doorway)) {
+        Pos doorway = chewMark(ctx, plan.entry());
+        if (!doorway.equals(plan.entry()) && ctx.actuators().breaker().begin(doorway)) {
             breaking = true;
             return TaskStatus.RUNNING;
         }
@@ -378,7 +375,18 @@ public final class ChopPlannedTree implements PrimitiveTask {
                             != BlockKind.AIR) {
                         return beginBreak(ctx, below, "the pillar underfoot");
                     }
-                    return TaskStatus.RUNNING; // mid-fall between pillar cells
+                    // Air below the feet CELL yet not falling: she is straddling the cell
+                    // edge, held up by a neighbour (run 3 froze at x .51 exactly so). Walk to
+                    // the shaft's own centre and gravity does the rest.
+                    if (!walkIssued) {
+                        ctx.actuators().mover().moveTo(feet.x(), feet.y(), feet.z());
+                        walkIssued = true;
+                        walkTicks = 0;
+                    } else if (ctx.actuators().mover().state() != MoveState.MOVING
+                            || ++walkTicks >= 40) {
+                        walkIssued = false;
+                    }
+                    return TaskStatus.RUNNING;
                 }
                 if (!walkIssued) {
                     ctx.actuators().mover().moveTo(
@@ -567,6 +575,25 @@ public final class ChopPlannedTree implements PrimitiveTask {
         };
     }
 
+    /**
+     * The cell the arm should actually bite on the way to {@code cell}: the obstruction CHAIN,
+     * walked until the arm agrees its mark is clear. One hop is not enough —
+     * {@code obstruction(x)} marches toward x's centre while {@code begin(blocker)} checks the
+     * line to the BLOCKER's centre, and those lines can clip different cells. Only this tree's
+     * own cells are chosen; bounded hops.
+     */
+    private Pos chewMark(BrainContext ctx, Pos cell) {
+        Pos mark = cell;
+        for (int hop = 0; hop < 4; hop++) {
+            Pos b = ctx.actuators().breaker().obstruction(mark);
+            if (b == null || b.equals(mark) || !treeBlocks.contains(b)) {
+                break;
+            }
+            mark = b;
+        }
+        return mark;
+    }
+
     private boolean besideEntry(BrainContext ctx) {
         Pos feet = ctx.percepts().position();
         return Math.abs(feet.x() - plan.entry().x()) + Math.abs(feet.z() - plan.entry().z()) == 1
@@ -614,12 +641,12 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private void beginWorkBreak(BrainContext ctx, Pos cell, String what) {
         // Chew-first, same as the shaft, and the blocker is the ARM'S own ANSWER: a self-sampled
         // line measures from somewhere the eyes are not and disagrees with the refusal it cures.
-        Pos blocker = ctx.actuators().breaker().obstruction(cell);
-        Pos mark = blocker != null && treeBlocks.contains(blocker) ? blocker : cell;
+        Pos mark = chewMark(ctx, cell);
         if (ctx.actuators().breaker().begin(mark)) {
             breaking = true;
             return;
         }
+        Pos blocker = mark.equals(cell) ? null : mark;
         if (!standRetried) {
             // Once per move: walk the stand again, exactly, before surrendering — the first
             // walk's arrival tolerance is a whole cell of slop the arm does not have.
