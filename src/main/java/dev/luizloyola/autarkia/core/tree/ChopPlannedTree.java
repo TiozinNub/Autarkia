@@ -75,6 +75,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private java.util.Set<Pos> treeBlocks;
     private boolean boostUp;
     private Pos boostCell;
+    /** One exact re-walk to the stand before a refusal becomes a give-up — stand slop is real. */
+    private boolean standRetried;
+    private boolean retryWalking;
     /** Everything the card promised that this run could not serve — the reckoning of the exit. */
     private final List<Pos> leftovers = new ArrayList<>();
     private String ending;
@@ -432,6 +435,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
             return TaskStatus.RUNNING;
         }
         walkIssued = false;
+        if (retryWalking) {
+            if (ctx.actuators().mover().state() == MoveState.MOVING
+                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
+                return TaskStatus.RUNNING;
+            }
+            retryWalking = false; // landed (or gave up landing) — one more try at the arm work
+        }
         // At the stand. Digs still standing and in reach are the swing's line; digs beyond
         // reach were the tunnel here, and standing here proves that access — drop them.
         while (!digsAhead.isEmpty()) {
@@ -586,7 +596,23 @@ public final class ChopPlannedTree implements PrimitiveTask {
             breaking = true;
             return;
         }
-        giveUpMove(ctx, "the arm refused " + what + " at " + shortPos(mark));
+        if (!standRetried) {
+            // Once per move: walk the stand again, exactly, before surrendering — the first
+            // walk's arrival tolerance is a whole cell of slop the arm does not have.
+            standRetried = true;
+            retryWalking = true;
+            ChopPlan.Move move = plan.layers().get(layerIndex).moves().get(moveIndex);
+            ctx.actuators().mover().moveTo(move.stand().x(), move.stand().y(), move.stand().z());
+            walkTicks = 0;
+            return;
+        }
+        // Forensic give-up: enough evidence that the next grind run convicts a cause, not a
+        // symptom.
+        Pos feet = ctx.percepts().position();
+        giveUpMove(ctx, "the arm refused " + what + " at " + shortPos(mark)
+                + " [feet " + shortPos(feet)
+                + ", path " + (blocker == null ? "clear" : "blocked by " + shortPos(blocker))
+                + ", mark is " + ctx.percepts().blocks().at(mark.x(), mark.y(), mark.z()) + "]");
     }
 
     /** Abandon the current move cleanly: its target is a leftover, the dance goes on. */
@@ -598,6 +624,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
         digsAhead = null;
         walkIssued = false;
         boostUp = false;
+        standRetried = false;
+        retryWalking = false;
         moveIndex++;
     }
 
@@ -614,6 +642,8 @@ public final class ChopPlannedTree implements PrimitiveTask {
         }
         digsAhead = null;
         walkIssued = false;
+        standRetried = false;
+        retryWalking = false;
         moveIndex++;
     }
 
