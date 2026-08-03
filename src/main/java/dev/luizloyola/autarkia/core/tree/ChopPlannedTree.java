@@ -58,7 +58,14 @@ public final class ChopPlannedTree implements PrimitiveTask {
      */
     private static final int STUCK_TICKS = 300;
 
-    private enum Phase { APPROACH, SURVEY, ENTER, ASCEND, WORK, VERIFY }
+    /** How far from the anchor the tail chases this fell's log drops, and how many walks. */
+    private static final int GATHER_RADIUS = 10;
+    private static final int GATHER_WALKS_MAX = 8;
+
+    /** How long a tree that beat this task stays off the producer's menu. */
+    private static final int AVOID_TICKS = 2400;
+
+    private enum Phase { APPROACH, SURVEY, ENTER, ASCEND, WORK, GATHER, VERIFY }
 
     private final Pos anchor;
 
@@ -87,6 +94,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
     /** Everything the card promised that this run could not serve — the reckoning of the exit. */
     private final List<Pos> leftovers = new ArrayList<>();
     private String ending;
+    /** Doorstep sides already found unreachable this run — the next-nearest is tried next. */
+    private int doorstepsTried;
+    /** Walks spent collecting the fell's drops — the tail's budget. */
+    private int gatherWalks;
     /** Where the feet last were, and since when — the stuck watchdog's memory. */
     private Pos lastSpot;
     private long restingSince = -1;
@@ -100,7 +111,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
         // Selection is commitment: the claim heartbeats every tick so a dead claimant lapses
         // in one TTL, and a rival's live claim ends this task before it swings once.
         if (!ctx.claims().claim(Pois.TREE, anchor, ctx.percepts().time())) {
-            return fail(ctx, "the tree at " + shortPos(anchor) + " is claimed by someone else");
+            ending = "the tree at " + shortPos(anchor) + " is claimed by someone else";
+            ctx.journal().record(Category.BRAIN, "chop", "FAILED — " + ending);
+            return TaskStatus.FAILED; // contention, not brokenness: no avoidance
         }
         // The stuck watchdog: feet in one cell with no arm or rise working, for longer than
         // any legitimate wait — end the run outright; a re-order replans from the remnant.
@@ -122,6 +135,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             case ENTER -> enter(ctx);
             case ASCEND -> ascend(ctx);
             case WORK -> work(ctx);
+            case GATHER -> gather(ctx);
             case VERIFY -> verify(ctx);
         };
     }
@@ -217,7 +231,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 }
                 return fail(ctx, "the arm refused the way in " + armForensics(ctx, pairCell));
             }
-            Pos stand = nearestDoorstep(ctx);
+            Pos stand = nearestDoorstep(ctx, doorstepsTried);
             // The doorstep must be STANDABLE before a walk can deliver her — a sapling oak's own
             // canopy fills the cells beside its trunk. Chew that column first.
             for (int dy = 0; dy <= 1; dy++) {
@@ -251,6 +265,11 @@ public final class ChopPlannedTree implements PrimitiveTask {
             Pos blocker = chewMark(ctx, stand);
             if (!blocker.equals(stand) && ctx.actuators().breaker().begin(blocker)) {
                 breaking = true;
+                return TaskStatus.RUNNING;
+            }
+            // This side is a dead end; three more exist, and only when all four fail does the tree
+            // win.
+            if (++doorstepsTried < 4) {
                 return TaskStatus.RUNNING;
             }
             return fail(ctx, "cannot stand beside the doorway at " + shortPos(plan.entry()));
@@ -563,7 +582,53 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 return beginBreak(ctx, below, "the last of the pillar");
             }
         }
-        phase = Phase.VERIFY;
+        phase = Phase.GATHER;
+        gatherWalks = 0;
+        return TaskStatus.RUNNING;
+    }
+
+    /**
+     * The tail's first half: the fell's own harvest comes home. Walk to each log drop near the
+     * anchor until none remain or the budget runs out (drops in a creek can drift), picked up by
+     * the body's own walk-over. Leaves and saplings stay where decay puts them; this is about
+     * the WOOD the card promised.
+     */
+    private TaskStatus gather(BrainContext ctx) {
+        Pos here = ctx.percepts().position();
+        Pos nearest = null;
+        long bestDist = Long.MAX_VALUE;
+        for (var drop : ctx.percepts().drops()) {
+            if (!Stock.LOGS.matches(drop.itemId())) {
+                continue;
+            }
+            long dist = TreeShape.horizontalDistSq(drop.pos(), anchor);
+            if (dist > (long) GATHER_RADIUS * GATHER_RADIUS) {
+                continue; // some other fell's litter — not this dance's to chase
+            }
+            long toMe = TreeShape.horizontalDistSq(drop.pos(), here);
+            if (toMe < bestDist) {
+                bestDist = toMe;
+                nearest = drop.pos();
+            }
+        }
+        if (nearest == null || gatherWalks >= GATHER_WALKS_MAX) {
+            ctx.actuators().mover().stop();
+            walkIssued = false;
+            phase = Phase.VERIFY;
+            return TaskStatus.RUNNING;
+        }
+        if (!walkIssued) {
+            ctx.actuators().mover().moveTo(nearest.x(), nearest.y(), nearest.z());
+            walkIssued = true;
+            walkTicks = 0;
+            gatherWalks++;
+            return TaskStatus.RUNNING;
+        }
+        if (ctx.actuators().mover().state() == MoveState.MOVING
+                && ++walkTicks < WALK_TIMEOUT_TICKS) {
+            return TaskStatus.RUNNING;
+        }
+        walkIssued = false;
         return TaskStatus.RUNNING;
     }
 
@@ -660,11 +725,10 @@ public final class ChopPlannedTree implements PrimitiveTask {
      * refused the first wild tree on a hillside. A cell holding this tree's leaves counts — the
      * chew makes it standable.
      */
-    private Pos nearestDoorstep(BrainContext ctx) {
+    private Pos nearestDoorstep(BrainContext ctx, int skip) {
         BlockProbe probe = ctx.percepts().blocks();
         Pos feet = ctx.percepts().position();
-        Pos best = null;
-        long bestDist = Long.MAX_VALUE;
+        java.util.List<long[]> ranked = new ArrayList<>();
         int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         for (int[] side : sides) {
             int x = plan.entry().x() + side[0];
@@ -680,16 +744,16 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 long dx = x - feet.x();
                 long dz = z - feet.z();
                 long dy = y - plan.entry().y();
-                long dist = dx * dx + dz * dz + dy * dy;
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = new Pos(x, y, z);
-                }
+                ranked.add(new long[] {dx * dx + dz * dz + dy * dy, x, y, z});
                 break; // the topmost standable spot is this side's doorstep
             }
         }
-        return best != null ? best
-                : new Pos(plan.entry().x() + 1, plan.entry().y(), plan.entry().z());
+        ranked.sort(java.util.Comparator.comparingLong(r -> r[0]));
+        if (ranked.isEmpty()) {
+            return new Pos(plan.entry().x() + 1, plan.entry().y(), plan.entry().z());
+        }
+        long[] pick = ranked.get(Math.min(skip, ranked.size() - 1));
+        return new Pos((int) pick[1], (int) pick[2], (int) pick[3]);
     }
 
     private TaskStatus beginBreak(BrainContext ctx, Pos cell, String what) {
@@ -835,9 +899,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
 
     private TaskStatus fail(BrainContext ctx, String why) {
         // Every ending reaches the ring: a failure nobody journals is a stall nobody can
-        // diagnose (two grind batches called these "STALLED" before this line existed).
+        // diagnose. And a tree that beat her goes off the menu for a while — without the
+        // avoidance the producer re-offers the same nearest unreachable tree forever, and fifty
+        // Persons hammering doomed approaches was most of a real forest's lost TPS.
         ending = why;
         ctx.journal().record(Category.BRAIN, "chop", "FAILED — " + why);
+        ctx.knowledge().avoid(Pois.TREE, anchor, ctx.percepts().time() + AVOID_TICKS);
+        ctx.claims().release(Pois.TREE, anchor);
         return TaskStatus.FAILED;
     }
 
