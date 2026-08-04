@@ -76,6 +76,7 @@ import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
 import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.mod.body.AgentBody;
+import dev.luizloyola.anima.mod.body.Modifiers;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -130,6 +131,12 @@ public class Person extends Avatar implements AgentBody {
      * physical state of <em>this</em> body and dies with it; durable memories are instead
      * {@link AgentId}-keyed.
      */
+    /** The two switches a command set on this body — see {@code BrainDriver}. */
+    private static final String TAG_BRAIN_AUTO = "BrainAuto";
+    private static final String TAG_BRAIN_WANDER = "BrainWander";
+    /** Aspect modifiers with no other source of truth — see {@link #modifiers()}. */
+    private static final String TAG_MODIFIERS = "Modifiers";
+
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
     private static final String TAG_FOOD_SATURATION = "foodSaturationLevel";
@@ -954,10 +961,6 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * What is shifting this Person away from a plain settler. Empty for now, and not
-     * saved: whatever grows a job or a trait persists THAT and re-applies its modifiers on load.
-     */
-    /**
      * What frightens a settler — {@link PersonDanger}, read through so the regeneration at every
      * server start (and an operator's edit) reaches a Person already walking around.
      */
@@ -966,6 +969,14 @@ public class Person extends Avatar implements AgentBody {
         return PersonDanger.STORE.get();
     }
 
+    /**
+     * What is shifting this Person away from a plain settler.
+     *
+     * <p>Saved for the modifiers with nowhere else to live — today only the one
+     * {@code /anima profile debug} sets by hand. Whatever grows a JOB persists the job and
+     * re-applies its modifiers on load; the two compose because modifiers are keyed by id, and
+     * re-applying an id replaces rather than stacks.
+     */
     @Override
     public AgentModifiers modifiers() {
         if (this.modifiers == null) {
@@ -985,6 +996,15 @@ public class Person extends Avatar implements AgentBody {
         output.putInt(TAG_FOOD_TICK_TIMER, this.needs.tickTimer());
         output.putFloat(TAG_FOOD_SATURATION, this.needs.saturation());
         output.putFloat(TAG_FOOD_EXHAUSTION, this.needs.exhaustion());
+        // The two switches somebody set ON this body, not the working state the driver re-derives.
+        // Written unconditionally: "auto is off" has to survive, and so does turning it back on.
+        output.putBoolean(TAG_BRAIN_AUTO, this.brain.isAuto());
+        output.putBoolean(TAG_BRAIN_WANDER, this.brain.isWander());
+        // Read off the field, not modifiers(): the accessor mints an empty set on demand, and a
+        // save has no business creating state on a body that never had any.
+        if (this.modifiers != null && !this.modifiers.isEmpty()) {
+            output.store(TAG_MODIFIERS, Modifiers.LIST, this.modifiers.all());
+        }
     }
 
     @Override
@@ -998,6 +1018,13 @@ public class Person extends Avatar implements AgentBody {
         this.needs.setTickTimer(input.getIntOr(TAG_FOOD_TICK_TIMER, 0));
         this.needs.setSaturation(input.getFloatOr(TAG_FOOD_SATURATION, 5.0F));
         this.needs.setExhaustion(input.getFloatOr(TAG_FOOD_EXHAUSTION, 0.0F));
+        // Both default ON, which is both the spawn default and what every Person saved before
+        // these tags existed should read as.
+        this.brain.restoreSwitches(input.getBooleanOr(TAG_BRAIN_AUTO, true),
+                input.getBooleanOr(TAG_BRAIN_WANDER, true));
+        // applyAll is idempotent per id, so a consumer that later re-applies a job's modifier from
+        // its own state lands on the same value rather than stacking a second copy.
+        input.read(TAG_MODIFIERS, Modifiers.LIST).ifPresent(modifiers()::applyAll);
     }
 
     /**
