@@ -24,6 +24,11 @@ public final class PatchRule implements GrowthRule {
     public static final PatchRule PUMPKINS = new PatchRule(Patches.PUMPKIN, Patches.PUMPKINS);
     public static final PatchRule MELONS = new PatchRule(Patches.MELON, Patches.MELONS);
     public static final PatchRule CACTI = new PatchRule(Patches.CACTUS, Patches.CACTI);
+    public static final PatchRule CANE = new PatchRule(Patches.SUGAR_CANE, Patches.CANE);
+    public static final PatchRule BERRIES = new PatchRule(Patches.SWEET_BERRIES, Patches.BERRIES);
+
+    /** Every crop a settler knows to look for, in one list for the registrations to walk. */
+    public static final List<PatchRule> ALL = List.of(PUMPKINS, MELONS, CACTI, CANE, BERRIES);
 
     private final BlockKind seed;
     private final PoiKind kind;

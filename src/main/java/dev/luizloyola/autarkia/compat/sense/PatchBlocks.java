@@ -36,6 +36,14 @@ public final class PatchBlocks {
             if (state.is(Blocks.CACTUS)) {
                 return Optional.of(Patches.CACTUS);
             }
+            // The two with no collision at all. Anima's floor would call these AIR — the rung that
+            // stops a meadow reading as a field of things — so consumers must be asked before it.
+            if (state.is(Blocks.SUGAR_CANE)) {
+                return Optional.of(Patches.SUGAR_CANE);
+            }
+            if (state.is(Blocks.SWEET_BERRY_BUSH)) {
+                return Optional.of(Patches.SWEET_BERRIES);
+            }
             return Optional.empty();
         });
     }

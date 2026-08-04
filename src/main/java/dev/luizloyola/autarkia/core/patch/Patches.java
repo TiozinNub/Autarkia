@@ -31,6 +31,17 @@ public final class Patches {
     public static final BlockKind CACTUS = BlockKind.register("cactus");
 
     /**
+     * A sugar cane stalk. Unlike the three above it has no collision at all, so it is absent from
+     * the motion-blocking heightmap and a body asking what a column's SURFACE was got the sand
+     * underneath a whole cane brake. That is what {@code BlockProbe.topY} exists to answer, and
+     * this is the first kind that needs it.
+     */
+    public static final BlockKind SUGAR_CANE = BlockKind.register("sugar_cane");
+
+    /** A sweet berry bush, collision-free for the same reason and found the same way. */
+    public static final BlockKind SWEET_BERRIES = BlockKind.register("sweet_berries");
+
+    /**
      * Somewhere pumpkins grow. Merge radius 12 — wide enough that one worldgen patch is one
      * memory however its blocks are strewn (the spread is 7 either way from a centre, so two
      * blocks of the same patch are at most 14 apart, and a clump met from either end lands
@@ -45,6 +56,20 @@ public final class Patches {
      * wider — worst case two memories for one stretch of desert, which is not wrong.
      */
     public static final PoiKind CACTI = PoiKind.register("cacti", 12, "");
+
+    /**
+     * A cane brake. Merge radius 8 rather than 12: cane grows in clumps along a water's edge, and
+     * at 12 a body would collapse two banks of a narrow river into one belief anchored in the water
+     * between them.
+     *
+     * <p>{@link PoiKind.Settling#SURFACE} only because a glance looks at what STANDS on a column; a
+     * body asking only for the column's surface could never settle cane, leaving a rumour nothing
+     * can confirm.
+     */
+    public static final PoiKind CANE = PoiKind.register("cane", 8, "");
+
+    /** A stand of berry bushes. Same clumping, same reach. */
+    public static final PoiKind BERRIES = PoiKind.register("berries", 8, "");
 
     private Patches() {
     }

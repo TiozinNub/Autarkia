@@ -111,12 +111,10 @@ public class AutarkiaMod implements ModInitializer {
         // believe about it. Declaring a block kind is not declaring it worth remembering.
         Patches.init();
         PatchBlocks.register();
-        for (PatchRule rule : List.of(PatchRule.PUMPKINS, PatchRule.MELONS, PatchRule.CACTI)) {
+        for (PatchRule rule : PatchRule.ALL) {
             GrowthRules.register(rule.seed(), rule);
+            KnowledgeViewer.particle(rule.kind(), ParticleTypes.COMPOSTER);
         }
-        KnowledgeViewer.particle(Patches.PUMPKINS, ParticleTypes.COMPOSTER);
-        KnowledgeViewer.particle(Patches.MELONS, ParticleTypes.COMPOSTER);
-        KnowledgeViewer.particle(Patches.CACTI, ParticleTypes.COMPOSTER);
         registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
     }

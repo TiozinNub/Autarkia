@@ -40,8 +40,9 @@ class PatchRuleTest {
 
     @BeforeEach
     void registerWhatGrows() {
-        GrowthRules.register(PatchRule.PUMPKINS.seed(), PatchRule.PUMPKINS);
-        GrowthRules.register(PatchRule.MELONS.seed(), PatchRule.MELONS);
+        for (PatchRule rule : PatchRule.ALL) {
+            GrowthRules.register(rule.seed(), rule);
+        }
     }
 
     @AfterEach
@@ -106,6 +107,27 @@ class PatchRuleTest {
         assertEquals("", patch.kind().unit(),
                 "and it counts nothing, because a merge replaces rather than adds and any "
                         + "number here would be the last clump's size wearing the patch's name");
+    }
+
+    @Test
+    @DisplayName("a cane brake is noticed, though nothing about it holds a body up")
+    void aCollisionFreeCropIsStillNoticed() {
+        FakeProbe probe = new FakeProbe();
+        probe.thin(Patches.SUGAR_CANE);
+        for (int dz = 0; dz <= 1; dz++) { // two stalks on the bank, each two tall
+            probe.set(4, ON_GROUND, 4 + dz, Patches.SUGAR_CANE);
+            probe.set(4, ON_GROUND + 1, 4 + dz, Patches.SUGAR_CANE);
+        }
+
+        // The fixture models the world's own trap: cane is not in the motion-blocking heightmap,
+        // so the question the near field used to ask answers with the ground under the brake.
+        assertEquals(FakeProbe.GROUND_Y, probe.surfaceY(4, 4),
+                "cane is not what would hold a boot up");
+        assertEquals(ON_GROUND + 1, probe.topY(4, 4), "but it is what stands here");
+
+        assertEquals(1, walk(probe).all(Patches.CANE).size(),
+                "and a body walking the bank notices it — asking the other question is the "
+                        + "whole of what made a cane brake invisible");
     }
 
     @Test
