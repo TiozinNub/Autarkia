@@ -344,12 +344,21 @@ public final class TreeShape {
             cluster.add(seed);
             while (!frontier.isEmpty()) {
                 Pos p = frontier.poll();
-                for (Pos other : new ArrayList<>(unvisited)) {
-                    if (Math.abs(other.x() - p.x()) <= 1 && Math.abs(other.y() - p.y()) <= 1
-                            && Math.abs(other.z() - p.z()) <= 1) {
-                        unvisited.remove(other);
-                        cluster.add(other);
-                        frontier.add(other);
+                // Ask the twenty-six cells that touch this one, not every cell in the wood: the
+                // old walk copied the whole unvisited set into a fresh list on every poll —
+                // quadratic in the bases, an allocation per step, for what a hash lookup answers.
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            if (dx == 0 && dy == 0 && dz == 0) {
+                                continue;
+                            }
+                            Pos other = new Pos(p.x() + dx, p.y() + dy, p.z() + dz);
+                            if (unvisited.remove(other)) {
+                                cluster.add(other);
+                                frontier.add(other);
+                            }
+                        }
                     }
                 }
             }
