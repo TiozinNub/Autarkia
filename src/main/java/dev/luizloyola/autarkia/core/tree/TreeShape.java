@@ -208,11 +208,24 @@ public final class TreeShape {
             for (Pos cell : frontier) {
                 int tree = owner.get(cell);
                 BlockKind kind = blocks.get(cell);
+                // Only wood reaches diagonally ({@link #attached}), so for a LEAF the offset
+                // alone settles twenty of the twenty-six neighbours before a Pos is built. Those
+                // skipped lookups were 10% of the server thread at fifty walkers (2026-08-03).
+                boolean fromWood = kind == BlockKind.LOG;
                 for (int dy = -1; dy <= 1; dy++) {
                     for (int dx = -1; dx <= 1; dx++) {
                         for (int dz = -1; dz <= 1; dz++) {
+                            int steps = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+                            if (steps == 0 || (steps > 1 && !fromWood)) {
+                                continue; // the cell itself, or a diagonal no leaf may cross
+                            }
                             Pos next = new Pos(cell.x() + dx, cell.y() + dy, cell.z() + dz);
                             BlockKind nextKind = blocks.get(next);
+                            // Not in the mass at all (air, ground, a foreign kind): assignable is
+                            // a subset of the mass, so this settles it without asking the set.
+                            if (nextKind == null) {
+                                continue;
+                            }
                             if (!attached(kind, nextKind, dx, dy, dz)
                                     || !assignable.contains(next) || owner.containsKey(next)) {
                                 continue;
