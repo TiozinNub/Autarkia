@@ -19,13 +19,16 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 
 /**
- * The screen for {@link PersonInventoryMenu}: background texture, inset paper-doll, and a mini
- * armor / health / hunger readout beside it; the rest is {@link AbstractContainerScreen} default.
- * In {@code compat} because constructor arity <em>and</em> background hook are version-specific
- * (26.1 retained-mode {@code GuiGraphicsExtractor}, older immediate-mode {@code GuiGraphics}).
+ * The screen for {@link PersonInventoryMenu}: background texture, inset paper-doll, armor / health /
+ * hunger rows beside the doll, and the HUD's selection frame around the hand — the hotbar slot the
+ * Person is holding from. In {@code compat} because an {@link AbstractContainerScreen} subclass's
+ * constructor arity <em>and</em> background hook differ across MC versions (26.1 retained-mode
+ * {@code GuiGraphicsExtractor}, older immediate-mode {@code GuiGraphics}); slots, labels and items
+ * come from the superclass everywhere.
  *
- * <p>The rows walk the vanilla HUD sprites directly — {@code Gui}'s draws are private and welded to
- * the live HUD — so the read is static: no damage blink, no regen bounce.
+ * <p>Reuses the vanilla HUD <em>sprites</em> but not its renderer — {@code Gui}'s heart/armor/food
+ * draws are private and welded to the live HUD — so the static read (full/half/empty, effect tints)
+ * is reproduced and the animation (damage blink, regen bounce) is not.
  */
 @Environment(EnvType.CLIENT)
 public class PersonInventoryScreen extends AbstractContainerScreen<PersonInventoryMenu> {
@@ -52,6 +55,12 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
             Identifier.withDefaultNamespace("hud/food_half"), Identifier.withDefaultNamespace("hud/food_empty")};
     private static final Identifier[] FOOD_HUNGER = {Identifier.withDefaultNamespace("hud/food_full_hunger"),
             Identifier.withDefaultNamespace("hud/food_half_hunger"), Identifier.withDefaultNamespace("hud/food_empty_hunger")};
+    /** The HUD's hotbar selection frame, here marking the Person's selected slot. Its native 24×23. */
+    private static final Identifier HOTBAR_SELECTION = Identifier.withDefaultNamespace("hud/hotbar_selection");
+    private static final int SELECTION_W = 24;
+    private static final int SELECTION_H = 23;
+    /** Overhang of the frame past the 16×16 item box, top and left — the HUD's own spacing. */
+    private static final int SELECTION_INSET = 4;
 
     // Armor, health, hunger rows right of the paper-doll. Each icon is 9px on an 8px pitch (1px
     // overlap, like the HUD): 10 × 8 + 1 = 81px, ending ~x+160, clear of the 176-wide panel, and
@@ -96,17 +105,34 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
         return null;
     }
 
-    /** A version-neutral 9×9 sprite blit at {@code (x, y)} — the only per-MC-version bit of the stat rows. */
+    /** A version-neutral sprite blit — the only per-MC-version bit of the stat rows and the hand frame. */
     @FunctionalInterface
-    private interface IconBlitter {
-        void blit(Identifier sprite, int x, int y);
+    private interface SpriteBlitter {
+        void blit(Identifier sprite, int x, int y, int width, int height);
+    }
+
+    /**
+     * Frames the Person's selected hotbar slot with the vanilla HUD's own selection sprite; the item
+     * is drawn over the frame's hollow middle afterwards by {@link AbstractContainerScreen}, as on
+     * the HUD.
+     *
+     * <p>The sprite is cut for the HUD's 20px pitch, not the 18px inventory grid, so it is placed by
+     * the item box: 4px of overhang left and top of the 16×16 item, lapping ~3px onto the
+     * neighbouring cells' borders exactly as on the HUD.
+     */
+    private void drawHandFrame(SpriteBlitter blit, int originX, int originY) {
+        int slot = getMenu().selectedSlot();
+        int itemX = originX + PersonInventoryMenu.HOTBAR_X + slot * PersonInventoryMenu.SLOT_PITCH;
+        int itemY = originY + PersonInventoryMenu.HOTBAR_Y;
+        blit.blit(HOTBAR_SELECTION, itemX - SELECTION_INSET, itemY - SELECTION_INSET,
+                SELECTION_W, SELECTION_H);
     }
 
     /**
      * The armor / health / hunger rows at panel origin {@code (originX, originY)}: health off the
      * entity, hunger off the menu's food slot, hearts and drumsticks effect-tinted.
      */
-    private void drawVitals(IconBlitter blit, int originX, int originY, LivingEntity person) {
+    private void drawVitals(SpriteBlitter blit, int originX, int originY, LivingEntity person) {
         int armor = person.getArmorValue();
         drawRow(blit, originX, originY + ARMOR_Y, VITAL_ICONS, ARMOR_EMPTY, i -> armorForeground(i, armor));
 
@@ -126,13 +152,13 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
      * One row, the HUD's two passes: the empty {@code background} under every slot first, so half
      * icons composite over their own backing, then {@code foreground} on top wherever non-null.
      */
-    private static void drawRow(IconBlitter blit, int originX, int rowY, int count,
+    private static void drawRow(SpriteBlitter blit, int originX, int rowY, int count,
                                 Identifier background, IntFunction<Identifier> foreground) {
         for (int i = 0; i < count; i++) {
             int px = originX + VITALS_X + i * VITAL_PITCH;
-            blit.blit(background, px, rowY);
+            blit.blit(background, px, rowY, VITAL_ICON, VITAL_ICON);
             Identifier fg = foreground.apply(i);
-            if (fg != null) blit.blit(fg, px, rowY);
+            if (fg != null) blit.blit(fg, px, rowY, VITAL_ICON, VITAL_ICON);
         }
     }
 
@@ -159,6 +185,10 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
         int y = (this.height - this.imageHeight) / 2;
         extractor.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, x, y, 0.0F, 0.0F,
                 this.imageWidth, this.imageHeight, TEX_SIZE, TEX_SIZE);
+        SpriteBlitter blit = (sprite, px, py, w, h) ->
+                extractor.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, px, py, w, h);
+        // The selected hotbar slot — synced, so it needs no entity and draws even if the doll can't.
+        drawHandFrame(blit, x, y);
         // Paper doll: This Person in the inset, following the mouse. The offhand slot draws on top
         // afterwards.
         if (this.minecraft != null && this.minecraft.level != null
@@ -167,9 +197,7 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
                     extractor, x + 26, y + 8, x + 74, y + 77, 30, 0.0625F,
                     (float) mouseX, (float) mouseY, person);
             // Armor / health / hunger, stacked vanilla HUD rows in the empty panel beside the doll.
-            drawVitals((sprite, px, py) ->
-                    extractor.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, px, py, VITAL_ICON, VITAL_ICON),
-                    x, y, person);
+            drawVitals(blit, x, y, person);
         }
     }
     //?} else {
@@ -179,6 +207,10 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
         int y = (this.height - this.imageHeight) / 2;
         graphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, x, y, 0.0F, 0.0F,
                 this.imageWidth, this.imageHeight, TEX_SIZE, TEX_SIZE);
+        SpriteBlitter blit = (sprite, px, py, w, h) ->
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, px, py, w, h);
+        // The selected hotbar slot — synced, so it needs no entity and draws even if the doll can't.
+        drawHandFrame(blit, x, y);
         // Paper doll: render this Person in the inset (the black rect), following the mouse — exactly
         // as the vanilla inventory renders the player. The offhand slot draws on top afterwards.
         if (this.minecraft != null && this.minecraft.level != null
@@ -187,9 +219,7 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
                     graphics, x + 26, y + 8, x + 74, y + 77, 30, 0.0625F,
                     (float) mouseX, (float) mouseY, person);
             // Armor / health / hunger, stacked vanilla HUD rows in the empty panel beside the doll.
-            drawVitals((sprite, px, py) ->
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, px, py, VITAL_ICON, VITAL_ICON),
-                    x, y, person);
+            drawVitals(blit, x, y, person);
         }
     }
     *///?}

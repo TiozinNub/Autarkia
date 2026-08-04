@@ -5,6 +5,7 @@ import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.agent.Needs;
 import java.util.function.IntSupplier;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.util.Mth;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -40,6 +41,13 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     // (3 rows + the standard 4px gap).
     private static final int GRID_X = 8;
     private static final int GRID_Y = 84;
+    /** Slot pitch — vanilla's, and the texture's. */
+    public static final int SLOT_PITCH = 18;
+    /** The gap-separated hotbar row's offset below the main rows, as the vanilla helper places it. */
+    private static final int HOTBAR_DY = 58;
+    /** Item origin of the Person's hotbar slot 0, so the screen can frame the selected one. */
+    public static final int HOTBAR_X = GRID_X;
+    public static final int HOTBAR_Y = GRID_Y + HOTBAR_DY;
     // Armor column (left); offhand tucked at the paper-doll's bottom-right, like the vanilla inventory.
     private static final int ARMOR_X = 8;
     private static final int ARMOR_Y = 8;
@@ -65,6 +73,10 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     private int syncedFood = Needs.MAX_FOOD;
     /** Live food source: the Person's needs on the server, the {@link #syncedFood} cache on the client. */
     private final IntSupplier foodSource;
+    /** Last selected slot the server broadcast; the {@link #selectedSlot} slot reads it back on the client. */
+    private int syncedSelected = 0;
+    /** Live selection source: the core inventory on the server, {@link #syncedSelected} on the client. */
+    private final IntSupplier selectedSource;
     /**
      * The Person's food level ({@code 0..20}), for the screen's hunger row. Health rides the
      * {@link net.minecraft.world.entity.LivingEntity} sync, but a plain {@code LivingEntity} carries
@@ -82,6 +94,23 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
             syncedFood = value;
         }
     };
+    /**
+     * The Person's selected hotbar slot ({@code 0..8}, synced), for the screen's selection frame.
+     * Like {@link #foodLevel} it is polled every {@code broadcastChanges} tick, so the frame
+     * follows the hand live. Too small to trip the {@code writeShort} ceiling, so one slot carries
+     * it.
+     */
+    private final DataSlot selectedSlot = new DataSlot() {
+        @Override
+        public int get() {
+            return selectedSource.getAsInt();
+        }
+
+        @Override
+        public void set(int value) {
+            syncedSelected = value;
+        }
+    };
 
     /** Client-side factory (via the {@code MenuType}): dummy container + unknown entity id (both synced). */
     public PersonInventoryMenu(int syncId, net.minecraft.world.entity.player.Inventory playerInv) {
@@ -96,11 +125,14 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         this.personContainer = personContainer;
         // The client's container is a dummy SimpleContainer, so it falls back to the broadcast value.
         this.foodSource = (personContainer instanceof PersonContainer pc) ? pc::foodLevel : () -> syncedFood;
+        this.selectedSource =
+                (personContainer instanceof PersonContainer live) ? live::selectedSlot : () -> syncedSelected;
         this.personIdLow.set(entityId & 0xFFFF);
         this.personIdHigh.set((entityId >>> 16) & 0xFFFF);
         addDataSlot(this.personIdLow);
         addDataSlot(this.personIdHigh);
         addDataSlot(this.foodLevel);
+        addDataSlot(this.selectedSlot);
 
         // Vanilla's own player-inventory layout: 3 main rows (container 9..35) at (GRID_X, GRID_Y),
         // then the hotbar (container 0..8) 58px below. The same call the vanilla inventory uses, so
@@ -130,6 +162,15 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     /** The Person's food level ({@code 0..20}, synced), for the screen's hunger row. */
     public int foodLevel() {
         return this.foodLevel.get();
+    }
+
+    /**
+     * The Person's selected hotbar slot ({@code 0..8}, synced), for the screen's selection frame.
+     * Clamped rather than trusted: the value is a wire read, and an out-of-range one would put the
+     * frame somewhere there is no slot.
+     */
+    public int selectedSlot() {
+        return Mth.clamp(this.selectedSlot.get(), 0, Inventory.HOTBAR_SIZE - 1);
     }
 
     @Override

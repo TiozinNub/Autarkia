@@ -44,6 +44,14 @@ public final class PersonContainer implements Container {
         return person.needs().foodLevel();
     }
 
+    /**
+     * The Person's selected hotbar slot ({@code 0..8}) — the one {@link Inventory#mainHand()} reads,
+     * for {@link PersonInventoryMenu}'s selection sync. Server-side only, like {@link #foodLevel()}.
+     */
+    public int selectedSlot() {
+        return inventory.selectedSlot();
+    }
+
     @Override
     public int getContainerSize() {
         return Inventory.SIZE;
