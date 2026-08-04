@@ -860,10 +860,22 @@ public class Person extends Avatar implements AgentBody {
         this.entityData.set(DATA_PERSON_ID, id.value().toString());
     }
 
-    /** This person's directory handle, or {@code null} before it has been assigned (the spawn tick
-     *  has not run yet). Synced, so it resolves on the client too. Resolve names/identity via
-     *  {@link PersonDirectory}. */
+    /**
+     * This person's directory handle, or {@code null} before it has been assigned. Synced, so it
+     * resolves on the client too; resolve names and identity via {@link PersonDirectory}.
+     *
+     * <p><b>The field first, the synced string only as a fallback.</b> Both are written together
+     * and only by {@link #setAgentId}, which loading from disk goes through too, so on the server
+     * the field always holds the id. The string is there for the CLIENT, which never runs it.
+     *
+     * <p>Reaching for the string first cost a fresh {@code UUID} parse per call, several times per
+     * being-reading — on the order of a hundred thousand a tick at two hundred agents, with
+     * {@code UUID.parse4Nibbles} duly turning up in a server-thread profile.
+     */
     public @Nullable AgentId getAgentId() {
+        if (this.personId != null) {
+            return this.personId;
+        }
         String id = this.entityData.get(DATA_PERSON_ID);
         return id.isEmpty() ? null : AgentId.of(UUID.fromString(id));
     }
