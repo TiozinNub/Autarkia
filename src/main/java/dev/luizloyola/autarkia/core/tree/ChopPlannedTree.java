@@ -7,6 +7,7 @@ import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.RiseState;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.knowledge.RegionGrowth;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
@@ -96,6 +97,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
     private Deque<Pos> digsAhead;
     /** Every cell the surveyed tree owns — what the chew-through is allowed to eat. */
     private java.util.Set<Pos> treeBlocks;
+    /**
+     * The claimed ground, re-declared on every heartbeat: the anchor cell until the survey says
+     * how big this tree is, its whole box afterwards. A field because the heartbeat runs every
+     * tick and the box cannot change once known — recomputing it from {@link #treeBlocks} would
+     * walk a few hundred cells a tick.
+     */
+    private Region claimedArea;
     private boolean boostUp;
     private Pos boostCell;
     /** Whether the rise in flight is a boost (stand +1) or a climb up the mast to a layer. */
@@ -143,7 +151,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
     public TaskStatus tick(BrainContext ctx) {
         // Selection is commitment: the claim heartbeats every tick so a dead claimant lapses
         // in one TTL, and a rival's live claim ends this task before it swings once.
-        if (!ctx.claims().claim(Pois.TREE, anchor, ctx.percepts().time())) {
+        if (!ctx.claims().claim(Pois.TREE, anchor, claimedArea(), ctx.percepts().time())) {
             ending = "the tree at " + shortPos(anchor) + " is claimed by someone else";
             ctx.journal().record(Category.BRAIN, "chop", "FAILED — " + ending);
             return TaskStatus.FAILED; // contention, not brokenness: no avoidance
@@ -241,6 +249,9 @@ public final class ChopPlannedTree implements PrimitiveTask {
         treeBlocks.addAll(tree.base());
         treeBlocks.addAll(tree.column());
         treeBlocks.addAll(tree.branches());
+        // The survey has just said how far this tree reaches, so the claim can stop being a
+        // single cell and start covering the ground the felling will actually strew logs over.
+        claimedArea = boxAround(treeBlocks);
         // A remnant's lowest log hangs in mid-air, so the card cannot take it for the floor: it
         // is told the level she surveyed from, which she walked to and can therefore walk on. A
         // real tree's stump is the floor.
@@ -1401,5 +1412,23 @@ public final class ChopPlannedTree implements PrimitiveTask {
 
     private static String shortPos(Pos p) {
         return "(" + p.x() + ", " + p.y() + ", " + p.z() + ")";
+    }
+
+    /**
+     * The ground this claim covers. Before the survey there is nothing safe to say beyond the
+     * anchor: a guessed box would fence off ground this task may never touch, stopping other
+     * workers with nobody working it.
+     */
+    private Region claimedArea() {
+        return claimedArea == null ? Region.of(anchor) : claimedArea;
+    }
+
+    /** The smallest box containing every cell — the tree's footprint, computed once. */
+    private static Region boxAround(java.util.Set<Pos> cells) {
+        Region box = null;
+        for (Pos cell : cells) {
+            box = box == null ? Region.of(cell) : box.including(cell);
+        }
+        return box;
     }
 }
