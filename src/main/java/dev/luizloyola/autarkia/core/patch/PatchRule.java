@@ -49,24 +49,13 @@ public final class PatchRule implements GrowthRule {
     }
 
     @Override
-    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seedCell, BlockProbe probe) {
+    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, BlockProbe probe) {
         if (blocks.isEmpty()) {
             return List.of();
         }
-        Pos anchor = seedCell;
-        long best = Long.MAX_VALUE;
-        for (Pos cell : blocks.keySet()) {
-            long dx = (long) cell.x() - seedCell.x();
-            long dy = (long) cell.y() - seedCell.y();
-            long dz = (long) cell.z() - seedCell.z();
-            long dist = dx * dx + dy * dy + dz * dz;
-            if (dist < best) {
-                best = dist;
-                anchor = cell;
-            }
-        }
+        // Any pumpkin of the patch will do as a way in; Anchors picks the near one per asker.
         // Units are the clump's size and mean nothing about the patch — see Patches. The kind
         // declares no unit, so nothing ever renders this number at an operator.
-        return List.of(new Evaluation(anchor, blocks.size(), blocks));
+        return List.of(new Evaluation(List.copyOf(blocks.keySet()), blocks.size(), blocks));
     }
 }

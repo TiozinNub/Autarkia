@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.agent.SpeciesProfile;
 import dev.luizloyola.anima.core.agent.TestSpecies;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
+import dev.luizloyola.anima.core.brain.knowledge.Anchors;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
@@ -68,10 +69,11 @@ class PatchRuleTest {
                 seed, Patches.PUMPKIN,
                 new Pos(5, ON_GROUND, 4), Patches.PUMPKIN);
 
-        var parts = PatchRule.PUMPKINS.evaluate(clump, seed, probe);
+        var parts = PatchRule.PUMPKINS.evaluate(clump, probe);
 
         assertEquals(1, parts.size(), "a clump is not several pumpkins the way a canopy is trees");
-        assertEquals(seed, parts.get(0).anchor());
+        assertEquals(seed, Anchors.choose(parts.get(0).approach(), seed),
+                "any pumpkin is a way in; the near one is the one they walk to");
     }
 
     @Test

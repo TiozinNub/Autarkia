@@ -45,7 +45,7 @@ public final class TreeRule implements GrowthRule {
     }
 
     @Override
-    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seed, BlockProbe probe) {
+    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, BlockProbe probe) {
         List<Evaluation> trees = new ArrayList<>();
         for (TreeShape.Trunk trunk : TreeShape.split(blocks, probe)) {
             if (!hasSunlitLeaf(trunk.leaves(), probe)) {
@@ -64,7 +64,9 @@ public final class TreeRule implements GrowthRule {
             for (Pos leaf : trunk.leaves()) {
                 cells.put(leaf, BlockKind.LEAVES);
             }
-            trees.add(new Evaluation(anchorOf(trunk.base(), seed), trunk.logCount(), cells));
+            // The base layer is the approach: which foot is the asker's business, not the
+            // wood's — Anchors picks the near one, so this is evaluated once for everybody.
+            trees.add(new Evaluation(trunk.base(), trunk.logCount(), cells));
         }
         return trees;
     }
@@ -79,23 +81,4 @@ public final class TreeRule implements GrowthRule {
         return false;
     }
 
-    /** The lowest base cell; among equally low ones, the horizontally nearest to the seed. */
-    private static Pos anchorOf(List<Pos> logs, Pos seed) {
-        Pos best = null;
-        long bestDist = Long.MAX_VALUE;
-        for (Pos log : logs) {
-            if (best != null && log.y() != best.y()) {
-                if (log.y() > best.y()) {
-                    continue;
-                }
-                bestDist = Long.MAX_VALUE;
-            }
-            long dist = TreeShape.horizontalDistSq(log, seed);
-            if (best == null || log.y() < best.y() || dist < bestDist) {
-                best = log;
-                bestDist = dist;
-            }
-        }
-        return best;
-    }
 }

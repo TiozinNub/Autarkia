@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.item;
 
 import dev.luizloyola.anima.compat.sense.LevelProbe;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
+import dev.luizloyola.anima.core.brain.knowledge.Anchors;
 import dev.luizloyola.anima.core.brain.knowledge.GrownRegion;
 import dev.luizloyola.anima.core.brain.knowledge.RegionGrowth;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -65,7 +66,9 @@ public final class ChopWandAction implements WandAction {
             if (!tree.blocks().containsKey(seed)) {
                 continue; // a neighbour sharing the canopy — not the one under the cursor
             }
-            boolean autoDisabled = person.brain().run(new ChopPlannedTree(tree.anchor()));
+            // Anchored from the clicked cell: an anchor means the side you came at the thing from.
+            boolean autoDisabled = person.brain().run(
+                    new ChopPlannedTree(Anchors.choose(tree.approach(), seed)));
             return Optional.of(Component.translatable(autoDisabled
                             ? "item.autarkia.debug_wand.chopping_auto_off"
                             : "item.autarkia.debug_wand.chopping",

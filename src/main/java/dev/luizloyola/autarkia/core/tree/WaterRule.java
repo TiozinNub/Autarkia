@@ -34,19 +34,12 @@ public final class WaterRule implements GrowthRule {
     }
 
     @Override
-    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, Pos seed, BlockProbe probe) {
-        Pos anchor = null;
-        long bestDist = Long.MAX_VALUE;
-        for (Pos cell : blocks.keySet()) {
-            long dx = cell.x() - seed.x();
-            long dy = cell.y() - seed.y();
-            long dz = cell.z() - seed.z();
-            long dist = dx * dx + dy * dy + dz * dz;
-            if (dist < bestDist) {
-                bestDist = dist;
-                anchor = cell;
-            }
+    public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, BlockProbe probe) {
+        if (blocks.isEmpty()) {
+            return List.of();
         }
-        return List.of(new Evaluation(anchor, blocks.size(), blocks));
+        // Every cell is a way in: which shore is the near one depends on the side you came at,
+        // and that cannot be known here — Anchors picks it for whoever is asking.
+        return List.of(new Evaluation(List.copyOf(blocks.keySet()), blocks.size(), blocks));
     }
 }

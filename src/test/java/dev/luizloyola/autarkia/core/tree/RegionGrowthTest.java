@@ -33,6 +33,43 @@ class RegionGrowthTest {
         return region.parts().get(0);
     }
 
+    /**
+     * Measured live, fifty walkers: inside wood wider than the spread cap essentially every scan
+     * stops at the cap and is marked partial, and a partial mass lent to nobody made three
+     * quarters of re-grown scans duplicate work. A cut-short scan is exact about the trees well
+     * inside it and silent only about those at its edge.
+     */
+    @Test
+    void aScanStoppedAtItsSpreadCapStillSeesWholeTreesInsideIt() {
+        FakeProbe probe = new FakeProbe();
+        // A stand running far past the profile's 24-block spread cap, canopies welded into one
+        // mass so nothing but the cap can end the walk.
+        for (int x = 10; x <= 60; x += 2) {
+            probe.placeOak(x, 10);
+        }
+        Pos seed = new Pos(10, 68, 10);
+        GrownRegion region = grow(
+                new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES, TestSpecies.PROFILE),
+                probe, 100_000);
+
+        assertTrue(region.partial(), "the walk really did stop at the cap");
+        assertTrue(region.parts().size() > 2, "and still found a stand: " + region.parts().size());
+
+        List<GrownRegion.Part> whole = region.parts().stream()
+                .filter(GrownRegion.Part::complete).toList();
+        List<GrownRegion.Part> clipped = region.parts().stream()
+                .filter(part -> !part.complete()).toList();
+
+        assertFalse(whole.isEmpty(), "the trees near the seed were seen entire");
+        assertFalse(clipped.isEmpty(), "and the ones out at the cut were not");
+        assertTrue(whole.stream().anyMatch(part -> part.blocks().containsKey(new Pos(10, 64, 10))),
+                "the tree they were standing at is not in doubt");
+        int wholeEdge = whole.stream().mapToInt(part -> part.bounds().max().x()).max().orElse(0);
+        int clippedEdge = clipped.stream().mapToInt(part -> part.bounds().max().x()).min().orElse(0);
+        assertTrue(wholeEdge < clippedEdge + 4,
+                "doubt belongs at the far edge, not scattered through the stand");
+    }
+
     @Test
     void anOakGrowsIntoAnAcceptedTree() {
         FakeProbe probe = new FakeProbe();
@@ -44,7 +81,7 @@ class RegionGrowthTest {
         assertTrue(region.accepted());
         assertEquals(Pois.TREE, region.kind());
         GrownRegion.Part tree = only(region);
-        assertEquals(new Pos(10, 64, 10), tree.anchor(), "the trunk base — where the axe goes");
+        assertEquals(new Pos(10, 64, 10), tree.anchorFrom(seed), "the trunk base — where the axe goes");
         assertEquals(4, tree.units(), "4 logs");
         assertFalse(region.partial());
         assertEquals(21, region.blocks().size(), "4 logs + 17 leaves");
@@ -68,7 +105,8 @@ class RegionGrowthTest {
                 probe, 10_000);
 
         assertEquals(2, region.parts().size(), "two trunks, two trees, two memories");
-        List<Pos> anchors = region.parts().stream().map(GrownRegion.Part::anchor).toList();
+        List<Pos> anchors = region.parts().stream()
+                .map(part -> part.anchorFrom(new Pos(10, 68, 10))).toList();
         assertTrue(anchors.contains(new Pos(10, 64, 10)), "anchors: " + anchors);
         assertTrue(anchors.contains(new Pos(12, 64, 10)), "anchors: " + anchors);
         for (GrownRegion.Part tree : region.parts()) {
@@ -102,7 +140,8 @@ class RegionGrowthTest {
                 probe, 10_000);
 
         GrownRegion.Part tree = only(region);
-        assertEquals(new Pos(10, 64, 10), tree.anchor(), "the stump anchors nothing");
+        assertEquals(new Pos(10, 64, 10), tree.anchorFrom(new Pos(10, 68, 10)),
+                "the stump anchors nothing");
         assertEquals(6, tree.units(), "the oak, its branch, and the stump its wood reaches");
         assertTrue(tree.blocks().containsKey(new Pos(12, 64, 10)),
                 "the stump is the oak's wood now — felling the oak leaves no stump behind");
@@ -126,7 +165,7 @@ class RegionGrowthTest {
         fresh.placeOak(10, 10);
         GrownRegion unsliced = grow(new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES, TestSpecies.PROFILE),
                 fresh, 10_000);
-        assertEquals(only(unsliced).anchor(), only(sliced.result()).anchor());
+        assertEquals(only(unsliced).anchorFrom(seed), only(sliced.result()).anchorFrom(seed));
         assertEquals(only(unsliced).units(), only(sliced.result()).units());
         assertEquals(unsliced.blocks().size(), sliced.result().blocks().size());
     }
@@ -187,7 +226,7 @@ class RegionGrowthTest {
         assertTrue(region.accepted());
         assertEquals(Pois.WATER, region.kind());
         assertEquals(25, only(region).units(), "the whole 5×5 surface sheet");
-        assertEquals(seed, only(region).anchor(), "nearest cell to where they noticed it");
+        assertEquals(seed, only(region).anchorFrom(seed), "nearest cell to where they noticed it");
         assertFalse(region.partial());
     }
 
