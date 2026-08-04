@@ -182,6 +182,7 @@ public final class AutarkiaCommands {
                         // world state; "view" renders those beliefs as particles + discovery chat.
                         .then(AgentCommands.knowledge())
                         .then(AgentCommands.horizon())
+                        .then(AgentCommands.survey())
                         // Who is holding what — site claims and item leases, one semantics, two
                         // keyspaces. The readout contention never had.
                         .then(AgentCommands.claims())
