@@ -49,6 +49,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionResult;
@@ -77,6 +78,8 @@ import net.minecraft.world.phys.Vec3;
 import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.body.Modifiers;
+import dev.luizloyola.anima.mod.identity.AgentRecords;
+import dev.luizloyola.anima.mod.identity.Graves;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -877,12 +880,40 @@ public class Person extends Avatar implements AgentBody {
     @Override
     public void die(DamageSource cause) {
         super.die(cause);
-        if (!level().isClientSide()) {
-            // The combat tracker's line already names them ("Alice starved to death"), so it is
-            // logged as-is rather than prefixed with the name a second time.
-            String story = getCombatTracker().getDeathMessage().getString();
-            AutarkiaMod.LOGGER.info("{}", story);
-            journal().record(Category.BODY, "death", story);
+        if (!(level() instanceof ServerLevel level)) {
+            return;
+        }
+        // The combat tracker's line already names them ("Alice starved to death"), so it is
+        // logged as-is rather than prefixed with the name a second time.
+        String story = getCombatTracker().getDeathMessage().getString();
+        AutarkiaMod.LOGGER.info("{}", story);
+        journal().record(Category.BODY, "death", story);
+        bury(level, story);
+    }
+
+    /**
+     * Writes the death down and lets go of everything a dead mind cannot use.
+     *
+     * <p><b>Here or nowhere:</b> afterwards nothing can tell this settler died — a directory entry
+     * with no loaded body is what one in an unloaded chunk looks like — and no
+     * {@code RemovalReason} stands in ({@code CHANGED_DIMENSION} fires for a portal, the two
+     * {@code UNLOADED_} ones mean the opposite of dead). At {@code die()} rather than at removal
+     * because a body lingers through its death animation; {@code Graves} makes it idempotent.
+     *
+     * <p>Let go: knowledge and party membership (a dead member makes a party larger than it is, and
+     * boards count members). Identity, the contact books naming them and their journal stay.
+     */
+    private void bury(ServerLevel level, String story) {
+        AgentId id = this.personId;
+        if (id == null) {
+            return; // died before anybody decided who they were; there is nothing to bury
+        }
+        MinecraftServer server = level.getServer();
+        boolean news = Graves.get(server).bury(id, new Graves.Death(level.getGameTime(),
+                level.dimension().identifier().toString(),
+                getBlockX(), getBlockY(), getBlockZ(), story));
+        if (news) {
+            AgentRecords.bury(server, id);
         }
     }
 
