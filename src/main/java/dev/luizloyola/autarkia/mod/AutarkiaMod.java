@@ -22,8 +22,12 @@ import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.core.brain.task.Producers;
+import dev.luizloyola.autarkia.compat.sense.PatchBlocks;
+import dev.luizloyola.autarkia.core.patch.PatchRule;
+import dev.luizloyola.autarkia.core.patch.Patches;
 import dev.luizloyola.autarkia.core.tree.ChopForLogs;
 import dev.luizloyola.autarkia.core.board.Stock;
+import java.util.List;
 import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.autarkia.core.tree.TreeRule;
 import dev.luizloyola.autarkia.core.tree.WaterRule;
@@ -102,6 +106,17 @@ public class AutarkiaMod implements ModInitializer {
         GrowthRules.register(BlockKind.LEAVES, TreeRule.INSTANCE);
         GrowthRules.register(BlockKind.WATER, WaterRule.INSTANCE);
         KnowledgeViewer.particle(Pois.TREE, ParticleTypes.HAPPY_VILLAGER);
+        // And what grows in scattered clumps rather than in masses. Two registrations each, not
+        // one: PatchBlocks teaches Anima to tell a pumpkin from a stone, PatchRule says what to
+        // believe about it. Declaring a block kind is not declaring it worth remembering.
+        Patches.init();
+        PatchBlocks.register();
+        for (PatchRule rule : List.of(PatchRule.PUMPKINS, PatchRule.MELONS, PatchRule.CACTI)) {
+            GrowthRules.register(rule.seed(), rule);
+        }
+        KnowledgeViewer.particle(Patches.PUMPKINS, ParticleTypes.COMPOSTER);
+        KnowledgeViewer.particle(Patches.MELONS, ParticleTypes.COMPOSTER);
+        KnowledgeViewer.particle(Patches.CACTI, ParticleTypes.COMPOSTER);
         registerInteraction();
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
     }
