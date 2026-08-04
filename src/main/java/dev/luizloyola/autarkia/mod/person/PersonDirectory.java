@@ -9,6 +9,7 @@ import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.PrivateIdentity;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.anima.mod.store.StoreGuard;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
@@ -39,8 +40,10 @@ import java.util.random.RandomGenerator;
  * <p>Codec-based (the 26.1 {@link SavedDataType} model); the codec lives in {@code mod} so the core
  * stays free of DataFixerUpper.
  */
-public final class PersonDirectory extends SavedData implements AgentDirectory {
-    private static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
+public final class PersonDirectory extends SavedData
+        implements AgentDirectory, StoreGuard.Checked {
+    /** This store's file key — public so the boot guard can find it on disk. */
+    public static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
 
     /** Default external appearance for a legacy (pre-appearance) person. */
     private static final Appearance DEFAULT_APPEARANCE =
@@ -65,7 +68,13 @@ public final class PersonDirectory extends SavedData implements AgentDirectory {
             APPEARANCE_CODEC.optionalFieldOf("appearance", DEFAULT_APPEARANCE).forGetter(PersonIdentity::appearance)
     ).apply(entry, (uuid, name, appearance) -> new PersonIdentity(AgentId.of(uuid), name, appearance)));
 
+    /** This store's schema. Bump when the shape above changes incompatibly. */
+    private static final int SCHEMA = 1;
+
     private static final Codec<PersonDirectory> CODEC = RecordCodecBuilder.create(dir -> dir.group(
+            Codec.INT.optionalFieldOf("version", 0).forGetter(d -> SCHEMA),
+            Codec.INT.optionalFieldOf("rows", StoreGuard.UNCOUNTED)
+                    .forGetter(d -> d.entries().size()),
             ENTRY_CODEC.listOf().fieldOf("persons").forGetter(PersonDirectory::entries)
     ).apply(dir, PersonDirectory::fromEntries));
 
@@ -73,14 +82,33 @@ public final class PersonDirectory extends SavedData implements AgentDirectory {
             SavedDatas.type(ID, PersonDirectory::new, CODEC, DataFixTypes.LEVEL);
 
     private final PersonRegistry registry;
+    private final int loadedVersion;
+    private final int declaredRows;
 
     /** The {@link SavedDataType} supplier for a fresh save. */
     public PersonDirectory() {
-        this(new PersonRegistry());
+        this(new PersonRegistry(), StoreGuard.NEVER_LOADED, StoreGuard.UNCOUNTED);
     }
 
-    private PersonDirectory(PersonRegistry registry) {
+    private PersonDirectory(PersonRegistry registry, int loadedVersion, int declaredRows) {
         this.registry = registry;
+        this.loadedVersion = loadedVersion;
+        this.declaredRows = declaredRows;
+    }
+
+    @Override
+    public int loadedVersion() {
+        return loadedVersion;
+    }
+
+    @Override
+    public int declaredRows() {
+        return declaredRows;
+    }
+
+    @Override
+    public int actualRows() {
+        return entries().size();
     }
 
     /** Resolves the single, server-global directory. */
@@ -182,9 +210,10 @@ public final class PersonDirectory extends SavedData implements AgentDirectory {
         return List.copyOf(registry.all());
     }
 
-    private static PersonDirectory fromEntries(List<PersonIdentity> entries) {
+    private static PersonDirectory fromEntries(int version, int declaredRows,
+                                               List<PersonIdentity> entries) {
         PersonRegistry registry = new PersonRegistry();
         entries.forEach(registry::register);
-        return new PersonDirectory(registry);
+        return new PersonDirectory(registry, version, declaredRows);
     }
 }

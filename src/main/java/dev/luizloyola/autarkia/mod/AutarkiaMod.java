@@ -22,6 +22,7 @@ import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.identity.AgentRecords;
+import dev.luizloyola.anima.mod.store.StoreGuard;
 import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.autarkia.compat.sense.PatchBlocks;
 import dev.luizloyola.autarkia.core.patch.PatchRule;
@@ -98,6 +99,9 @@ public class AutarkiaMod implements ModInitializer {
         // ERASURE (a Person unmade by command, who never died) takes this row.
         AgentRecords.register("identity", true,
                 (server, who) -> PersonDirectory.get(server).purge(who));
+        // And that the directory is checked at boot for a load vanilla swallowed. Anima installs
+        // the guard itself and registers its own three stores; this is the consumer's.
+        StoreGuard.guard("identity", PersonDirectory.ID, PersonDirectory::get);
         // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
         // this world, not about having a mind, so it belongs here rather than in the library.
         // Since the seventh choreography (2026-08-02), obtain orders the dance card itself.

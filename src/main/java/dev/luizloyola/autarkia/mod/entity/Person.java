@@ -369,8 +369,44 @@ public class Person extends Avatar implements AgentBody {
                 this.identityProjected = true;
             }
         }
+        // Outside the identity block on purpose: that one stops running once a Person is projected,
+        // and a check that quietly stops running is worse than none. One boolean read a tick.
+        if (!CHUNK_SAVE_CHECKED && this.level() instanceof ServerLevel) {
+            verifyChunkSaved();
+        }
         super.tick();
     }
+
+    /**
+     * Checks once per JVM that a Person is still written into its chunk, because the fact that one
+     * is rests on an accident.
+     *
+     * <p>{@code Entity.shouldBeSaved()} defaults to true and {@code Player} overrides it to false;
+     * {@link Avatar}, split OUT of {@code Player} at 1.21.9, kept the default (verified by
+     * disassembling 26.1.2). If a release moves that override up onto {@code Avatar}, every Person
+     * silently stops being written and the settlement is gone after the next reload, with nothing
+     * pointing at the cause.
+     *
+     * <p>Deferred to the first tick because the answer is a property of an instance, and asking by
+     * name through reflection would be a string mappings can invalidate. Gated on the states where
+     * vanilla legitimately answers false — passenger, ridden vehicle, already removed.
+     */
+    private void verifyChunkSaved() {
+        if (isPassenger() || isVehicle() || isRemoved()) {
+            return; 
+        }
+        CHUNK_SAVE_CHECKED = true;
+        if (!shouldBeSaved()) {
+            AutarkiaMod.LOGGER.error("PERSONS ARE NOT BEING SAVED. shouldBeSaved() is false for a "
+                    + "plain standing Person, which means Minecraft now excludes this entity from "
+                    + "chunk data — most likely because Avatar picked up Player's override. Every "
+                    + "settler in this world will be gone after the next restart, and nothing else "
+                    + "will report it. Do not keep playing a world you care about.");
+        }
+    }
+
+    /** One answer per JVM — see {@link #verifyChunkSaved}. */
+    private static boolean CHUNK_SAVE_CHECKED;
 
     /**
      * Both-sides tick step. {@code updateSwingTime()} is the clock behind the visible arm-swing
