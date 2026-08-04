@@ -122,10 +122,12 @@ class KeepStockedTest {
 
     @Test
     void aRebuiltBoardOffersAnErrandNobodyIsHoldingAnyMore() {
-        // The one field it would be actively wrong to carry across: `claimed` says somebody is
-        // working this item, and after a restart nobody is — the arbiter's claim is tier 0 and went
-        // with the process. A board that woke up believing the errand taken would never offer it
-        // again and never withdraw it.
+        // `claimed` says somebody is out there working this item, and after a restart nobody is —
+        // the arbiter's claim is tier 0 and went with the process. Carrying the flag across ON its
+        // own would leave a board that never offers the errand again and never withdraws it.
+        // Carrying both halves (the hold and the worker's commitment) is what layer 3 will do
+        // once work items have durable identity (decision: Luiz); it buys nothing here, where a
+        // personal board's holder is always its owner. This test pins the CURRENT shape.
         ticks(KeepStocked.CHECK_INTERVAL * 2);
         WorkItem item = work.bestAvailable(ctx).orElseThrow();
         work.claimed(item, ctx);
