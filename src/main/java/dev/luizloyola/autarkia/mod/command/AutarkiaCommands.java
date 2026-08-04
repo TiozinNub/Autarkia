@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.command;
 
 import java.util.Map;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.anima.mod.identity.AgentRecords;
 import dev.luizloyola.anima.core.agent.PrivateIdentity;
 import dev.luizloyola.anima.mod.body.AgentBodies;
 import dev.luizloyola.anima.mod.body.AgentBody;
@@ -237,13 +238,19 @@ public final class AutarkiaCommands {
                                 .then(spawnLeaves(Commands.literal("spawn"), Mind.FULL)
                                         .then(spawnLeaves(Commands.literal("nobrain"), Mind.NO_BRAIN))
                                         .then(spawnLeaves(Commands.literal("nowander"), Mind.NO_WANDER)))
-                                // No `purge graveyard` here, and it must not be rebuilt: it called
-                                // every identity with no LOADED entity "dead" and destroyed its
-                                // directory entry, knowledge and journal. On any world where
-                                // settlers walk out of render distance that deletes most of the
-                                // settlement. Absent has never meant dead — see the persistence
-                                // spec: burial is recorded at die() or it is not knowable at all.
-                                // The replacement takes explicit ids and infers nothing.
+                                // No `purge graveyard` here — REMOVED 2026-08-04. It called every
+                                // identity with no LOADED entity "dead" and destroyed its
+                                // directory entry, knowledge and journal, which deletes most of a
+                                // settlement on any world where settlers leave render distance.
+                                // Absence never meant death, and after the fact the two are
+                                // indistinguishable: burial is recorded at die() or not at all
+                                // (2026-08-03-persistence-design.md). `erase` replaces it, taking
+                                // an explicit id.
+                                .then(Commands.literal("erase")
+                                        .then(Commands.argument("who", StringArgumentType.word())
+                                                .suggests(ERASABLE_SUGGESTIONS)
+                                                .executes(ctx -> personErase(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "who")))))
                                 .then(Commands.literal("needs")
                                         .executes(ctx -> personNeeds(ctx.getSource())))
                                 .then(Commands.literal("setfood")
@@ -466,6 +473,75 @@ public final class AutarkiaCommands {
                 .append(Component.literal(identity.name()).withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" (" + appearance.gender() + ") at " + where + brainNote)
                         .withStyle(ChatFormatting.GRAY)), true);
+        return 1;
+    }
+
+    /** Every identity the directory holds, by name and by short id — what {@code erase} accepts.
+     *  Directory-backed rather than body-backed on purpose: the whole point of erase is to reach a
+     *  record whose entity is not around, which is most of them. */
+    private static final SuggestionProvider<CommandSourceStack> ERASABLE_SUGGESTIONS = (ctx, builder) -> {
+        Stream<String> tokens = PersonDirectory.get(ctx.getSource().getServer()).all().stream()
+                .flatMap(identity -> Stream.of(
+                        identity.name().contains(" ") ? '"' + identity.name() + '"' : identity.name(),
+                        AgentCommands.shortId(identity.id())));
+        return SharedSuggestionProvider.suggest(tokens, builder);
+    };
+
+    /**
+     * Unmakes one Person by explicit name or id: every store registered with {@code AgentRecords}
+     * drops what it holds for them.
+     *
+     * <p>Unlike the {@code purge graveyard} it replaces, it never infers who is gone (an ambiguous
+     * name fails rather than guessing) and it asks the registry rather than enumerating stores —
+     * the old command knew about three stores out of four and left 722 orphan party rows behind.
+     *
+     * <p><b>Refuses while the body is loaded</b>, which would otherwise mint a fresh anonymous
+     * identity on its next tick.
+     */
+    private static int personErase(CommandSourceStack source, String rawToken) {
+        MinecraftServer server = source.getServer();
+        PersonDirectory directory = PersonDirectory.get(server);
+        String token = rawToken.trim();
+        String lower = token.toLowerCase(Locale.ROOT);
+
+        // Id (or short-id prefix) first: it is unambiguous, and names are not unique.
+        List<PersonIdentity> matches = directory.all().stream()
+                .filter(i -> i.id().toString().toLowerCase(Locale.ROOT).startsWith(lower))
+                .toList();
+        if (matches.isEmpty()) {
+            matches = directory.all().stream()
+                    .filter(i -> i.name().equalsIgnoreCase(token))
+                    .toList();
+        }
+        if (matches.isEmpty()) {
+            Replies.fail(source, Component.literal(
+                    "No identity matches '" + token + "' — try a name or id from the list command."));
+            return 0;
+        }
+        if (matches.size() > 1) {
+            String ids = matches.stream().map(i -> AgentCommands.shortId(i.id()))
+                    .collect(Collectors.joining(", "));
+            Replies.fail(source, Component.literal(matches.size() + " identities named '" + token
+                    + "' — pick one by id: " + ids));
+            return 0;
+        }
+
+        PersonIdentity identity = matches.get(0);
+        AgentId id = identity.id();
+        if (findLoaded(server, id) != null) {
+            Replies.fail(source, Component.literal(identity.name() + " is loaded — kill or remove "
+                    + "the body first, or it will mint a fresh identity on its next tick."));
+            return 0;
+        }
+
+        List<String> touched = AgentRecords.erase(server, id);
+        // LOGGED, like the spawn it undoes, and for the same reason the old command was: erasing
+        // destroys the record that would have said what happened to it.
+        Replies.send(source, () -> Component.literal("Erased " + identity.name() + " ("
+                + AgentCommands.shortId(id) + ") from "
+                + (touched.isEmpty() ? "nothing — no store held anything"
+                        : String.join(", ", touched))
+                + ".").withStyle(ChatFormatting.GRAY), true);
         return 1;
     }
 

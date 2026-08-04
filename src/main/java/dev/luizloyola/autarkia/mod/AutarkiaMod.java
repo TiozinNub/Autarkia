@@ -21,6 +21,7 @@ import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.anima.mod.identity.AgentRecords;
 import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.autarkia.compat.sense.PatchBlocks;
 import dev.luizloyola.autarkia.core.patch.PatchRule;
@@ -91,6 +92,12 @@ public class AutarkiaMod implements ModInitializer {
         // tier stays ours to sync. Providers chain, so a future pets mod answers for its own ids
         // beside this one.
         AgentDirectory.provide(PersonDirectory::get);
+        // What to do when one of those Persons is let go. Registered here rather than inside
+        // whatever command does the letting go: the store's author is the only one who reliably
+        // remembers it exists. `survivesDeath = true` because identity outlives the body — only an
+        // ERASURE (a Person unmade by command, who never died) takes this row.
+        AgentRecords.register("identity", true,
+                (server, who) -> PersonDirectory.get(server).purge(who));
         // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
         // this world, not about having a mind, so it belongs here rather than in the library.
         // Since the seventh choreography (2026-08-02), obtain orders the dance card itself.
