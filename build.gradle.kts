@@ -152,13 +152,25 @@ loom {
         // through AUTARKIA_SERVER_DIR; without this the override reached the harness but not the
         // game, and both servers landed in run/server on top of each other.
         runDirectory = rootProject.file(providers.gradleProperty("runDir").getOrElse("run/$name"))
-        jvmArguments.add("-Dmixin.debug.export=true") // Exports transformed classes for debugging
+
+        // Dumps every transformed class to <runDir>/.mixin.out/ — 9-13 MB of writes per launch,
+        // and useful only when you actually want to READ the bytecode a mixin produced. Opt in
+        // with -Pmixindebug (scripts/{client,server}.sh --mixin-debug).
+        if (providers.gradleProperty("mixindebug").isPresent) {
+            jvmArguments.add("-Dmixin.debug.export=true")
+        }
 
         // Hot swap (-Photswap, or scripts/{client,server}.sh --hotswap): open a JDWP port so
         // scripts/hotswap.sh can push recompiled classes into the RUNNING game, and turn on
         // enhanced class redefinition so a swap may add methods and fields — stock HotSpot
         // allows method bodies only. Client and server get their own port so both can be
         // swapped at once. suspend=n: the game boots without waiting for anyone to attach.
+        //
+        // This is the SLOW profile, and so: it gives up C2 (see below) to keep the
+        // world alive across a code change. The fast profile in the `else` branch is what runs
+        // otherwise, and the two are mutually exclusive — enhanced redefinition refuses to start
+        // on anything but G1 or Serial ("Must use the Serial or G1 GC with enhanced class
+        // redefinition"), so a hot-swapping run cannot have the fast profile's GC either way.
         if (providers.gradleProperty("hotswap").isPresent) {
             jvmArguments.add("-XX:+AllowEnhancedClassRedefinition")
             jvmArguments.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:${if (name == "client") 5006 else 5005}")
@@ -171,9 +183,84 @@ loom {
             // throughput, which a dev session on a superflat test world can afford; hot swap is
             // never on in a real build.
             jvmArguments.add("-XX:TieredStopAtLevel=1")
+        } else if (providers.gradleProperty("jvm").orNull != "stock") {
+            // ── the fast profile: the DEFAULT for any run that is not hot-swapping ──────────
+            // Opt out with -Pjvm=stock to get the bare JVM this block replaced.
+            //
+            // What it replaced was nothing at all: the runs set no heap and no GC, so ergonomics
+            // picked -Xms 1/64 of RAM and -Xmx 1/4. On a 60 GB box that is a 968 MB heap that
+            // grows to 15 GB by stop-the-world resizes — during the window you are
+            // staging a scene and watching the first ticks.
+            //
+            // Everything here stays close to what a PLAYER runs. Mojang's own
+            // version manifest ships no heap and no GC flags, so the shipping configuration is
+            // default G1; this tunes G1 rather than replacing it. ZGC would cut pauses further
+            // but taxes every reference read with a load barrier, and the ns/cell numbers this
+            // project is tuned against would stop describing anything real.
+            val heap = providers.gradleProperty("heap").getOrElse(if (name == "client") "4G" else "2G")
+            jvmArguments.add("-Xms$heap")   // Xms == Xmx: never resize the heap mid-session.
+            jvmArguments.add("-Xmx$heap")
+            jvmArguments.add("-XX:+AlwaysPreTouch") // Fault the pages in NOW, not during a tick.
+
+            // G1, tuned for a small heap that is collected often and briefly rather than rarely
+            // and long. MaxTenuringThreshold=1 + SurvivorRatio=32: a tick's garbage is dead by
+            // the next one, so promoting it to the old gen only buys a mixed collection later.
+            // UnlockExperimentalVMOptions must PRECEDE G1NewSizePercent — it is an experimental
+            // flag, and the JVM refuses to start on the wrong order ("The unlock option must
+            // precede 'G1NewSizePercent'"), not merely on the missing one.
+            jvmArguments.add("-XX:+UnlockExperimentalVMOptions")
+            jvmArguments.add("-XX:+UseG1GC")
+            jvmArguments.add("-XX:MaxGCPauseMillis=37")            // under one 50 ms tick
+            jvmArguments.add("-XX:G1HeapRegionSize=16M")
+            jvmArguments.add("-XX:G1NewSizePercent=30")
+            jvmArguments.add("-XX:G1ReservePercent=20")
+            jvmArguments.add("-XX:SurvivorRatio=32")
+            jvmArguments.add("-XX:MaxTenuringThreshold=1")
+            jvmArguments.add("-XX:G1MixedGCCountTarget=3")
+            jvmArguments.add("-XX:InitiatingHeapOccupancyPercent=15")
+            // Minecraft and LWJGL lean on System.gc() to reclaim direct buffers, so
+            // -XX:+DisableExplicitGC (the usual recommendation) trades a pause for an eventual
+            // direct-memory OOM. Making the explicit collection concurrent gets the pause back
+            // without taking the reclamation away.
+            jvmArguments.add("-XX:+ExplicitGCInvokesConcurrent")
+            // Stop writing the hsperfdata mmap into /tmp: the write can stall on a page fault,
+            // and nothing here reads it.
+            jvmArguments.add("-XX:+PerfDisableSharedMem")
+
+            // C2 declines to compile any method over 8000 bytes and never revisits it. Minecraft
+            // and its mixin-woven methods have several, and they run every tick, interpreted, for
+            // the whole session. Lifting the ban needs the node limits raised with it or C2 bails
+            // out again halfway — and NodeLimitFudgeFactor must land between 2% and 40% of
+            // MaxNodeLimit or the JVM refuses to start, so these three move together or not at all.
+            jvmArguments.add("-XX:-DontCompileHugeMethods")
+            jvmArguments.add("-XX:MaxNodeLimit=240000")
+            jvmArguments.add("-XX:NodeLimitFudgeFactor=8000")
+            // More compiled code, and now bigger methods among it, than the 240 MB default holds.
+            // A full code cache silently stops compiling and the game degrades to the interpreter.
+            jvmArguments.add("-XX:ReservedCodeCacheSize=512M")
+            jvmArguments.add("-XX:NonNMethodCodeHeapSize=16M")
+            jvmArguments.add("-XX:ProfiledCodeHeapSize=248M")
+            jvmArguments.add("-XX:NonProfiledCodeHeapSize=248M")
+
+            // Project Lilliput: 16-byte object headers down to 8. Minecraft allocates small
+            // objects by the million (BlockPos, Vec3i, the nav grid's cells), so this is a
+            // straight cut in footprint and, more to the point, in cache misses per scan.
+            // JEP 519 made it a product flag in 25 — but it does not EXIST before 24, and an
+            // unrecognised -XX flag is fatal, so the 1.21.11 node (Java 21) must not see it.
+            if (requiredJava >= JavaVersion.VERSION_25) {
+                jvmArguments.add("-XX:+UseCompactObjectHeaders")
+            }
+
+            // LWJGL validates every argument of every GL/AL call by default. Useful when you are
+            // writing the render path, pure overhead when you are watching a Person walk.
+            if (name == "client") {
+                jvmArguments.add("-Dorg.lwjgl.util.NoChecks=true")
+            }
         }
 
-        // Real Microsoft-account login via DevAuth Neo: scripts/client.sh --auth
+        // Real Microsoft-account login via DevAuth Neo. scripts/client.sh passes -Pdevauth by
+        // DEFAULT now — its --offline is what drops this branch and gives you the nameless dev
+        // profile the client used to start with.
         if (name == "client" && providers.gradleProperty("devauth").isPresent) {
             jvmArguments.add("-Ddevauth.enabled=1")
             providers.gradleProperty("devauth.account").orNull
