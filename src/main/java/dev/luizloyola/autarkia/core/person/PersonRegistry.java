@@ -42,7 +42,12 @@ public final class PersonRegistry {
         return byId.containsKey(id);
     }
 
-    /** Removes an identity outright — the dev purge path; real deaths KEEP identity. */
+    /**
+     * Removes an identity outright. <b>Real deaths must never call this</b> — identity outlives the
+     * body: the dead stay named in the contact books of everyone who knew them, so deleting the
+     * record edits the living's memories. This is erasure, for a Person unmade by command. No caller
+     * today.
+     */
     public boolean remove(AgentId id) {
         return byId.remove(id) != null;
     }

@@ -38,7 +38,6 @@ import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.Entry;
-import dev.luizloyola.anima.core.log.JournalService;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.anima.core.agent.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
@@ -53,7 +52,6 @@ import dev.luizloyola.autarkia.mod.debug.TreeSplitViewer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Persons;
 import dev.luizloyola.autarkia.mod.entity.Person;
-import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.log.ThoughtBroadcast;
 import dev.luizloyola.anima.mod.net.ContactsSync;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
@@ -84,7 +82,6 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -240,12 +237,13 @@ public final class AutarkiaCommands {
                                 .then(spawnLeaves(Commands.literal("spawn"), Mind.FULL)
                                         .then(spawnLeaves(Commands.literal("nobrain"), Mind.NO_BRAIN))
                                         .then(spawnLeaves(Commands.literal("nowander"), Mind.NO_WANDER)))
-                                // Every identity with no loaded entity loses its directory entry,
-                                // knowledge and journal ring. Real deaths keep identity;
-                                // this is for test-world churn.
-                                .then(Commands.literal("purge")
-                                        .then(Commands.literal("graveyard")
-                                                .executes(ctx -> purgeGraveyard(ctx.getSource()))))
+                                // No `purge graveyard` here, and it must not be rebuilt: it called
+                                // every identity with no LOADED entity "dead" and destroyed its
+                                // directory entry, knowledge and journal. On any world where
+                                // settlers walk out of render distance that deletes most of the
+                                // settlement. Absent has never meant dead — see the persistence
+                                // spec: burial is recorded at die() or it is not knowable at all.
+                                // The replacement takes explicit ids and infers nothing.
                                 .then(Commands.literal("needs")
                                         .executes(ctx -> personNeeds(ctx.getSource())))
                                 .then(Commands.literal("setfood")
@@ -258,38 +256,6 @@ public final class AutarkiaCommands {
                                                         .executes(ctx -> personSetFood(ctx.getSource(),
                                                                 IntegerArgumentType.getInteger(ctx, "food"),
                                                                 FloatArgumentType.getFloat(ctx, "saturation")))))))));
-    }
-
-    /** Purges every identity with no loaded entity — dev hygiene for test-world churn. */
-    private static int purgeGraveyard(CommandSourceStack source) {
-        MinecraftServer server = source.getServer();
-        PersonDirectory directory = PersonDirectory.get(server);
-        java.util.Set<AgentId> loaded = new java.util.HashSet<>();
-        for (Person person : loadedPersons(server)) {
-            if (person.agentId() != null) {
-                loaded.add(person.agentId());
-            }
-        }
-        List<AgentId> dead = new ArrayList<>();
-        for (PersonIdentity identity : directory.all()) {
-            if (!loaded.contains(identity.id())) {
-                dead.add(identity.id());
-            }
-        }
-        var knowledge = Knowledges.of(server);
-        JournalService journals = Journals.of(server);
-        for (AgentId id : dead) {
-            directory.purge(id);
-            knowledge.remove(id);
-            journals.drop(id);
-        }
-        // LOGGED: purging destroys an identity, its memories and its journal — the very record
-        // that would have said what happened to it goes with it. Spawning was already logged;
-        // unmaking was not, which left creation traceable and destruction silent.
-        Replies.send(source, () -> Component.literal("Purged " + dead.size()
-                + " unloaded identit" + (dead.size() == 1 ? "y" : "ies")
-                + " (directory + knowledge + journal ring).").withStyle(ChatFormatting.GRAY), true);
-        return dead.size();
     }
 
     /**

@@ -151,8 +151,9 @@ public final class PersonDirectory extends SavedData implements AgentDirectory {
         return Collections.unmodifiableMap(everyone);
     }
 
-    /** Dev-tooling removal (the purge command); marks dirty. Real deaths never call this —
-     *  identity outlives the entity. */
+    /** Drops the identity. Real deaths never call this — identity outlives the entity by design
+     *  (see {@link PersonRegistry#remove}). No caller today: {@code purge graveyard} used it and
+     *  treated every unloaded Person as dead. */
     public boolean purge(AgentId id) {
         boolean removed = registry.remove(id);
         if (removed) {
