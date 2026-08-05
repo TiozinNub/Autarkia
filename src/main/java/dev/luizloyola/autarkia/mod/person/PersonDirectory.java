@@ -1,6 +1,5 @@
 package dev.luizloyola.autarkia.mod.person;
 
-import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.compat.SavedDatas;
@@ -29,7 +28,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Function;
 import java.util.random.RandomGenerator;
 
 /**
@@ -47,41 +45,14 @@ public final class PersonDirectory extends SavedData
     /** This store's file key — public so the boot guard can find it on disk. */
     public static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
 
-    private static final Codec<Gender> GENDER_CODEC = Codec.STRING.xmap(Gender::valueOf, Gender::name);
-    private static final Codec<ModelType> MODEL_CODEC = Codec.STRING.xmap(ModelType::valueOf, ModelType::name);
-
-    /**
-     * How an appearance is written from schema 2 on: {@link Appearance#encode()}, the same string
-     * the entity syncs to clients, so disk and wire cannot drift — and unlike a codec it is
-     * unit-testable (see {@code AppearanceCodecTest}).
-     */
-    private static final Codec<Appearance> ENCODED_APPEARANCE_CODEC =
-            Codec.STRING.xmap(Appearance::decode, Appearance::encode);
-
-    /**
-     * How it was written at schema 1: a {@code {gender, skin, model}} compound. Kept so an existing
-     * world loads — read only, since {@link #APPEARANCE_CODEC} always encodes the new form; its
-     * getters are written to be total anyway.
-     */
-    private static final Codec<Appearance> LEGACY_APPEARANCE_CODEC = RecordCodecBuilder.create(a -> a.group(
-            GENDER_CODEC.fieldOf("gender").forGetter(Appearance::gender),
-            Codec.STRING.fieldOf("skin").forGetter(appearance -> appearance.look() instanceof Look.Skin skin
-                    ? skin.assetId()
-                    : PersonSkins.DEFAULT_SKIN),
-            MODEL_CODEC.optionalFieldOf("model", ModelType.WIDE).forGetter(Appearance::model)
-    ).apply(a, (gender, skin, model) -> new Appearance(gender, model, new Look.Skin(skin))));
-
-    /** New form first, old form as the fallback; always written in the new form. */
-    private static final Codec<Appearance> APPEARANCE_CODEC =
-            Codec.either(ENCODED_APPEARANCE_CODEC, LEGACY_APPEARANCE_CODEC)
-                    .xmap(either -> either.map(Function.identity(), Function.identity()), Either::left);
-
     /** One identity entry: {@code {id, name, appearance}}. Appearance is optional so entries
-     *  written before the external tier existed still load (they get {@link Appearance#DEFAULT}). */
+     *  written before the external tier existed still load (they get {@link Appearance#DEFAULT});
+     *  its own two forms are {@link AppearanceCodecs}, which lives apart so it can be tested. */
     private static final Codec<PersonIdentity> ENTRY_CODEC = RecordCodecBuilder.create(entry -> entry.group(
             UUIDUtil.CODEC.fieldOf("id").forGetter(identity -> identity.id().value()),
             Codec.STRING.fieldOf("name").forGetter(PersonIdentity::name),
-            APPEARANCE_CODEC.optionalFieldOf("appearance", Appearance.DEFAULT).forGetter(PersonIdentity::appearance)
+            AppearanceCodecs.CODEC.optionalFieldOf("appearance", Appearance.DEFAULT)
+                    .forGetter(PersonIdentity::appearance)
     ).apply(entry, (uuid, name, appearance) -> new PersonIdentity(AgentId.of(uuid), name, appearance)));
 
     /** This store's schema. Bump when the shape above changes incompatibly.

@@ -102,16 +102,18 @@ public class Person extends Avatar implements AgentBody {
     public static final Identifier DEFAULT_SKIN = Identifier.parse(PersonSkins.DEFAULT_SKIN);
 
     /**
-     * External identity synced to clients for rendering (the always-on tier), as one encoded
-     * {@link Appearance}: gender, body model and look together. Projected from the person's record
-     * in the {@link PersonDirectory}, which is the source of truth. The full identity (name, …) is
-     * not synced.
+     * External identity synced to clients for rendering, as one encoded {@link Appearance}: gender,
+     * body model and look together. Projected from the person's record in the
+     * {@link PersonDirectory}, which stays the source of truth; the name is not synced.
      *
-     * <p><b>One field rather than three</b>: each synced field is a protocol change that
+     * <p><b>One field rather than three.</b> Each synced field is a protocol change that
      * <em>cannot be hot-swapped in</em> — {@link SynchedEntityData#defineId} runs in a static
      * initialiser, and a redefinition never re-runs one. The encoding is
-     * {@link Appearance#encode()}, the same string the store writes, so nothing can drift, and a
-     * plain string stays legible in {@code /data get entity}.
+     * {@link Appearance#encode()}, the same string the store writes, so there is one representation
+     * rather than two that can drift.
+     *
+     * <p>⚠️ Synched data is <em>not</em> entity NBT, so this never shows up in
+     * {@code /data get entity}; {@code /autarkia whois} reads the store's copy back.
      */
     private static final EntityDataAccessor<String> DATA_APPEARANCE =
             SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
