@@ -19,7 +19,11 @@
     "",
     "A slot marked 'optional' is allowed to draw nothing — a beard, blood, grime. Without it the",
     "editor would rightly complain that a selector with no '*' rule leaves the slot empty for some",
-    "combination of parameters, which for these slots is the entire point."
+    "combination of parameters, which for these slots is the entire point.",
+    "",
+    "A slot whose selector reads a parameter that changes many times a second MUST be 'dynamic',",
+    "or every change re-bakes the shared static base that the whole split exists to protect. The",
+    "beard reads 'speaking', so it is dynamic even though a beard itself does not come and go."
   ],
   "canvas": [64, 64],
   "anchors": {
@@ -102,6 +106,7 @@
       "offset": [0, 4],
       "size": [8, 4],
       "optional": true,
+      "dynamic": true,
       "ops": [
         {
           "type": "ramp",
@@ -118,15 +123,16 @@
       "select": [
         {
           "when": {
-            "beard": "stubble"
+            "beard": "true",
+            "speaking": "true"
           },
-          "texture": "autarkia:face/beard_stubble"
+          "texture": "autarkia:face/beard_speaking"
         },
         {
           "when": {
-            "beard": "full"
+            "beard": "true"
           },
-          "texture": "autarkia:face/beard_full"
+          "texture": "autarkia:face/beard"
         }
       ]
     },
@@ -169,7 +175,7 @@
       "name": "mouth",
       "anchor": "FACE",
       "offset": [3, 6],
-      "size": [2, 1],
+      "size": [2, 2],
       "dynamic": true,
       "select": [
         {
