@@ -38,6 +38,11 @@
     "Every file in a family shares the slot's ramp, so they must all be drawn in the SAME palette.",
     "One ramp cannot have two identity colours.",
     "",
+    "The body is a family too: 'autarkia:body/{gender}' picks male.png or female.png, and the",
+    "editor draws the SLIM arm model for female — the geometry follows the same parameter the skin",
+    "does, so there is one control and not two. Both bodies share the slot's retint, so both must",
+    "contain its reference colour; female.png is a copy of male.png until it is drawn properly.",
+    "",
     "Vanilla armour renders OVER the whole baked skin, so cloth only ever shows where armour is not.",
     "",
     "A RAMP MUST DESCRIBE ITS ART. Its keys are the exact colours the file is drawn in and there is",
@@ -176,7 +181,7 @@
       ],
       "select": [
         {
-          "texture": "autarkia:body/base"
+          "texture": "autarkia:body/{gender}"
         }
       ]
     },
