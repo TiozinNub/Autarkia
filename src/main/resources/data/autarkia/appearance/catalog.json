@@ -61,7 +61,14 @@
     "lightness. Nothing special was needed for that; it falls out of the arithmetic.",
     "",
     "Slot order is composite order, so 'trousers' is declared before 'shirt' and the shirt hangs",
-    "over the waistband rather than being tucked into it."
+    "over the waistband rather than being tucked into it.",
+    "",
+    "A rule's 'texture' may be a LIST, best first. Layers that reach the arms need it: narrowing an",
+    "arm moves its faces on the sheet, so a sleeve drawn for wide arms lands on the wrong pixels of",
+    "a slim one. Listing ['x_{model}', 'x'] says draw the specific file if somebody made one and the",
+    "shared file otherwise \u2014 which is the rule an artist works to. Two selector rules cannot say it:",
+    "a rule matches on PARAMETERS, so a slim rule would match whether or not the art exists and the",
+    "layer would vanish instead of falling back."
   ],
   "canvas": [
     64,
@@ -395,7 +402,10 @@
       ],
       "select": [
         {
-          "texture": "autarkia:cloth/shirt"
+          "texture": [
+            "autarkia:cloth/shirt_{model}",
+            "autarkia:cloth/shirt"
+          ]
         }
       ]
     },
@@ -415,7 +425,10 @@
           "when": {
             "job": "farmer"
           },
-          "texture": "autarkia:cloth/uniform_farmer"
+          "texture": [
+            "autarkia:cloth/uniform_farmer_{model}",
+            "autarkia:cloth/uniform_farmer"
+          ]
         }
       ]
     },
@@ -544,7 +557,10 @@
       ],
       "select": [
         {
-          "texture": "autarkia:hair/{hairstyle}"
+          "texture": [
+            "autarkia:hair/{hairstyle}_{model}",
+            "autarkia:hair/{hairstyle}"
+          ]
         }
       ]
     }
