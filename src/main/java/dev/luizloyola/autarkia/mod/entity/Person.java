@@ -87,6 +87,7 @@ import com.mojang.serialization.Codec;
 import dev.luizloyola.anima.mod.body.Modifiers;
 import dev.luizloyola.anima.mod.brain.BrainState;
 import dev.luizloyola.anima.mod.brain.SenseState;
+import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.identity.AgentRecords;
 import dev.luizloyola.anima.mod.identity.Graves;
 import org.jspecify.annotations.Nullable;
@@ -157,6 +158,8 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_PLAN = "BrainPlan";
     /** What this body remembers of other bodies — tracks, linger and herds. */
     private static final String TAG_BEINGS = "Beings";
+    /** This body's own account of itself — the journal ring `/anima log` reads. */
+    private static final String TAG_JOURNAL = "Journal";
 
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -190,6 +193,9 @@ public class Person extends Avatar implements AgentBody {
      * nothing to run, and it stood there for good.
      */
     private dev.luizloyola.anima.mod.nav.Navigator.@Nullable Walk pendingWalk;
+
+    /** This body's saved journal lines, waiting for a server to file them with. */
+    private java.util.@Nullable List<dev.luizloyola.anima.core.log.Entry> pendingJournal;
 
     /**
      * The directory name, cached on the SERVER when the identity projects ({@link #applyIdentity}).
@@ -424,6 +430,12 @@ public class Person extends Avatar implements AgentBody {
         // and a check that quietly stops running is worse than none. One boolean read a tick.
         if (!CHUNK_SAVE_CHECKED && this.level() instanceof ServerLevel) {
             verifyChunkSaved();
+        }
+        if (this.pendingJournal != null && this.personId != null
+                && this.level() instanceof ServerLevel journalLevel) {
+            var lines = this.pendingJournal;
+            this.pendingJournal = null;
+            Journals.of(journalLevel.getServer()).restore(this.personId, lines);
         }
         if (this.pendingWalk != null && this.level() instanceof ServerLevel) {
             var walk = this.pendingWalk;
@@ -1106,6 +1118,12 @@ public class Person extends Avatar implements AgentBody {
         // Losing these does not blank the senses, it makes a body RE-NOTICE everyone around it and
         // announce them again — the loudest way an agent could tell you it had been rebooted.
         output.store(TAG_BEINGS, SenseState.BEINGS, this.beingSense.snapshot());
+        // A second copy of lines the archive already holds: the archive is a folder, and the ring
+        // `/anima log` reads came back empty after every boot. Bounded by the ring's own cap.
+        if (this.personId != null && level() instanceof ServerLevel level) {
+            output.store(TAG_JOURNAL, BrainState.JOURNAL,
+                    Journals.of(level.getServer()).snapshot(this.personId));
+        }
     }
 
     @Override
@@ -1136,6 +1154,9 @@ public class Person extends Avatar implements AgentBody {
                 .ifPresent(this.brain::restoreCooldowns);
         input.read(TAG_BRAIN_PLAN, BrainState.brain()).ifPresent(this.brain::restore);
         input.read(TAG_BEINGS, SenseState.BEINGS).ifPresent(this.beingSense::restore);
+        // Held rather than filed: the journal service belongs to a server this entity has not been
+        // added to yet. The first tick hands it over, beside the walk.
+        this.pendingJournal = input.read(TAG_JOURNAL, BrainState.JOURNAL).orElse(null);
     }
 
     /**
