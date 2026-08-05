@@ -37,6 +37,11 @@
     "otherwise the lookup misses every pixel and the layer simply stops responding to its binding,",
     "silently and completely. The editor's problems list counts the pixels a ramp does not know.",
     "",
+    "A ramp is for art drawn as a SHADE MAP — a handful of flat tones. Art that is a painting uses",
+    "'retint' instead: it measures the HSV difference between one reference colour in the file and",
+    "the target, and applies that one difference to every pixel, so a hundred and thirty hand-mixed",
+    "skin tones keep their relationships and move together. The body is drawn that way.",
+    "",
     "Each garment has its own ramp because each is drawn in its own palette. 'trousers' carries the",
     "shoes as well: their keys are greys, and saturation is a RATIO, so a zero-saturation key gives a",
     "zero-saturation shade whatever CLOTH_B becomes — the shoes stay grey and only track its",
@@ -148,9 +153,9 @@
       "anchor": "SHEET",
       "ops": [
         {
-          "type": "ramp",
-          "bind": "SKIN",
-          "ramp": "skin"
+          "type": "retint",
+          "from": "AA7C65",
+          "bind": "SKIN"
         }
       ],
       "select": [
