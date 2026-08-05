@@ -30,6 +30,14 @@
     "as people. 'uniform' is the job layer over the top — optional, one rule per job, and only",
     "'farmer' exists so far. Adding a job is one rule and one PNG.",
     "",
+    "A texture may name a FAMILY rather than a file: 'autarkia:hair/{hairstyle}' means every PNG in",
+    "that folder is a hairstyle. Nothing lists them — the folder IS the list, so drawing a new one",
+    "makes it choosable with no edit here. In game the parameter comes from the person; in the",
+    "editor it is a dropdown of what exists.",
+    "",
+    "Every file in a family shares the slot's ramp, so they must all be drawn in the SAME palette.",
+    "One ramp cannot have two identity colours.",
+    "",
     "Vanilla armour renders OVER the whole baked skin, so cloth only ever shows where armour is not.",
     "",
     "A RAMP MUST DESCRIBE ITS ART. Its keys are the exact colours the file is drawn in and there is",
@@ -64,14 +72,12 @@
       [-50, 800, 1220]
     ],
     "hair": {
-      "keys": ["241808", "261A0A", "2B1E0D", "332411", "342512", "3F2A15"],
+      "keys": ["DE812E", "E58D3F", "EB983F", "F3A858"],
       "shades": [
-        [3, 1115, 837],
-        [3, 1056, 884],
+        [-28, 1083, 945],
+        [-29, 990, 974],
         [0, 1000, 1000],
-        [-5, 956, 1186],
-        [-5, 937, 1209],
-        [-40, 956, 1465]
+        [-1, 871, 1034]
       ]
     },
     "shirt": {
@@ -97,7 +103,16 @@
       ]
     },
     "trousers": {
-      "keys": ["282828", "373737", "3F3F3F", "4A4A4A", "555555", "3A3189", "41359B", "463AA5"],
+      "keys": [
+        "282828",
+        "373737",
+        "3F3F3F",
+        "4A4A4A",
+        "555555",
+        "3A3189",
+        "41359B",
+        "463AA5"
+      ],
       "shades": [
         [-2471, 0, 258],
         [-2471, 0, 355],
@@ -146,14 +161,7 @@
       "3E4A6B",
       "6B4A6B"
     ],
-    "cloth_b": [
-      "4A3A2A",
-      "5E4A33",
-      "6B5B45",
-      "46503F",
-      "3A3A3A",
-      "2A2A2E"
-    ]
+    "cloth_b": ["4A3A2A", "5E4A33", "6B5B45", "46503F", "3A3A3A", "2A2A2E"]
   },
   "slots": [
     {
@@ -331,7 +339,7 @@
       ],
       "select": [
         {
-          "texture": "autarkia:hair/short"
+          "texture": "autarkia:hair/{hairstyle}"
         }
       ]
     }
