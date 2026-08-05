@@ -139,6 +139,8 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_WANDER = "BrainWander";
     /** Aspect modifiers with no other source of truth — see {@link #modifiers()}. */
     private static final String TAG_MODIFIERS = "Modifiers";
+    /** Where somebody last told this body to walk — see {@link #pendingGoal}. */
+    private static final String TAG_NAV_GOAL = "NavGoal";
 
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -147,6 +149,18 @@ public class Person extends Avatar implements AgentBody {
 
     /** Whether this load has projected the directory identity onto the synced fields yet. */
     private boolean identityProjected;
+
+    /**
+     * Where this body was walking when the world was last saved, handed back to the navigator on
+     * the first tick.
+     *
+     * <p>The path, the grid and the follower's index are working state the world can rebuild from
+     * the goal; the goal cannot be rebuilt, being an order somebody gave this body — which is why
+     * the autonomy switch is saved beside it. Saving the switch alone was a real bug: a manual
+     * {@code brain goto} turns autonomy off, so a reload restored a body in manual mode with
+     * nothing to run, and it stood there for good.
+     */
+    private @Nullable BlockPos pendingGoal;
 
     /**
      * The directory name, cached on the SERVER when the identity projects ({@link #applyIdentity}).
@@ -383,6 +397,12 @@ public class Person extends Avatar implements AgentBody {
         // and a check that quietly stops running is worse than none. One boolean read a tick.
         if (!CHUNK_SAVE_CHECKED && this.level() instanceof ServerLevel) {
             verifyChunkSaved();
+        }
+        if (this.pendingGoal != null && this.level() instanceof ServerLevel) {
+            BlockPos goal = this.pendingGoal;
+            this.pendingGoal = null; // one attempt; a failed path is the navigator's to report
+            this.navigator.pathTo(goal);
+            journal().record(Category.BODY, "resumed", "walking to " + goal.toShortString());
         }
         super.tick();
     }
@@ -1036,6 +1056,14 @@ public class Person extends Avatar implements AgentBody {
         if (this.modifiers != null && !this.modifiers.isEmpty()) {
             output.store(TAG_MODIFIERS, Modifiers.LIST, this.modifiers.all());
         }
+        // Only while actually going somewhere: ARRIVED and FAILED keep the goal for inspection,
+        // and restoring either would send them walking back to a place they are already standing
+        // in or have already given up on.
+        BlockPos goal = this.navigator.goal();
+        if (goal != null && (this.navigator.state() == Navigator.State.PATHING
+                || this.navigator.state() == Navigator.State.FOLLOWING)) {
+            output.store(TAG_NAV_GOAL, BlockPos.CODEC, goal);
+        }
     }
 
     @Override
@@ -1056,6 +1084,9 @@ public class Person extends Avatar implements AgentBody {
         // applyAll is idempotent per id, so a consumer that later re-applies a job's modifier from
         // its own state lands on the same value rather than stacking a second copy.
         input.read(TAG_MODIFIERS, Modifiers.LIST).ifPresent(modifiers()::applyAll);
+        // Held rather than issued: nothing can be pathed here, mid-NBT-read, before the entity is
+        // in a world. The first tick hands it over.
+        this.pendingGoal = input.read(TAG_NAV_GOAL, BlockPos.CODEC).orElse(null);
     }
 
     /**
