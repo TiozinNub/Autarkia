@@ -1,6 +1,10 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.board.WorkItem;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The board every agent has to themselves (decision: Luiz — <b>compose, don't merge</b>). A want
@@ -35,5 +39,42 @@ public final class PersonalBoard extends Board {
         // owing themselves an errand they abandoned.
         expire(ctx.percepts().time());
         closeFinished();
+    }
+
+    /**
+     * The state of every project posted here, in post order — all of layer 3 that lives on a body
+     * at all. Party boards keep their own, elsewhere.
+     */
+    public List<KeepStocked.State> snapshot() {
+        List<KeepStocked.State> saved = new ArrayList<>();
+        for (Project project : projects()) {
+            if (project instanceof KeepStocked stocked) {
+                saved.add(stocked.snapshot());
+            }
+        }
+        return saved;
+    }
+
+    /**
+     * Puts those rhythms back and re-establishes the owner's hold on anything that was claimed.
+     *
+     * @return the errand the owner is holding again, or empty — what an arbiter points back at
+     */
+    public java.util.Optional<WorkItem> restore(List<KeepStocked.State> saved, AgentId owner,
+                                                long now) {
+        java.util.Optional<WorkItem> held = java.util.Optional.empty();
+        int i = 0;
+        for (Project project : projects()) {
+            if (!(project instanceof KeepStocked stocked) || i >= saved.size()) {
+                continue;
+            }
+            KeepStocked.State state = saved.get(i++);
+            stocked.restore(state);
+            if (state.claimed() && stocked.openItem() != null) {
+                reclaim(stocked.openItem(), owner, now);
+                held = java.util.Optional.of(stocked.openItem());
+            }
+        }
+        return held;
     }
 }

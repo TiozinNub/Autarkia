@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.board;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -8,6 +9,7 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.inv.ItemStack;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -100,9 +102,9 @@ class KeepStockedTest {
         assertFalse(board.isEmpty(), "the want persists even when currently satisfied");
     }
 
-    // ── what a restart does to a personal board ──────────────────────────────────────────
-    // Layer 3 keeps NOTHING across a restart. A board is rebuilt from constants in the body's
-    // field initializer, so these tests build a second one exactly as a reload would.
+    // ── a board built fresh, with nothing to restore ─────────────────────────────────────
+    // A board with no saved state: a world written before any of this, or a project posted since.
+    // These assert the FALLBACK, not the design — the restore path is the section below.
 
     @Test
     void aRebuiltBoardWantsTheSameThing() {
@@ -122,12 +124,10 @@ class KeepStockedTest {
 
     @Test
     void aRebuiltBoardOffersAnErrandNobodyIsHoldingAnyMore() {
-        // `claimed` says somebody is out there working this item, and after a restart nobody is —
-        // the arbiter's claim is tier 0 and went with the process. Carrying the flag across ON its
-        // own would leave a board that never offers the errand again and never withdraws it.
-        // Carrying both halves (the hold and the worker's commitment) is what layer 3 will do
-        // once work items have durable identity (decision: Luiz); it buys nothing here, where a
-        // personal board's holder is always its owner. This test pins the CURRENT shape.
+        // With nothing saved, an unclaimed board is the only sound start: a claim flag with no
+        // claim behind it leaves a want spoken for by nobody. Both halves are carried now — see
+        // aRestoredClaimIsHeldRatherThanOfferedAround — needing no durable work-item identity, since
+        // a personal board has one member and one slot. That identity is a SHARED board's problem.
         ticks(KeepStocked.CHECK_INTERVAL * 2);
         WorkItem item = work.bestAvailable(ctx).orElseThrow();
         work.claimed(item, ctx);
@@ -146,8 +146,8 @@ class KeepStockedTest {
 
     @Test
     void aRebuiltBoardReadsProgressOffThePackRatherThanRememberingIt() {
-        // The other half of why nothing needs saving: a standing project's progress is not a number
-        // it keeps, it is what the body is carrying — and the pack is tier 1, already durable.
+        // PROGRESS is not a number a standing project keeps: it is what the body carries, and the
+        // pack was always durable. The cadence and the claim, though, cannot be re-derived.
         ctx.inventory().add(ItemStack.of("minecraft:oak_log", 16, 64));
         PersonalBoard reloaded = new PersonalBoard();
         reloaded.post(new KeepStocked(Stock.LOGS, 16, 0.35, 0));
@@ -158,5 +158,54 @@ class KeepStockedTest {
         }
         assertTrue(work2.bestAvailable(ctx).isEmpty(),
                 "already stocked, so the rebuilt project posts nothing");
+    }
+
+    // ── continuity ───────────────────────────────────────────────────────────────────────────
+    // Under the rule that replaced step 4's "a board saves nothing" — anything outliving its tick
+    // survives — the cadence, the open item and the claim are all state. These pin the round trip.
+
+    @Test
+    void aRestoredProjectKeepsItsRhythmAndItsOpenErrand() {
+        ticks(KeepStocked.CHECK_INTERVAL * 2);
+        assertTrue(work.bestAvailable(ctx).isPresent(), "an errand is out");
+
+        KeepStocked before = new KeepStocked(Stock.LOGS, 16, 0.35, 0);
+        PersonalBoard reloaded = new PersonalBoard();
+        reloaded.post(before);
+        before.restore(new KeepStocked.State(0, 137, 4, true, false));
+
+        assertEquals(137, before.snapshot().clock(), "the cadence clock carries");
+        assertEquals(4, before.snapshot().beats(), "so does the warm-up count");
+        assertTrue(reloaded.viewFor(() -> me).bestAvailable(ctx).isPresent(),
+                "an errand that was out is out again, without waiting for a fresh beat");
+    }
+
+    @Test
+    void aRestoredClaimIsHeldRatherThanOfferedAround() {
+        // A claimed errand must come back CLAIMED: offered again, it could be scored and handed to
+        // somebody else while its holder is still walking to it.
+        KeepStocked project = new KeepStocked(Stock.LOGS, 16, 0.35, 0);
+        PersonalBoard reloaded = new PersonalBoard();
+        reloaded.post(project);
+        reloaded.restore(List.of(new KeepStocked.State(0, 0, 4, true, true)), me, ctx.now());
+
+        assertTrue(reloaded.viewFor(() -> me).bestAvailable(ctx).isEmpty(),
+                "held, so not on offer to anyone — including its own owner");
+        assertNotNull(project.openItem(), "and the errand itself is back");
+    }
+
+    @Test
+    void aRetryCooldownIsNotForgivenByAReload() {
+        KeepStocked project = new KeepStocked(Stock.LOGS, 16, 0.35, 0);
+        PersonalBoard reloaded = new PersonalBoard();
+        reloaded.post(project);
+        reloaded.restore(List.of(new KeepStocked.State(KeepStocked.FAIL_COOLDOWN, 0, 4, false, false)),
+                me, ctx.now());
+        for (int i = 0; i < KeepStocked.CHECK_INTERVAL * 2; i++) {
+            reloaded.tick(ctx);
+            ctx.advance(1);
+        }
+        assertTrue(reloaded.viewFor(() -> me).bestAvailable(ctx).isEmpty(),
+                "still sitting out the retry it was told to sit out");
     }
 }

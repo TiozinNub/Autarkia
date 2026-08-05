@@ -43,6 +43,7 @@ import dev.luizloyola.autarkia.mod.inv.PersonContainer;
 import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Navigator;
+import dev.luizloyola.autarkia.mod.brain.AutarkiaTasks;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.List;
 import java.util.Locale;
@@ -160,6 +161,8 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BEINGS = "Beings";
     /** This body's own account of itself — the journal ring `/anima log` reads. */
     private static final String TAG_JOURNAL = "Journal";
+    /** The personal board's projects — all of layer 3 that lives on a body. */
+    private static final String TAG_BOARD = "Board";
 
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -193,6 +196,12 @@ public class Person extends Avatar implements AgentBody {
      * nothing to run, and it stood there for good.
      */
     private dev.luizloyola.anima.mod.nav.Navigator.@Nullable Walk pendingWalk;
+
+    /** The saved plan and grant, and the saved board — restored together on the first tick, board
+     *  first: the plan belongs to an errand the board has to hand back before the arbiter can be
+     *  pointed at it. */
+    private dev.luizloyola.anima.mod.brain.BrainDriver.@Nullable BrainSnapshot pendingBrain;
+    private java.util.@Nullable List<dev.luizloyola.autarkia.core.board.KeepStocked.State> pendingBoard;
 
     /** This body's saved journal lines, waiting for a server to file them with. */
     private java.util.@Nullable List<dev.luizloyola.anima.core.log.Entry> pendingJournal;
@@ -430,6 +439,24 @@ public class Person extends Avatar implements AgentBody {
         // and a check that quietly stops running is worse than none. One boolean read a tick.
         if (!CHUNK_SAVE_CHECKED && this.level() instanceof ServerLevel) {
             verifyChunkSaved();
+        }
+        if ((this.pendingBrain != null || this.pendingBoard != null) && this.personId != null
+                && this.level() instanceof ServerLevel boardLevel) {
+            // Board first: it hands back the errand the plan belongs to, and the arbiter is
+            // pointed at that exact item rather than at a flag with nothing behind it.
+            var board = this.pendingBoard;
+            var brainState = this.pendingBrain;
+            this.pendingBoard = null;
+            this.pendingBrain = null;
+            dev.luizloyola.anima.core.brain.board.WorkItem held = null;
+            if (board != null) {
+                held = this.personalBoard
+                        .restore(board, this.personId, boardLevel.getGameTime())
+                        .orElse(null);
+            }
+            if (brainState != null) {
+                this.brain.restore(brainState, held);
+            }
         }
         if (this.pendingJournal != null && this.personId != null
                 && this.level() instanceof ServerLevel journalLevel) {
@@ -1115,6 +1142,7 @@ public class Person extends Avatar implements AgentBody {
         // The plan and its grant, as one field. A body mid-errand that came back with an empty
         // executor would re-decide from scratch, which is a reboot it noticed.
         output.store(TAG_BRAIN_PLAN, BrainState.brain(), this.brain.snapshot());
+        output.store(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD, this.personalBoard.snapshot());
         // Losing these does not blank the senses, it makes a body RE-NOTICE everyone around it and
         // announce them again — the loudest way an agent could tell you it had been rebooted.
         output.store(TAG_BEINGS, SenseState.BEINGS, this.beingSense.snapshot());
@@ -1152,7 +1180,8 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_BRAIN_RANDOM, Codec.LONG).ifPresent(this.brain.random()::restore);
         input.read(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS)
                 .ifPresent(this.brain::restoreCooldowns);
-        input.read(TAG_BRAIN_PLAN, BrainState.brain()).ifPresent(this.brain::restore);
+        this.pendingBrain = input.read(TAG_BRAIN_PLAN, BrainState.brain()).orElse(null);
+        this.pendingBoard = input.read(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD).orElse(null);
         input.read(TAG_BEINGS, SenseState.BEINGS).ifPresent(this.beingSense::restore);
         // Held rather than filed: the journal service belongs to a server this entity has not been
         // added to yet. The first tick hands it over, beside the walk.

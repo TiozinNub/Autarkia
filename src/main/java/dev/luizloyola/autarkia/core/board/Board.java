@@ -409,4 +409,14 @@ public class Board {
             return ctx.percepts().time();
         }
     }
+
+    /**
+     * Hands a lease straight back on a reload, without the bidding a fresh claim goes through: not
+     * {@link #claim}, because re-taking an errand across a restart could see it scored, offered and
+     * handed to somebody else, losing a settler a job they were walking to. Ticks do not pass while
+     * a server is down, so the lease was never near expiring.
+     */
+    public void reclaim(WorkItem item, AgentId who, long now) {
+        leases.put(item, new Lease(who, now + ttlTicks()));
+    }
 }

@@ -7,6 +7,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
+import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.tree.ChopPlan;
 import dev.luizloyola.autarkia.core.tree.ChopPlannedTree;
 import dev.luizloyola.autarkia.core.tree.TreeShape;
@@ -166,4 +167,19 @@ public final class AutarkiaTasks {
                 STATE.xmap(state -> new ChopPlannedTree(state.anchor()).restore(state),
                         ChopPlannedTree::snapshot));
     }
+
+    /**
+     * A personal board's projects — the whole of layer 3 that lives on a body.
+     *
+     * <p>Autarkia's, not Anima's: a pack of pets is a party but never composes a board. Party
+     * boards keep their own state in a server-scoped store instead.
+     */
+    public static final Codec<List<KeepStocked.State>> PERSONAL_BOARD =
+            RecordCodecBuilder.<KeepStocked.State>create(k -> k.group(
+                    Codec.INT.fieldOf("cooldown").forGetter(KeepStocked.State::cooldown),
+                    Codec.INT.fieldOf("clock").forGetter(KeepStocked.State::clock),
+                    Codec.INT.fieldOf("beats").forGetter(KeepStocked.State::beats),
+                    Codec.BOOL.fieldOf("wanting").forGetter(KeepStocked.State::wanting),
+                    Codec.BOOL.fieldOf("claimed").forGetter(KeepStocked.State::claimed)
+            ).apply(k, KeepStocked.State::new)).listOf();
 }

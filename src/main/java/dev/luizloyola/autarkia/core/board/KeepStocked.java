@@ -153,4 +153,36 @@ public final class KeepStocked implements PersonalProject {
             return ctx.percepts().inventory().count(spec.matcher()) + "/" + target + " held";
         }
     }
+
+    // ── continuity ───────────────────────────────────────────────────────────────────────────
+
+    /**
+     * A standing want's rhythm and whether an errand is out — everything that outlives a tick.
+     * The spec, target and priority are not here: constants rebuilt by the field initializer.
+     *
+     * <p>{@code wanting} rather than the item itself: only this project mints one, and on a
+     * single-member board there is nobody to tell two claimants apart, so a boolean is a complete
+     * description and the project re-mints on restore. A SHARED board will need durable work-item
+     * identity.
+     */
+    public record State(int cooldown, int clock, int beats, boolean wanting, boolean claimed) {
+    }
+
+    public State snapshot() {
+        return new State(cooldown, clock, beats, open != null, claimed);
+    }
+
+    /** Puts the rhythm back, re-minting the open errand if one was out. */
+    public void restore(State state) {
+        this.cooldown = state.cooldown();
+        this.clock = state.clock();
+        this.beats = state.beats();
+        this.open = state.wanting() ? new StockItem() : null;
+        this.claimed = state.claimed();
+    }
+
+    /** The errand currently on offer, or null — so a reload can point an arbiter back at it. */
+    public WorkItem openItem() {
+        return open;
+    }
 }
