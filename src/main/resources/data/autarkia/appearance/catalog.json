@@ -35,7 +35,15 @@
     "A RAMP MUST DESCRIBE ITS ART. Its keys are the exact colours the file is drawn in and there is",
     "one shade per key, so redrawing a layer with a different palette means recalibrating its ramp —",
     "otherwise the lookup misses every pixel and the layer simply stops responding to its binding,",
-    "silently and completely. The editor's problems list counts the pixels a ramp does not know."
+    "silently and completely. The editor's problems list counts the pixels a ramp does not know.",
+    "",
+    "Each garment has its own ramp because each is drawn in its own palette. 'trousers' carries the",
+    "shoes as well: their keys are greys, and saturation is a RATIO, so a zero-saturation key gives a",
+    "zero-saturation shade whatever CLOTH_B becomes — the shoes stay grey and only track its",
+    "lightness. Nothing special was needed for that; it falls out of the arithmetic.",
+    "",
+    "Slot order is composite order, so 'trousers' is declared before 'shirt' and the shirt hangs",
+    "over the waistband rather than being tucked into it."
   ],
   "canvas": [64, 64],
   "anchors": {
@@ -61,7 +69,7 @@
         [-40, 956, 1465]
       ]
     },
-    "cloth": {
+    "shirt": {
       "keys": ["006868", "037A7A", "007F7F", "058888", "049595", "00A4A4", "00AFAF", "0ABCBC", "00CCCC"],
       "shades": [
         [0, 1000, 594],
@@ -73,6 +81,19 @@
         [0, 1000, 1000],
         [0, 1000, 1074],
         [0, 1000, 1166]
+      ]
+    },
+    "trousers": {
+      "keys": ["282828", "373737", "3F3F3F", "4A4A4A", "555555", "3A3189", "41359B", "463AA5"],
+      "shades": [
+        [-2471, 0, 258],
+        [-2471, 0, 355],
+        [-2471, 0, 406],
+        [-2471, 0, 477],
+        [-2471, 0, 548],
+        [-9, 976, 884],
+        [0, 1000, 1000],
+        [-3, 985, 1065]
       ]
     }
   },
@@ -139,34 +160,34 @@
       ]
     },
     {
-      "name": "shirt",
-      "anchor": "SHEET",
-      "ops": [
-        {
-          "type": "ramp",
-          "bind": "CLOTH_A",
-          "ramp": "cloth"
-        }
-      ],
-      "select": [
-        {
-          "texture": "autarkia:cloth/shirt"
-        }
-      ]
-    },
-    {
       "name": "trousers",
       "anchor": "SHEET",
       "ops": [
         {
           "type": "ramp",
           "bind": "CLOTH_B",
-          "ramp": "cloth"
+          "ramp": "trousers"
         }
       ],
       "select": [
         {
           "texture": "autarkia:cloth/trousers"
+        }
+      ]
+    },
+    {
+      "name": "shirt",
+      "anchor": "SHEET",
+      "ops": [
+        {
+          "type": "ramp",
+          "bind": "CLOTH_A",
+          "ramp": "shirt"
+        }
+      ],
+      "select": [
+        {
+          "texture": "autarkia:cloth/shirt"
         }
       ]
     },
@@ -178,7 +199,7 @@
         {
           "type": "ramp",
           "bind": "CLOTH_A",
-          "ramp": "cloth"
+          "ramp": "shirt"
         }
       ],
       "select": [
