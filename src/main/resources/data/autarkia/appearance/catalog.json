@@ -7,17 +7,17 @@
     "Ramp shades are fixed point: [hue tenths of a degree, saturation thousandths, value thousandths],",
     "deepest shade first. A ramp replaces one authored colour per shade, and it is written one of two",
     "ways. A bare ARRAY of shades means the art is drawn in the reserved index colours FF0000, FF0001,",
-    "FF0002, ... (see Shades) — the right default for art authored from scratch. An OBJECT may add",
+    "FF0002, ... (see Shades) \u2014 the right default for art authored from scratch. An OBJECT may add",
     "'keys': the real colours the art is actually drawn in, one per shade, deepest first. That is what",
     "lets a layer be painted in visible colour and still recolour per agent, and it is why 'hair' is",
-    "spelled that way — its art is Steve's hair, kept in Steve's own browns.",
+    "spelled that way \u2014 its art is Steve's hair, kept in Steve's own browns.",
     "",
     "Either way, a pixel that is neither transparent nor one of that ramp's keys is left exactly as",
     "authored, on purpose, so a stray colour stays visible instead of quietly becoming a shade nobody",
-    "chose. Keys must be distinct, and a ramp's keys are part of what its NAME means — two ramps with",
+    "chose. Keys must be distinct, and a ramp's keys are part of what its NAME means \u2014 two ramps with",
     "the same name and different keys would collide in the bake cache.",
     "",
-    "A slot marked 'optional' is allowed to draw nothing — a beard, blood, grime. Without it the",
+    "A slot marked 'optional' is allowed to draw nothing \u2014 a beard, blood, grime. Without it the",
     "editor would rightly complain that a selector with no '*' rule leaves the slot empty for some",
     "combination of parameters, which for these slots is the entire point.",
     "",
@@ -27,84 +27,221 @@
     "",
     "Everyone is dressed: 'shirt' and 'trousers' have a wildcard and always draw, in two separate",
     "cloth ladders, because one colour for both is what makes a crowd read as a uniform rather than",
-    "as people. 'uniform' is the job layer over the top — optional, one rule per job, and only",
+    "as people. 'uniform' is the job layer over the top \u2014 optional, one rule per job, and only",
     "'farmer' exists so far. Adding a job is one rule and one PNG.",
     "",
     "A texture may name a FAMILY rather than a file: 'autarkia:hair/{hairstyle}' means every PNG in",
-    "that folder is a hairstyle. Nothing lists them — the folder IS the list, so drawing a new one",
+    "that folder is a hairstyle. Nothing lists them \u2014 the folder IS the list, so drawing a new one",
     "makes it choosable with no edit here. In game the parameter comes from the person; in the",
     "editor it is a dropdown of what exists.",
     "",
     "Every file in a family shares the slot's ramp, so they must all be drawn in the SAME palette.",
     "One ramp cannot have two identity colours.",
     "",
-    "The body is a family too: 'autarkia:body/{gender}' picks male.png or female.png, and the",
-    "editor draws the SLIM arm model for female — the geometry follows the same parameter the skin",
-    "does, so there is one control and not two. Both bodies share the slot's retint, so both must",
-    "contain its reference colour; female.png is a copy of male.png until it is drawn properly.",
+    "The body is a family too: 'autarkia:body/{model}' picks slim.png or wide.png, and the",
+    "editor draws the slim arm model for 'slim' \u2014 the geometry IS the parameter the skin",
+    "is chosen by, so there is one control and not two. Both bodies share the slot's ramp, so both",
+    "must be drawn in the same palette \u2014 they are, exactly, which is what makes one ramp enough.",
     "",
     "Vanilla armour renders OVER the whole baked skin, so cloth only ever shows where armour is not.",
     "",
     "A RAMP MUST DESCRIBE ITS ART. Its keys are the exact colours the file is drawn in and there is",
-    "one shade per key, so redrawing a layer with a different palette means recalibrating its ramp —",
+    "one shade per key, so redrawing a layer with a different palette means recalibrating its ramp \u2014",
     "otherwise the lookup misses every pixel and the layer simply stops responding to its binding,",
     "silently and completely. The editor's problems list counts the pixels a ramp does not know.",
     "",
-    "A ramp is for art drawn as a SHADE MAP — a handful of flat tones. Art that is a painting uses",
+    "A ramp is for art drawn as a SHADE MAP \u2014 a handful of flat tones. Art that is a painting uses",
     "'retint' instead: it measures the HSV difference between one reference colour in the file and",
     "the target, and applies that one difference to every pixel, so a hundred and thirty hand-mixed",
     "skin tones keep their relationships and move together. The body is drawn that way.",
     "",
     "Each garment has its own ramp because each is drawn in its own palette. 'trousers' carries the",
     "shoes as well: their keys are greys, and saturation is a RATIO, so a zero-saturation key gives a",
-    "zero-saturation shade whatever CLOTH_B becomes — the shoes stay grey and only track its",
+    "zero-saturation shade whatever CLOTH_B becomes \u2014 the shoes stay grey and only track its",
     "lightness. Nothing special was needed for that; it falls out of the arithmetic.",
     "",
     "Slot order is composite order, so 'trousers' is declared before 'shirt' and the shirt hangs",
     "over the waistband rather than being tucked into it."
   ],
-  "canvas": [64, 64],
+  "canvas": [
+    64,
+    64
+  ],
   "anchors": {
-    "SHEET": [0, 0, 64, 64],
-    "FACE": [8, 8, 8, 8],
-    "FACE_OVERLAY": [40, 8, 8, 8]
+    "SHEET": [
+      0,
+      0,
+      64,
+      64
+    ],
+    "FACE": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "FACE_OVERLAY": [
+      40,
+      8,
+      8,
+      8
+    ]
   },
   "ramps": {
-    "skin": [
-      [80, 1150, 780],
-      [0, 1000, 1000],
-      [-30, 900, 1120],
-      [-50, 800, 1220]
-    ],
-    "hair": {
-      "keys": ["DE812E", "E58D3F", "EB983F", "F3A858"],
+    "skin": {
+      "keys": [
+        "815643",
+        "885B47",
+        "91604C",
+        "996650",
+        "A16C54",
+        "AA7259"
+      ],
       "shades": [
-        [-28, 1083, 945],
-        [-29, 990, 974],
-        [0, 1000, 1000],
-        [-1, 871, 1034]
+        [
+          -1,
+          1009,
+          759
+        ],
+        [
+          -1,
+          1003,
+          800
+        ],
+        [
+          -11,
+          999,
+          853
+        ],
+        [
+          -4,
+          1001,
+          900
+        ],
+        [
+          2,
+          1004,
+          947
+        ],
+        [
+          0,
+          1000,
+          1000
+        ]
+      ]
+    },
+    "hair": {
+      "keys": [
+        "DE812E",
+        "E58D3F",
+        "EB983F",
+        "F3A858"
+      ],
+      "shades": [
+        [
+          -28,
+          1083,
+          945
+        ],
+        [
+          -29,
+          990,
+          974
+        ],
+        [
+          0,
+          1000,
+          1000
+        ],
+        [
+          -1,
+          871,
+          1034
+        ]
       ]
     },
     "shirt": {
-      "keys": ["006868", "037A7A", "007F7F", "058888", "049595", "00A4A4", "00AFAF", "0ABCBC", "00CCCC"],
+      "keys": [
+        "006868",
+        "037A7A",
+        "007F7F",
+        "058888",
+        "049595",
+        "00A4A4",
+        "00AFAF",
+        "0ABCBC",
+        "00CCCC"
+      ],
       "shades": [
-        [0, 1000, 594],
-        [0, 975, 697],
-        [0, 1000, 726],
-        [0, 963, 777],
-        [0, 973, 851],
-        [0, 1000, 937],
-        [0, 1000, 1000],
-        [0, 1000, 1074],
-        [0, 1000, 1166]
+        [
+          0,
+          1000,
+          594
+        ],
+        [
+          0,
+          975,
+          697
+        ],
+        [
+          0,
+          1000,
+          726
+        ],
+        [
+          0,
+          963,
+          777
+        ],
+        [
+          0,
+          973,
+          851
+        ],
+        [
+          0,
+          1000,
+          937
+        ],
+        [
+          0,
+          1000,
+          1000
+        ],
+        [
+          0,
+          1000,
+          1074
+        ],
+        [
+          0,
+          1000,
+          1166
+        ]
       ]
     },
     "beard": {
-      "keys": ["421D0A", "492510", "6A4030"],
+      "keys": [
+        "421D0A",
+        "492510",
+        "6A4030"
+      ],
       "shades": [
-        [-17, 1087, 904],
-        [0, 1000, 1000],
-        [-56, 701, 1452]
+        [
+          -17,
+          1087,
+          904
+        ],
+        [
+          0,
+          1000,
+          1000
+        ],
+        [
+          -56,
+          701,
+          1452
+        ]
       ]
     },
     "trousers": {
@@ -119,14 +256,46 @@
         "463AA5"
       ],
       "shades": [
-        [-2471, 0, 258],
-        [-2471, 0, 355],
-        [-2471, 0, 406],
-        [-2471, 0, 477],
-        [-2471, 0, 548],
-        [-9, 976, 884],
-        [0, 1000, 1000],
-        [-3, 985, 1065]
+        [
+          -2471,
+          0,
+          258
+        ],
+        [
+          -2471,
+          0,
+          355
+        ],
+        [
+          -2471,
+          0,
+          406
+        ],
+        [
+          -2471,
+          0,
+          477
+        ],
+        [
+          -2471,
+          0,
+          548
+        ],
+        [
+          -9,
+          976,
+          884
+        ],
+        [
+          0,
+          1000,
+          1000
+        ],
+        [
+          -3,
+          985,
+          1065
+        ]
       ]
     }
   },
@@ -155,7 +324,13 @@
       "C46A2B",
       "E8CE8F"
     ],
-    "eye": ["4A2C17", "7A5A2E", "4F6B3E", "3F6480", "6B7278"],
+    "eye": [
+      "4A2C17",
+      "7A5A2E",
+      "4F6B3E",
+      "3F6480",
+      "6B7278"
+    ],
     "cloth_a": [
       "E8DCC0",
       "D8C49A",
@@ -166,7 +341,14 @@
       "3E4A6B",
       "6B4A6B"
     ],
-    "cloth_b": ["4A3A2A", "5E4A33", "6B5B45", "46503F", "3A3A3A", "2A2A2E"]
+    "cloth_b": [
+      "4A3A2A",
+      "5E4A33",
+      "6B5B45",
+      "46503F",
+      "3A3A3A",
+      "2A2A2E"
+    ]
   },
   "slots": [
     {
@@ -174,14 +356,14 @@
       "anchor": "SHEET",
       "ops": [
         {
-          "type": "retint",
-          "from": "AA7C65",
-          "bind": "SKIN"
+          "type": "ramp",
+          "bind": "SKIN",
+          "ramp": "skin"
         }
       ],
       "select": [
         {
-          "texture": "autarkia:body/{gender}"
+          "texture": "autarkia:body/{model}"
         }
       ]
     },
@@ -240,8 +422,14 @@
     {
       "name": "beard",
       "anchor": "FACE",
-      "offset": [0, 4],
-      "size": [8, 4],
+      "offset": [
+        0,
+        4
+      ],
+      "size": [
+        8,
+        4
+      ],
       "optional": true,
       "dynamic": true,
       "ops": [
@@ -276,8 +464,14 @@
     {
       "name": "eyes",
       "anchor": "FACE",
-      "offset": [1, 4],
-      "size": [6, 1],
+      "offset": [
+        1,
+        4
+      ],
+      "size": [
+        6,
+        1
+      ],
       "dynamic": true,
       "ops": [
         {
@@ -311,8 +505,14 @@
     {
       "name": "mouth",
       "anchor": "FACE",
-      "offset": [3, 6],
-      "size": [2, 2],
+      "offset": [
+        3,
+        6
+      ],
+      "size": [
+        2,
+        2
+      ],
       "dynamic": true,
       "select": [
         {
