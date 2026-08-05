@@ -74,7 +74,15 @@
     "opaque colour. That is what lets one slot wear files drawn from different sources: short hair",
     "off Steve is a dark brown and long hair off Alex is a light ginger, and no single list of ramp",
     "keys can serve both. With a measured reference nothing needs standardising and nothing needs",
-    "recalibrating when a file is redrawn."
+    "recalibrating when a file is redrawn.",
+    "",
+    "Everything a person is made of lives under textures/person, one folder per CHOICE: body,",
+    "hair, shirts, pants, uniforms, face. A folder is a family and its files are the options, so",
+    "adding a shirt is dropping a PNG into shirts/ \u2014 the picker lists it, and nothing here changes.",
+    "",
+    "eyes, mouth and beard have folders too, but their files are STATES rather than choices \u2014 blink,",
+    "happy, neutral \u2014 so a selector names them and nothing is picked. The folder is the feature; what",
+    "is in it is either options or states depending on what the feature is."
   ],
   "canvas": [
     64,
@@ -257,7 +265,7 @@
         ]
       ]
     },
-    "trousers": {
+    "pants": {
       "keys": [
         "282828",
         "373737",
@@ -376,23 +384,23 @@
       ],
       "select": [
         {
-          "texture": "autarkia:body/{model}"
+          "texture": "autarkia:person/body/{model}"
         }
       ]
     },
     {
-      "name": "trousers",
+      "name": "pants",
       "anchor": "SHEET",
       "ops": [
         {
           "type": "ramp",
           "bind": "CLOTH_B",
-          "ramp": "trousers"
+          "ramp": "pants"
         }
       ],
       "select": [
         {
-          "texture": "autarkia:cloth/trousers"
+          "texture": "autarkia:person/pants/{pants}"
         }
       ]
     },
@@ -409,8 +417,8 @@
       "select": [
         {
           "texture": [
-            "autarkia:cloth/shirt_{model}",
-            "autarkia:cloth/shirt"
+            "autarkia:person/shirts/{shirt}_{model}",
+            "autarkia:person/shirts/{shirt}"
           ]
         }
       ]
@@ -428,12 +436,9 @@
       ],
       "select": [
         {
-          "when": {
-            "job": "farmer"
-          },
           "texture": [
-            "autarkia:cloth/uniform_farmer_{model}",
-            "autarkia:cloth/uniform_farmer"
+            "autarkia:person/uniforms/{job}_{model}",
+            "autarkia:person/uniforms/{job}"
           ]
         }
       ]
@@ -470,13 +475,13 @@
             "beard": "true",
             "speaking": "true"
           },
-          "texture": "autarkia:face/beard_speaking"
+          "texture": "autarkia:person/beard/speaking"
         },
         {
           "when": {
             "beard": "true"
           },
-          "texture": "autarkia:face/beard"
+          "texture": "autarkia:person/beard/plain"
         }
       ]
     },
@@ -508,16 +513,16 @@
           "when": {
             "blink": "true"
           },
-          "texture": "autarkia:face/eyes_blink"
+          "texture": "autarkia:person/eyes/blink"
         },
         {
           "when": {
             "mood": "happy"
           },
-          "texture": "autarkia:face/eyes_happy"
+          "texture": "autarkia:person/eyes/happy"
         },
         {
-          "texture": "autarkia:face/eyes_neutral"
+          "texture": "autarkia:person/eyes/neutral"
         }
       ]
     },
@@ -538,16 +543,16 @@
           "when": {
             "speaking": "true"
           },
-          "texture": "autarkia:face/mouth_open"
+          "texture": "autarkia:person/mouth/open"
         },
         {
           "when": {
             "mood": "happy"
           },
-          "texture": "autarkia:face/mouth_smile"
+          "texture": "autarkia:person/mouth/smile"
         },
         {
-          "texture": "autarkia:face/mouth_neutral"
+          "texture": "autarkia:person/mouth/neutral"
         }
       ]
     },
@@ -563,8 +568,8 @@
       "select": [
         {
           "texture": [
-            "autarkia:hair/{hairstyle}_{model}",
-            "autarkia:hair/{hairstyle}"
+            "autarkia:person/hair/{hairstyle}_{model}",
+            "autarkia:person/hair/{hairstyle}"
           ]
         }
       ]
