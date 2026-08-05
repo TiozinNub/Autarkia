@@ -30,7 +30,12 @@
     "as people. 'uniform' is the job layer over the top — optional, one rule per job, and only",
     "'farmer' exists so far. Adding a job is one rule and one PNG.",
     "",
-    "Vanilla armour renders OVER the whole baked skin, so cloth only ever shows where armour is not."
+    "Vanilla armour renders OVER the whole baked skin, so cloth only ever shows where armour is not.",
+    "",
+    "A RAMP MUST DESCRIBE ITS ART. Its keys are the exact colours the file is drawn in and there is",
+    "one shade per key, so redrawing a layer with a different palette means recalibrating its ramp —",
+    "otherwise the lookup misses every pixel and the layer simply stops responding to its binding,",
+    "silently and completely. The editor's problems list counts the pixels a ramp does not know."
   ],
   "canvas": [64, 64],
   "anchors": {
@@ -57,12 +62,17 @@
       ]
     },
     "cloth": {
-      "keys": ["59503F", "7A6E58", "9C8D72", "C2B295"],
+      "keys": ["006868", "037A7A", "007F7F", "058888", "049595", "00A4A4", "00AFAF", "0ABCBC", "00CCCC"],
       "shades": [
-        [7, 1085, 571],
-        [3, 1035, 782],
+        [0, 1000, 594],
+        [0, 975, 697],
+        [0, 1000, 726],
+        [0, 963, 777],
+        [0, 973, 851],
+        [0, 1000, 937],
         [0, 1000, 1000],
-        [1, 862, 1244]
+        [0, 1000, 1074],
+        [0, 1000, 1166]
       ]
     }
   },
