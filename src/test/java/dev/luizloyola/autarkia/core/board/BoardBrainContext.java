@@ -125,4 +125,13 @@ final class BoardBrainContext implements BrainContext {
     public double costTolerance() {
         return Double.POSITIVE_INFINITY;
     }
+
+    /** A fixed stream, so a test that draws twice gets the same two numbers every run. */
+    private final dev.luizloyola.anima.core.agent.AgentRandom random =
+            new dev.luizloyola.anima.core.agent.AgentRandom(20260805L);
+
+    @Override
+    public java.util.random.RandomGenerator random() {
+        return random;
+    }
 }
