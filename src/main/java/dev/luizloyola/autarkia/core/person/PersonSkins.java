@@ -26,8 +26,14 @@ public final class PersonSkins {
     /** Where vanilla keeps them: {@code assets/minecraft/textures/entity/player/<cut>/<name>.png}. */
     private static final String VANILLA = "minecraft:entity/player/";
 
+    /** The one every client certainly has, and therefore the fallback for a person with no look on
+     *  record or one nothing recognises. Lives here rather than on the entity so {@code core} can
+     *  name it — {@link Look#DEFAULT} and {@link Appearance#DEFAULT} both need it, and neither may
+     *  reach into {@code mod}. */
+    public static final String DEFAULT_SKIN = VANILLA + "wide/steve";
+
     static final List<String> MALE_SKINS = List.of(
-            VANILLA + "wide/steve",
+            DEFAULT_SKIN,
             VANILLA + "wide/kai",
             VANILLA + "wide/noor",
             VANILLA + "wide/sunny",

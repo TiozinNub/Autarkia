@@ -1,10 +1,12 @@
 package dev.luizloyola.autarkia.mod.person;
 
+import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.compat.SavedDatas;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
+import dev.luizloyola.autarkia.core.person.Look;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.PrivateIdentity;
@@ -14,7 +16,6 @@ import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
 import dev.luizloyola.autarkia.core.person.PersonSkins;
-import dev.luizloyola.autarkia.mod.entity.Person;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -28,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.random.RandomGenerator;
 
 /**
@@ -45,31 +47,47 @@ public final class PersonDirectory extends SavedData
     /** This store's file key — public so the boot guard can find it on disk. */
     public static final Identifier ID = Identifier.fromNamespaceAndPath("autarkia", "persons");
 
-    /** Default external appearance for a legacy (pre-appearance) person. */
-    private static final Appearance DEFAULT_APPEARANCE =
-            new Appearance(Gender.MALE, Person.DEFAULT_SKIN.toString(), ModelType.WIDE);
-
     private static final Codec<Gender> GENDER_CODEC = Codec.STRING.xmap(Gender::valueOf, Gender::name);
     private static final Codec<ModelType> MODEL_CODEC = Codec.STRING.xmap(ModelType::valueOf, ModelType::name);
 
-    /** The external, synced tier: {@code {gender, skin, model}}. {@code model} is optional so
-     *  entries written before it existed still load (they fall back to {@code WIDE}). */
-    private static final Codec<Appearance> APPEARANCE_CODEC = RecordCodecBuilder.create(a -> a.group(
+    /**
+     * How an appearance is written from schema 2 on: {@link Appearance#encode()}, the same string
+     * the entity syncs to clients, so disk and wire cannot drift — and unlike a codec it is
+     * unit-testable (see {@code AppearanceCodecTest}).
+     */
+    private static final Codec<Appearance> ENCODED_APPEARANCE_CODEC =
+            Codec.STRING.xmap(Appearance::decode, Appearance::encode);
+
+    /**
+     * How it was written at schema 1: a {@code {gender, skin, model}} compound. Kept so an existing
+     * world loads — read only, since {@link #APPEARANCE_CODEC} always encodes the new form; its
+     * getters are written to be total anyway.
+     */
+    private static final Codec<Appearance> LEGACY_APPEARANCE_CODEC = RecordCodecBuilder.create(a -> a.group(
             GENDER_CODEC.fieldOf("gender").forGetter(Appearance::gender),
-            Codec.STRING.fieldOf("skin").forGetter(Appearance::skin),
+            Codec.STRING.fieldOf("skin").forGetter(appearance -> appearance.look() instanceof Look.Skin skin
+                    ? skin.assetId()
+                    : PersonSkins.DEFAULT_SKIN),
             MODEL_CODEC.optionalFieldOf("model", ModelType.WIDE).forGetter(Appearance::model)
-    ).apply(a, Appearance::new));
+    ).apply(a, (gender, skin, model) -> new Appearance(gender, model, new Look.Skin(skin))));
+
+    /** New form first, old form as the fallback; always written in the new form. */
+    private static final Codec<Appearance> APPEARANCE_CODEC =
+            Codec.either(ENCODED_APPEARANCE_CODEC, LEGACY_APPEARANCE_CODEC)
+                    .xmap(either -> either.map(Function.identity(), Function.identity()), Either::left);
 
     /** One identity entry: {@code {id, name, appearance}}. Appearance is optional so entries
-     *  written before the external tier existed still load (they get {@link #DEFAULT_APPEARANCE}). */
+     *  written before the external tier existed still load (they get {@link Appearance#DEFAULT}). */
     private static final Codec<PersonIdentity> ENTRY_CODEC = RecordCodecBuilder.create(entry -> entry.group(
             UUIDUtil.CODEC.fieldOf("id").forGetter(identity -> identity.id().value()),
             Codec.STRING.fieldOf("name").forGetter(PersonIdentity::name),
-            APPEARANCE_CODEC.optionalFieldOf("appearance", DEFAULT_APPEARANCE).forGetter(PersonIdentity::appearance)
+            APPEARANCE_CODEC.optionalFieldOf("appearance", Appearance.DEFAULT).forGetter(PersonIdentity::appearance)
     ).apply(entry, (uuid, name, appearance) -> new PersonIdentity(AgentId.of(uuid), name, appearance)));
 
-    /** This store's schema. Bump when the shape above changes incompatibly. */
-    private static final int SCHEMA = 1;
+    /** This store's schema. Bump when the shape above changes incompatibly.
+     *  <p>2 — appearance became one encoded string ({@link Appearance#encode()}) instead of a
+     *  {@code {gender, skin, model}} compound. Schema 1 still reads. */
+    private static final int SCHEMA = 2;
 
     private static final Codec<PersonDirectory> CODEC = RecordCodecBuilder.create(dir -> dir.group(
             Codec.INT.optionalFieldOf("version", 0).forGetter(d -> SCHEMA),
@@ -138,9 +156,9 @@ public final class PersonDirectory extends SavedData
      * wide, female slim — see {@link PersonSkins}). Marks the directory dirty.
      */
     private PersonIdentity mint(Gender gender, String name, RandomGenerator random) {
-        String skin = PersonSkins.random(random, gender);
+        Look look = new Look.Skin(PersonSkins.random(random, gender));
         ModelType model = gender.choose(ModelType.WIDE, ModelType.SLIM);
-        PersonIdentity identity = registry.create(AgentId.random(), name, new Appearance(gender, skin, model));
+        PersonIdentity identity = registry.create(AgentId.random(), name, new Appearance(gender, model, look));
         setDirty();
         return identity;
     }

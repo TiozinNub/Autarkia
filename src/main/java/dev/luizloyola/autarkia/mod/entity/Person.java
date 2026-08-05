@@ -13,7 +13,11 @@ import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.log.AgentJournal;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
+import dev.luizloyola.anima.core.appearance.Part;
+import dev.luizloyola.anima.core.appearance.Recipe;
 import dev.luizloyola.autarkia.core.person.Appearance;
+import dev.luizloyola.autarkia.core.person.AppearanceComposer;
+import dev.luizloyola.autarkia.core.person.Look;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.Needs;
@@ -40,6 +44,7 @@ import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -94,25 +99,22 @@ public class Person extends Avatar implements AgentBody {
      * Default skin, as a texture <em>asset id</em> — vanilla's own Steve, which every client
      * already has. Autarkia ships no skin textures at all; see {@link PersonSkins} for why.
      */
-    public static final Identifier DEFAULT_SKIN =
-            Identifier.fromNamespaceAndPath("minecraft", "entity/player/wide/steve");
-
-    private static final EntityDataAccessor<String> DATA_SKIN =
-            SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
+    public static final Identifier DEFAULT_SKIN = Identifier.parse(PersonSkins.DEFAULT_SKIN);
 
     /**
-     * External identity synced to clients for rendering (the always-on tier). Skin lives in
-     * {@link #DATA_SKIN}; gender here. Both are projected from the person's {@link Appearance} in
-     * the {@link PersonDirectory} — the directory is the source of truth, these are its client
-     * mirror. The full identity (name, …) is not synced.
+     * External identity synced to clients for rendering (the always-on tier), as one encoded
+     * {@link Appearance}: gender, body model and look together. Projected from the person's record
+     * in the {@link PersonDirectory}, which is the source of truth. The full identity (name, …) is
+     * not synced.
+     *
+     * <p><b>One field rather than three</b>: each synced field is a protocol change that
+     * <em>cannot be hot-swapped in</em> — {@link SynchedEntityData#defineId} runs in a static
+     * initialiser, and a redefinition never re-runs one. The encoding is
+     * {@link Appearance#encode()}, the same string the store writes, so nothing can drift, and a
+     * plain string stays legible in {@code /data get entity}.
      */
-    private static final EntityDataAccessor<String> DATA_GENDER =
+    private static final EntityDataAccessor<String> DATA_APPEARANCE =
             SynchedEntityData.defineId(Person.class, EntityDataSerializers.STRING);
-
-    /** Whether this person renders with the slim (Alex) arm model rather than wide (Steve). Synced
-     *  for the renderer; projected from the person's {@link Appearance#model()}. */
-    private static final EntityDataAccessor<Boolean> DATA_SLIM =
-            SynchedEntityData.defineId(Person.class, EntityDataSerializers.BOOLEAN);
 
     /**
      * This person's identity handle ({@link AgentId}) as a UUID string, synced so the client can
@@ -149,6 +151,19 @@ public class Person extends Avatar implements AgentBody {
 
     /** Whether this load has projected the directory identity onto the synced fields yet. */
     private boolean identityProjected;
+
+    /**
+     * The last encoded appearance seen on {@link #DATA_APPEARANCE}, and what it decoded and
+     * composed to. Memo, not state: {@link #appearance()} is read on the render thread for every
+     * Person on screen every frame, so decoding per call would allocate per Person per frame.
+     *
+     * <p>Invalidated by comparing against the raw synced string — {@code SynchedEntityData} offers
+     * no change hook. That also makes a hot swap adding these fields safe: they arrive null, so the
+     * first read rebuilds them.
+     */
+    private @Nullable String appearanceRaw;
+    private @Nullable Appearance appearance;
+    private @Nullable Recipe appearanceRecipe;
 
     /**
      * Where this body was walking when the world was last saved, handed back to the navigator on
@@ -367,9 +382,7 @@ public class Person extends Avatar implements AgentBody {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
-        builder.define(DATA_SKIN, DEFAULT_SKIN.toString());
-        builder.define(DATA_GENDER, Gender.MALE.name());
-        builder.define(DATA_SLIM, false);
+        builder.define(DATA_APPEARANCE, Appearance.DEFAULT.encode());
         builder.define(DATA_PERSON_ID, "");
     }
 
@@ -853,19 +866,20 @@ public class Person extends Avatar implements AgentBody {
      */
     private void applyIdentity(PersonIdentity identity) {
         this.identityName = identity.name();
-        Appearance appearance = identity.appearance();
+        Appearance identityAppearance = identity.appearance();
         // Self-healing migration: Autarkia used to bundle its own skin PNGs, so a person created
         // then points at a texture no longer in the jar. Corrected once on first load rather than
-        // resolved on every read.
-        String skin = PersonSkins.resolve(appearance.skin(), appearance.gender());
-        if (!skin.equals(appearance.skin()) && level() instanceof ServerLevel serverLevel) {
-            appearance = appearance.withSkin(skin);
-            PersonDirectory.get(serverLevel.getServer())
-                    .replace(identity.withAppearance(appearance));
+        // resolved on every read. Only a literal skin goes stale — a composed look names catalog
+        // entries, which fall back on their own.
+        if (identityAppearance.look() instanceof Look.Skin worn) {
+            String resolved = PersonSkins.resolve(worn.assetId(), identityAppearance.gender());
+            if (!resolved.equals(worn.assetId()) && level() instanceof ServerLevel serverLevel) {
+                identityAppearance = identityAppearance.withLook(new Look.Skin(resolved));
+                PersonDirectory.get(serverLevel.getServer())
+                        .replace(identity.withAppearance(identityAppearance));
+            }
         }
-        setSkinTexture(Identifier.parse(skin));
-        this.entityData.set(DATA_GENDER, appearance.gender().name());
-        this.entityData.set(DATA_SLIM, appearance.model() == ModelType.SLIM);
+        this.entityData.set(DATA_APPEARANCE, identityAppearance.encode());
     }
 
     /**
@@ -1156,22 +1170,46 @@ public class Person extends Avatar implements AgentBody {
         }
     }
 
-    public Identifier getSkinTexture() {
-        return Identifier.parse(this.entityData.get(DATA_SKIN));
+    /**
+     * This person's external identity as both sides see it — decoded from {@link #DATA_APPEARANCE}
+     * and memoised until that string moves. Never null: an unreadable value decodes to
+     * {@link Appearance#DEFAULT} rather than failing, so a person with a corrupt record comes back
+     * visibly wrong instead of taking the render down with them.
+     */
+    public Appearance appearance() {
+        String raw = this.entityData.get(DATA_APPEARANCE);
+        if (!raw.equals(this.appearanceRaw)) {
+            this.appearanceRaw = raw;
+            this.appearance = Appearance.decode(raw);
+            this.appearanceRecipe = AppearanceComposer.compose(this.appearance);
+        }
+        return this.appearance;
     }
 
-    public void setSkinTexture(Identifier id) {
-        this.entityData.set(DATA_SKIN, id.toString());
+    /**
+     * What to bake to draw this person — Anima's currency, composed from {@link #appearance()} by
+     * Autarkia's own composer. Today it is one whole-canvas part naming a vanilla skin, so the bake
+     * is that PNG unchanged; the renderer already goes through here so that stops being true
+     * without anything downstream noticing.
+     */
+    public Recipe appearanceRecipe() {
+        appearance();
+        return this.appearanceRecipe;
+    }
+
+    public Identifier getSkinTexture() {
+        List<Part> statics = appearanceRecipe().statics();
+        return statics.isEmpty() ? DEFAULT_SKIN : Identifier.parse(statics.get(0).texture());
     }
 
     /** This person's synced gender (readable on both sides). Part of the external identity. */
     public Gender getGender() {
-        return Gender.valueOf(this.entityData.get(DATA_GENDER));
+        return appearance().gender();
     }
 
     /** Whether this person renders with the slim (Alex) arm model. Synced; used by the renderer. */
     public boolean isSlim() {
-        return this.entityData.get(DATA_SLIM);
+        return appearance().model() == ModelType.SLIM;
     }
 
     /**
