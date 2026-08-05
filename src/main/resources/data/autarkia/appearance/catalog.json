@@ -80,9 +80,18 @@
     "hair, shirts, pants, uniforms, face. A folder is a family and its files are the options, so",
     "adding a shirt is dropping a PNG into shirts/ \u2014 the picker lists it, and nothing here changes.",
     "",
-    "eyes, mouth and beard have folders too, but their files are STATES rather than choices \u2014 blink,",
-    "happy, neutral \u2014 so a selector names them and nothing is picked. The folder is the feature; what",
-    "is in it is either options or states depending on what the feature is."
+    "",
+    "A STATE is a suffix that falls back, exactly as a model cut is: eyes/{mood}_blink before",
+    "eyes/{mood}, mouth/{mood}_open before mouth/{mood}, beard/{beard}_speaking before",
+    "beard/{beard}. So a blink is drawn once per expression that needs its own, and every",
+    "expression without one simply does not blink. Draw happy_blink and",
+    "a happy face blinks; until then it holds its happy eyes through the blink, which is a gap you",
+    "can see rather than a wrong pixel. Listing a third candidate \u2014 {mood}_blink, neutral_blink,",
+    "{mood} \u2014 would make every expression borrow a generic blink instead; one line, if that reads",
+    "better than not blinking.",
+    "",
+    "Suffixed files are never offered in a picker. A blink is not an expression and a slim cut is",
+    "not a hairstyle \u2014 both are another way of drawing a choice somebody already made."
   ],
   "canvas": [
     64,
@@ -472,16 +481,15 @@
       "select": [
         {
           "when": {
-            "beard": "true",
             "speaking": "true"
           },
-          "texture": "autarkia:person/beard/speaking"
+          "texture": [
+            "autarkia:person/beard/{beard}_speaking",
+            "autarkia:person/beard/{beard}"
+          ]
         },
         {
-          "when": {
-            "beard": "true"
-          },
-          "texture": "autarkia:person/beard/plain"
+          "texture": "autarkia:person/beard/{beard}"
         }
       ]
     },
@@ -513,16 +521,13 @@
           "when": {
             "blink": "true"
           },
-          "texture": "autarkia:person/eyes/blink"
+          "texture": [
+            "autarkia:person/eyes/{mood}_blink",
+            "autarkia:person/eyes/{mood}"
+          ]
         },
         {
-          "when": {
-            "mood": "happy"
-          },
-          "texture": "autarkia:person/eyes/happy"
-        },
-        {
-          "texture": "autarkia:person/eyes/neutral"
+          "texture": "autarkia:person/eyes/{mood}"
         }
       ]
     },
@@ -543,16 +548,13 @@
           "when": {
             "speaking": "true"
           },
-          "texture": "autarkia:person/mouth/open"
+          "texture": [
+            "autarkia:person/mouth/{mood}_open",
+            "autarkia:person/mouth/{mood}"
+          ]
         },
         {
-          "when": {
-            "mood": "happy"
-          },
-          "texture": "autarkia:person/mouth/smile"
-        },
-        {
-          "texture": "autarkia:person/mouth/neutral"
+          "texture": "autarkia:person/mouth/{mood}"
         }
       ]
     },
