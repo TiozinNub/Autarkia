@@ -163,6 +163,14 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_JOURNAL = "Journal";
     /** The personal board's projects — all of layer 3 that lives on a body. */
     private static final String TAG_BOARD = "Board";
+    /** A swing and a climb in flight — paired with the task flags that say one is under way. */
+    private static final String TAG_SWING = "Swing";
+    private static final String TAG_STEP = "Step";
+    /** Ground this body has already surveyed, so it does not walk it all again. */
+    private static final String TAG_SURVEY = "Survey";
+    /** The anchor hunger is measured against, so a reload is not one free step. */
+    private static final String TAG_LAST_X = "LastX";
+    private static final String TAG_LAST_Z = "LastZ";
 
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -1149,7 +1157,17 @@ public class Person extends Avatar implements AgentBody {
         // A second copy of lines the archive already holds: the archive is a folder, and the ring
         // `/anima log` reads came back empty after every boot. Bounded by the ring's own cap.
         if (this.personId != null && level() instanceof ServerLevel level) {
-            output.store(TAG_JOURNAL, BrainState.JOURNAL,
+            // The two actuators, paired with the task flags that already survived without them: a body
+        // that came back "breaking" while its breaker rested waited on a swing nobody was swinging.
+        output.store(TAG_SWING, BrainState.SWING, this.blockBreaker.snapshot());
+        output.store(TAG_STEP, BrainState.STEP, this.riser.snapshot());
+        this.poiSensor.snapshot().ifPresent(survey ->
+                output.store(TAG_SURVEY, BrainState.SURVEY, survey));
+        if (!Double.isNaN(this.lastX)) {
+            output.putDouble(TAG_LAST_X, this.lastX);
+            output.putDouble(TAG_LAST_Z, this.lastZ);
+        }
+        output.store(TAG_JOURNAL, BrainState.JOURNAL,
                     Journals.of(level.getServer()).snapshot(this.personId));
         }
     }
@@ -1186,6 +1204,13 @@ public class Person extends Avatar implements AgentBody {
         // Held rather than filed: the journal service belongs to a server this entity has not been
         // added to yet. The first tick hands it over, beside the walk.
         this.pendingJournal = input.read(TAG_JOURNAL, BrainState.JOURNAL).orElse(null);
+        input.read(TAG_SWING, BrainState.SWING).ifPresent(this.blockBreaker::restore);
+        input.read(TAG_STEP, BrainState.STEP).ifPresent(this.riser::restore);
+        input.read(TAG_SURVEY, BrainState.SURVEY).ifPresent(this.poiSensor::restore);
+        // NaN is the "never moved yet" marker the field initializer uses, and the right default:
+        // the next tick anchors it wherever the body actually stands.
+        this.lastX = input.getDoubleOr(TAG_LAST_X, Double.NaN);
+        this.lastZ = input.getDoubleOr(TAG_LAST_Z, 0.0);
     }
 
     /**
