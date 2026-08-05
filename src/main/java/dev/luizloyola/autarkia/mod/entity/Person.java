@@ -86,6 +86,7 @@ import dev.luizloyola.anima.mod.body.AgentBody;
 import com.mojang.serialization.Codec;
 import dev.luizloyola.anima.mod.body.Modifiers;
 import dev.luizloyola.anima.mod.brain.BrainState;
+import dev.luizloyola.anima.mod.brain.SenseState;
 import dev.luizloyola.anima.mod.identity.AgentRecords;
 import dev.luizloyola.anima.mod.identity.Graves;
 import org.jspecify.annotations.Nullable;
@@ -154,6 +155,8 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_COOLDOWNS = "BrainCooldowns";
     /** The plan in progress and the grant that owns it — one tag, never two. */
     private static final String TAG_BRAIN_PLAN = "BrainPlan";
+    /** What this body remembers of other bodies — tracks, linger and herds. */
+    private static final String TAG_BEINGS = "Beings";
 
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -1100,6 +1103,9 @@ public class Person extends Avatar implements AgentBody {
         // The plan and its grant, as one field. A body mid-errand that came back with an empty
         // executor would re-decide from scratch, which is a reboot it noticed.
         output.store(TAG_BRAIN_PLAN, BrainState.brain(), this.brain.snapshot());
+        // Losing these does not blank the senses, it makes a body RE-NOTICE everyone around it and
+        // announce them again — the loudest way an agent could tell you it had been rebooted.
+        output.store(TAG_BEINGS, SenseState.BEINGS, this.beingSense.snapshot());
     }
 
     @Override
@@ -1129,6 +1135,7 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS)
                 .ifPresent(this.brain::restoreCooldowns);
         input.read(TAG_BRAIN_PLAN, BrainState.brain()).ifPresent(this.brain::restore);
+        input.read(TAG_BEINGS, SenseState.BEINGS).ifPresent(this.beingSense::restore);
     }
 
     /**
