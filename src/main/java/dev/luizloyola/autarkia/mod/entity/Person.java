@@ -46,6 +46,7 @@ import dev.luizloyola.anima.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -82,7 +83,9 @@ import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
 import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.mod.body.AgentBody;
+import com.mojang.serialization.Codec;
 import dev.luizloyola.anima.mod.body.Modifiers;
+import dev.luizloyola.anima.mod.brain.BrainState;
 import dev.luizloyola.anima.mod.identity.AgentRecords;
 import dev.luizloyola.anima.mod.identity.Graves;
 import org.jspecify.annotations.Nullable;
@@ -145,6 +148,10 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_MODIFIERS = "Modifiers";
     /** Where somebody last told this body to walk — see {@link #pendingGoal}. */
     private static final String TAG_NAV_GOAL = "NavGoal";
+    /** This body's stream of chance, so the roam it was going to pick is the one it picks. */
+    private static final String TAG_BRAIN_RANDOM = "BrainRandom";
+    /** Drives sitting out a fail-cooldown, by name, with the ticks they have left. */
+    private static final String TAG_BRAIN_COOLDOWNS = "BrainCooldowns";
 
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -1080,6 +1087,14 @@ public class Person extends Avatar implements AgentBody {
                 || this.navigator.state() == Navigator.State.FOLLOWING)) {
             output.store(TAG_NAV_GOAL, BlockPos.CODEC, goal);
         }
+        // Carried between ticks, so it is carried across a reload: a stream that restarts makes
+        // the very next roam a different one, and a cooldown that clears is a body that forgave
+        // itself while nobody was looking.
+        output.putLong(TAG_BRAIN_RANDOM, this.brain.random().state());
+        Map<String, Integer> cooldowns = this.brain.cooldowns();
+        if (!cooldowns.isEmpty()) {
+            output.store(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS, cooldowns);
+        }
     }
 
     @Override
@@ -1103,6 +1118,11 @@ public class Person extends Avatar implements AgentBody {
         // Held rather than issued: nothing can be pathed here, mid-NBT-read, before the entity is
         // in a world. The first tick hands it over.
         this.pendingGoal = input.read(TAG_NAV_GOAL, BlockPos.CODEC).orElse(null);
+        // Absent on a body saved before either existed: the seed the constructor already drew
+        // stands, and nobody is on cooldown.
+        input.read(TAG_BRAIN_RANDOM, Codec.LONG).ifPresent(this.brain.random()::restore);
+        input.read(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS)
+                .ifPresent(this.brain::restoreCooldowns);
     }
 
     /**
