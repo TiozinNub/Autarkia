@@ -68,7 +68,13 @@
     "a slim one. Listing ['x_{model}', 'x'] says draw the specific file if somebody made one and the",
     "shared file otherwise \u2014 which is the rule an artist works to. Two selector rules cannot say it:",
     "a rule matches on PARAMETERS, so a slim rule would match whether or not the art exists and the",
-    "layer would vanish instead of falling back."
+    "layer would vanish instead of falling back.",
+    "",
+    "'retint' with no 'from' measures its reference from the ART \u2014 each texture's own most common",
+    "opaque colour. That is what lets one slot wear files drawn from different sources: short hair",
+    "off Steve is a dark brown and long hair off Alex is a light ginger, and no single list of ramp",
+    "keys can serve both. With a measured reference nothing needs standardising and nothing needs",
+    "recalibrating when a file is redrawn."
   ],
   "canvas": [
     64,
@@ -550,9 +556,8 @@
       "anchor": "SHEET",
       "ops": [
         {
-          "type": "ramp",
-          "bind": "HAIR",
-          "ramp": "hair"
+          "type": "retint",
+          "bind": "HAIR"
         }
       ],
       "select": [
