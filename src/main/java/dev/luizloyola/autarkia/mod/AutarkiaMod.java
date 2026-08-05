@@ -106,6 +106,8 @@ public class AutarkiaMod implements ModInitializer {
         // this world, not about having a mind, so it belongs here rather than in the library.
         // Since the seventh choreography (2026-08-02), obtain orders the dance card itself.
         Producers.register(Stock.LOGS, ChopForLogs::new);
+        // And how the dance card writes itself down, so a chop survives a reload mid-tree.
+        dev.luizloyola.autarkia.mod.brain.AutarkiaTasks.install();
         // Teach the debug wand what a block MEANS to a settler — Anima's wand can point at
         // anything and knows what none of it is. Unclaimed clicks still fall back to walking
         // there.

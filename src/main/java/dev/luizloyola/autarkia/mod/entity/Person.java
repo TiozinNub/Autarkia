@@ -146,12 +146,14 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_WANDER = "BrainWander";
     /** Aspect modifiers with no other source of truth — see {@link #modifiers()}. */
     private static final String TAG_MODIFIERS = "Modifiers";
-    /** Where somebody last told this body to walk — see {@link #pendingGoal}. */
-    private static final String TAG_NAV_GOAL = "NavGoal";
+    /** The walk in progress — route, waypoint and counters. See {@link #pendingWalk}. */
+    private static final String TAG_NAV_WALK = "NavWalk";
     /** This body's stream of chance, so the roam it was going to pick is the one it picks. */
     private static final String TAG_BRAIN_RANDOM = "BrainRandom";
     /** Drives sitting out a fail-cooldown, by name, with the ticks they have left. */
     private static final String TAG_BRAIN_COOLDOWNS = "BrainCooldowns";
+    /** The plan in progress and the grant that owns it — one tag, never two. */
+    private static final String TAG_BRAIN_PLAN = "BrainPlan";
 
     private static final String TAG_FOOD_LEVEL = "foodLevel";
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
@@ -184,7 +186,7 @@ public class Person extends Avatar implements AgentBody {
      * {@code brain goto} turns autonomy off, so a reload restored a body in manual mode with
      * nothing to run, and it stood there for good.
      */
-    private @Nullable BlockPos pendingGoal;
+    private dev.luizloyola.anima.mod.nav.Navigator.@Nullable Walk pendingWalk;
 
     /**
      * The directory name, cached on the SERVER when the identity projects ({@link #applyIdentity}).
@@ -420,11 +422,12 @@ public class Person extends Avatar implements AgentBody {
         if (!CHUNK_SAVE_CHECKED && this.level() instanceof ServerLevel) {
             verifyChunkSaved();
         }
-        if (this.pendingGoal != null && this.level() instanceof ServerLevel) {
-            BlockPos goal = this.pendingGoal;
-            this.pendingGoal = null; // one attempt; a failed path is the navigator's to report
-            this.navigator.pathTo(goal);
-            journal().record(Category.BODY, "resumed", "walking to " + goal.toShortString());
+        if (this.pendingWalk != null && this.level() instanceof ServerLevel) {
+            var walk = this.pendingWalk;
+            this.pendingWalk = null; // one attempt; a broken route is the navigator's to report
+            this.navigator.restore(walk);
+            journal().record(Category.BODY, "resumed", "walking to "
+                    + (walk.goal() == null ? "nowhere" : walk.goal().toShortString()));
         }
         super.tick();
     }
@@ -1082,10 +1085,9 @@ public class Person extends Avatar implements AgentBody {
         // Only while actually going somewhere: ARRIVED and FAILED keep the goal for inspection,
         // and restoring either would send them walking back to a place they are already standing
         // in or have already given up on.
-        BlockPos goal = this.navigator.goal();
-        if (goal != null && (this.navigator.state() == Navigator.State.PATHING
-                || this.navigator.state() == Navigator.State.FOLLOWING)) {
-            output.store(TAG_NAV_GOAL, BlockPos.CODEC, goal);
+        if (this.navigator.state() == Navigator.State.PATHING
+                || this.navigator.state() == Navigator.State.FOLLOWING) {
+            output.store(TAG_NAV_WALK, BrainState.WALK, this.navigator.snapshot());
         }
         // Carried between ticks, so it is carried across a reload: a stream that restarts makes
         // the very next roam a different one, and a cooldown that clears is a body that forgave
@@ -1095,6 +1097,9 @@ public class Person extends Avatar implements AgentBody {
         if (!cooldowns.isEmpty()) {
             output.store(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS, cooldowns);
         }
+        // The plan and its grant, as one field. A body mid-errand that came back with an empty
+        // executor would re-decide from scratch, which is a reboot it noticed.
+        output.store(TAG_BRAIN_PLAN, BrainState.brain(), this.brain.snapshot());
     }
 
     @Override
@@ -1117,12 +1122,13 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_MODIFIERS, Modifiers.LIST).ifPresent(modifiers()::applyAll);
         // Held rather than issued: nothing can be pathed here, mid-NBT-read, before the entity is
         // in a world. The first tick hands it over.
-        this.pendingGoal = input.read(TAG_NAV_GOAL, BlockPos.CODEC).orElse(null);
+        this.pendingWalk = input.read(TAG_NAV_WALK, BrainState.WALK).orElse(null);
         // Absent on a body saved before either existed: the seed the constructor already drew
         // stands, and nobody is on cooldown.
         input.read(TAG_BRAIN_RANDOM, Codec.LONG).ifPresent(this.brain.random()::restore);
         input.read(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS)
                 .ifPresent(this.brain::restoreCooldowns);
+        input.read(TAG_BRAIN_PLAN, BrainState.brain()).ifPresent(this.brain::restore);
     }
 
     /**

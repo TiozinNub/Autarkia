@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.act.RiseState;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
+import org.jspecify.annotations.Nullable;
 import dev.luizloyola.anima.core.brain.knowledge.RegionGrowth;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
@@ -1430,5 +1431,100 @@ public final class ChopPlannedTree implements PrimitiveTask {
             box = box == null ? Region.of(cell) : box.including(cell);
         }
         return box;
+    }
+
+    // ── continuity ───────────────────────────────────────────────────────────────────────────
+    // The card was compiled against a tree that is now half gone, so re-surveying does not
+    // reproduce it — a remnant is a different shape, and layerIndex/moveIndex point into the plan
+    // they were made for. So the plan is carried, not recomputed.
+    //
+    // Grouped into sub-records because a codec group tops out at sixteen fields. The one field
+    // absent is the in-flight RegionGrowth scan: a pure function of the world at the
+    // anchor, so a task interrupted mid-survey scans again and reaches the same tree.
+
+    /** Where she is in the dance, and the small clocks that pace it. {@code chasing} and
+     *  {@code lastSpot} are null when she is chasing nothing and has not settled anywhere. */
+    public record Progress(String phase, boolean walkIssued, int walkTicks, boolean breaking,
+                           int pickupWait, int gatherWalks, int decayWait, int layerGatherWalks,
+                           Pos chasing, Pos lastSpot, long restingSince,
+                           List<Pos> unreachableDrops) {
+    }
+
+    /** The working axis and the climb. {@code boostCell} is null when no boost is in flight. */
+    public record Site(int siteX, int siteZ, int doorstepsTried, boolean axisFallback,
+                       boolean boostUp, Pos boostCell, boolean riseForBoost,
+                       boolean riseIssued) {
+    }
+
+    /** The card, and how far down it she has read. {@code tree}, {@code plan} and
+     *  {@code claimedArea} are null before the survey has produced them. */
+    public record Card(TreeShape.Trunk tree, ChopPlan plan, List<Pos> mastAhead,
+                       List<Pos> digsAhead, List<Pos> treeBlocks, Region claimedArea,
+                       int layerIndex, int moveIndex) {
+    }
+
+    /** How it finished, or why it is giving up. Both strings are null while it is still going. */
+    public record Ending(List<Pos> leftovers, String ending, boolean bailing,
+                         String bailReason) {
+    }
+
+    /** Everything this chop is in the middle of. */
+    public record State(Pos anchor, Progress progress, Site site, Card card, Ending ending) {
+    }
+
+    /** What this chop would need to be built again exactly as it stands. */
+    public State snapshot() {
+        return new State(anchor,
+                new Progress(phase.name(), walkIssued, walkTicks, breaking, pickupWait,
+                        gatherWalks, decayWait, layerGatherWalks, chasing, lastSpot, restingSince,
+                        List.copyOf(unreachableDrops)),
+                new Site(siteX, siteZ, doorstepsTried, axisFallback, boostUp, boostCell,
+                        riseForBoost, riseIssued),
+                new Card(tree, plan,
+                        mastAhead == null ? List.of() : List.copyOf(mastAhead),
+                        digsAhead == null ? List.of() : List.copyOf(digsAhead),
+                        treeBlocks == null ? List.of() : List.copyOf(treeBlocks),
+                        claimedArea, layerIndex, moveIndex),
+                new Ending(List.copyOf(leftovers), ending, bailing, bailReason));
+    }
+
+    /** Puts a saved chop back, mid-dance. The survey rescans only if it had not finished. */
+    public ChopPlannedTree restore(State state) {
+        this.phase = Phase.valueOf(state.progress().phase());
+        this.walkIssued = state.progress().walkIssued();
+        this.walkTicks = state.progress().walkTicks();
+        this.breaking = state.progress().breaking();
+        this.pickupWait = state.progress().pickupWait();
+        this.gatherWalks = state.progress().gatherWalks();
+        this.decayWait = state.progress().decayWait();
+        this.layerGatherWalks = state.progress().layerGatherWalks();
+        this.chasing = state.progress().chasing();
+        this.lastSpot = state.progress().lastSpot();
+        this.restingSince = state.progress().restingSince();
+        this.unreachableDrops.addAll(state.progress().unreachableDrops());
+
+        this.siteX = state.site().siteX();
+        this.siteZ = state.site().siteZ();
+        this.doorstepsTried = state.site().doorstepsTried();
+        this.axisFallback = state.site().axisFallback();
+        this.boostUp = state.site().boostUp();
+        this.boostCell = state.site().boostCell();
+        this.riseForBoost = state.site().riseForBoost();
+        this.riseIssued = state.site().riseIssued();
+
+        this.tree = state.card().tree();
+        this.plan = state.card().plan();
+        this.mastAhead = new java.util.ArrayDeque<>(state.card().mastAhead());
+        this.digsAhead = new java.util.ArrayDeque<>(state.card().digsAhead());
+        this.treeBlocks = new HashSet<>(state.card().treeBlocks());
+        this.claimedArea = state.card().claimedArea();
+        this.layerIndex = state.card().layerIndex();
+        this.moveIndex = state.card().moveIndex();
+
+        this.leftovers.addAll(state.ending().leftovers());
+        this.ending = state.ending().ending();
+        this.bailing = state.ending().bailing();
+        this.bailReason = state.ending().bailReason();
+        return this;
     }
 }
