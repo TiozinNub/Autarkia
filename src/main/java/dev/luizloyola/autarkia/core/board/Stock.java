@@ -15,7 +15,8 @@ public final class Stock {
      *  String-level vanilla knowledge, the same convention the chop's sapling map uses;
      *  provisional until a compat tag lens ({@code ItemTags.LOGS}) replaces the predicate. */
     public static final ItemSpec LOGS =
-            new ItemSpec("logs", id -> id.endsWith("_log") || id.endsWith("_stem"));
+            ItemSpec.register(
+                    new ItemSpec("logs", id -> id.endsWith("_log") || id.endsWith("_stem")));
 
     private Stock() {
     }
