@@ -1,0 +1,74 @@
+{
+  "_comment": [
+    "Autarkia's appearance vocabulary. Anima ships the machinery that reads this; everything here",
+    "is content. Edit it with tools/appearance-preview (scripts/appearance-preview.sh), which reads",
+    "this exact file and runs the exact compositor the game runs.",
+    "",
+    "Ramp shades are fixed point: [hue tenths of a degree, saturation thousandths, value thousandths],",
+    "deepest shade first. Ramped art is a SHADE MAP, not a picture: every opaque pixel must be one of",
+    "the reserved index colours FF0000, FF0001, FF0002, ... (see Shades). Anything else is left",
+    "exactly as authored, on purpose, so a stray colour stays visible instead of quietly becoming a",
+    "shade nobody chose."
+  ],
+
+  "canvas": [64, 64],
+
+  "anchors": {
+    "SHEET": [0, 0, 64, 64],
+    "FACE": [8, 8, 8, 8],
+    "FACE_OVERLAY": [40, 8, 8, 8]
+  },
+
+  "ramps": {
+    "skin": [[80, 1150, 780], [0, 1000, 1000], [-30, 900, 1120], [-50, 800, 1220]],
+    "hair": [[-150, 1200, 550], [0, 1000, 1000], [100, 750, 1350], [100, 550, 1600]],
+    "cloth": [[-120, 1100, 650], [0, 1000, 1000], [80, 850, 1150], [80, 750, 1300]]
+  },
+
+  "ladders": {
+    "skin": ["F5D0B0", "EFC0A0", "E8B18C", "DDA07A", "CE8E68", "BC7D57",
+             "A66A48", "8E573A", "78462E", "613724", "4B2A1B", "3A2015"],
+    "hair": ["0F0D0C", "2C1B12", "4A2F1C", "6B4423", "8C5A2B", "8C3B1E", "C46A2B", "E8CE8F"],
+    "eye": ["4A2C17", "7A5A2E", "4F6B3E", "3F6480", "6B7278"]
+  },
+
+  "slots": [
+    {
+      "name": "body",
+      "anchor": "SHEET",
+      "ops": [{ "type": "ramp", "bind": "SKIN", "ramp": "skin" }],
+      "select": [{ "texture": "autarkia:body/base" }]
+    },
+    {
+      "name": "eyes",
+      "anchor": "FACE",
+      "offset": [1, 2],
+      "size": [6, 2],
+      "dynamic": true,
+      "ops": [{ "type": "palette", "swaps": [{ "from": "FF0000", "bind": "EYE" }] }],
+      "select": [
+        { "when": { "blink": "true" }, "texture": "autarkia:face/eyes_blink" },
+        { "when": { "mood": "happy" }, "texture": "autarkia:face/eyes_happy" },
+        { "texture": "autarkia:face/eyes_neutral" }
+      ]
+    },
+    {
+      "name": "mouth",
+      "anchor": "FACE",
+      "offset": [2, 5],
+      "size": [4, 2],
+      "dynamic": true,
+      "select": [
+        { "when": { "speaking": "true" }, "texture": "autarkia:face/mouth_open" },
+        { "when": { "mood": "happy" }, "texture": "autarkia:face/mouth_smile" },
+        { "texture": "autarkia:face/mouth_neutral" }
+      ]
+    },
+    {
+      "name": "hair",
+      "anchor": "SHEET",
+      "ops": [{ "type": "ramp", "bind": "HAIR", "ramp": "hair" }],
+      "select": [{ "texture": "autarkia:hair/short" }]
+    }
+  ]
+}
