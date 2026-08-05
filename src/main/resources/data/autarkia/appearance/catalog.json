@@ -23,7 +23,14 @@
     "",
     "A slot whose selector reads a parameter that changes many times a second MUST be 'dynamic',",
     "or every change re-bakes the shared static base that the whole split exists to protect. The",
-    "beard reads 'speaking', so it is dynamic even though a beard itself does not come and go."
+    "beard reads 'speaking', so it is dynamic even though a beard itself does not come and go.",
+    "",
+    "Everyone is dressed: 'shirt' and 'trousers' have a wildcard and always draw, in two separate",
+    "cloth ladders, because one colour for both is what makes a crowd read as a uniform rather than",
+    "as people. 'uniform' is the job layer over the top — optional, one rule per job, and only",
+    "'farmer' exists so far. Adding a job is one rule and one PNG.",
+    "",
+    "Vanilla armour renders OVER the whole baked skin, so cloth only ever shows where armour is not."
   ],
   "canvas": [64, 64],
   "anchors": {
@@ -81,7 +88,25 @@
       "C46A2B",
       "E8CE8F"
     ],
-    "eye": ["4A2C17", "7A5A2E", "4F6B3E", "3F6480", "6B7278"]
+    "eye": ["4A2C17", "7A5A2E", "4F6B3E", "3F6480", "6B7278"],
+    "cloth_a": [
+      "E8DCC0",
+      "D8C49A",
+      "B8974A",
+      "A8453A",
+      "7E8B5A",
+      "55606B",
+      "3E4A6B",
+      "6B4A6B"
+    ],
+    "cloth_b": [
+      "4A3A2A",
+      "5E4A33",
+      "6B5B45",
+      "46503F",
+      "3A3A3A",
+      "2A2A2E"
+    ]
   },
   "slots": [
     {
@@ -97,6 +122,58 @@
       "select": [
         {
           "texture": "autarkia:body/base"
+        }
+      ]
+    },
+    {
+      "name": "shirt",
+      "anchor": "SHEET",
+      "ops": [
+        {
+          "type": "ramp",
+          "bind": "CLOTH_A",
+          "ramp": "cloth"
+        }
+      ],
+      "select": [
+        {
+          "texture": "autarkia:cloth/shirt"
+        }
+      ]
+    },
+    {
+      "name": "trousers",
+      "anchor": "SHEET",
+      "ops": [
+        {
+          "type": "ramp",
+          "bind": "CLOTH_B",
+          "ramp": "cloth"
+        }
+      ],
+      "select": [
+        {
+          "texture": "autarkia:cloth/trousers"
+        }
+      ]
+    },
+    {
+      "name": "uniform",
+      "anchor": "SHEET",
+      "optional": true,
+      "ops": [
+        {
+          "type": "ramp",
+          "bind": "CLOTH_A",
+          "ramp": "cloth"
+        }
+      ],
+      "select": [
+        {
+          "when": {
+            "job": "farmer"
+          },
+          "texture": "autarkia:cloth/uniform_farmer"
         }
       ]
     },
