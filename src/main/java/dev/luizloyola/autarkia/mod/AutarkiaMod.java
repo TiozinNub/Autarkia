@@ -35,6 +35,7 @@ import dev.luizloyola.autarkia.core.tree.TreeRule;
 import dev.luizloyola.autarkia.core.tree.WaterRule;
 import net.minecraft.core.particles.ParticleTypes;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
+import dev.luizloyola.autarkia.mod.person.PersonAppearance;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import dev.luizloyola.anima.mod.net.DebugGlowSync;
 import net.fabricmc.api.ModInitializer;
@@ -67,6 +68,9 @@ public class AutarkiaMod implements ModInitializer {
         // once the registries freeze, so this waits for a server to start.
         ServerLifecycleEvents.SERVER_STARTING.register(server ->
                 new DangerFile(MOD_ID, PersonDanger.STORE).generate());
+        // Say what the wardrobe came to, once, at INFO: a catalog that failed to load or an art
+        // folder that did not ship otherwise shows up only as settlers who quietly look wrong.
+        PersonAppearance.describe().forEach(LOGGER::info);
         ModEntities.init();
         AnimaItems.init();
         ModMenus.init();
