@@ -160,6 +160,27 @@ loom {
             jvmArguments.add("-Dmixin.debug.export=true")
         }
 
+        // Writes every composited appearance to a PNG as it is baked, so a look can be compared
+        // against the art it was composed from. Opt in with -Pappearancedump (scripts/client.sh
+        // --appearance-dump); the value is a directory, defaulting to one under the run dir.
+        // A baked texture lives only on the GPU and in native memory, so without this the only way
+        // to check a bake is to look at it — which is no way to prove one is unchanged.
+        if (providers.gradleProperty("appearancedump").isPresent) {
+            val into = providers.gradleProperty("appearancedump").get()
+                .ifEmpty { "${runDirectory.get().asFile}/appearance-dump" }
+            jvmArguments.add("-Danima.appearance.dump=$into")
+        }
+
+        // -Pjoin=host:port sends the client straight into a server on launch, skipping the menus.
+        // Vanilla's own quick-play argument, not a mod feature. It exists because anything the
+        // CLIENT does (and the whole appearance bake does) cannot be checked from the headless
+        // harness at all, and a check that needs someone to click through two screens first is a
+        // check that does not get run.
+        if (name == "client" && providers.gradleProperty("join").isPresent) {
+            programArguments.add("--quickPlayMultiplayer")
+            programArguments.add(providers.gradleProperty("join").get())
+        }
+
         // Hot swap (-Photswap, or scripts/{client,server}.sh --hotswap): open a JDWP port so
         // scripts/hotswap.sh can push recompiled classes into the RUNNING game, and turn on
         // enhanced class redefinition so a swap may add methods and fields — stock HotSpot
