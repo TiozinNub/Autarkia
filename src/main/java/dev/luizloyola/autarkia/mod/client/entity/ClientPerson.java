@@ -1,8 +1,13 @@
 package dev.luizloyola.autarkia.mod.client.entity;
 
 import dev.luizloyola.anima.mod.client.appearance.BakedTextures;
+import dev.luizloyola.anima.core.appearance.Blink;
+import dev.luizloyola.anima.core.appearance.Recipe;
+import dev.luizloyola.autarkia.core.person.AppearanceComposer;
+import dev.luizloyola.autarkia.mod.person.PersonAppearance;
 import dev.luizloyola.autarkia.mod.client.anim.ShadowPlayer;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import java.util.Map;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.entity.ClientAvatarEntity;
@@ -43,6 +48,14 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
      *  {@link #onClientRemoval()}. Two Persons who genuinely look the same hold two handles on one
      *  texture, so the handle counts rather than owns. */
     private final BakedTextures.Handle bakedSkin = BakedTextures.handle();
+
+    /** The recipe this body was last composed into, and the two things that invalidate it: the
+     *  appearance it came from, and whether the eyes were shut. Composing per frame would allocate a
+     *  recipe and hash a canonical string for every Person on screen, sixty times a second, to answer
+     *  a question whose answer changes about once every four seconds. */
+    private @Nullable Recipe composed;
+    private @Nullable Recipe composedFrom;
+    private boolean eyesShut;
 
     public ClientPerson(EntityType<? extends Person> type, Level level) {
         super(type, level);
@@ -86,10 +99,35 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
      */
     @Override
     public PlayerSkin getSkin() {
-        Identifier baked = this.bakedSkin.textureFor(appearanceRecipe());
+        Identifier baked = this.bakedSkin.textureFor(liveRecipe());
         ClientAsset.Texture body = new ClientAsset.ResourceTexture(baked, baked);
         PlayerModelType model = isSlim() ? PlayerModelType.SLIM : PlayerModelType.WIDE;
         return PlayerSkin.insecure(body, null, null, model);
+    }
+
+    /**
+     * This body as it is <em>right now</em> — their appearance, plus what their face is doing.
+     *
+     * <p>Blinking is <b>client-side and unsynced</b>: syncing a cosmetic that changes several
+     * times a minute per body would cost a packet per blink to buy an agreement nobody can
+     * perceive. Each client runs the same stateless schedule against its own clock, seeded per
+     * body so a crowd never blinks in unison.
+     *
+     * <p>Recomposed only when the appearance (compared by identity) or the eyes move.
+     */
+    private Recipe liveRecipe() {
+        Recipe base = appearanceRecipe();
+        boolean shut = Blink.shutAt(getAgentId().value().getLeastSignificantBits(),
+                System.currentTimeMillis());
+        if (this.composed == null || this.composedFrom != base || this.eyesShut != shut) {
+            this.composedFrom = base;
+            this.eyesShut = shut;
+            Map<String, String> state = new java.util.LinkedHashMap<>(AppearanceComposer.RESTING_STATE);
+            state.put("blink", Boolean.toString(shut));
+            this.composed = AppearanceComposer.compose(appearance(), PersonAppearance.catalog(),
+                    PersonAppearance::has, state);
+        }
+        return this.composed;
     }
 
     /**

@@ -7,17 +7,17 @@
     "Ramp shades are fixed point: [hue tenths of a degree, saturation thousandths, value thousandths],",
     "deepest shade first. A ramp replaces one authored colour per shade, and it is written one of two",
     "ways. A bare ARRAY of shades means the art is drawn in the reserved index colours FF0000, FF0001,",
-    "FF0002, ... (see Shades) \u2014 the right default for art authored from scratch. An OBJECT may add",
+    "FF0002, ... (see Shades) — the right default for art authored from scratch. An OBJECT may add",
     "'keys': the real colours the art is actually drawn in, one per shade, deepest first. That is what",
     "lets a layer be painted in visible colour and still recolour per agent, and it is why 'hair' is",
-    "spelled that way \u2014 its art is Steve's hair, kept in Steve's own browns.",
+    "spelled that way — its art is Steve's hair, kept in Steve's own browns.",
     "",
     "Either way, a pixel that is neither transparent nor one of that ramp's keys is left exactly as",
     "authored, on purpose, so a stray colour stays visible instead of quietly becoming a shade nobody",
-    "chose. Keys must be distinct, and a ramp's keys are part of what its NAME means \u2014 two ramps with",
+    "chose. Keys must be distinct, and a ramp's keys are part of what its NAME means — two ramps with",
     "the same name and different keys would collide in the bake cache.",
     "",
-    "A slot marked 'optional' is allowed to draw nothing \u2014 a beard, blood, grime. Without it the",
+    "A slot marked 'optional' is allowed to draw nothing — a beard, blood, grime. Without it the",
     "editor would rightly complain that a selector with no '*' rule leaves the slot empty for some",
     "combination of parameters, which for these slots is the entire point.",
     "",
@@ -27,37 +27,42 @@
     "",
     "Everyone is dressed: 'shirt' and 'trousers' have a wildcard and always draw, in two separate",
     "cloth ladders, because one colour for both is what makes a crowd read as a uniform rather than",
-    "as people. 'uniform' is the job layer over the top \u2014 optional, one rule per job, and only",
+    "as people. 'uniform' is the job layer over the top — optional, one rule per job, and only",
     "'farmer' exists so far. Adding a job is one rule and one PNG.",
     "",
     "A texture may name a FAMILY rather than a file: 'autarkia:hair/{hairstyle}' means every PNG in",
-    "that folder is a hairstyle. Nothing lists them \u2014 the folder IS the list, so drawing a new one",
+    "that folder is a hairstyle. Nothing lists them — the folder IS the list, so drawing a new one",
     "makes it choosable with no edit here. In game the parameter comes from the person; in the",
     "editor it is a dropdown of what exists.",
     "",
-    "Every file in a family shares the slot's ramp, so they must all be drawn in the SAME palette.",
-    "One ramp cannot have two identity colours.",
+    "Every file in a family shares the slot's ONE recolouring rule. If that rule is a ramp, every",
+    "member must be drawn in the same palette — a ramp cannot have two identity colours. A family",
+    "whose members come from different sources therefore uses 'retint' instead, which measures its",
+    "reference per file: that is why 'hair' is drawn that way, and why 'shirt' became so once a",
+    "green blouse joined a teal shirt. The cost is real and worth knowing: a ramp gives per-shade",
+    "control and a retint moves every pixel by one HSV difference, so a family that IS one palette",
+    "is still better served by a ramp.",
     "",
     "The body is a family too: 'autarkia:body/{model}' picks slim.png or wide.png, and the",
-    "editor draws the slim arm model for 'slim' \u2014 the geometry IS the parameter the skin",
+    "editor draws the slim arm model for 'slim' — the geometry IS the parameter the skin",
     "is chosen by, so there is one control and not two. Both bodies share the slot's ramp, so both",
-    "must be drawn in the same palette \u2014 they are, exactly, which is what makes one ramp enough.",
+    "must be drawn in the same palette — they are, exactly, which is what makes one ramp enough.",
     "",
     "Vanilla armour renders OVER the whole baked skin, so cloth only ever shows where armour is not.",
     "",
     "A RAMP MUST DESCRIBE ITS ART. Its keys are the exact colours the file is drawn in and there is",
-    "one shade per key, so redrawing a layer with a different palette means recalibrating its ramp \u2014",
+    "one shade per key, so redrawing a layer with a different palette means recalibrating its ramp —",
     "otherwise the lookup misses every pixel and the layer simply stops responding to its binding,",
     "silently and completely. The editor's problems list counts the pixels a ramp does not know.",
     "",
-    "A ramp is for art drawn as a SHADE MAP \u2014 a handful of flat tones. Art that is a painting uses",
+    "A ramp is for art drawn as a SHADE MAP — a handful of flat tones. Art that is a painting uses",
     "'retint' instead: it measures the HSV difference between one reference colour in the file and",
     "the target, and applies that one difference to every pixel, so a hundred and thirty hand-mixed",
     "skin tones keep their relationships and move together. The body is drawn that way.",
     "",
     "Each garment has its own ramp because each is drawn in its own palette. 'trousers' carries the",
     "shoes as well: their keys are greys, and saturation is a RATIO, so a zero-saturation key gives a",
-    "zero-saturation shade whatever CLOTH_B becomes \u2014 the shoes stay grey and only track its",
+    "zero-saturation shade whatever CLOTH_B becomes — the shoes stay grey and only track its",
     "lightness. Nothing special was needed for that; it falls out of the arithmetic.",
     "",
     "Slot order is composite order, so 'trousers' is declared before 'shirt' and the shirt hangs",
@@ -66,11 +71,11 @@
     "A rule's 'texture' may be a LIST, best first. Layers that reach the arms need it: narrowing an",
     "arm moves its faces on the sheet, so a sleeve drawn for wide arms lands on the wrong pixels of",
     "a slim one. Listing ['x_{model}', 'x'] says draw the specific file if somebody made one and the",
-    "shared file otherwise \u2014 which is the rule an artist works to. Two selector rules cannot say it:",
+    "shared file otherwise — which is the rule an artist works to. Two selector rules cannot say it:",
     "a rule matches on PARAMETERS, so a slim rule would match whether or not the art exists and the",
     "layer would vanish instead of falling back.",
     "",
-    "'retint' with no 'from' measures its reference from the ART \u2014 each texture's own most common",
+    "'retint' with no 'from' measures its reference from the ART — each texture's own most common",
     "opaque colour. That is what lets one slot wear files drawn from different sources: short hair",
     "off Steve is a dark brown and long hair off Alex is a light ginger, and no single list of ramp",
     "keys can serve both. With a measured reference nothing needs standardising and nothing needs",
@@ -78,7 +83,7 @@
     "",
     "Everything a person is made of lives under textures/person, one folder per CHOICE: body,",
     "hair, shirts, pants, uniforms, face. A folder is a family and its files are the options, so",
-    "adding a shirt is dropping a PNG into shirts/ \u2014 the picker lists it, and nothing here changes.",
+    "adding a shirt is dropping a PNG into shirts/ — the picker lists it, and nothing here changes.",
     "",
     "",
     "A STATE is a suffix that falls back, exactly as a model cut is: eyes/{mood}_blink before",
@@ -86,12 +91,12 @@
     "beard/{beard}. So a blink is drawn once per expression that needs its own, and every",
     "expression without one simply does not blink. Draw happy_blink and",
     "a happy face blinks; until then it holds its happy eyes through the blink, which is a gap you",
-    "can see rather than a wrong pixel. Listing a third candidate \u2014 {mood}_blink, neutral_blink,",
-    "{mood} \u2014 would make every expression borrow a generic blink instead; one line, if that reads",
+    "can see rather than a wrong pixel. Listing a third candidate — {mood}_blink, neutral_blink,",
+    "{mood} — would make every expression borrow a generic blink instead; one line, if that reads",
     "better than not blinking.",
     "",
     "Suffixed files are never offered in a picker. A blink is not an expression and a slim cut is",
-    "not a hairstyle \u2014 both are another way of drawing a choice somebody already made."
+    "not a hairstyle — both are another way of drawing a choice somebody already made."
   ],
   "canvas": [
     64,
@@ -187,66 +192,6 @@
           -1,
           871,
           1034
-        ]
-      ]
-    },
-    "shirt": {
-      "keys": [
-        "006868",
-        "037A7A",
-        "007F7F",
-        "058888",
-        "049595",
-        "00A4A4",
-        "00AFAF",
-        "0ABCBC",
-        "00CCCC"
-      ],
-      "shades": [
-        [
-          0,
-          1000,
-          594
-        ],
-        [
-          0,
-          975,
-          697
-        ],
-        [
-          0,
-          1000,
-          726
-        ],
-        [
-          0,
-          963,
-          777
-        ],
-        [
-          0,
-          973,
-          851
-        ],
-        [
-          0,
-          1000,
-          937
-        ],
-        [
-          0,
-          1000,
-          1000
-        ],
-        [
-          0,
-          1000,
-          1074
-        ],
-        [
-          0,
-          1000,
-          1166
         ]
       ]
     },
@@ -418,9 +363,8 @@
       "anchor": "SHEET",
       "ops": [
         {
-          "type": "ramp",
-          "bind": "CLOTH_A",
-          "ramp": "shirt"
+          "type": "retint",
+          "bind": "CLOTH_A"
         }
       ],
       "select": [
@@ -438,9 +382,8 @@
       "optional": true,
       "ops": [
         {
-          "type": "ramp",
-          "bind": "CLOTH_A",
-          "ramp": "shirt"
+          "type": "retint",
+          "bind": "CLOTH_A"
         }
       ],
       "select": [
