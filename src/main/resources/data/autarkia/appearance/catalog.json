@@ -116,10 +116,18 @@
     "genotype stores a position, so DELETING an entry renumbers every colour after it and silently",
     "repaints every settler already carrying a later one. Switch a colour off; do not delete it.",
     "",
-    "Family members (hairstyles, shirts) are NOT weighted and are drawn uniformly. A colour ladder is",
-    "a spectrum, so 'commoner in the middle' means something about a population; a hairstyle has no",
-    "middle for a bias to be about. A rare hat would want odds stated per member, not inferred from",
-    "where its file happens to sort.",
+    "Family members (hairstyles, shirts) are drawn UNIFORMLY unless 'odds' says otherwise, and never",
+    "with the ladders' positional hump. A colour ladder is a spectrum, so 'commoner in the middle'",
+    "means something; a family's members come out of a folder in whatever order the filesystem gives,",
+    "so any bias read off their order would be nonsense. Odds have to be said out loud:",
+    "",
+    "  \"odds\": { \"hairstyle\": { \"*\": 10, \"mohawk\": 1 } }",
+    "",
+    "A map by NAME rather than a list, because a family is DISCOVERED — there is nothing for a",
+    "parallel array to be parallel to, and a list would go out of step the first time somebody drew a",
+    "new PNG. '*' is what an unnamed member is worth, so a new file is common by default and only the",
+    "exception needs writing down. Naming art that is not there is harmless; it never comes up. Every",
+    "member weighted to zero draws NOTHING, which for an optional slot is the right answer.",
     "",
     "A STATE is a suffix that falls back, exactly as a model cut is: eyes/{mood}_blink before",
     "eyes/{mood}, mouth/{mood}_open before mouth/{mood}, beard/{beard}_speaking before",
@@ -203,8 +211,7 @@
     "beard": {
       "keys": [
         "421D0A",
-        "492510",
-        "6A4030"
+        "492510"
       ],
       "shades": [
         [
@@ -216,11 +223,6 @@
           0,
           1000,
           1000
-        ],
-        [
-          -56,
-          701,
-          1452
         ]
       ]
     },

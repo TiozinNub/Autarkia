@@ -68,7 +68,13 @@ public final class Genotypes {
             if (mayBeNone.contains(parameter) && random.nextBoolean()) {
                 return;
             }
-            picks.put(parameter, values.get(random.nextInt(values.size())));
+            // Against the catalog's odds where it states any, uniformly where it does not: a family
+            // has no middle for a positional bias to be about, and its members arrive in whatever
+            // order the filesystem gives them.
+            String chosen = catalog.odds(parameter).pick(values, random);
+            if (chosen != null) {
+                picks.put(parameter, chosen);
+            }
         });
         return new Look.Composed(ladders, picks);
     }
