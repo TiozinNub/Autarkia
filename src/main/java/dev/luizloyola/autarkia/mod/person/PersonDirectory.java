@@ -16,7 +16,6 @@ import dev.luizloyola.anima.mod.store.StoreGuard;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
-import dev.luizloyola.autarkia.core.person.PersonSkins;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -111,27 +110,27 @@ public final class PersonDirectory extends SavedData
     public PersonIdentity createPerson() {
         RandomGenerator random = ThreadLocalRandom.current();
         Gender gender = Gender.random(random);
-        return mint(gender, PersonNames.random(random, gender), random);
+        return mint(gender, PersonNames.random(random, gender));
     }
 
     /**
-     * As {@link #createPerson()} but with a caller-supplied {@code name} — the deliberate spawn
-     * path ({@code /autarkia person spawn <name>}). The name is used verbatim; gender is
-     * <em>not</em> inferred from it, so "Alice" may be male.
+     * As {@link #createPerson()} but named by the caller ({@code /autarkia person spawn <name>}).
+     * Gender, look and model are still generated; gender is <em>not</em> inferred from the name, so
+     * "Alice" may be male.
      */
     public PersonIdentity createPerson(String name) {
         RandomGenerator random = ThreadLocalRandom.current();
-        return mint(Gender.random(random), name, random);
+        return mint(Gender.random(random), name);
     }
 
     /**
-     * Mints and registers one identity: the model follows the skin's geometry (our male skins are
-     * wide, female slim — see {@link PersonSkins}). Marks the directory dirty.
+     * Mints and registers one identity from a chosen gender + name. The model follows the gender
+     * (male wide, female slim); everything else is rolled from their own id.
      */
-    private PersonIdentity mint(Gender gender, String name, RandomGenerator random) {
+    private PersonIdentity mint(Gender gender, String name) {
         ModelType model = gender.choose(ModelType.WIDE, ModelType.SLIM);
         AgentId id = AgentId.random();
-        PersonIdentity identity = registry.create(id, name, new Appearance(gender, model, look(id, random, gender)));
+        PersonIdentity identity = registry.create(id, name, new Appearance(gender, model, look(id)));
         setDirty();
         return identity;
     }
@@ -139,17 +138,21 @@ public final class PersonDirectory extends SavedData
     /**
      * The look a brand-new person is given: composed from the catalog, seeded from their own id.
      *
-     * <p>Seeding from the id rather than from {@code random} makes the roll a <em>function of the
-     * person</em> — the same settler always has the same face, a child's seed can later be mixed
-     * from two parents', and a look is reproducible when one goes wrong.
-     *
-     * <p>Falls back to a vanilla skin when no catalog loaded, so a settler looks like they did
-     * before this feature existed.
+     * <p>Seeded from the id, not a passing random, so the roll is a <em>function of the person</em>:
+     * one settler keeps one face, a child's seed can later mix two parents', and a look is
+     * reproducible. Public because the self-healing migration gives a person whose bundled skin no
+     * longer exists the look they would have been born with.
      */
-    private static Look look(AgentId id, RandomGenerator random, Gender gender) {
+    public static Look composedLookFor(AgentId id) {
+        return look(id);
+    }
+
+    private static Look look(AgentId id) {
         Catalog catalog = PersonAppearance.catalog();
         if (catalog == null) {
-            return new Look.Skin(PersonSkins.random(random, gender));
+            // No catalog is a broken installation, not a style of settler. One recognisable fallback
+            // says so at a glance; nine of them at random would look like a working feature.
+            return Look.DEFAULT;
         }
         return Genotypes.roll(id.value().getMostSignificantBits() ^ id.value().getLeastSignificantBits(),
                 catalog, PersonAppearance.choices());

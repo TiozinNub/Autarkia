@@ -1,24 +1,16 @@
 package dev.luizloyola.autarkia.core.person;
 
-import java.util.List;
-import java.util.random.RandomGenerator;
-
 /**
- * Gendered pools of skin texture asset-ids for new persons, drawn from the <b>nine default player
- * skins the game already ships</b>.
+ * The one texture a Person falls back to when nothing else can be worked out — reached only when
+ * the catalog could not be read at all. A settler with no catalog must look <b>wrong</b>, not be
+ * invisible and not be magenta, and vanilla's own Steve is the one texture every client has.
  *
- * <p>Autarkia bundles no skin PNGs: the ones it used to carry came from public skin galleries,
- * which license nothing to a downloader, so shipping them would have been redistributing other
- * people's work. Vanilla's own textures need no licence and give more variety than the twelve
- * that were bundled.
+ * <p><b>Autarkia bundles no skin PNGs.</b> Public skin galleries license nothing to a downloader —
+ * an uploader grants the SITE a licence, not the world — while naming a vanilla texture ships
+ * nothing.
  *
- * <p>Each of the nine exists in a wide and a slim cut. {@link ModelType} follows {@link Gender}
- * (male wide, female slim), so the model is baked into the id here. Mojang assigned these
- * characters no gender; the two pools are a presentation convention of Autarkia's, one line to
- * change.
- *
- * <p>Ids are asset-ids ({@code namespace:path}, without {@code textures/} or {@code .png}). The
- * skin string is opaque to the simulation; the renderer gives it meaning.
+ * <p>Ids are asset ids ({@code namespace:path}, without {@code textures/} or {@code .png}). The
+ * string is opaque to the rest of the simulation; the renderer gives it meaning.
  */
 public final class PersonSkins {
     private PersonSkins() {}
@@ -31,35 +23,4 @@ public final class PersonSkins {
      *  name it — {@link Look#DEFAULT} and {@link Appearance#DEFAULT} both need it, and neither may
      *  reach into {@code mod}. */
     public static final String DEFAULT_SKIN = VANILLA + "wide/steve";
-
-    static final List<String> MALE_SKINS = List.of(
-            DEFAULT_SKIN,
-            VANILLA + "wide/kai",
-            VANILLA + "wide/noor",
-            VANILLA + "wide/sunny",
-            VANILLA + "wide/zuri");
-
-    static final List<String> FEMALE_SKINS = List.of(
-            VANILLA + "slim/alex",
-            VANILLA + "slim/ari",
-            VANILLA + "slim/efe",
-            VANILLA + "slim/makena");
-
-    public static String random(RandomGenerator random, Gender gender) {
-        List<String> pool = gender.choose(MALE_SKINS, FEMALE_SKINS);
-        return pool.get(random.nextInt(pool.size()));
-    }
-
-    /**
-     * A skin id that certainly resolves: the stored one if this version still ships it, else the
-     * gender's first vanilla default.
-     *
-     * <p>Persons made before the bundled PNGs were deleted point at a texture no longer in the jar,
-     * and a missing texture is a magenta-and-black person forever, not a crash. Remapping on read
-     * beats a migration pass.
-     */
-    public static String resolve(String stored, Gender gender) {
-        List<String> pool = gender.choose(MALE_SKINS, FEMALE_SKINS);
-        return pool.contains(stored) ? stored : pool.get(0);
-    }
 }

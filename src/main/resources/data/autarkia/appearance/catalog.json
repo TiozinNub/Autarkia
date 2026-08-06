@@ -9,8 +9,8 @@
     "ways. A bare ARRAY of shades means the art is drawn in the reserved index colours FF0000, FF0001,",
     "FF0002, ... (see Shades) — the right default for art authored from scratch. An OBJECT may add",
     "'keys': the real colours the art is actually drawn in, one per shade, deepest first. That is what",
-    "lets a layer be painted in visible colour and still recolour per agent, and it is why 'hair' is",
-    "spelled that way — its art is Steve's hair, kept in Steve's own browns.",
+    "lets a layer be painted in visible colour and still recolour per agent, and it is why 'beard' is",
+    "spelled that way — its art is drawn in real browns rather than in index colours.",
     "",
     "Either way, a pixel that is neither transparent nor one of that ramp's keys is left exactly as",
     "authored, on purpose, so a stray colour stays visible instead of quietly becoming a shade nobody",
@@ -162,36 +162,6 @@
           0,
           1000,
           1000
-        ]
-      ]
-    },
-    "hair": {
-      "keys": [
-        "DE812E",
-        "E58D3F",
-        "EB983F",
-        "F3A858"
-      ],
-      "shades": [
-        [
-          -28,
-          1083,
-          945
-        ],
-        [
-          -29,
-          990,
-          974
-        ],
-        [
-          0,
-          1000,
-          1000
-        ],
-        [
-          -1,
-          871,
-          1034
         ]
       ]
     },

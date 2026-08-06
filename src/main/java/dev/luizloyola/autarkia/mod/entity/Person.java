@@ -23,7 +23,6 @@ import dev.luizloyola.anima.core.agent.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonDanger;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
-import dev.luizloyola.autarkia.core.person.PersonSkins;
 import dev.luizloyola.autarkia.core.person.PersonSpecies;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.anima.mod.brain.BrainDriver;
@@ -923,16 +922,22 @@ public class Person extends Avatar implements AgentBody {
         this.identityName = identity.name();
         Appearance identityAppearance = identity.appearance();
         // Self-healing migration: Autarkia used to bundle its own skin PNGs, so a person created
-        // then points at a texture no longer in the jar. Corrected once on first load rather than
-        // resolved on every read. Only a literal skin goes stale — a composed look names catalog
-        // entries, which fall back on their own.
-        if (identityAppearance.look() instanceof Look.Skin worn) {
-            String resolved = PersonSkins.resolve(worn.assetId(), identityAppearance.gender());
-            if (!resolved.equals(worn.assetId()) && level() instanceof ServerLevel serverLevel) {
-                identityAppearance = identityAppearance.withLook(new Look.Skin(resolved));
-                PersonDirectory.get(serverLevel.getServer())
-                        .replace(identity.withAppearance(identityAppearance));
-            }
+        // before that points at a texture not in the jar — and a missing texture is not a crash,
+        // it is a magenta-and-black person forever. Corrected once, on first load, rather than
+        // resolved on every read with the directory disagreeing with the renderer; they are healed
+        // into a composed look rolled from their own id.
+        //
+        // Scoped to our namespace: a pin naming anything else is somebody's deliberate choice, and
+        // a dedicated server ships no client assets, so it can no more confirm that
+        // `minecraft:entity/player/wide/steve` exists than deny it.
+        if (identityAppearance.look() instanceof Look.Skin worn
+                && worn.assetId().startsWith(AutarkiaMod.MOD_ID + ":")
+                && !PersonAppearance.has(worn.assetId())
+                && level() instanceof ServerLevel serverLevel) {
+            identityAppearance = identityAppearance.withLook(
+                    PersonDirectory.composedLookFor(identity.id()));
+            PersonDirectory.get(serverLevel.getServer())
+                    .replace(identity.withAppearance(identityAppearance));
         }
         this.entityData.set(DATA_APPEARANCE, identityAppearance.encode());
     }
