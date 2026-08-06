@@ -126,6 +126,11 @@ dependencies {
 tasks.named<Test>("test") {
     useJUnitPlatform()
 
+    // See the same block in anima/build.gradle.kts: a project resolves to its jar on the test
+    // classpath, and on a Mojang-mapped node that jar carries intermediary names, so this node's own
+    // named classes have to come first.
+    classpath = sourceSets["main"].output + classpath
+
     // See the same block in anima/build.gradle.kts: ArchitectureTest reads the BRANCH's source as
     // text (`autarkia/src`), because that is the one form that still carries `//?` directives and
     // the one form every node is generated from.
@@ -134,9 +139,11 @@ tasks.named<Test>("test") {
     inputs.dir(branchSources).withPropertyName("branchSources").withPathSensitivity(PathSensitivity.RELATIVE)
 
     // See the same block in anima/build.gradle.kts: JarContentsTest inspects the artifact that
-    // actually ships — `remapJar` on the Mojang-mapped nodes, `jar` on the unobfuscated ones.
-    val shippedJar = (if (tasks.names.contains("remapJar")) tasks.named<Jar>("remapJar")
-                      else tasks.named<Jar>("jar")).flatMap { it.archiveFile }
+    // actually ships (`remapJar` on the Mojang-mapped nodes, `jar` on the unobfuscated ones), and
+    // `AbstractArchiveTask` rather than `Jar` because Loom's RemapJarTask is not the `Jar` a build
+    // script names by default.
+    val shippedJar = (if (tasks.names.contains("remapJar")) tasks.named<AbstractArchiveTask>("remapJar")
+                      else tasks.named<AbstractArchiveTask>("jar")).flatMap { it.archiveFile }
     dependsOn(shippedJar)
     inputs.file(shippedJar).withPropertyName("shippedJar").withPathSensitivity(PathSensitivity.NAME_ONLY)
     // A plain String, not a jvmArgumentProviders lambda — a lambda in a build script captures the
@@ -145,13 +152,20 @@ tasks.named<Test>("test") {
     systemProperty("autarkia.version", modVersion)
 }
 
-// Warnings are errors — see the same block in anima/build.gradle.kts for what each exclusion buys
-// and why the list is `all` minus four rather than four named checks. `-Plint=off` opts out.
+// Warnings are errors — see the same block in anima/build.gradle.kts for what each exclusion buys,
+// why the list is `all` minus four rather than four named checks, and why the last two are named
+// only on the JDKs that have them. `-Plint=off` opts out.
 tasks.withType<JavaCompile>().configureEach {
     val lint = providers.gradleProperty("lint").orNull != "off"
     if (lint) {
+        val muted = buildList {
+            add("classfile")
+            add("deprecation")
+            if (requiredJava >= JavaVersion.VERSION_21) add("this-escape")
+            if (requiredJava >= JavaVersion.VERSION_22) add("dangling-doc-comments")
+        }
         options.compilerArgs.addAll(
-            listOf("-Xlint:all,-classfile,-deprecation,-this-escape,-dangling-doc-comments", "-Werror")
+            listOf(muted.joinToString(",-", prefix = "-Xlint:all,-"), "-Werror")
         )
     }
     options.errorprone {
