@@ -99,6 +99,28 @@
     "shared. A folder is a family and its files are the options, so adding a shirt is dropping a",
     "PNG into that gender's shirts/ — the picker lists it, and nothing here changes.",
     "",
+    "A LADDER is the set of values a colour binding may take, in order, and a genotype stores the",
+    "POSITION rather than the colour — which is what makes a tone heritable and what stops a crowd",
+    "being a scatter of unrelated RGB. Written as a bare array it is drawn triangularly: common in",
+    "the middle of the list, rare at the ends. Written as an object it carries 'weights', one per",
+    "colour, any scale, relative to each other — which replaces an accident of ordering with a",
+    "statement, so moving a colour up the list no longer changes how often it appears.",
+    "",
+    "The weights here are meant to be argued with. They say: brown hair and brown eyes carry a",
+    "settlement while red and blond are the ones you notice; cloth is undyed cream and tan before",
+    "anybody pays for colour, earth dyes are cheap, and purple is worth remarking on; work trousers",
+    "are brown and grey because that is not where dye gets spent. None of that is a fact about the",
+    "world, it is a look, and it is one number away from being a different one.",
+    "",
+    "A weight of ZERO excludes a colour without removing it, and that matters more than it reads: a",
+    "genotype stores a position, so DELETING an entry renumbers every colour after it and silently",
+    "repaints every settler already carrying a later one. Switch a colour off; do not delete it.",
+    "",
+    "Family members (hairstyles, shirts) are NOT weighted and are drawn uniformly. A colour ladder is",
+    "a spectrum, so 'commoner in the middle' means something about a population; a hairstyle has no",
+    "middle for a bias to be about. A rare hat would want odds stated per member, not inferred from",
+    "where its file happens to sort.",
+    "",
     "A STATE is a suffix that falls back, exactly as a model cut is: eyes/{mood}_blink before",
     "eyes/{mood}, mouth/{mood}_open before mouth/{mood}, beard/{beard}_speaking before",
     "beard/{beard}. So a blink is drawn once per expression that needs its own, and every",
@@ -288,41 +310,84 @@
         2
       ]
     },
-    "hair": [
-      "0F0D0C",
-      "2C1B12",
-      "4A2F1C",
-      "6B4423",
-      "8C5A2B",
-      "8C3B1E",
-      "C46A2B",
-      "E8CE8F"
-    ],
-    "eye": [
-      "4A2C17",
-      "7A5A2E",
-      "4F6B3E",
-      "3F6480",
-      "6B7278"
-    ],
-    "cloth_a": [
-      "E8DCC0",
-      "D8C49A",
-      "B8974A",
-      "A8453A",
-      "7E8B5A",
-      "55606B",
-      "3E4A6B",
-      "6B4A6B"
-    ],
-    "cloth_b": [
-      "4A3A2A",
-      "5E4A33",
-      "6B5B45",
-      "46503F",
-      "3A3A3A",
-      "2A2A2E"
-    ]
+    "hair": {
+      "colors": [
+        "0F0D0C",
+        "2C1B12",
+        "4A2F1C",
+        "6B4423",
+        "8C5A2B",
+        "8C3B1E",
+        "C46A2B",
+        "E8CE8F"
+      ],
+      "weights": [
+        12,
+        16,
+        18,
+        15,
+        9,
+        5,
+        3,
+        2
+      ]
+    },
+    "eye": {
+      "colors": [
+        "4A2C17",
+        "7A5A2E",
+        "4F6B3E",
+        "3F6480",
+        "6B7278"
+      ],
+      "weights": [
+        45,
+        20,
+        8,
+        18,
+        9
+      ]
+    },
+    "cloth_a": {
+      "colors": [
+        "E8DCC0",
+        "D8C49A",
+        "B8974A",
+        "A8453A",
+        "7E8B5A",
+        "55606B",
+        "3E4A6B",
+        "6B4A6B"
+      ],
+      "weights": [
+        20,
+        18,
+        12,
+        8,
+        13,
+        12,
+        8,
+        3
+      ]
+    },
+    "cloth_b": {
+      "colors": [
+        "4A3A2A",
+        "5E4A33",
+        "6B5B45",
+        "46503F",
+        "3A3A3A",
+        "2A2A2E"
+      ],
+      "weights": [
+        22,
+        20,
+        14,
+        10,
+        18,
+        16
+      ]
+    }
   },
   "slots": [
     {
