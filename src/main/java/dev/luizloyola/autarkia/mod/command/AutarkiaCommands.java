@@ -40,7 +40,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.Entry;
 import dev.luizloyola.autarkia.core.person.Appearance;
-import dev.luizloyola.anima.core.agent.Needs;
+import dev.luizloyola.anima.core.agent.Metabolism;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
@@ -224,6 +224,8 @@ public final class AutarkiaCommands {
                         // Who they can currently SEE — the peers() sense: Persons and live
                         // players, one seamless list, activity read off the visible body.
                         .then(AgentCommands.peers())
+                        // Every gauge the body declared — hunger and company today.
+                        .then(AgentCommands.needs())
                         // What this one is running: species -> modifiers -> effective.
                         .then(AgentCommands.profile())
                         .then(AgentCommands.inv(registryAccess))
@@ -251,18 +253,11 @@ public final class AutarkiaCommands {
                                                 .suggests(ERASABLE_SUGGESTIONS)
                                                 .executes(ctx -> personErase(ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "who")))))
-                                .then(Commands.literal("needs")
-                                        .executes(ctx -> personNeeds(ctx.getSource())))
-                                .then(Commands.literal("setfood")
-                                        .then(Commands.argument("food",
-                                                        IntegerArgumentType.integer(0, Needs.MAX_FOOD))
-                                                .executes(ctx -> personSetFood(ctx.getSource(),
-                                                        IntegerArgumentType.getInteger(ctx, "food"), 0.0F))
-                                                .then(Commands.argument("saturation",
-                                                                FloatArgumentType.floatArg(0.0F, Needs.MAX_FOOD))
-                                                        .executes(ctx -> personSetFood(ctx.getSource(),
-                                                                IntegerArgumentType.getInteger(ctx, "food"),
-                                                                FloatArgumentType.getFloat(ctx, "saturation")))))))));
+                                // `person needs` and `person setfood` moved to `/anima needs` and
+                                // `/anima needs food`: hunger is a gauge on a BODY, not a fact
+                                // about being a settler (a wolf gets hungry too), so by the wolf
+                                // rule they are Anima's, mounted by both roots.
+                        )));
     }
 
     /**
@@ -545,34 +540,7 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** Prints the resolved Person's need levels — the {@code needs().describe()} one-liner. */
-    private static int personNeeds(CommandSourceStack source) {
-        Person person = resolve(source);
-        if (person == null) return 0;
-        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
-                + person.needs().describe()).withStyle(ChatFormatting.AQUA));
-        return 1;
-    }
 
-    /**
-     * Sets the resolved Person's food level (0..20) and saturation (0.0 when omitted) and echoes the
-     * readout — the dev knob for exercising starvation, regen and the Eat instinct without waiting
-     * out the burn. Food goes first because saturation clamps against it; exhaustion is zeroed so
-     * what follows is deterministic.
-     */
-    private static int personSetFood(CommandSourceStack source, int food, float saturation) {
-        Person person = resolve(source);
-        if (person == null) return 0;
-        Needs needs = person.needs();
-        needs.setFoodLevel(food);
-        needs.setSaturation(saturation);
-        needs.setExhaustion(0.0F);
-        // LOGGED: needs persist on the entity and drive the arbiter — a hand-set hunger explains
-        // an eat that would otherwise read as the brain deciding something inexplicable.
-        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
-                + needs.describe()).withStyle(ChatFormatting.AQUA), true);
-        return 1;
-    }
 
     private static Person nearest(CommandSourceStack source) {
         ServerLevel level = source.getLevel();

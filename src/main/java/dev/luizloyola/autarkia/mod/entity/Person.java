@@ -19,8 +19,13 @@ import dev.luizloyola.autarkia.core.person.AppearanceComposer;
 import dev.luizloyola.autarkia.core.person.Look;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
-import dev.luizloyola.anima.core.agent.Needs;
+import dev.luizloyola.anima.core.agent.Metabolism;
+import dev.luizloyola.anima.core.agent.need.Company;
+import dev.luizloyola.anima.core.agent.need.FoodNeed;
+import dev.luizloyola.anima.core.agent.need.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.autarkia.core.person.PersonDanger;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonSpecies;
@@ -168,6 +173,11 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_FOOD_TICK_TIMER = "foodTickTimer";
     private static final String TAG_FOOD_SATURATION = "foodSaturationLevel";
     private static final String TAG_FOOD_EXHAUSTION = "foodExhaustionLevel";
+    /**
+     * How much company they had had when the world last saved. Persisted like the food bar:
+     * loneliness that reset to comfortable on every restart would tell them a reboot happened.
+     */
+    private static final String TAG_COMPANY = "company";
 
     /** Whether this load has projected the directory identity onto the synced fields yet. */
     private boolean identityProjected;
@@ -233,9 +243,9 @@ public class Person extends Avatar implements AgentBody {
     private final PersonalBoard personalBoard = personalBoard(getId());
 
     /**
-     * This person's brain host ({@link BrainDriver}) — a machine beside the {@link #navigator}: it
-     * runs the task executor and only ever <em>reads</em> the body. Transient — a running task is
-     * working state, not persisted; a reload just re-decides.
+     * This person's brain host ({@link BrainDriver}) — a machine beside the {@link #navigator}, on
+     * the other side of the machine/body split from {@link #inventory}/{@link #metabolism}: it runs
+     * the task executor and only ever <em>reads</em> the body.
      */
     private final BrainDriver brain = new BrainDriver(this, new ComposedBoards(
             personalBoard.viewFor(this::getAgentId), this::partyWork));
@@ -325,12 +335,33 @@ public class Person extends Avatar implements AgentBody {
     private final AgentRiser riser = new AgentRiser(this);
 
     /**
-     * This person's need levels ({@link Needs}) — body state beside the {@link #inventory}, not a
-     * brain organ: the entity owns and ticks its own metabolism, as vanilla's {@code FoodData}
-     * belongs to the player rather than to any AI, and the brain only ever <em>reads</em> it.
-     * Persisted in this entity's NBT (see {@link #TAG_FOOD_LEVEL}), ticked by {@link #tickNeeds()}.
+     * This person's food physiology ({@link Metabolism}) — body state beside the
+     * {@link #inventory}, not a brain organ: the entity owns and ticks it, mirroring how vanilla's
+     * {@code FoodData} belongs to the player and not to any AI, and the brain only ever
+     * <em>reads</em> it. Persisted in this entity's NBT (see {@link #TAG_FOOD_LEVEL}), ticked by
+     * {@link #tickNeeds()}.
      */
-    private final Needs needs = new Needs();
+    private final Metabolism metabolism = new Metabolism();
+
+    /**
+     * How much company this settler has had lately — the one gauge below that is its own number
+     * rather than a view. Fed each tick from the being sense and persisted like the food bar.
+     *
+     * <p>Takes the profile as a SUPPLIER: {@link #profile()} builds lazily and this is a field
+     * initialiser, so asking for it here would ask this body what species it is while its fields
+     * are still being assigned.
+     */
+    private final Company company = new Company(this::profile);
+
+    /**
+     * Everything this settler feels, in one roster: hunger (a view over the {@link #metabolism}
+     * above, never a second number) and {@link #company}. One tick site, one readout, and where a
+     * registered need Anima has never heard of would appear.
+     */
+    private final Needs needs = new Needs()
+            .add(new FoodNeed(this.metabolism))
+            .add(this.company);
+
     /**
      * Per-agent aspect modifiers — see {@link #profile()}. Empty until something shifts one.
      *
@@ -599,9 +630,21 @@ public class Person extends Avatar implements AgentBody {
         return this.riser;
     }
 
-    /** This person's need levels — body state the (future) brain reads, never owns. See {@link #needs}. */
+    /** This person's food physiology — body state the brain reads, never owns. See {@link #metabolism}. */
+    @Override
+    public Metabolism metabolism() {
+        return this.metabolism;
+    }
+
+    /** Every gauge this person feels. See {@link #needs}. */
+    @Override
     public Needs needs() {
         return this.needs;
+    }
+
+    /** This person's company gauge, typed — for the load path and the dev command that stages a mood. */
+    public Company company() {
+        return this.company;
     }
 
     /**
@@ -634,15 +677,16 @@ public class Person extends Avatar implements AgentBody {
      * {@code FoodData.tick(ServerPlayer)}:
      *
      * <ol>
-     *   <li><b>Movement exhaustion</b> — 0.1/m sprinting on ground, 0.01/m swimming, walking free,
-     *       measured against last tick's position.</li>
-     *   <li><b>Regen/starvation inputs</b> — the {@code naturalRegeneration} gamerule and hurt-ness.
-     *       {@code isHurt()} is Player-only on 26.1.2, so its body is inlined here: alive and below
-     *       max health.</li>
-     *   <li><b>Effects</b> — core decides <em>what</em> happens ({@link Needs.TickResult}), the body
-     *       applies it: a half-heart heal, a starvation hit on vanilla's 80-tick cadence. Unlike
-     *       vanilla the starvation damage is not difficulty-clamped — starvation must be a real
-     *       cause of death.</li>
+     *   <li><b>Movement exhaustion</b> — vanilla's 0.1/m sprinting and 0.01/m swimming, walking
+     *       free, measured against last tick's position.</li>
+     *   <li><b>Regen/starvation inputs</b> — the {@code naturalRegeneration} gamerule and
+     *       hurt-ness; {@code isHurt()} is Player-only on 26.1.2, so this inlines it: alive and
+     *       below max health.</li>
+     *   <li><b>Effects</b> — core decides ({@link Metabolism.TickResult}), the body applies: a
+     *       half-heart on regen, a starvation hit on vanilla's 80-tick cadence, not
+     *       difficulty-clamped because starvation has to be able to kill.</li>
+     *   <li><b>Every other gauge</b> — the {@link #needs} roster last, on the same beat; food is a
+     *       view over the organ above and does nothing there.</li>
      * </ol>
      */
     private void tickNeeds() {
@@ -653,9 +697,9 @@ public class Person extends Avatar implements AgentBody {
             float meters = (float) Math.sqrt(dx * dx + dz * dz);
             if (meters > 0.0F) {
                 if (isInWater()) {
-                    this.needs.exhaust(Needs.EXHAUSTION_SWIM_PER_METER * meters);
+                    this.metabolism.exhaust(Metabolism.EXHAUSTION_SWIM_PER_METER * meters);
                 } else if (isSprinting() && onGround()) {
-                    this.needs.exhaust(Needs.EXHAUSTION_SPRINT_PER_METER * meters);
+                    this.metabolism.exhaust(Metabolism.EXHAUSTION_SPRINT_PER_METER * meters);
                 }
             }
         }
@@ -667,17 +711,17 @@ public class Person extends Avatar implements AgentBody {
         // feeds (level+1) food at the ×1.0 modifier.
         MobEffectInstance hungerEffect = getEffect(MobEffects.HUNGER);
         if (hungerEffect != null) {
-            this.needs.exhaust(0.005F * (hungerEffect.getAmplifier() + 1));
+            this.metabolism.exhaust(0.005F * (hungerEffect.getAmplifier() + 1));
         }
         MobEffectInstance saturationEffect = getEffect(MobEffects.SATURATION);
         if (saturationEffect != null) {
             int nutrition = saturationEffect.getAmplifier() + 1;
-            this.needs.eat(nutrition, Needs.saturationByModifier(nutrition, 1.0F));
+            this.metabolism.eat(nutrition, Metabolism.saturationByModifier(nutrition, 1.0F));
         }
         boolean naturalRegen =
                 ((ServerLevel) level()).getGameRules().get(GameRules.NATURAL_HEALTH_REGENERATION);
         boolean isHurt = getHealth() > 0.0F && getHealth() < getMaxHealth();
-        Needs.TickResult result = this.needs.tick(naturalRegen, isHurt);
+        Metabolism.TickResult result = this.metabolism.tick(naturalRegen, isHurt);
         if (result.heal() > 0.0F) {
             heal(result.heal());
         }
@@ -686,6 +730,34 @@ public class Person extends Avatar implements AgentBody {
             // serverAiStep, so the level is always the server one (same cast as the Navigator).
             hurtServer((ServerLevel) level(), damageSources().starve(), 1.0F);
         }
+        this.company.observe(knownPeopleNearby());
+        this.needs.tick();
+    }
+
+    /**
+     * How many people this settler can currently perceive and has already met — what feeds the
+     * company gauge. <b>Minded</b> is the being sense's word for "a person" and covers live players
+     * exactly like settlers; <b>{@code INDIVIDUAL}</b> is the evidence gate, since a figure made out
+     * at a distance cannot be somebody you know; <b>in the contact book</b> keeps a stranger beside
+     * you from satisfying the drive to go and introduce yourself.
+     *
+     * <p>Reads the sense's retained tracks rather than forcing a scan — what it last decided on its
+     * own near/far cadence.
+     */
+    private int knownPeopleNearby() {
+        AgentId me = agentId();
+        if (me == null) {
+            return 0;
+        }
+        ContactData contacts = ContactData.get(((ServerLevel) level()).getServer());
+        int count = 0;
+        for (Being being : this.beingSense.beings()) {
+            if (being.kind().minded() && being.identified() == Being.Identified.INDIVIDUAL
+                    && contacts.knows(me, being.id().asPerson())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -698,7 +770,7 @@ public class Person extends Avatar implements AgentBody {
     public void jumpFromGround() {
         super.jumpFromGround();
         if (!level().isClientSide()) {
-            this.needs.exhaust(isSprinting() ? Needs.EXHAUSTION_SPRINT_JUMP : Needs.EXHAUSTION_JUMP);
+            this.metabolism.exhaust(isSprinting() ? Metabolism.EXHAUSTION_SPRINT_JUMP : Metabolism.EXHAUSTION_JUMP);
         }
     }
 
@@ -799,7 +871,7 @@ public class Person extends Avatar implements AgentBody {
         super.actuallyHurt(level, source, amount);
         doHurtEquipment(source, amount,
                 EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
-        this.needs.exhaust(source.getFoodExhaustion());
+        this.metabolism.exhaust(source.getFoodExhaustion());
         // BODY log: the health actually lost (armor/absorption may have trimmed the raw amount) and
         // the resulting health. actuallyHurt is past the invulnerability gate, so every call is a
         // real hit.
@@ -848,16 +920,15 @@ public class Person extends Avatar implements AgentBody {
 
     /**
      * Movement control: choose this tick's gait. Sprinting adds vanilla's ×1.3 speed modifier
-     * (picked up by {@link #driveForward}'s attribute read — call this first) and the sprint-jump
-     * boost in {@code jumpFromGround}. Guarded on change: {@code setSprinting} churns an attribute
-     * modifier.
+     * (read by {@link #driveForward} — call this first) and the sprint-jump forward boost. Guarded
+     * on change, since {@code setSprinting} churns an attribute modifier, and gated on
+     * {@link Metabolism#canSprint()} when enabling; disabling is always allowed.
      *
-     * <p>Enabling is subject to the vanilla food-6 sprint gate ({@link Needs#canSprint()});
-     * disabling is always allowed. A food&le;6 Person therefore cannot sprint, so 3-gap leap paths
-     * fail — the pathfinder doesn't know yet (deferred: hunger-aware {@code MoveCapabilities}).
+     * <p>A food&le;6 Person therefore cannot sprint, so 3-gap leap paths fail and the pathfinder
+     * does not know yet (deferred: hunger-aware {@code MoveCapabilities}).
      */
     public void driveSprint(boolean sprint) {
-        if (sprint && !this.needs.canSprint()) {
+        if (sprint && !this.metabolism.canSprint()) {
             sprint = false;
         }
         if (isSprinting() != sprint) {
@@ -1117,10 +1188,11 @@ public class Person extends Avatar implements AgentBody {
             output.store(TAG_PERSON_ID, UUIDUtil.CODEC, this.personId.value());
         }
         output.store(TAG_INVENTORY, Inventories.CODEC, this.inventory);
-        output.putInt(TAG_FOOD_LEVEL, this.needs.foodLevel());
-        output.putInt(TAG_FOOD_TICK_TIMER, this.needs.tickTimer());
-        output.putFloat(TAG_FOOD_SATURATION, this.needs.saturation());
-        output.putFloat(TAG_FOOD_EXHAUSTION, this.needs.exhaustion());
+        output.putInt(TAG_FOOD_LEVEL, this.metabolism.foodLevel());
+        output.putInt(TAG_FOOD_TICK_TIMER, this.metabolism.tickTimer());
+        output.putFloat(TAG_FOOD_SATURATION, this.metabolism.saturation());
+        output.putFloat(TAG_FOOD_EXHAUSTION, this.metabolism.exhaustion());
+        output.putDouble(TAG_COMPANY, this.company.level());
         // The two switches somebody set ON this body, not the working state the driver re-derives.
         // Written unconditionally: "auto is off" has to survive, and so does turning it back on.
         output.putBoolean(TAG_BRAIN_AUTO, this.brain.isAuto());
@@ -1177,10 +1249,14 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_INVENTORY, Inventories.CODEC).ifPresent(this.inventory::copyFrom);
         // Vanilla FoodData's own load defaults (full food, 5.0 saturation). Food level must load
         // before saturation — saturation clamps against the current food level.
-        this.needs.setFoodLevel(input.getIntOr(TAG_FOOD_LEVEL, Needs.MAX_FOOD));
-        this.needs.setTickTimer(input.getIntOr(TAG_FOOD_TICK_TIMER, 0));
-        this.needs.setSaturation(input.getFloatOr(TAG_FOOD_SATURATION, 5.0F));
-        this.needs.setExhaustion(input.getFloatOr(TAG_FOOD_EXHAUSTION, 0.0F));
+        this.metabolism.setFoodLevel(input.getIntOr(TAG_FOOD_LEVEL, Metabolism.MAX_FOOD));
+        this.metabolism.setTickTimer(input.getIntOr(TAG_FOOD_TICK_TIMER, 0));
+        this.metabolism.setSaturation(input.getFloatOr(TAG_FOOD_SATURATION, 5.0F));
+        this.metabolism.setExhaustion(input.getFloatOr(TAG_FOOD_EXHAUSTION, 0.0F));
+        // read(), not getDoubleOr(): a body saved before this tag existed must be left UNSEEDED so
+        // the gauge still starts at its species' band centre. Any default here would be a number
+        // for "we don't know", and 0.0 (the obvious one) means desperately lonely.
+        input.read(TAG_COMPANY, Codec.DOUBLE).ifPresent(this.company::setLevel);
         // Both default ON, which is both the spawn default and what every Person saved before
         // these tags existed should read as.
         this.brain.restoreSwitches(input.getBooleanOr(TAG_BRAIN_AUTO, true),

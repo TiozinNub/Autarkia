@@ -2,7 +2,7 @@ package dev.luizloyola.autarkia.mod.inv;
 
 import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
-import dev.luizloyola.anima.core.agent.Needs;
+import dev.luizloyola.anima.core.agent.Metabolism;
 import java.util.function.IntSupplier;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.util.Mth;
@@ -70,7 +70,7 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     /** The high 16 bits of {@link #personIdLow}'s id; see there for why the id is split at all. */
     private final DataSlot personIdHigh = DataSlot.standalone();
     /** Last food level the server broadcast; the {@link #foodLevel} slot reads it back on the client. */
-    private int syncedFood = Needs.MAX_FOOD;
+    private int syncedFood = Metabolism.MAX_FOOD;
     /** Live food source: the Person's needs on the server, the {@link #syncedFood} cache on the client. */
     private final IntSupplier foodSource;
     /** Last selected slot the server broadcast; the {@link #selectedSlot} slot reads it back on the client. */

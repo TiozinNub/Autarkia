@@ -2,7 +2,8 @@ package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.AgentProfile;
-import dev.luizloyola.anima.core.agent.Needs;
+import dev.luizloyola.anima.core.agent.Metabolism;
+import dev.luizloyola.anima.core.agent.need.Needs;
 import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.core.agent.TestSpecies;
 import dev.luizloyola.anima.core.brain.BrainContext;
@@ -77,6 +78,11 @@ final class BoardBrainContext implements BrainContext {
             @Override
             public Pos position() {
                 return position;
+            }
+
+            @Override
+            public Metabolism metabolism() {
+                throw new UnsupportedOperationException();
             }
 
             @Override

@@ -71,6 +71,16 @@ public final class PersonSpecies {
             .set(ProfileAspect.DANGER_BABY_MULT, 1.2)
             // --- social: must outrange sight, or a shout adds nothing to looking -------
             .set(ProfileAspect.SOCIAL_HAIL_RADIUS, 48)
+            // Company, as a band a settler tries to sit in: [0.35, 0.85] — wide, so most of a
+            // working day passes with nothing to say about it.
+            .set(ProfileAspect.SOCIAL_COMPANY_CENTER, 0.6)
+            .set(ProfileAspect.SOCIAL_COMPANY_WIDTH, 0.5)
+            // The three rates matter only against each other: two in-game days of solitude empties
+            // a settler, one neighbour fills at twice that, and a minute of conversation is worth
+            // twenty in-game hours of standing beside someone. Starting values, to tune in world.
+            .set(ProfileAspect.SOCIAL_COMPANY_SOLITUDE_TICKS, 48_000)
+            .set(ProfileAspect.SOCIAL_COMPANY_PROXIMITY_TICKS, 24_000)
+            .set(ProfileAspect.SOCIAL_COMPANY_ENCOUNTER_TICKS, 1_200)
             // --- body: a 1.8 hitbox, a vanilla jump, and vanilla's sprint-jump limit ----------
             .set(ProfileAspect.BODY_HEIGHT, 2)
             .set(ProfileAspect.BODY_JUMP_HEIGHT, 1)

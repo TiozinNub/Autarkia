@@ -41,7 +41,7 @@ public final class PersonContainer implements Container {
      * sync. Server-side only — the client menu uses a plain {@code SimpleContainer}, never this.
      */
     public int foodLevel() {
-        return person.needs().foodLevel();
+        return person.metabolism().foodLevel();
     }
 
     /**
