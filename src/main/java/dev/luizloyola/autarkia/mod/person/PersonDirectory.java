@@ -5,9 +5,11 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.compat.SavedDatas;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.Gender;
+import dev.luizloyola.autarkia.core.person.Genotypes;
 import dev.luizloyola.autarkia.core.person.Look;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.appearance.catalog.Catalog;
 import dev.luizloyola.anima.core.agent.PrivateIdentity;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.store.StoreGuard;
@@ -127,11 +129,30 @@ public final class PersonDirectory extends SavedData
      * wide, female slim — see {@link PersonSkins}). Marks the directory dirty.
      */
     private PersonIdentity mint(Gender gender, String name, RandomGenerator random) {
-        Look look = new Look.Skin(PersonSkins.random(random, gender));
         ModelType model = gender.choose(ModelType.WIDE, ModelType.SLIM);
-        PersonIdentity identity = registry.create(AgentId.random(), name, new Appearance(gender, model, look));
+        AgentId id = AgentId.random();
+        PersonIdentity identity = registry.create(id, name, new Appearance(gender, model, look(id, random, gender)));
         setDirty();
         return identity;
+    }
+
+    /**
+     * The look a brand-new person is given: composed from the catalog, seeded from their own id.
+     *
+     * <p>Seeding from the id rather than from {@code random} makes the roll a <em>function of the
+     * person</em> — the same settler always has the same face, a child's seed can later be mixed
+     * from two parents', and a look is reproducible when one goes wrong.
+     *
+     * <p>Falls back to a vanilla skin when no catalog loaded, so a settler looks like they did
+     * before this feature existed.
+     */
+    private static Look look(AgentId id, RandomGenerator random, Gender gender) {
+        Catalog catalog = PersonAppearance.catalog();
+        if (catalog == null) {
+            return new Look.Skin(PersonSkins.random(random, gender));
+        }
+        return Genotypes.roll(id.value().getMostSignificantBits() ^ id.value().getLeastSignificantBits(),
+                catalog, PersonAppearance.choices());
     }
 
     /**

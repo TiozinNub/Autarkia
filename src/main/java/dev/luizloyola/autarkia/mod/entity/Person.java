@@ -43,6 +43,7 @@ import dev.luizloyola.autarkia.mod.inv.PersonInventoryMenu;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.brain.AutarkiaTasks;
+import dev.luizloyola.autarkia.mod.person.PersonAppearance;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import java.util.Locale;
 import java.util.Map;
@@ -1283,7 +1284,8 @@ public class Person extends Avatar implements AgentBody {
         if (!raw.equals(this.appearanceRaw)) {
             this.appearanceRaw = raw;
             this.appearance = Appearance.decode(raw);
-            this.appearanceRecipe = AppearanceComposer.compose(this.appearance);
+            this.appearanceRecipe = AppearanceComposer.compose(this.appearance,
+                    PersonAppearance.catalog(), PersonAppearance::has);
         }
         return this.appearance;
     }
