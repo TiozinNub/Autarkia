@@ -127,6 +127,17 @@ tasks.named<Test>("test") {
     val branchSources = sc.branch.project.file("src/main/java")
     systemProperty("autarkia.arch.sourceRoot", branchSources.absolutePath)
     inputs.dir(branchSources).withPropertyName("branchSources").withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // See the same block in anima/build.gradle.kts: JarContentsTest inspects the artifact that
+    // actually ships — `remapJar` on the Mojang-mapped nodes, `jar` on the unobfuscated ones.
+    val shippedJar = (if (tasks.names.contains("remapJar")) tasks.named<Jar>("remapJar")
+                      else tasks.named<Jar>("jar")).flatMap { it.archiveFile }
+    dependsOn(shippedJar)
+    inputs.file(shippedJar).withPropertyName("shippedJar").withPathSensitivity(PathSensitivity.NAME_ONLY)
+    // A plain String, not a jvmArgumentProviders lambda — a lambda in a build script captures the
+    // script object and the configuration cache cannot serialize that.
+    systemProperty("autarkia.jar", shippedJar.get().asFile.absolutePath)
+    systemProperty("autarkia.version", modVersion)
 }
 
 // Warnings are errors — see the same block in anima/build.gradle.kts for what each exclusion buys
