@@ -130,7 +130,7 @@ public final class PersonDirectory extends SavedData
     private PersonIdentity mint(Gender gender, String name) {
         ModelType model = gender.choose(ModelType.WIDE, ModelType.SLIM);
         AgentId id = AgentId.random();
-        PersonIdentity identity = registry.create(id, name, new Appearance(gender, model, look(id)));
+        PersonIdentity identity = registry.create(id, name, new Appearance(gender, model, look(id, gender)));
         setDirty();
         return identity;
     }
@@ -143,19 +143,23 @@ public final class PersonDirectory extends SavedData
      * reproducible. Public because the self-healing migration gives a person whose bundled skin no
      * longer exists the look they would have been born with.
      */
-    public static Look composedLookFor(AgentId id) {
-        return look(id);
+    public static Look composedLookFor(AgentId id, Gender gender) {
+        return look(id, gender);
     }
 
-    private static Look look(AgentId id) {
+    private static Look look(AgentId id, Gender gender) {
         Catalog catalog = PersonAppearance.catalog();
         if (catalog == null) {
             // No catalog is a broken installation, not a style of settler. One recognisable fallback
             // says so at a glance; nine of them at random would look like a working feature.
             return Look.DEFAULT;
         }
+        // Art is split into male/ and female/ folders, so "what shirts exist" has two answers:
+        // rolling the merged list would hand a man a woman-only shirt, whose torso then silently
+        // draws nothing.
         return Genotypes.roll(id.value().getMostSignificantBits() ^ id.value().getLeastSignificantBits(),
-                catalog, PersonAppearance.choices());
+                catalog, PersonAppearance.choicesGiven(
+                        Map.of("gender", gender.name().toLowerCase(java.util.Locale.ROOT))));
     }
 
     /**

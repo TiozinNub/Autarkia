@@ -89,6 +89,10 @@ public final class AppearanceComposer {
         // The catalog's one word of body vocabulary. It names the geometry rather than implying it,
         // and it is the same thing the arm model is picked by, so there is one control and not two.
         params.put("model", appearance.model().name().toLowerCase(Locale.ROOT));
+        // And gender, which the catalog uses to split art that is DRAWN differently rather than
+        // merely coloured differently — a folder per gender under person/. Nothing in Anima knows
+        // what it means, and a catalog that never mentions it costs nothing.
+        params.put("gender", appearance.gender().name().toLowerCase(Locale.ROOT));
         params.putAll(composed.choices());
         params.putAll(state);
         return params;

@@ -935,7 +935,7 @@ public class Person extends Avatar implements AgentBody {
                 && !PersonAppearance.has(worn.assetId())
                 && level() instanceof ServerLevel serverLevel) {
             identityAppearance = identityAppearance.withLook(
-                    PersonDirectory.composedLookFor(identity.id()));
+                    PersonDirectory.composedLookFor(identity.id(), identityAppearance.gender()));
             PersonDirectory.get(serverLevel.getServer())
                     .replace(identity.withAppearance(identityAppearance));
         }

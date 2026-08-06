@@ -90,6 +90,16 @@ public final class PersonAppearance {
     }
 
     /**
+     * What each parameter may be, once some are decided. Not cached, unlike {@link #choices()}:
+     * asked once per settler over a couple of dozen texture ids, and a cache keyed by an arbitrary
+     * parameter set would cost more than it saves.
+     */
+    public static Map<String, List<String>> choicesGiven(Map<String, String> known) {
+        Catalog loaded = catalog();
+        return loaded == null ? Map.of() : Choices.of(loaded, art(), known);
+    }
+
+    /**
      * What the wardrobe came to, as lines to log once at startup.
      *
      * <p>Everything below degrades <em>quietly</em> — a catalog that did not load, art that did not

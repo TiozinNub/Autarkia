@@ -30,10 +30,23 @@
     "as people. 'uniform' is the job layer over the top — optional, one rule per job, and only",
     "'farmer' exists so far. Adding a job is one rule and one PNG.",
     "",
-    "A texture may name a FAMILY rather than a file: 'autarkia:hair/{hairstyle}' means every PNG in",
-    "that folder is a hairstyle. Nothing lists them — the folder IS the list, so drawing a new one",
-    "makes it choosable with no edit here. In game the parameter comes from the person; in the",
-    "editor it is a dropdown of what exists.",
+    "A texture may name a FAMILY rather than a file: 'autarkia:person/{gender}/hair/{hairstyle}'",
+    "means every PNG in that folder is a hairstyle. Nothing lists them — the folder IS the list, so",
+    "drawing a new one makes it choosable with no edit here. In game the parameter comes from the",
+    "person; in the editor it is a dropdown of what exists.",
+    "",
+    "ART IS SPLIT BY GENDER, and the split is a path and nothing more: male/ and female/ each hold",
+    "their own body, hair, shirts, pants and beard, while the face (eyes, mouth) and the job layer",
+    "(uniforms) are shared because they are drawn the same on anybody. Two things follow, and both",
+    "fall out of the paths rather than out of any rule written anywhere:",
+    "",
+    "  - A ROLL only ever offers what exists for that person. 'what shirts are there' has two",
+    "    answers once the art is split, and a settler is rolled against the narrower one — handing a",
+    "    man a shirt drawn only for a woman would resolve to a path with no file behind it, and that",
+    "    failure is not an error, it is a torso that draws nothing for the life of the world.",
+    "  - A family a gender has NO folder for is simply not offered to them. That is the whole reason",
+    "    only men have beards: there is no female/beard, so there is nothing to roll, and no code",
+    "    anywhere says anything about who may have one.",
     "",
     "Every file in a family shares the slot's ONE recolouring rule. If that rule is a ramp, every",
     "member must be drawn in the same palette — a ramp cannot have two identity colours. A family",
@@ -43,8 +56,8 @@
     "control and a retint moves every pixel by one HSV difference, so a family that IS one palette",
     "is still better served by a ramp.",
     "",
-    "The body is a family too: 'autarkia:body/{model}' picks slim.png or wide.png, and the",
-    "editor draws the slim arm model for 'slim' — the geometry IS the parameter the skin",
+    "The body is a family too: 'autarkia:person/{gender}/body/{model}' picks slim.png or wide.png,",
+    "and the editor draws the slim arm model for 'slim' — the geometry IS the parameter the skin",
     "is chosen by, so there is one control and not two. Both bodies share the slot's ramp, so both",
     "must be drawn in the same palette — they are, exactly, which is what makes one ramp enough.",
     "",
@@ -81,10 +94,10 @@
     "keys can serve both. With a measured reference nothing needs standardising and nothing needs",
     "recalibrating when a file is redrawn.",
     "",
-    "Everything a person is made of lives under textures/person, one folder per CHOICE: body,",
-    "hair, shirts, pants, uniforms, face. A folder is a family and its files are the options, so",
-    "adding a shirt is dropping a PNG into shirts/ — the picker lists it, and nothing here changes.",
-    "",
+    "Everything a person is made of lives under textures/person: male/ and female/ hold one",
+    "folder per CHOICE (body, hair, shirts, pants, beard), and eyes/, mouth/ and uniforms/ are",
+    "shared. A folder is a family and its files are the options, so adding a shirt is dropping a",
+    "PNG into that gender's shirts/ — the picker lists it, and nothing here changes.",
     "",
     "A STATE is a suffix that falls back, exactly as a model cut is: eyes/{mood}_blink before",
     "eyes/{mood}, mouth/{mood}_open before mouth/{mood}, beard/{beard}_speaking before",
@@ -308,7 +321,7 @@
       ],
       "select": [
         {
-          "texture": "autarkia:person/body/{model}"
+          "texture": "autarkia:person/{gender}/body/{model}"
         }
       ]
     },
@@ -324,7 +337,7 @@
       ],
       "select": [
         {
-          "texture": "autarkia:person/pants/{pants}"
+          "texture": "autarkia:person/{gender}/pants/{pants}"
         }
       ]
     },
@@ -340,8 +353,8 @@
       "select": [
         {
           "texture": [
-            "autarkia:person/shirts/{shirt}_{model}",
-            "autarkia:person/shirts/{shirt}"
+            "autarkia:person/{gender}/shirts/{shirt}_{model}",
+            "autarkia:person/{gender}/shirts/{shirt}"
           ]
         }
       ]
@@ -397,12 +410,12 @@
             "speaking": "true"
           },
           "texture": [
-            "autarkia:person/beard/{beard}_speaking",
-            "autarkia:person/beard/{beard}"
+            "autarkia:person/{gender}/beard/{beard}_speaking",
+            "autarkia:person/{gender}/beard/{beard}"
           ]
         },
         {
-          "texture": "autarkia:person/beard/{beard}"
+          "texture": "autarkia:person/{gender}/beard/{beard}"
         }
       ]
     },
@@ -483,8 +496,8 @@
       "select": [
         {
           "texture": [
-            "autarkia:person/hair/{hairstyle}_{model}",
-            "autarkia:person/hair/{hairstyle}"
+            "autarkia:person/{gender}/hair/{hairstyle}_{model}",
+            "autarkia:person/{gender}/hair/{hairstyle}"
           ]
         }
       ]
