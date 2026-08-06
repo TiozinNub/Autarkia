@@ -13,7 +13,6 @@ import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.log.AgentJournal;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
-import dev.luizloyola.anima.core.appearance.Part;
 import dev.luizloyola.anima.core.appearance.Recipe;
 import dev.luizloyola.autarkia.core.person.Appearance;
 import dev.luizloyola.autarkia.core.person.AppearanceComposer;
@@ -45,7 +44,6 @@ import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Navigator;
 import dev.luizloyola.autarkia.mod.brain.AutarkiaTasks;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -101,12 +99,6 @@ import org.jspecify.annotations.Nullable;
  * Persons; this class adds only what it means to be a <em>person</em>.
  */
 public class Person extends Avatar implements AgentBody {
-    /**
-     * Default skin, as a texture <em>asset id</em> — vanilla's own Steve, which every client
-     * already has. Autarkia ships no skin textures at all; see {@link PersonSkins} for why.
-     */
-    public static final Identifier DEFAULT_SKIN = Identifier.parse(PersonSkins.DEFAULT_SKIN);
-
     /**
      * External identity synced to clients for rendering, as one encoded {@link Appearance}: gender,
      * body model and look together. Projected from the person's record in the
@@ -1298,18 +1290,14 @@ public class Person extends Avatar implements AgentBody {
 
     /**
      * What to bake to draw this person — Anima's currency, composed from {@link #appearance()} by
-     * Autarkia's own composer. Today it is one whole-canvas part naming a vanilla skin, so the bake
-     * is that PNG unchanged; the renderer already goes through here so that stops being true
-     * without anything downstream noticing.
+     * Autarkia's own composer. Today one whole-canvas part naming a vanilla skin, and the client
+     * renders through the bake either way. The same object comes back until the synced appearance
+     * moves, so {@code ClientPerson}'s texture handle recognises "still the same look" without
+     * hashing a recipe every frame.
      */
     public Recipe appearanceRecipe() {
         appearance();
         return this.appearanceRecipe;
-    }
-
-    public Identifier getSkinTexture() {
-        List<Part> statics = appearanceRecipe().statics();
-        return statics.isEmpty() ? DEFAULT_SKIN : Identifier.parse(statics.get(0).texture());
     }
 
     /** This person's synced gender (readable on both sides). Part of the external identity. */
@@ -1356,7 +1344,7 @@ public class Person extends Avatar implements AgentBody {
 
     /**
      * Supplies the game-profile {@link Avatar} exposes on 26.1. Unused for rendering — the visible
-     * skin comes from {@link #getSkinTexture()} via the renderer, not from this profile. No
+     * skin is baked from {@link #appearanceRecipe()} on the client, not read off this profile. No
      * {@code @Override}: pre-26.1 {@code Avatar} has no such method, where this is harmless dead code.
      */
     public ResolvableProfile getProfile() {

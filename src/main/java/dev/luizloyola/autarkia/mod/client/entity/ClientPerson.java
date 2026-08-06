@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.client.entity;
 
+import dev.luizloyola.anima.mod.client.appearance.BakedTextures;
 import dev.luizloyola.autarkia.mod.client.anim.ShadowPlayer;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import net.fabricmc.api.EnvType;
@@ -9,6 +10,7 @@ import net.minecraft.client.entity.ClientAvatarState;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.parrot.Parrot;
@@ -36,6 +38,11 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
      *  that mod is present — see {@link ShadowPlayer}. Lives here, not on the renderer, because NEA
      *  keeps per-entity animation state on it and one model instance serves every Person on screen. */
     private @Nullable ShadowPlayer shadow;
+
+    /** This Person's live baked texture — one reference into Anima's shared cache, given back in
+     *  {@link #onClientRemoval()}. Two Persons who genuinely look the same hold two handles on one
+     *  texture, so the handle counts rather than owns. */
+    private final BakedTextures.Handle bakedSkin = BakedTextures.handle();
 
     public ClientPerson(EntityType<? extends Person> type, Level level) {
         super(type, level);
@@ -65,14 +72,37 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
         this.avatarState.tick(position(), getDeltaMovement());
     }
 
-    /** Build a player skin pointing at this Person's chosen texture file, with the arm model
-     *  (wide/slim) their appearance calls for. The renderer reads this model type back to pick the
-     *  matching baked model. Also serves the {@link ClientAvatarEntity} contract. */
+    /**
+     * Build a player skin pointing at this Person's <b>baked</b> texture, with the arm model
+     * (wide/slim) their appearance calls for; the renderer reads this model type back to pick the
+     * matching baked model. Also serves the {@link ClientAvatarEntity} contract.
+     *
+     * <p>Called once per frame per visible Person, so the handle is a field.
+     *
+     * <p>⚠️ The <b>two-argument</b> {@code ResourceTexture} constructor, deliberately: the
+     * one-argument form derives {@code textures/<id>.png} from the id, right for art in a pack and
+     * wrong for a texture registered under its name — a double-wrap this project has paid for once
+     * already.
+     */
     @Override
     public PlayerSkin getSkin() {
-        ClientAsset.Texture body = new ClientAsset.ResourceTexture(getSkinTexture());
+        Identifier baked = this.bakedSkin.textureFor(appearanceRecipe());
+        ClientAsset.Texture body = new ClientAsset.ResourceTexture(baked, baked);
         PlayerModelType model = isSlim() ? PlayerModelType.SLIM : PlayerModelType.WIDE;
         return PlayerSkin.insecure(body, null, null, model);
+    }
+
+    /**
+     * Hand the baked texture back when this body leaves the client.
+     *
+     * <p>Without it a settlement's worth of composited skins accumulates in native memory, where a
+     * leak never shows up in a heap profile. Anima frees a texture only when the last Person
+     * wearing that look lets go, so this is a decrement, and safe to reach twice.
+     */
+    @Override
+    public void onClientRemoval() {
+        super.onClientRemoval();
+        this.bakedSkin.dispose();
     }
 
     @Override
