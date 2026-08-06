@@ -1,6 +1,5 @@
 package dev.luizloyola.autarkia.core.tree;
 
-import dev.luizloyola.anima.compat.sense.LevelProbe;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRule;

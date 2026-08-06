@@ -120,6 +120,23 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+
+    // See the same block in anima/build.gradle.kts: ArchitectureTest reads the BRANCH's source as
+    // text (`autarkia/src`), because that is the one form that still carries `//?` directives and
+    // the one form every node is generated from.
+    val branchSources = sc.branch.project.file("src/main/java")
+    systemProperty("autarkia.arch.sourceRoot", branchSources.absolutePath)
+    inputs.dir(branchSources).withPropertyName("branchSources").withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// Warnings are errors — see the same block in anima/build.gradle.kts for what each exclusion buys
+// and why the list is `all` minus four rather than four named checks. `-Plint=off` opts out.
+tasks.withType<JavaCompile>().configureEach {
+    if (providers.gradleProperty("lint").orNull != "off") {
+        options.compilerArgs.addAll(
+            listOf("-Xlint:all,-classfile,-deprecation,-this-escape,-dangling-doc-comments", "-Werror")
+        )
+    }
 }
 
 // See the same block in anima/build.gradle.kts for the full story: Gradle rewrites an archive in
