@@ -1,7 +1,10 @@
+import net.ltgt.gradle.errorprone.errorprone
+
 plugins {
     // This plugin applies the correct loom variant based on the Minecraft version
     id("dev.kikugie.loom-back-compat")
     id("me.modmuss50.mod-publish-plugin") version "2.1.1"
+    id("net.ltgt.errorprone") version "5.1.0"
 }
 
 // DO NOT set group = ...!
@@ -116,6 +119,8 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    errorprone("com.google.errorprone:error_prone_core:2.50.0")
 }
 
 tasks.named<Test>("test") {
@@ -143,10 +148,18 @@ tasks.named<Test>("test") {
 // Warnings are errors — see the same block in anima/build.gradle.kts for what each exclusion buys
 // and why the list is `all` minus four rather than four named checks. `-Plint=off` opts out.
 tasks.withType<JavaCompile>().configureEach {
-    if (providers.gradleProperty("lint").orNull != "off") {
+    val lint = providers.gradleProperty("lint").orNull != "off"
+    if (lint) {
         options.compilerArgs.addAll(
             listOf("-Xlint:all,-classfile,-deprecation,-this-escape,-dangling-doc-comments", "-Werror")
         )
+    }
+    options.errorprone {
+        isEnabled = lint
+        // Mixins are excluded — see anima/build.gradle.kts for why an injector's unread parameter
+        // is not dead code.
+        excludedPaths = ".*/mixin/.*"
+        disableAllWarnings = true
     }
 }
 

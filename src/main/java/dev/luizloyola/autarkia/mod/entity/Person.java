@@ -1244,6 +1244,11 @@ public class Person extends Avatar implements AgentBody {
      * lying there. Items {@code target}ed at a player are not special-cased — {@code ItemEntity}
      * exposes no accessor, and vanilla's own mob looting ignores it too.
      */
+    // The pickup sound's pitch is vanilla's own idiom, `(nextFloat() - nextFloat()) * 0.7 + 1`,
+    // which spreads the pitch symmetrically around 1. Error Prone reads the two identical calls as
+    // one value and concludes the difference is always zero; they are two draws from a mutable
+    // generator, so it is not.
+    @SuppressWarnings("IdentityBinaryExpression")
     private void pickUpNearbyItems(ServerLevel level) {
         if (!isAlive()) {
             return;
