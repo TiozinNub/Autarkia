@@ -14,15 +14,17 @@ import java.util.random.RandomGenerator;
  * Where a person's looks come from: one roll, from their own id, never again.
  *
  * <h2>Rolled from the agent, not from a moment</h2>
- * The seed comes from the {@link dev.luizloyola.anima.core.agent.AgentId}, so the same person
- * always rolls the same face — a genotype a body <em>has</em> rather than one a save file
- * remembers, and the hook heritability hangs on: a child's seed can be mixed from two parents'.
+ * The seed comes from the {@link dev.luizloyola.anima.core.agent.AgentId}, so the same person always
+ * rolls the same face, and a child's seed can later be mixed from two parents' rather than drawn
+ * fresh.
  *
- * <h2>Weighted, not uniform</h2>
- * A flat draw over a twelve-entry tone ladder gives as many of the palest as of the mid tones and
- * reads as a random table. Ladder positions are therefore <b>triangular</b> — the mean of two
- * uniform draws — so the middle is common and the ends rare. Family members stay uniform: a
- * hairstyle is a choice, not a spectrum.
+ * <h2>Never uniform</h2>
+ * A flat draw over a twelve-entry tone ladder gives as many of the palest as of the mid tones, which
+ * reads as a random table. How a ladder is drawn is its own business (see {@code LadderSpec}):
+ * authored {@code weights}, else a triangular hump over the order given.
+ *
+ * <p>Families stay uniform (a family is a choice with no middle for a bias to be about), so one
+ * that wants odds states them per member.
  */
 public final class Genotypes {
     private Genotypes() {}
@@ -48,9 +50,9 @@ public final class Genotypes {
     public static Look.Composed roll(long seed, Catalog catalog, Map<String, List<String>> choices) {
         RandomGenerator random = new java.util.SplittableRandom(seed);
         Map<String, Integer> ladders = new LinkedHashMap<>();
-        catalog.ladders().forEach((name, entries) -> {
-            if (!entries.isEmpty()) {
-                ladders.put(name, triangular(random, entries.size()));
+        catalog.ladders().forEach((name, ladder) -> {
+            if (ladder.size() > 0) {
+                ladders.put(name, ladder.pick(random));
             }
         });
 
@@ -92,12 +94,4 @@ public final class Genotypes {
         return optional;
     }
 
-    /**
-     * A ladder position, biased to the middle — the mean of two uniform draws.
-     *
-     * <p>Integer division truncates, tilting the result imperceptibly low; not worth correcting.
-     */
-    private static int triangular(RandomGenerator random, int size) {
-        return size <= 1 ? 0 : (random.nextInt(size) + random.nextInt(size)) / 2;
-    }
 }
