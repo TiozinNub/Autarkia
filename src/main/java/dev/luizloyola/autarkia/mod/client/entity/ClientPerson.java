@@ -117,8 +117,11 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
      */
     private Recipe liveRecipe() {
         Recipe base = appearanceRecipe();
-        boolean shut = Blink.shutAt(getAgentId().value().getLeastSignificantBits(),
-                System.currentTimeMillis());
+        // The ENTITY's uuid, not the agent id. An agent id is @Nullable — empty until the server
+        // has projected an identity onto the body and synced it, the state a freshly summoned
+        // Person is in — and this runs on the render thread, where an NPE is a crash report. A
+        // blink needs no agent, only a number that differs between bodies.
+        boolean shut = Blink.shutAt(getUUID().getLeastSignificantBits(), System.currentTimeMillis());
         if (this.composed == null || this.composedFrom != base || this.eyesShut != shut) {
             this.composedFrom = base;
             this.eyesShut = shut;
