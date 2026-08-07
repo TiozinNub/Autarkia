@@ -79,13 +79,13 @@ class PersonSpeciesTest {
     @Test
     @DisplayName("the generated knobs land in autarkia.json, namespaced under the species")
     void theKnobsAreOursAndNamespaced() {
-        for (ProfileAspect aspect : ProfileAspect.values()) {
+        for (ProfileAspect aspect : ProfileAspect.all()) {
             KnobSpec knob = PersonSpecies.KNOBS.knob(aspect);
             assertEquals("person.anima_settings." + aspect.key(), knob.key());
             assertEquals(PersonSpecies.PROFILE.get(aspect), knob.def(),
                     knob.key() + " must default to what the species declared");
         }
-        assertEquals(ProfileAspect.values().length, PersonSpecies.KNOBS.knobs().size(),
+        assertEquals(ProfileAspect.count(), PersonSpecies.KNOBS.knobs().size(),
                 "the whole schema is generated, never a hand-picked subset");
     }
 }
