@@ -52,8 +52,9 @@ public class AutarkiaMod implements ModInitializer {
     public static final String MINECRAFT = /*$ minecraft*/ "26.1.2";
 
     /**
-     * {@code config/autarkia.json} — today, what a Person is like. Anima keeps the schema
-     * of a mind; the values for this body are ours.
+     * {@code config/autarkia.toml} — today, what a Person is like. Anima keeps the schema
+     * of a mind; the values describing this body are ours, so they live in our file behind our
+     * command.
      */
     public static final ConfigFile CONFIG = new ConfigFile(AutarkiaConfig.store());
 
@@ -62,7 +63,7 @@ public class AutarkiaMod implements ModInitializer {
         // Load before anything can read a Person's aspects. Anima's own file (the limits, the
         // journal, the flee weights) is loaded by its initializer; this one holds the species.
         for (String problem : CONFIG.reload()) {
-            LOGGER.warn("autarkia.json: {}", problem);
+            LOGGER.warn("autarkia.toml: {}", problem);
         }
         // The weights cannot be generated here: modded and datapack entity types only exist
         // once the registries freeze, so this waits for a server to start.

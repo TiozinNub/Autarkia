@@ -5,15 +5,12 @@ import dev.luizloyola.anima.core.agent.SpeciesKnobs;
 import dev.luizloyola.anima.core.agent.SpeciesProfile;
 
 /**
- * What a Person is like — Autarkia's answer to every aspect of a mind Anima names.
- *
- * <p>These numbers used to be Anima's, in {@code anima.json}, applying to every agent in the world;
- * 24 blocks of eyesight and a 150° cone describe a settler, not a wolf. The library kept the schema
- * ({@link ProfileAspect}) and the mod that ships the body took the values, unchanged to the digit.
+ * What a Person is like — Autarkia's answer to every aspect of a mind Anima names. The library keeps
+ * the schema ({@link ProfileAspect}) and the mod that ships the body keeps the values: 24 blocks of
+ * eyesight, a 150° cone and a 16-block flee range describe a settler, not a wolf or a rabbit.
  *
  * <p>{@link SpeciesProfile.Builder#build()} hard-fails naming anything left unanswered, so a new
- * Anima aspect stops the build here until somebody decides what a settler thinks about it — better
- * than quietly inheriting a library's guess.
+ * aspect in Anima stops the build here rather than letting a settler inherit a library's guess.
  */
 public final class PersonSpecies {
 
@@ -89,7 +86,7 @@ public final class PersonSpecies {
             .set(ProfileAspect.BODY_CAN_SWIM, true)
             .build();
 
-    /** The same declaration as tunables in {@code autarkia.json}, under {@code person.*}. */
+    /** The same declaration as tunables in {@code autarkia.toml}, under {@code person.*}. */
     public static final SpeciesKnobs KNOBS = SpeciesKnobs.of(PROFILE);
 
     private PersonSpecies() {

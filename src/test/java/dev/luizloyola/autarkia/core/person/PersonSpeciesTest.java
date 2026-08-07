@@ -13,9 +13,8 @@ import org.junit.jupiter.api.Test;
  * What a settler is, pinned.
  *
  * <p>These numbers were Anima's knob defaults, guarded by Anima's suite; they are Autarkia's now —
- * the library has no opinion about how far a Person sees — so the guard moved with them. Every
- * value below is unchanged from what {@code anima.json} shipped before the split, the claim this
- * file enforces.
+ * the library has no opinion about how far a Person sees — so the guard moved with them. Every value
+ * below is unchanged from what {@code anima.toml} shipped before the split.
  */
 class PersonSpeciesTest {
 
@@ -77,7 +76,7 @@ class PersonSpeciesTest {
     }
 
     @Test
-    @DisplayName("the generated knobs land in autarkia.json, namespaced under the species")
+    @DisplayName("the generated knobs land in autarkia.toml, namespaced under the species")
     void theKnobsAreOursAndNamespaced() {
         for (ProfileAspect aspect : ProfileAspect.all()) {
             KnobSpec knob = PersonSpecies.KNOBS.knob(aspect);

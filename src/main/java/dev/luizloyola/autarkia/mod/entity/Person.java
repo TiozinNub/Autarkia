@@ -1141,12 +1141,11 @@ public class Person extends Avatar implements AgentBody {
 
     /**
      * What this settler is like: {@link PersonSpecies} read live through
-     * {@code config/autarkia.json} — so {@code /autarkia config reload} retunes a Person
+     * {@code config/autarkia.toml} — so {@code /autarkia config reload} retunes a Person
      * mid-stride — plus whatever is currently shifting this particular one.
      *
-     * <p>Nothing shifts one yet (no traits, skills or jobs), so {@link ModifiedProfile#of} hands
-     * back the shared species view unchanged, allocating nothing; {@code /autarkia profile} shows
-     * the derivation either way.
+     * <p>Nothing shifts one yet: with no traits, skills or jobs to hang a modifier on,
+     * {@link ModifiedProfile#of} hands back the shared species view unchanged, allocating nothing.
      */
     @Override
     public AgentProfile profile() {

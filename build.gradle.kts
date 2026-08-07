@@ -85,6 +85,17 @@ dependencies {
     // runtime.
     implementation(project(path = anima.path, configuration = "namedElements"))
 
+    // night-config, for the DEV RUN only — Autarkia never names it. Anima's config machinery
+    // reads and writes `config/autarkia.toml` on Autarkia's behalf, so the classes must be on the
+    // classpath when the dev client/server launches, and `namedElements` publishes Anima's jar
+    // without Anima's dependencies. A shipped Autarkia gets them the proper way: Anima nests
+    // them, and fabric.mod.json already makes Anima a hard dependency. Not
+    // `include`d here — two copies of one library is the whole problem jar-in-jar creates.
+    val nightConfig: String = sc.properties["deps.night_config"]
+    for (module in listOf("core", "toml")) {
+        implementation("com.electronwill.night-config:$module:$nightConfig")
+    }
+
     // Use `mod{dependency type}` even on 26.1+ - loom-back-compat converts them
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
     fapi(
