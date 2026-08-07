@@ -359,7 +359,7 @@ public class Person extends Avatar implements AgentBody {
      * registered need Anima has never heard of would appear.
      */
     private final Needs needs = new Needs()
-            .add(new FoodNeed(this.metabolism))
+            .add(new FoodNeed(this.metabolism, this::profile))
             .add(this.company);
 
     /**
@@ -1192,7 +1192,7 @@ public class Person extends Avatar implements AgentBody {
         output.putInt(TAG_FOOD_TICK_TIMER, this.metabolism.tickTimer());
         output.putFloat(TAG_FOOD_SATURATION, this.metabolism.saturation());
         output.putFloat(TAG_FOOD_EXHAUSTION, this.metabolism.exhaustion());
-        output.putDouble(TAG_COMPANY, this.company.level());
+        output.putDouble(TAG_COMPANY, this.company.value());
         // The two switches somebody set ON this body, not the working state the driver re-derives.
         // Written unconditionally: "auto is off" has to survive, and so does turning it back on.
         output.putBoolean(TAG_BRAIN_AUTO, this.brain.isAuto());
@@ -1256,7 +1256,7 @@ public class Person extends Avatar implements AgentBody {
         // read(), not getDoubleOr(): a body saved before this tag existed must be left UNSEEDED so
         // the gauge still starts at its species' band centre. Any default here would be a number
         // for "we don't know", and 0.0 (the obvious one) means desperately lonely.
-        input.read(TAG_COMPANY, Codec.DOUBLE).ifPresent(this.company::setLevel);
+        input.read(TAG_COMPANY, Codec.DOUBLE).ifPresent(this.company::setValue);
         // Both default ON, which is both the spawn default and what every Person saved before
         // these tags existed should read as.
         this.brain.restoreSwitches(input.getBooleanOr(TAG_BRAIN_AUTO, true),
