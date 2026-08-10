@@ -289,7 +289,7 @@ public final class ClearArea implements PartyProject {
         withdrawAll();
         refresh(now);
         if (ctx != null) {
-            ctx.journal().record(Category.PROJECT, describe(), switch (next) {
+            ctx.journal().record(Category.PROJECT, name(), switch (next) {
                 case CLEARING -> "surveyed — " + count(TargetState.OPEN) + " to clear";
                 case VERIFYING -> "cleared — checking the whole box again";
                 case DONE -> closingLine();
@@ -335,7 +335,7 @@ public final class ClearArea implements PartyProject {
             reported.add(slice);
             sliceRetryAfter.remove(slice);
             int found = harvest(ctx);
-            ctx.journal().record(Category.PROJECT, describe(),
+            ctx.journal().record(Category.PROJECT, name(),
                     "slice " + (slice + 1) + "/" + slices.size() + " walked — "
                             + (found == 0 ? "nothing new" : found + " found"));
         } else {
@@ -363,7 +363,7 @@ public final class ClearArea implements PartyProject {
             boolean giveUp = failures >= REFUSE_AFTER;
             settle(key.at(), giveUp ? TargetState.REFUSED : TargetState.OPEN,
                     failures, giveUp ? 0L : now + FAIL_COOLDOWN);
-            ctx.journal().record(Category.PROJECT, describe(), giveUp
+            ctx.journal().record(Category.PROJECT, name(), giveUp
                     ? "gave up on " + at(key.at()) + " after " + failures + " tries"
                     : "failed at " + at(key.at()) + ", retry in " + FAIL_COOLDOWN + "t");
         }
@@ -418,8 +418,16 @@ public final class ClearArea implements PartyProject {
 
     @Override
     public String describe() {
-        return "clear " + clearing.label() + " in " + size() + " at " + at(bounds.min())
-                + " — " + progress();
+        return name() + " — " + progress();
+    }
+
+    /**
+     * What this project is, with no word about how far along it is — the subject every journal line
+     * is filed under. Separate from {@link #describe()}, which wants both in one string: the closing
+     * line came out {@code done (3 cleared - done) 3 cleared}.
+     */
+    private String name() {
+        return "clear " + clearing.label() + " in " + size() + " at " + at(bounds.min());
     }
 
     private String progress() {
@@ -543,6 +551,11 @@ public final class ClearArea implements PartyProject {
         public String describe() {
             return "survey slice " + (index + 1) + "/" + slices.size() + " of " + clearing.label();
         }
+
+        @Override
+        public String progress(BrainContext ctx) {
+            return reported.size() + "/" + slices.size() + " slices walked";
+        }
     }
 
     /** Remove the one thing standing here. Named by its anchor, which is also its site claim. */
@@ -571,6 +584,12 @@ public final class ClearArea implements PartyProject {
         @Override
         public String describe() {
             return "clear the " + clearing.label() + " at " + at(key.at());
+        }
+
+        @Override
+        public String progress(BrainContext ctx) {
+            return count(TargetState.CLEARED) + "/" + (ledger.size() - count(TargetState.REFUSED))
+                    + " cleared";
         }
     }
 

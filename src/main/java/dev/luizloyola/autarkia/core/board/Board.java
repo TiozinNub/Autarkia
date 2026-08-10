@@ -385,9 +385,13 @@ public class Board {
 
         @Override
         public void completed(WorkItem item, BrainContext ctx) {
+            // Tell the project first, then write the line: the outcome is what advances progress,
+            // so a line written before the hand-over reports the state the errand was leaving — it
+            // read "closed (0/1 cleared)" on the errand that cleared the one. Only wrong for work
+            // whose progress its own project keeps.
+            Board.this.completed(item, member.get(), ctx);
             ctx.journal().record(Category.PROJECT, item.describe(),
                     "closed (" + item.progress(ctx) + ")");
-            Board.this.completed(item, member.get(), ctx);
         }
 
         @Override

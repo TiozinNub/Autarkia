@@ -3,18 +3,20 @@ package dev.luizloyola.autarkia.core.tree;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.autarkia.core.board.Clearing;
 
 /**
  * Clearing a box of its trees — the first {@link Clearing}.
  *
- * <p>Removing is free: {@link ChopPlannedTree} already claims the site at the anchor, so an item
- * lease and a site claim coincide without either keyspace knowing about the other.
+ * <p>Removing is {@link ChopPlannedTree}, which takes its own site claim at the anchor, so an
+ * item lease and a site claim on a clear-area target coincide without either keyspace knowing
+ * about the other.
  *
- * <p>Surveying is not built (ladder step 2) and {@link #surveys()} says so, so the project offers
- * no errands and its readout names the reason. Its surveyor must WALK the slice: a {@code Survey}
- * from a standing spot reports coarse glimpses, while per-tree anchors grow from the near field.
+ * <p>Looking is {@link SurveyArea}, which WALKS its slice: a standing {@code Survey} reports
+ * only coarse-grid glimpses, while the per-tree anchors a ledger needs are grown by the near
+ * field alone. Rays rule out open ground cheaply, feet find the trees.
  */
 public final class TreeClearing implements Clearing {
 
@@ -45,13 +47,12 @@ public final class TreeClearing implements Clearing {
 
     @Override
     public boolean surveys() {
-        return false;
+        return true;
     }
 
     @Override
     public Task survey(Region slice) {
-        throw new IllegalStateException("no tree surveyor yet — surveys() says so, and "
-                + "ClearArea offers no survey items while it does");
+        return new SurveyArea(slice, Pois.TREE);
     }
 
     @Override
