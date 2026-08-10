@@ -79,7 +79,7 @@ public final class PersonSpecies {
             // bar. Starting values, to be tuned in world.
             .set(ProfileAspect.SOCIAL_COMPANY_UTTERANCES, 30)
             // --- body: a 1.8 hitbox, a vanilla jump, and vanilla's sprint-jump limit ----------
-            .set(ProfileAspect.BODY_HEIGHT, 2)
+            .set(ProfileAspect.BODY_HEIGHT, 1.8)   // the real hitbox, not a cell count
             .set(ProfileAspect.BODY_JUMP_HEIGHT, 1)
             .set(ProfileAspect.BODY_MAX_DROP, 3)
             .set(ProfileAspect.BODY_MAX_LEAP, 3)

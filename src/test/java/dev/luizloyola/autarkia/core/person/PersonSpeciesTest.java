@@ -59,7 +59,9 @@ class PersonSpeciesTest {
         assertEquals(48, PERSON.i(ProfileAspect.SOCIAL_HAIL_RADIUS), "social.hail_radius");
 
         // The movement capabilities were never knobs — they were the AgentProfile.PERSON record.
-        assertEquals(2, PERSON.i(ProfileAspect.BODY_HEIGHT), "a 1.8 hitbox is 2 cells");
+        assertEquals(1.8, PERSON.d(ProfileAspect.BODY_HEIGHT), 1.0e-9,
+                "the declared height is the hitbox itself — how many CELLS that costs depends on "
+                        + "how high the floor sits inside its cell, which is MoveCapabilities.topCell");
         assertEquals(1, PERSON.i(ProfileAspect.BODY_JUMP_HEIGHT), "vanilla jump");
         assertEquals(3, PERSON.i(ProfileAspect.BODY_MAX_DROP), "no fall damage worth fearing");
         assertEquals(3, PERSON.i(ProfileAspect.BODY_MAX_LEAP), "vanilla sprint-jump limit");
