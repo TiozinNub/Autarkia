@@ -96,6 +96,8 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.mod.debug.TreeSplitViewer.init();
         // The same trees, drawn with their chop dance cards.
         dev.luizloyola.autarkia.mod.debug.TreeChopPlanViewer.init();
+        // Layer 3's own: a party's clearing project drawn over the ground it covers.
+        dev.luizloyola.autarkia.mod.debug.BoardViewer.init();
         // Teach Anima who Persons are. It asks only for the private tier (the name); the public
         // tier stays ours to sync. Providers chain, so a future pets mod answers for its own ids
         // beside this one.

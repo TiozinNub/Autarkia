@@ -50,6 +50,20 @@ public final class PartyBoard extends Board {
         closeFinished();
     }
 
+    /**
+     * Who is holding which of this project's errands right now, by durable name.
+     *
+     * <p>Keyed rather than by item so a caller can match a hold against project state it already
+     * has — a debug view knows anchors, not the item objects the board leases by.
+     */
+    public Map<WorkKey, AgentId> holdsOn(PartyProject project, long now) {
+        Map<WorkKey, AgentId> out = new java.util.LinkedHashMap<>();
+        for (Map.Entry<WorkItem, AgentId> hold : held(now)) {
+            project.keyOf(hold.getKey()).ifPresent(key -> out.put(key, hold.getValue()));
+        }
+        return out;
+    }
+
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
     /**

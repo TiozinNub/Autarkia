@@ -137,7 +137,7 @@ public final class TreeChopPlanViewer {
             return;
         }
         CellOverlays.show(player,
-                new CellOverlayPayload(SOURCE, TTL_TICKS, groups, List.of(), labels));
+                new CellOverlayPayload(SOURCE, TTL_TICKS, groups, List.of(), List.of(), labels));
     }
 
     /** One tree's card: gold mast, clock-hued moves, washed-out digs, painted refusals. */

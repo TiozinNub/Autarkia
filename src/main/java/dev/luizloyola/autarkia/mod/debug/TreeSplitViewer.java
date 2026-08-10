@@ -220,7 +220,7 @@ public final class TreeSplitViewer {
             return;
         }
         CellOverlays.show(player,
-                new CellOverlayPayload(SOURCE, TTL_TICKS, groups, faces, labels));
+                new CellOverlayPayload(SOURCE, TTL_TICKS, groups, faces, List.of(), labels));
     }
 
     /** One tree's paint: hue by anchor, shade by role, and its tally floating over the top. */

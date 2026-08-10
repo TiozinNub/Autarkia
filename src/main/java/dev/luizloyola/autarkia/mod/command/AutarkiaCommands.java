@@ -9,6 +9,7 @@ import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.command.AgentCommands;
 import dev.luizloyola.anima.mod.command.AgentSelection;
 import dev.luizloyola.anima.mod.command.Replies;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -54,6 +55,7 @@ import dev.luizloyola.anima.mod.brain.Knowledges;
 import dev.luizloyola.anima.mod.brain.BeingViewer;
 import dev.luizloyola.anima.mod.debug.DebugLayer;
 import dev.luizloyola.anima.mod.debug.DebugView;
+import dev.luizloyola.autarkia.mod.debug.BoardViewer;
 import dev.luizloyola.autarkia.mod.debug.TreeChopPlanViewer;
 import dev.luizloyola.autarkia.mod.debug.TreeSplitViewer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
@@ -242,9 +244,13 @@ public final class AutarkiaCommands {
                                                                                 BlockPosArgument.getLoadedBlockPos(ctx, "from"),
                                                                                 BlockPosArgument.getLoadedBlockPos(ctx, "to"),
                                                                                 DoubleArgumentType.getDouble(ctx, "priority"))))))))
-                                // Scoped, because the two boards number their projects
-                                // independently and the readout shows both as "#1" — see
-                                // boardCancel for what an unscoped guess costs.
+                                // The ledger over the world it is about. Layer 3 is the one layer
+                                // with no body to look at, so this is its only visual.
+                                .then(Commands.literal("view")
+                                        .executes(ctx -> boardView(ctx.getSource(), null))
+                                        .then(Commands.argument("on", BoolArgumentType.bool())
+                                                .executes(ctx -> boardView(ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "on")))))
                                 .then(Commands.literal("cancel")
                                         .then(Commands.argument("project", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> boardCancel(ctx.getSource(),
@@ -328,6 +334,40 @@ public final class AutarkiaCommands {
         }
         MinecraftServer server = level.getServer();
         return Optional.of(PartyBoards.of(server, PartyData.get(server).partyOf(who)));
+    }
+
+    /**
+     * Toggles the clearing-project overlay for the calling player, or reports it when asked bare —
+     * reading back rather than blind-toggling, the rule every switch in this tree follows.
+     */
+    private static int boardView(CommandSourceStack source, @Nullable Boolean on) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            Replies.fail(source, Component.literal(
+                    "The board view is drawn for a PLAYER — run it as one."));
+            return 0;
+        }
+        MinecraftServer server = source.getServer();
+        if (on == null) {
+            boolean watching = BoardViewer.isWatching(server, player);
+            Replies.send(source, () -> Component.literal("The board view is "
+                            + (watching ? "on." : "off."))
+                    .withStyle(ChatFormatting.GRAY));
+            return watching ? 1 : 0;
+        }
+        boolean now = BoardViewer.toggle(server, player, on);
+        int projects = now ? BoardViewer.inRange(server, player) : 0;
+        Replies.send(source, () -> Component.literal(now
+                        ? "Board view on — " + (projects == 0
+                                ? "no clearing project within " + 512 + " blocks of you yet."
+                                : projects + " project" + (projects == 1 ? "" : "s") + " in range. "
+                                        + "Grey slice = unwalked, amber = being walked, green = "
+                                        + "reported. White tree = pending, cyan = somebody is on "
+                                        + "it, orange = cooling off, dim green = cleared, RED = "
+                                        + "given up on.")
+                        : "Board view off.")
+                .withStyle(now ? ChatFormatting.AQUA : ChatFormatting.GRAY));
+        return now ? 1 : 0;
     }
 
     /**

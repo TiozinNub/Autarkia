@@ -186,6 +186,16 @@ public final class ClearArea implements PartyProject {
         return Map.copyOf(ledger);
     }
 
+    /** Which slices have been walked and reported in the CURRENT pass — the "explored" answer. */
+    public Set<Integer> reported() {
+        return Set.copyOf(reported);
+    }
+
+    /** Whether this slice is waiting out a failure rather than genuinely on offer. */
+    public boolean sliceCoolingAt(int slice, long now) {
+        return sliceRetryAfter.getOrDefault(slice, 0L) > now;
+    }
+
     @Override
     public double priority() {
         return priority;
