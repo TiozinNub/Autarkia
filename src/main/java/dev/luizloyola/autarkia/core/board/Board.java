@@ -240,6 +240,21 @@ public class Board {
     }
 
     /**
+     * Every live hold as the pair a store needs — the item and who holds it. Unlike
+     * {@link #leases(long)}, which flattens to a rendered line, a store needs the item itself so its
+     * project can be asked for its durable name.
+     */
+    protected List<Map.Entry<WorkItem, AgentId>> held(long now) {
+        List<Map.Entry<WorkItem, AgentId>> live = new ArrayList<>();
+        for (Map.Entry<WorkItem, Lease> entry : leases.entrySet()) {
+            if (entry.getValue().liveAt(now)) {
+                live.add(Map.entry(entry.getKey(), entry.getValue().who()));
+            }
+        }
+        return live;
+    }
+
+    /**
      * Ticks a hold survives past its last heartbeat. Shared with {@code SiteClaims} in v1
      * (decision: Luiz — one semantics, and for the clear-area project the two holds coincide
      * anyway), so the one knob tunes both.

@@ -10,6 +10,9 @@ import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.act.ActuatorAccess;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.Drop;
 import dev.luizloyola.anima.core.brain.sense.FoodLookup;
@@ -21,13 +24,18 @@ import dev.luizloyola.anima.core.log.JournalService;
 import java.util.List;
 
 /**
- * A minimal context for board and project tests: a real pack and a real journal, and a loud
- * refusal for everything else. Layer 3 reads what an agent HOLDS and writes what it decided —
- * anything it reaches for beyond that is a bug the exceptions here will name.
+ * A minimal context for board and project tests: a real pack, a real journal, a real knowledge
+ * store, and an exception for everything else. Layer 3 reads what an agent holds and knows when they
+ * report and writes what it decided; reaching further is a bug these exceptions name.
+ *
+ * <p>The knowledge store arrived with {@code ClearArea}: a surveyor's report is their memory of the
+ * box at hand-over — one read of a member's mind, not the ambient telepathy the "board is not
+ * omniscient" rule forbids.
  */
 final class BoardBrainContext implements BrainContext {
 
     private final Inventory inventory = new Inventory();
+    private final AgentKnowledge knowledge = new AgentKnowledge();
     private final JournalService journal = new JournalService(() -> 0L);
     private final AgentJournal view = journal.forPerson(AgentId.random());
     /** What an item is allowed to price itself against — the one map fact a board test needs. */
@@ -124,7 +132,13 @@ final class BoardBrainContext implements BrainContext {
 
     @Override
     public AgentKnowledge knowledge() {
-        throw new UnsupportedOperationException("a board never reads memories");
+        return knowledge;
+    }
+
+    /** Puts a remembered place of this kind at this anchor — what a surveyor comes back with. */
+    void remember(PoiKind kind, Pos anchor) {
+        knowledge.note(new PoiMemory(kind, anchor, Region.of(anchor), 1, false, now),
+                AgentKnowledge.maxPerKind(profile()));
     }
 
     @Override

@@ -9,6 +9,7 @@ import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.command.AgentCommands;
 import dev.luizloyola.anima.mod.command.AgentSelection;
 import dev.luizloyola.anima.mod.command.Replies;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -33,9 +34,14 @@ import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
+import dev.luizloyola.autarkia.core.tree.TreeClearing;
+import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.core.tree.ChopPlannedTree;
 import dev.luizloyola.autarkia.core.tree.Pois;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.Entry;
@@ -56,7 +62,9 @@ import dev.luizloyola.autarkia.mod.entity.Person;
 import dev.luizloyola.anima.mod.log.ThoughtBroadcast;
 import dev.luizloyola.anima.mod.net.ContactsSync;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
+import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.mod.social.ContactData;
+import dev.luizloyola.anima.mod.social.PartyData;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -217,10 +225,34 @@ public final class AutarkiaCommands {
                         // for itself) and the party board (what the group has posted).
                         .then(Commands.literal("board")
                                 .executes(ctx -> boardShow(ctx.getSource()))
+                                // Two corners and nothing else — the box is the whole brief; who
+                                // goes in, in what order, and how they learn what is standing
+                                // there is the project's business, not the operator's.
+                                .then(Commands.literal("post")
+                                        .then(Commands.literal("clear")
+                                                .then(Commands.argument("from", BlockPosArgument.blockPos())
+                                                        .then(Commands.argument("to", BlockPosArgument.blockPos())
+                                                                .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                        BlockPosArgument.getLoadedBlockPos(ctx, "from"),
+                                                                        BlockPosArgument.getLoadedBlockPos(ctx, "to"),
+                                                                        CLEAR_PRIORITY))
+                                                                .then(Commands.argument("priority",
+                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
+                                                                        .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                                BlockPosArgument.getLoadedBlockPos(ctx, "from"),
+                                                                                BlockPosArgument.getLoadedBlockPos(ctx, "to"),
+                                                                                DoubleArgumentType.getDouble(ctx, "priority"))))))))
+                                // Scoped, because the two boards number their projects
+                                // independently and the readout shows both as "#1" — see
+                                // boardCancel for what an unscoped guess costs.
                                 .then(Commands.literal("cancel")
                                         .then(Commands.argument("project", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> boardCancel(ctx.getSource(),
-                                                        IntegerArgumentType.getInteger(ctx, "project"))))))
+                                                        IntegerArgumentType.getInteger(ctx, "project"), false)))
+                                        .then(Commands.literal("party")
+                                                .then(Commands.argument("project", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> boardCancel(ctx.getSource(),
+                                                                IntegerArgumentType.getInteger(ctx, "project"), true))))))
                         // Who they can currently SEE — the peers() sense: Persons and live
                         // players, one seamless list, activity read off the visible body.
                         .then(AgentCommands.peers())
@@ -279,25 +311,112 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * Cancels a project by the handle the readout shows. Scoped to the personal board: nothing can
-     * be posted to a party board yet, and cancelling a shared project will be a different question
-     * from dropping one's own standing want.
+     * Default bid for a posted clearing. Above the personal board's standing want (0.35) on
+     * purpose: it should win at close range while still losing to a settler who is genuinely
+     * hungry.
      */
-    private static int boardCancel(CommandSourceStack source, int handle) {
+    private static final double CLEAR_PRIORITY = 0.5;
+
+    /** Longest side one clearing project takes, in blocks. See the refusal for why. */
+    private static final int CLEAR_MAX_SIDE = 512;
+
+    /** The board of this person's party, or empty before they know who they are. */
+    private static Optional<PartyBoard> partyBoardOf(Person person) {
+        AgentId who = person.getAgentId();
+        if (who == null || !(person.level() instanceof ServerLevel level)) {
+            return Optional.empty();
+        }
+        MinecraftServer server = level.getServer();
+        return Optional.of(PartyBoards.of(server, PartyData.get(server).partyOf(who)));
+    }
+
+    /**
+     * Posts "clear this area" to the resolved Person's party board.
+     *
+     * <p>The two corners mark the EDGES and that is the entire brief (decision: Luiz): no list of
+     * trees, no seeded ledger — nobody knows what is inside a box until somebody walks it, which
+     * is why the project surveys in slices before it clears anything.
+     *
+     * <p>The box is three-dimensional as typed and the reply says so in blocks: a flat one reads
+     * {@code ×1} and finds nothing, which has to be visible.
+     */
+    private static int boardPostClear(CommandSourceStack source, BlockPos from, BlockPos to,
+                                      double priority) {
         Person person = resolve(source);
         if (person == null) return 0;
-        var cancelled = person.board().cancel(handle);
-        if (cancelled.isEmpty()) {
+        AgentId who = person.getAgentId();
+        if (who == null || !(person.level() instanceof ServerLevel level)) {
             Replies.fail(source, Component.literal(
-                    "No project #" + handle + " on " + person.getName().getString() + "'s own board."));
+                    person.getName().getString() + " does not know who they are yet."));
             return 0;
         }
+        Region bounds = new Region(
+                new Pos(Math.min(from.getX(), to.getX()), Math.min(from.getY(), to.getY()),
+                        Math.min(from.getZ(), to.getZ())),
+                new Pos(Math.max(from.getX(), to.getX()), Math.max(from.getY(), to.getY()),
+                        Math.max(from.getZ(), to.getZ())));
+        int wide = bounds.max().x() - bounds.min().x() + 1;
+        int deep = bounds.max().z() - bounds.min().z() + 1;
+        if (wide > CLEAR_MAX_SIDE || deep > CLEAR_MAX_SIDE) {
+            // Refused rather than clamped: a box quietly shrunk is a box whose edges are not where
+            // the operator put them, and every slice index after it names different ground.
+            Replies.fail(source, Component.literal("That box is " + wide + "×" + deep
+                    + " blocks. " + CLEAR_MAX_SIDE + " a side is the most one project takes — "
+                    + "post several, or somebody is walking it until the heat death."));
+            return 0;
+        }
+        MinecraftServer server = level.getServer();
+        PartyId party = PartyData.get(server).partyOf(who);
+        PartyBoard board = PartyBoards.of(server, party);
+        // Trees, because they are the only thing anything knows how to clear. The kind becomes an
+        // argument the day a second Clearing is registered; until then a choice of one is noise.
+        ClearArea project = new ClearArea(TreeClearing.INSTANCE, bounds, priority);
+        int handle = board.post(project);
+        PartyBoards.touch(server);
+        // LOGGED: this creates durable, shared, persisted state that outlives everyone who works
+        // it — the same reason cancel below is logged.
+        Replies.send(source, () -> Component.literal("Posted #" + handle + " to "
+                        + person.getName().getString() + "'s party — " + project.describe()
+                        + ", " + project.slices().size() + " slices")
+                .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
+    /**
+     * Cancels a project by the handle the readout shows, on the board the caller NAMED —
+     * {@code cancel <n>} is the personal board, {@code cancel party <n>} the party's.
+     *
+     * <p>Scoped rather than searched: the two boards number their own projects from one, so both
+     * readouts show a {@code #1}. A cancel that tried one and fell back to the other, asked to
+     * drop a party's clearing, silently dropped the caller's own standing want instead and
+     * reported success (live, 2026-08-10).
+     *
+     * <p>Any member may cancel a shared project — the dev answer, until layer 4 has opinions about
+     * who decides.
+     */
+    private static int boardCancel(CommandSourceStack source, int handle, boolean party) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        var cancelled = party
+                ? partyBoardOf(person).flatMap(board -> board.cancel(handle))
+                : person.board().cancel(handle);
+        if (party && cancelled.isPresent() && person.level() instanceof ServerLevel level) {
+            PartyBoards.touch(level.getServer());
+        }
+        if (cancelled.isEmpty()) {
+            Replies.fail(source, Component.literal("No project #" + handle + " on "
+                    + person.getName().getString() + "'s " + (party ? "party's" : "own")
+                    + " board."));
+            return 0;
+        }
+        String what = cancelled.get().describe();
         // LOGGED: this destroys layer-3 state. No journal line records it — the journal belongs
         // to the agent, and an agent does not narrate what was done TO it — so left unlogged a
         // cancel is invisible everywhere, the board reading "nothing posted" afterwards.
         // Caught live, chasing a Person whose want had evaporated.
         Replies.send(source, () -> Component.literal(person.getName().getString()
-                        + " drops #" + handle + " — " + cancelled.get().describe())
+                        + " drops " + (party ? "the party's " : "their own ") + "#" + handle
+                        + " — " + what)
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }

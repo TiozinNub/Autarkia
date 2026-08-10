@@ -13,18 +13,14 @@ import net.minecraft.server.MinecraftServer;
 /**
  * The {@code mod} home of the party boards: one {@link PartyBoard} per {@link PartyId} per running
  * server, ticked here rather than by anybody's entity — the {@code Claims} / {@code Journals}
- * shape.
+ * shape. Ticked from a member it would think once per member, stop thinking when the last member
+ * unloaded, and have to decide whose eyes it thought with.
  *
- * <p>A board ticked from a member would think once per member, stop thinking when the last member
- * unloaded, and have to decide whose eyes it thought with. Ticked from here it thinks once, on its
- * own cadence, with no eyes: state that belongs to a group, not to a body.
+ * <p><b>Staggered</b> by board id, so a settlement's worth of boards spread across the interval
+ * instead of spiking on one tick.
  *
- * <p>Staggered — each board's beat is offset by its own id, so a settlement's worth of boards do
- * not all think on the same tick.
- *
- * <p>Transient in ladder step 2: nothing posts to a party board yet, so nothing is lost across a
- * restart. The persisted store (Autarkia SavedData, {@code PartyId}-keyed) lands with the first
- * project that can be posted there.
+ * <p>Persisted ({@link PartyBoardData}): the store does not mirror the boards, it asks them what
+ * they hold as vanilla serializes; this host only says whether anything is worth asking about.
  */
 public final class PartyBoards {
     private PartyBoards() {}
@@ -37,21 +33,61 @@ public final class PartyBoards {
 
     /** Call once from mod init: ties the per-server registries and their cadence to the lifecycle. */
     public static void init() {
-        ServerLifecycleEvents.SERVER_STOPPING.register(BY_SERVER::remove);
+        // STARTED, not STARTING: the levels have to exist before the store can be read, and the
+        // boards must be standing before the first tick could offer anybody an errand.
+        ServerLifecycleEvents.SERVER_STARTED.register(PartyBoards::load);
+        // STOPPED, not STOPPING. Vanilla saves its level data AFTER the stopping event and this
+        // store's codec asks the live boards what they hold as it serializes, so dropping the
+        // registry on STOPPING writes an empty list over a settlement's work. Caught live
+        // 2026-08-10: the file was there, at the right version, declaring and holding zero rows,
+        // so the boot guard passed it as healthy.
+        ServerLifecycleEvents.SERVER_STOPPED.register(BY_SERVER::remove);
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             Map<PartyId, PartyBoard> boards = BY_SERVER.get(server);
             if (boards == null || boards.isEmpty()) {
                 return;
             }
             long now = server.overworld().getGameTime();
+            boolean anythingPosted = false;
             // Copied because a board's tick may close projects, and later may post or disband —
             // none of which should be a concurrent modification of the map being walked.
             for (PartyBoard board : new ArrayList<>(boards.values())) {
                 if (dueThisTick(board.party(), now)) {
                     board.tick(now);
                 }
+                anythingPosted |= !board.isEmpty();
+            }
+            if (anythingPosted) {
+                touch(server);
             }
         });
+    }
+
+    /**
+     * Rebuilds every saved board, then tells the store to answer for the live ones from now on.
+     *
+     * <p>Before anything ticks, so a member who logs in on the first tick finds the errand they
+     * were walking to still theirs, not back on offer.
+     */
+    private static void load(MinecraftServer server) {
+        PartyBoardData store = PartyBoardData.get(server);
+        long now = server.overworld().getGameTime();
+        for (PartyId party : store.parties()) {
+            PartyBoardData.refuseUnknown(of(server, party).restore(store.take(party), now), party);
+        }
+        store.attach(server);
+    }
+
+    /**
+     * Marks the store dirty, so the next save asks the boards what they hold.
+     *
+     * <p>Called from the tick above while anything is posted, rather than from each of the many
+     * places a board changes: missing one of those loses a settlement's work silently, while a
+     * flag set on a slow beat while a board is non-empty cannot miss any. Costs one file write per
+     * autosave, only while a party has work posted.
+     */
+    public static void touch(MinecraftServer server) {
+        PartyBoardData.get(server).setDirty();
     }
 
     /** This party's board on this server, created empty on first ask. */

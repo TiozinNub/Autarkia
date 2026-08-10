@@ -1,0 +1,435 @@
+package dev.luizloyola.autarkia.core.board;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.Idle;
+import dev.luizloyola.anima.core.brain.task.Task;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+
+/**
+ * The phase machine, the slices, the ledger and the refusal rule — everything that decides whether
+ * a box gets cleared, proven without a world, a body or a block of perception.
+ *
+ * <p>Blind: a survey here is a member handing back what they "remember". That is what
+ * a real one will be. The walking is step 2's and changes no rule below.
+ */
+class ClearAreaTest {
+
+    /** A kind of place that is only ever a test's. */
+    private static final PoiKind THING = PoiKind.register("clear_test_thing", 1, "");
+
+    /** A clearing that can survey and whose tasks do nothing — the rules are the subject here. */
+    private record TestClearing(boolean surveys) implements Clearing {
+        @Override
+        public String id() {
+            return "test_things";
+        }
+
+        @Override
+        public PoiKind kind() {
+            return THING;
+        }
+
+        @Override
+        public String label() {
+            return "things";
+        }
+
+        @Override
+        public Task survey(Region slice) {
+            return new Idle(1);
+        }
+
+        @Override
+        public Task clear(Pos anchor) {
+            return new Idle(1);
+        }
+    }
+
+    private static final Clearing ABLE = new TestClearing(true);
+    private static final Clearing UNABLE = new TestClearing(false);
+
+    /** A box exactly one slice across, so a whole pass is a single errand. */
+    private static Region oneSlice() {
+        return new Region(new Pos(0, 60, 0), new Pos(10, 70, 10));
+    }
+
+    private static ClearArea posted(Clearing clearing, Region bounds) {
+        ClearArea project = new ClearArea(clearing, bounds, 0.5);
+        project.tick(0L);
+        return project;
+    }
+
+    // ── what it offers ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aFreshProjectOffersItsSlicesAndNothingElse() {
+        ClearArea project = posted(ABLE, oneSlice());
+        assertEquals(ClearArea.Phase.SURVEYING, project.phase());
+        assertEquals(1, project.open().size());
+        assertTrue(project.open().get(0).describe().startsWith("survey slice 1/1"));
+    }
+
+    @Test
+    void aBoxDividesIntoWholeSlicesAndTheGridCoversIt() {
+        // Two slices wide, two deep, and the last of each is the short remainder.
+        Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
+        ClearArea project = posted(ABLE, big);
+        assertEquals(4, project.slices().size());
+        assertEquals(new Pos(0, 60, 0), project.slices().get(0).min());
+        assertEquals(new Pos(60, 70, 50), project.slices().get(3).max());
+        assertEquals(4, project.open().size());
+    }
+
+    @Test
+    void nobodyIsOfferedAnythingWhileNothingCanSurvey() {
+        ClearArea project = posted(UNABLE, oneSlice());
+        assertTrue(project.open().isEmpty());
+        // And the readout says why, rather than looking like a project with nothing to do.
+        assertTrue(project.describe().contains("nobody can survey"));
+        assertFalse(project.finished());
+    }
+
+    // ── the loop ─────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aSurveyThatFoundNothingFinishesTheWholeProject() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        project.completed(project.open().get(0), ctx);
+        // Walked the whole box, found nothing: there is no second pass worth making.
+        assertEquals(ClearArea.Phase.DONE, project.phase());
+        assertTrue(project.finished());
+    }
+
+    @Test
+    void surveyThenClearThenVerifyThenDone() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, new Pos(3, 60, 3));
+        ctx.remember(THING, new Pos(7, 60, 8));
+
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.CLEARING, project.phase());
+        assertEquals(2, project.open().size());
+
+        for (WorkItem item : List.copyOf(project.open())) {
+            project.completed(item, ctx);
+        }
+        // Everything reported is gone, so the box is walked again — from scratch, because what a
+        // first pass missed is precisely where nobody went.
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+        assertEquals(1, project.open().size());
+
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.DONE, project.phase());
+        assertTrue(project.describe().contains("2 cleared"));
+    }
+
+    @Test
+    void aVerifyPassThatFindsSomethingNewGoesBackToClearing() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, new Pos(3, 60, 3));
+
+        project.completed(project.open().get(0), ctx);
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+
+        // The second surveyor walks ground the first one hurried past.
+        ctx.remember(THING, new Pos(9, 60, 9));
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.CLEARING, project.phase());
+        assertEquals(1, project.open().size());
+    }
+
+    @Test
+    void aClearedAnchorIsNeverReportedBackIntoTheLedger() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos gone = new Pos(3, 60, 3);
+        ctx.remember(THING, gone);
+
+        project.completed(project.open().get(0), ctx);
+        project.completed(project.open().get(0), ctx);
+
+        // The verifier still REMEMBERS it — another member can easily be carrying a memory of
+        // something felled while they were away — and the ledger must not send anybody back.
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.DONE, project.phase());
+        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(gone).state());
+    }
+
+    @Test
+    void onlyWhatIsInsideTheBoxIsTaken() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, new Pos(3, 60, 3));
+        ctx.remember(THING, new Pos(300, 60, 300));
+        ctx.remember(THING, new Pos(3, 200, 3)); // inside the footprint, above the box
+
+        project.completed(project.open().get(0), ctx);
+        assertEquals(1, project.ledger().size());
+    }
+
+    // ── giving up ────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aTargetThatKeepsFailingIsRefusedAndTheProjectCanFinish() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos stubborn = new Pos(3, 60, 3);
+        ctx.remember(THING, stubborn);
+        project.completed(project.open().get(0), ctx);
+
+        for (int attempt = 1; attempt <= ClearArea.REFUSE_AFTER; attempt++) {
+            assertEquals(1, project.open().size(), "attempt " + attempt + " should be on offer");
+            project.failed(project.open().get(0), ctx);
+            if (attempt < ClearArea.REFUSE_AFTER) {
+                // A failure is paced: nothing is on offer until the cooldown runs out, or an agent
+                // would burn every attempt within a second of the first.
+                assertTrue(project.open().isEmpty(), "attempt " + attempt + " must cool down");
+            } else {
+                // The last failure settles the last target. That is what ends the clearing phase
+                // — so the verify pass opens on the same call and its slice is already on offer.
+                assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+            }
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+        // Refused means gone from the offer for good — this is what stops "repeat until done"
+        // from repeating forever over one thing nobody can remove.
+        assertTrue(project.open().stream().noneMatch(item -> item.describe().contains("clear")));
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.DONE, project.phase());
+        assertTrue(project.describe().contains("1 refused"));
+    }
+
+    @Test
+    void aRefusedAnchorIsNotReportedBackEither() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos stubborn = new Pos(3, 60, 3);
+        ctx.remember(THING, stubborn);
+        project.completed(project.open().get(0), ctx);
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(project.open().get(0), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+        // The verifier reports it again, because it is still standing there in plain sight.
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.DONE, project.phase(),
+                "a refused target reported afresh would restart the loop it exists to end");
+    }
+
+    @Test
+    void aFailedSliceIsOfferedAgainAfterItsCooldown() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        project.failed(project.open().get(0), ctx);
+        assertTrue(project.open().isEmpty());
+        ctx.advance(ClearArea.FAIL_COOLDOWN);
+        project.tick(ctx.now());
+        assertEquals(1, project.open().size());
+        assertEquals(ClearArea.Phase.SURVEYING, project.phase());
+    }
+
+    // ── holds ────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void anErrandSomebodyHoldsIsNeverWithdrawn() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        WorkItem taken = project.open().get(0);
+        project.claimed(taken);
+        project.failed(taken, ctx);
+        // Failing releases it; the guard is about the OTHER route — a project deciding on its own
+        // beat that it no longer wants an errand a worker is walking to.
+        WorkItem again = project.open().isEmpty() ? null : project.open().get(0);
+        assertTrue(again == null || again != taken);
+
+        ctx.advance(ClearArea.FAIL_COOLDOWN);
+        project.tick(ctx.now());
+        WorkItem reoffered = project.open().get(0);
+        project.claimed(reoffered);
+        project.tick(ctx.now() + 1);
+        assertSame(reoffered, project.open().get(0), "a held item must survive a beat unchanged");
+    }
+
+    @Test
+    void anItemKeepsItsIdentityAcrossBeats() {
+        // The board leases by IDENTITY, so re-minting on every ask would drop every hold.
+        ClearArea project = posted(ABLE, oneSlice());
+        WorkItem first = project.open().get(0);
+        project.tick(1L);
+        project.tick(2L);
+        assertSame(first, project.open().get(0));
+    }
+
+    // ── durable names ────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void everyOfferedItemHasADurableNameThatFindsItAgain() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, new Pos(3, 60, 3));
+        project.completed(project.open().get(0), ctx);
+
+        WorkItem item = project.open().get(0);
+        Optional<WorkKey> key = project.keyOf(item);
+        assertTrue(key.isPresent());
+        assertEquals(WorkKey.CLEAR, key.get().flavour());
+        assertSame(item, project.itemFor(key.get()).orElseThrow());
+    }
+
+    @Test
+    void aNameForSomethingNoLongerOfferedFindsNothing() {
+        ClearArea project = posted(ABLE, oneSlice());
+        assertTrue(project.itemFor(new WorkKey(WorkKey.CLEAR, new Pos(1, 1, 1))).isEmpty());
+    }
+
+    // ── continuity ───────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aSavedProjectComesBackMidClearWithTheSameLedgerAndOffers() {
+        Clearings.register(ABLE);
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, new Pos(3, 60, 3));
+        ctx.remember(THING, new Pos(7, 60, 8));
+        project.completed(project.open().get(0), ctx);
+        project.completed(project.open().get(0), ctx);
+
+        ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
+        assertEquals(ClearArea.Phase.CLEARING, back.phase());
+        assertEquals(project.ledger(), back.ledger());
+        assertEquals(1, back.open().size(), "the one target still standing is on offer again");
+        assertEquals(project.describe(), back.describe());
+    }
+
+    @Test
+    void aSavedProjectRemembersWhatItGaveUpOn() {
+        Clearings.register(ABLE);
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos stubborn = new Pos(3, 60, 3);
+        ctx.remember(THING, stubborn);
+        project.completed(project.open().get(0), ctx);
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(project.open().get(0), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+
+        ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
+        assertEquals(ClearArea.TargetState.REFUSED, back.ledger().get(stubborn).state(),
+                "a restart that forgot a refusal would let the loop back in through the store");
+    }
+
+    @Test
+    void aSavedProjectRemembersHowFarTheSurveyGot() {
+        Clearings.register(ABLE);
+        Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
+        ClearArea project = posted(ABLE, big);
+        BoardBrainContext ctx = new BoardBrainContext();
+        project.completed(project.open().get(0), ctx);
+        assertEquals(3, project.open().size());
+
+        ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
+        assertEquals(3, back.open().size(), "a walked slice must not be walked again");
+        assertTrue(back.describe().contains("1/4 slices"));
+    }
+
+    @Test
+    void aProjectWhoseClearingThisBuildLacksComesBackAsNothing() {
+        Clearings.clear();
+        ClearArea project = posted(ABLE, oneSlice());
+        // Never silently an empty project: the store's job is to refuse the world, and it can only
+        // do that if this says so rather than handing back something plausible.
+        assertTrue(ClearArea.restore(project.snapshot(), 0L).isEmpty());
+        Clearings.register(ABLE);
+    }
+
+    @Test
+    void aSurveyItemKeepsItsNameAcrossARestart() {
+        Clearings.register(ABLE);
+        Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
+        ClearArea project = posted(ABLE, big);
+        WorkItem held = project.open().get(1);
+        WorkKey key = project.keyOf(held).orElseThrow();
+
+        ClearArea back = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
+        // A different object, the same errand: the member walking to it gets THAT one back rather
+        // than the pool.
+        assertTrue(back.itemFor(key).isPresent());
+        assertEquals(held.describe(), back.itemFor(key).orElseThrow().describe());
+    }
+
+    // ── the board around it ──────────────────────────────────────────────────────────────────
+
+    @Test
+    void aPartyBoardHandsEveryHolderBackTheirOwnErrand() {
+        Clearings.register(ABLE);
+        PartyBoard board = new PartyBoard(
+                dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
+        Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
+        ClearArea project = new ClearArea(ABLE, big, 0.5);
+        board.post(project);
+        board.tick(0L);
+
+        AgentId alice = AgentId.random();
+        AgentId bob = AgentId.random();
+        WorkItem hers = project.open().get(0);
+        WorkItem his = project.open().get(2);
+        assertTrue(board.claim(hers, alice, 0L));
+        assertTrue(board.claim(his, bob, 0L));
+        // Taken before the reload, the only side the old objects exist on — why a durable name is
+        // written down rather than derived later.
+        WorkKey herSlice = project.keyOf(hers).orElseThrow();
+        WorkKey hisSlice = project.keyOf(his).orElseThrow();
+
+        List<PartyBoard.Row> saved = board.snapshot(0L);
+        PartyBoard reloaded = new PartyBoard(board.party());
+        assertEquals(0, reloaded.restore(saved, 0L));
+
+        ClearArea back = (ClearArea) reloaded.projects().get(0);
+        assertTrue(reloaded.holds(back.itemFor(herSlice).orElseThrow(), alice, 0L),
+                "Alice must get HER slice back, not whichever one scores best");
+        assertTrue(reloaded.holds(back.itemFor(hisSlice).orElseThrow(), bob, 0L));
+        // And neither is on offer to anybody else.
+        assertTrue(reloaded.bestFor(AgentId.random(), new BoardBrainContext(), 0L)
+                .map(item -> back.keyOf(item).orElseThrow())
+                .filter(key -> key.equals(herSlice) || key.equals(hisSlice))
+                .isEmpty(), "a restored hold must not be re-offered to a third party");
+    }
+
+    @Test
+    void aFinishedProjectIsClosedByItsBoardsOwnBeat() {
+        Clearings.register(ABLE);
+        PartyBoard board = new PartyBoard(
+                dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5);
+        board.post(project);
+        board.tick(0L);
+        project.completed(project.open().get(0), new BoardBrainContext());
+        assertTrue(project.finished());
+
+        board.tick(1L);
+        assertTrue(board.isEmpty(), "a satisfied project is dropped by the host's beat");
+    }
+}

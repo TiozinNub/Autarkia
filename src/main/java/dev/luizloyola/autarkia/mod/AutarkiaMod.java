@@ -5,6 +5,7 @@ import dev.luizloyola.anima.mod.config.ConfigFile;
 import dev.luizloyola.autarkia.core.person.PersonDanger;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
+import dev.luizloyola.autarkia.mod.board.PartyBoardData;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.mod.command.AutarkiaCommands;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
@@ -31,6 +32,7 @@ import dev.luizloyola.autarkia.core.tree.ChopForLogs;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.List;
 import dev.luizloyola.autarkia.core.tree.Pois;
+import dev.luizloyola.autarkia.core.tree.TreeClearing;
 import dev.luizloyola.autarkia.core.tree.TreeRule;
 import dev.luizloyola.autarkia.core.tree.WaterRule;
 import net.minecraft.core.particles.ParticleTypes;
@@ -113,6 +115,14 @@ public class AutarkiaMod implements ModInitializer {
         Producers.register(Stock.LOGS, ChopForLogs::new);
         // And how the dance card writes itself down, so a chop survives a reload mid-tree.
         dev.luizloyola.autarkia.mod.brain.AutarkiaTasks.install();
+        // What "clear this area" means when the things in it are trees. The project knows only
+        // phases, slices and a ledger; the kind, the looking and the felling all arrive through
+        // here, which leaves room for boulders later.
+        dev.luizloyola.autarkia.core.board.Clearings.register(TreeClearing.INSTANCE);
+        // And that a party's work board is checked at boot like every other store: a project
+        // outlives every worker who touches it, so a swallowed load would send a settlement to
+        // re-walk ground it had already surveyed.
+        StoreGuard.guard("party boards", PartyBoardData.ID, PartyBoardData::get);
         // Teach the debug wand what a block MEANS to a settler — Anima's wand can point at
         // anything and knows what none of it is. Unclaimed clicks still fall back to walking
         // there.

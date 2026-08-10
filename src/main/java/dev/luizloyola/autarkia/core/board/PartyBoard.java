@@ -1,17 +1,19 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.social.PartyId;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
- * One party's board — the shared place a group's work is posted, reached by every member through
- * their own {@link Board#viewFor view}.
+ * One party's board — where a group's work is posted, reached by every member through their own
+ * {@link Board#viewFor view}.
  *
- * <p>It hangs off a {@link PartyId}, not a member: members come and go, a party can be unloaded,
- * and the work still exists and still belongs to somebody. It ticks server-side and entity-free, so
- * a party evolving while nobody is loaded needs no rework.
- *
- * <p>Empty in ladder step 2 by design — nothing posts until the clear-area project arrives. What
- * lands now is the id, the host that ticks it, and the per-member view.
+ * <p>It hangs off a {@link PartyId} rather than off any member, so the work outlives members coming
+ * and going and the whole party being unloaded. It ticks server-side and entity-free.
  */
 public final class PartyBoard extends Board {
 
@@ -31,16 +33,90 @@ public final class PartyBoard extends Board {
     }
 
     /**
-     * One beat of the board's own slow, entity-free thinking — run by the server-side host on a
-     * staggered cadence, with no agent's context.
+     * One beat of the board's own entity-free thinking, run by the server-side host on a staggered
+     * cadence with no agent's context. Projects think first, then lapsed holds are swept and
+     * anything satisfied is closed — the beat that frees a shared errand when the member holding it
+     * died, unloaded or was pulled away, with no member ticking and no death hook anywhere.
      *
-     * <p>It expires lapsed holds and closes what is satisfied. Expiry matters more here than on a
-     * personal board: no member ticks and there is no death hook, so this beat frees a shared
-     * errand when whoever took it died, unloaded or was pulled away. Party projects arrive with
-     * step 4.
+     * <p>A project that is not a {@link PartyProject} is carried but never ticked.
      */
     public void tick(long now) {
+        for (Project project : projects()) {
+            if (project instanceof PartyProject party) {
+                party.tick(now);
+            }
+        }
         expire(now);
         closeFinished();
+    }
+
+    // ── continuity ───────────────────────────────────────────────────────────────────────────
+
+    /**
+     * One posted project and every hold on it — the store's row shape.
+     *
+     * <p>Holds travel with the project because a {@link WorkKey} names an item <em>within</em> the
+     * project that minted it: two projects clearing overlapping boxes would write the same key.
+     */
+    public record Row(ClearArea.State project, List<Hold> holds) {
+    }
+
+    /** Who was holding which item when the world stopped. */
+    public record Hold(WorkKey key, AgentId who) {
+    }
+
+    /**
+     * Every party project posted here, with its holds, in post order.
+     *
+     * <p>Only {@link ClearArea} for now, and typed as such deliberately: a second party project
+     * type will arrive with its own row shape and its own codec.
+     */
+    public List<Row> snapshot(long now) {
+        List<Map.Entry<WorkItem, AgentId>> live = held(now);
+        List<Row> rows = new ArrayList<>();
+        for (Project project : projects()) {
+            if (!(project instanceof ClearArea area)) {
+                continue;
+            }
+            List<Hold> holds = new ArrayList<>();
+            for (Map.Entry<WorkItem, AgentId> hold : live) {
+                area.keyOf(hold.getKey()).ifPresent(key -> holds.add(new Hold(key, hold.getValue())));
+            }
+            rows.add(new Row(area.snapshot(), List.copyOf(holds)));
+        }
+        return List.copyOf(rows);
+    }
+
+    /**
+     * Posts every saved project back and gives each member their errand back.
+     *
+     * <p>Through {@link Board#reclaim}, never {@code claim}: re-<em>taking</em> puts an errand
+     * through scoring and can hand it to somebody else. Ticks do not pass while a server is down, so
+     * a hold was never near expiring. A hold whose item is gone is dropped.
+     *
+     * @return how many saved projects could not be rebuilt, because no {@link Clearing} in this
+     *         build answers to their id — never silently zero
+     */
+    public int restore(List<Row> rows, long now) {
+        int unknown = 0;
+        for (Row row : rows) {
+            Optional<ClearArea> rebuilt = ClearArea.restore(row.project(), now);
+            if (rebuilt.isEmpty()) {
+                unknown++;
+                continue;
+            }
+            ClearArea project = rebuilt.get();
+            post(project);
+            for (Hold hold : row.holds()) {
+                project.itemFor(hold.key()).ifPresent(item -> {
+                    reclaim(item, hold.who(), now);
+                    // `reclaim` skips the bidding `claim` does, and that includes telling the
+                    // project — which would otherwise think the errand free and withdraw it out
+                    // from under the member still walking to it.
+                    project.claimed(item);
+                });
+            }
+        }
+        return unknown;
     }
 }
