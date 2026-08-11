@@ -10,6 +10,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
 import org.jspecify.annotations.Nullable;
@@ -74,7 +75,13 @@ public final class ShadowPlayer {
         target.yBodyRotO = source.yBodyRotO;
         target.setDeltaMovement(source.getDeltaMovement());
         target.setOnGround(source.onGround());
-        target.setPose(source.getPose());
+        // The pose, EXCEPT the one the shadow cannot properly wear. NEA reads Pose.SWIMMING on a
+        // body that is not in water as CRAWLING (its own isValid), and the shadow is never in
+        // water, so a swimming Person handed its real pose got crawl arms instead of the swim
+        // stroke. Nothing is lost: the swim is drawn from the RENDER STATE, the Person's own,
+        // filled before the shadow is swapped in.
+        target.setPose(source.getPose() == Pose.SWIMMING && source.isInWater()
+                ? Pose.STANDING : source.getPose());
         target.setShiftKeyDown(source.isShiftKeyDown());
         target.setSprinting(source.isSprinting());
         target.tickCount = source.tickCount;

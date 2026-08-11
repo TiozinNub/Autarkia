@@ -632,7 +632,10 @@ public class Person extends Avatar implements AgentBody {
      * swimming, which out of water is vanilla's crawl.
      */
     private void updateSwimmingPose() {
-        Pose desired = isSwimming() ? Pose.SWIMMING : Pose.STANDING;
+        // Read from the organ, not the synched flag: the flag is published in baseTick, before the
+        // swimmer decides, so following it put the pose two ticks behind — a settler flapping on
+        // the shore after its feet were down. The flag stays a tick behind for vanilla's own uses.
+        Pose desired = this.swimmer.isSwimming() ? Pose.SWIMMING : Pose.STANDING;
         if (getPose() == desired || !fitsAs(desired)) {
             return;
         }
