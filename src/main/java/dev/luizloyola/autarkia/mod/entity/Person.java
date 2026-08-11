@@ -53,6 +53,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -62,6 +63,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.damagesource.DamageSource;
@@ -585,14 +587,25 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * Constant survival reflex: while any part of the body is in water, hold the swim-up input —
-     * float, never drown. Owned by the body rather than the {@link Navigator} so a Person who
-     * wandered in, was shoved in, or is idle floats exactly like one crossing on a path. Runs after
-     * the navigator so it wins the vertical input, and is effective same-tick because {@code aiStep}
-     * reads {@code this.jumping} right after {@code serverAiStep} (see {@link #driveJump}).
+     * Constant survival reflex: whenever the head goes under, hold the swim-up input — float, never
+     * drown. Owned by the body, not the {@link Navigator}, so a Person that wandered in, was shoved
+     * in, or is idle floats like one crossing on a path. Runs after the navigator so it wins the
+     * vertical input, and lands same-tick because {@code aiStep} reads {@code this.jumping} right
+     * after {@code serverAiStep} (see {@link #driveJump}).
+     *
+     * <p>"Whenever the head goes under" is doing all the work: the first cut pressed on every wet
+     * tick, and {@code jumpInLiquid}'s +0.04/tick never stops arriving, so the body climbed clear of
+     * the water, fell back in, and climbed again — gauntlet E2, 0.755 of a block of swing and 432
+     * reversals in 608 ticks. Against the eye line the same crossing swings 0.301 and stays
+     * 0.12–0.42 of a block submerged.
+     *
+     * <p>The eye line rather than vanilla's {@code FloatGoal} depth test, which was tried: it fires
+     * on 0.4 of a block of water whatever the head is doing, so a Person waded into a knee-deep
+     * stream and began swimming in it. Drowning is decided at the eye. Vanilla's other trick,
+     * skipping a fifth of the presses at random, measured worse still (0.52).
      */
     private void floatInWater() {
-        if (isInWater()) {
+        if (isEyeInFluid(FluidTags.WATER)) {
             setJumping(true); // held-jump-in-water rises via aiStep's jumpInLiquid
         }
     }
@@ -602,23 +615,18 @@ public class Person extends Avatar implements AgentBody {
      *
      * <p>{@code Entity.updateSwimming} asks "is it SPRINTING and under water", which can never be
      * yes here: sprint is gated on {@link #driveSprint} and the metabolism, and
-     * {@link #floatInWater} presses from the instant any part of the body is wet, so the head is
-     * back up before the eyes-under test can be true. The intent comes instead from the follower —
-     * {@link Navigator#isCrossingWater()} — kept in vanilla's two-state shape, harder to enter than
-     * to stay in, because a single condition flickers where two do not.
+     * {@link #floatInWater} keeps the head at the surface. The intent comes instead from the
+     * follower — {@link Navigator#isCrossingWater()} — kept in vanilla's two-state shape, harder to
+     * enter than to stay in, because a single condition flickers where two do not.
      *
-     * <p>The entry test is {@code !onGround()} rather than vanilla's eyes-under, because it
-     * separates <em>swimming</em> from <em>wading</em>: feet on the bed of a one-deep stream is a
-     * walk that happens to be wet, and the planner calls that leg a SWIM (it has no shallow-water
-     * move yet). Climbing out ends it on the same test, the instant the feet are planted, with no
-     * grace.
+     * <p>Entering also needs {@link #waterIsDeepEnoughToSwimIn()}: the planner tags a one-deep
+     * stream a SWIM leg (it has no shallow-water move yet), so the body has to know better. Leaving
+     * needs only {@code onGround()} and takes no grace — feet planted is wading or out the far side.
      *
-     * <p>Staying in it is measured in {@link #SWIM_GRACE_TICKS}, not the live conditions: a swimmer
-     * BOBS, because {@link #floatInWater} lifts it clear and the swimming box is 0.6 tall, so a
-     * small hop takes all of it out of the water — and the navigator alternates too, since a tick
-     * out of the water on a climb-out leg is not steered as a swim. The first cut flipped the pose
-     * twenty times a second, resizing the hitbox and broadcasting synched data each time; half a
-     * second of grace over both facts rides out the bob.
+     * <p>Staying in it is measured in {@link #SWIM_GRACE_TICKS}, not the live conditions: the
+     * swimming box is 0.6 tall, so a small rise lifts all of it clear for a tick and the navigator
+     * stops calling that leg a swim. The first cut flipped the pose twenty times a second, resizing
+     * the hitbox and broadcasting synched data each time.
      *
      * <p>Server only: the flag is synched, and the client's Navigator never ticks, so it would
      * always answer "not swimming".
@@ -628,7 +636,8 @@ public class Person extends Avatar implements AgentBody {
         if (!(level() instanceof ServerLevel)) {
             return; 
         }
-        boolean swimmingNow = this.navigator.isCrossingWater() && isInWater();
+        boolean swimmingNow =
+                this.navigator.isCrossingWater() && isInWater() && waterIsDeepEnoughToSwimIn();
         if (swimmingNow) {
             this.swimTicks = SWIM_GRACE_TICKS;
         } else if (this.swimTicks > 0) {
@@ -640,6 +649,35 @@ public class Person extends Avatar implements AgentBody {
         }
         setSwimming(isSwimming() ? this.swimTicks > 0 : swimmingNow);
     }
+
+    /**
+     * Whether the water under this body is deep enough to swim in rather than wade through — asked
+     * of the WORLD by counting the column, because every question the body can ask about itself is
+     * circular: {@code !onGround()} is true for a tick or two dropping off a bank; an eyes-under
+     * test is answered by the pose being decided (the swimming box puts the eye at 0.4, wet in a
+     * one-deep stream); and {@code getFluidHeight} is clamped to the body's own box. Gauntlet E1: a
+     * settler crossed eight blocks of ankle-deep water doing 71 ticks of breaststroke out of 72.
+     *
+     * <p>Two blocks is the right cut for a 1.8 body — on the bed of a two-deep pool the head is
+     * under (1.8 &lt; 2.0), in one-deep it is a clear block above. The scan starts a cell low in
+     * case we are bobbing above the surface.
+     */
+    private boolean waterIsDeepEnoughToSwimIn() {
+        BlockPos.MutableBlockPos cell = blockPosition().mutable();
+        if (!level().getFluidState(cell).is(FluidTags.WATER)) {
+            cell.move(Direction.DOWN); 
+        }
+        for (int depth = 0; depth < SWIMMABLE_DEPTH; depth++) {
+            if (!level().getFluidState(cell).is(FluidTags.WATER)) {
+                return false;
+            }
+            cell.move(Direction.DOWN);
+        }
+        return true;
+    }
+
+    /** Blocks of water a body must have under it before crossing counts as swimming, not wading. */
+    private static final int SWIMMABLE_DEPTH = 2;
 
     /**
      * How long a swimmer stays a swimmer after the last tick that plainly was one — long enough
