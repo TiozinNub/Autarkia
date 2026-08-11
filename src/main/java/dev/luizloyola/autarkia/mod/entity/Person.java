@@ -906,6 +906,30 @@ public class Person extends Avatar implements AgentBody {
     private @Nullable String lastBreathLevel;
 
     /**
+     * How long this particular settler can hold its breath — per agent, read live, and the same
+     * number its breath need calls a full lungful. Vanilla hands every living thing a flat 300.
+     *
+     * <p>The need's own {@code easy} boundary rather than a capacity aspect beside it:
+     * a body that holds 600 ticks while its need thinks comfort arrives at 300 would spend half of
+     * every lungful reporting a pressure it has no business feeling. One declaration answers both,
+     * and a modifier that deepens one deepens the other.
+     *
+     * <p>Read through on every call, so a config reload retunes a settler already under water.
+     */
+    @Override
+    public int getMaxAirSupply() {
+        return (int) FULL_BREATH.value(profile());
+    }
+
+    /**
+     * The level whose value is a full lungful. Resolved once by name; an absent one is a rename
+     * that has to fail loudly here rather than quietly become a capacity of zero.
+     */
+    private static final NeedLevel FULL_BREATH = NeedKind.BREATH.level("easy").orElseThrow(
+            () -> new IllegalStateException("the breath need has no \"easy\" level to size a "
+                    + "lungful from — see Person.getMaxAirSupply"));
+
+    /**
      * How many people this settler can currently perceive and has already met — what feeds the
      * company gauge. <b>Minded</b> is the being sense's word for "a person" and covers live players
      * exactly like settlers; <b>{@code INDIVIDUAL}</b> is the evidence gate, since a figure made out
