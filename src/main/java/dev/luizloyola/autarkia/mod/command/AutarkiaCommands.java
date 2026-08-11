@@ -161,6 +161,9 @@ public final class AutarkiaCommands {
                         // stand-ins until the social era's group-up handshake exists.
                         .then(AgentCommands.party())
                         .then(AgentCommands.nav())
+                        // The standing order beside the one-shot one: `follow` re-aims the same
+                        // legs at somebody who keeps moving, so a scene can be LED into place.
+                        .then(AgentCommands.follow())
                         // nav (above) drives the legs directly — locomotion debug; brain runs
                         // tasks through the executor, the machinery the arbiter feeds. Anima's
                         // shared brain verbs, plus the one that is ours: obtain is a log quota,
