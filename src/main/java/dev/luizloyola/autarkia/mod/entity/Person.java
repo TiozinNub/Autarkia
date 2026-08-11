@@ -587,28 +587,43 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * Constant survival reflex: whenever the head goes under, hold the swim-up input — float, never
-     * drown. Owned by the body, not the {@link Navigator}, so a Person that wandered in, was shoved
-     * in, or is idle floats like one crossing on a path. Runs after the navigator so it wins the
-     * vertical input, and lands same-tick because {@code aiStep} reads {@code this.jumping} right
-     * after {@code serverAiStep} (see {@link #driveJump}).
+     * Constant survival reflex: while the head is under, hold the swim-up input — float, never
+     * drown. Owned by the body, not the {@link Navigator}, so an idle or shoved-in Person floats
+     * like one crossing on a path. Runs after the navigator so it wins the vertical input, and
+     * lands same-tick because {@code aiStep} reads {@code this.jumping} right after
+     * {@code serverAiStep} (see {@link #driveJump}).
      *
-     * <p>"Whenever the head goes under" is doing all the work: the first cut pressed on every wet
-     * tick, and {@code jumpInLiquid}'s +0.04/tick never stops arriving, so the body climbed clear of
-     * the water, fell back in, and climbed again — gauntlet E2, 0.755 of a block of swing and 432
-     * reversals in 608 ticks. Against the eye line the same crossing swings 0.301 and stays
-     * 0.12–0.42 of a block submerged.
+     * <p>Pressing on every wet tick bounces instead: {@code jumpInLiquid}'s +0.04/tick never stops
+     * arriving, so the body climbed clear of the water, fell back, and climbed again — gauntlet E2,
+     * 0.755 of a block of swing and 432 reversals in 608 ticks. Against the eye line, 0.301 of
+     * swing and 0.12–0.42 of a block submerged throughout.
      *
-     * <p>The eye line rather than vanilla's {@code FloatGoal} depth test, which was tried: it fires
-     * on 0.4 of a block of water whatever the head is doing, so a Person waded into a knee-deep
-     * stream and began swimming in it. Drowning is decided at the eye. Vanilla's other trick,
-     * skipping a fifth of the presses at random, measured worse still (0.52).
+     * <p>One set point cannot serve both shapes. Swimming, the box is 0.6 and vanilla's
+     * {@code getFluidJumpThreshold} of 0.4 is right; upright, 0.4 floats a 1.8 body like a cork and
+     * pressing on wet eyes sinks it to the top of the head, so upright it is the eye height less
+     * {@link #HEAD_CLEARANCE}. Vanilla's random skip of a fifth of the presses measured worse
+     * (0.52 of a block against 0.30).
+     *
+     * <p>Nothing presses in water too shallow to swim in — see {@link #waterIsDeepEnoughToSwimIn()};
+     * a wader stands on the bed and walks.
      */
     private void floatInWater() {
-        if (isEyeInFluid(FluidTags.WATER)) {
+        if (!isInWater() || !waterIsDeepEnoughToSwimIn()) {
+            return;
+        }
+        double setPoint = isVisuallySwimming()
+                ? getFluidJumpThreshold()               // 0.6 box, riding the surface
+                : getEyeHeight() - HEAD_CLEARANCE;      // upright, treading, head out
+        if (getFluidHeight(FluidTags.WATER) > setPoint) {
             setJumping(true); // held-jump-in-water rises via aiStep's jumpInLiquid
         }
     }
+
+    /**
+     * How far above the waterline a treading body keeps its eyes — enough that the whole head is
+     * clear, since a head half under reads as going under, not as treading water.
+     */
+    private static final double HEAD_CLEARANCE = 0.3;
 
     /**
      * Whether this Person is swimming, replacing the rule vanilla uses for everything else.
