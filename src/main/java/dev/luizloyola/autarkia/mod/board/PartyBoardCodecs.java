@@ -69,7 +69,9 @@ public final class PartyBoardCodecs {
                     SLICE_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(ClearArea.State::sliceCooldowns),
                     TARGET.listOf().optionalFieldOf("targets", List.of())
-                            .forGetter(ClearArea.State::targets)
+                            .forGetter(ClearArea.State::targets),
+                    Codec.INT.optionalFieldOf("cleared_this_round", 0)
+                            .forGetter(ClearArea.State::clearedThisRound)
             ).apply(project, ClearArea.State::new));
 
     public static final Codec<WorkKey> WORK_KEY = RecordCodecBuilder.create(key -> key.group(

@@ -238,6 +238,58 @@ class ClearAreaTest {
     }
 
     @Test
+    void aRefusedTargetGetsAnotherGoOnceItsNeighboursAreDown() {
+        // A thing can be unreachable BECAUSE of what surrounds it, so a round that removed
+        // something has changed the world and earned the refused ones a retry.
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos stubborn = new Pos(3, 60, 3);
+        Pos easy = new Pos(8, 60, 8);
+        ctx.remember(THING, stubborn);
+        ctx.remember(THING, easy);
+        project.completed(project.open().get(0), ctx);
+
+        // Refuse one, fell the other.
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(itemAt(project, stubborn), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+        project.completed(itemAt(project, easy), ctx);
+
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(stubborn).state(),
+                "the round felled something, so the one it gave up on deserves another look");
+    }
+
+    @Test
+    void aRoundThatFelledNothingDoesNotReopenAndTheProjectEnds() {
+        // The termination guarantee. Reopening costs a felled tree; a round that felled none has
+        // changed nothing, so retrying would loop forever — which is what REFUSE_AFTER is for.
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos stubborn = new Pos(3, 60, 3);
+        ctx.remember(THING, stubborn);
+        project.completed(project.open().get(0), ctx);
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(itemAt(project, stubborn), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+
+        project.completed(project.open().get(0), ctx); // the verify sweep finds nothing new
+        assertEquals(ClearArea.Phase.DONE, project.phase(), "nothing changed, so nothing to retry");
+    }
+
+    /** The open item standing at this anchor — the tests act through the board's own offers. */
+    private static WorkItem itemAt(ClearArea project, Pos anchor) {
+        return project.itemFor(new WorkKey(WorkKey.CLEAR, anchor)).orElseThrow();
+    }
+
+    @Test
     void aFailedSliceIsOfferedAgainAfterItsCooldown() {
         ClearArea project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();

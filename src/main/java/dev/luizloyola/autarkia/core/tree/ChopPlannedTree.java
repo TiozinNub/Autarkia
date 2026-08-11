@@ -37,6 +37,24 @@ import java.util.Optional;
  */
 public final class ChopPlannedTree implements PrimitiveTask {
 
+    /**
+     * Whether the walk in flight is still worth waiting on — and the one place this task's walk
+     * budget is spent.
+     *
+     * <p><b>Ticks spent WAITING FOR A ROUTE do not count.</b> The search runs off-thread and
+     * costs milliseconds while the budget is in ticks, so charging one against the other shrinks
+     * the allowance as the tick rate rises and turns reachable work into "could not reach".
+     */
+    private boolean walkStillWorking(BrainContext ctx) {
+        if (ctx.actuators().mover().state() != MoveState.MOVING) {
+            return false;
+        }
+        if (ctx.actuators().mover().routing()) {
+            return true; 
+        }
+        return ++walkTicks < WALK_TIMEOUT_TICKS;
+    }
+
     /** Matches {@link ChopPlan}'s arm: swings and digs happen inside this reach of the eyes. */
     private static final double REACH = 4.0;
     private static final double EYE = 1.62;
@@ -161,7 +179,12 @@ public final class ChopPlannedTree implements PrimitiveTask {
         // any legitimate wait — end the run outright; a re-order replans from the remnant.
         Pos here = ctx.percepts().position();
         long now = ctx.percepts().time();
+        // A search in flight counts as busy. The watchdog catches a loop waiting on something
+        // that will never come; an off-thread route will come, and on a millisecond clock this
+        // tick counter knows nothing about — so without this it fires sooner the faster the
+        // server ticks.
         boolean busy = breaking || riseIssued
+                || ctx.actuators().mover().routing()
                 || ctx.actuators().breaker().state() == BreakState.BREAKING
                 || ctx.actuators().riser().state() == RiseState.RISING;
         boolean moved = !here.equals(lastSpot);
@@ -203,7 +226,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             walkTicks = 0;
             return TaskStatus.RUNNING;
         }
-        if (ctx.actuators().mover().state() == MoveState.MOVING && ++walkTicks < WALK_TIMEOUT_TICKS) {
+        if (walkStillWorking(ctx)) {
             return TaskStatus.RUNNING;
         }
         walkIssued = false;
@@ -325,8 +348,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
             walkTicks = 0;
             return TaskStatus.RUNNING;
         }
-        if (ctx.actuators().mover().state() == MoveState.MOVING
-                && ++walkTicks < WALK_TIMEOUT_TICKS) {
+        if (walkStillWorking(ctx)) {
             return TaskStatus.RUNNING;
         }
         walkIssued = false;
@@ -385,8 +407,7 @@ public final class ChopPlannedTree implements PrimitiveTask {
                 walkTicks = 0;
                 return TaskStatus.RUNNING;
             }
-            if (ctx.actuators().mover().state() == MoveState.MOVING
-                    && ++walkTicks < WALK_TIMEOUT_TICKS) {
+            if (walkStillWorking(ctx)) {
                 return TaskStatus.RUNNING;
             }
             walkIssued = false;

@@ -33,7 +33,7 @@ class PartyBoardCodecsTest {
         return new ClearArea.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
                 0.5, phase, List.of(0, 2), List.of(new ClearArea.SliceCooldown(1, 12_345L)),
-                targets);
+                targets, 7);
     }
 
     @Test
@@ -92,6 +92,15 @@ class PartyBoardCodecsTest {
                     PartyBoardCodecs.TARGET_STATE.encodeStart(JsonOps.INSTANCE, state).getOrThrow();
             assertEquals("\"" + state.name() + "\"", encoded.toString());
         }
+    }
+
+    @Test
+    void theRoundsProgressSurvivesTheFile() {
+        // The licence to reopen refusals. A reload that forgot it would either strand refusals
+        // that had earned another go, or hand out a retry the round had not paid for.
+        PartyBoard.Row after =
+                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of()), List.of()));
+        assertEquals(7, after.project().clearedThisRound());
     }
 
     @Test

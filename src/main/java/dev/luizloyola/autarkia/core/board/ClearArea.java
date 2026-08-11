@@ -146,6 +146,15 @@ public final class ClearArea implements PartyProject {
     /** Everything anybody has ever reported inside the bounds, by anchor, in report order. */
     private final Map<Pos, Target> ledger = new LinkedHashMap<>();
 
+    /**
+     * Targets removed since this clearing round began — the licence to reopen refusals.
+     *
+     * <p>A tree can be unreachable BECAUSE of the trees around it (decision: Luiz, 2026-08-11), but
+     * unconditional reopening is the non-termination {@link #REFUSE_AFTER} prevents. So a retry
+     * costs at least one felled tree, and there are finitely many.
+     */
+    private int clearedThisRound;
+
     /** What is on offer right now. Held rather than rebuilt: the board leases items by IDENTITY. */
     private final Map<WorkKey, WorkItem> open = new LinkedHashMap<>();
 
@@ -287,7 +296,10 @@ public final class ClearArea implements PartyProject {
                 // is where nobody went.
                 reported.clear();
                 sliceRetryAfter.clear();
-                enter(Phase.VERIFYING, ctx, now);
+                // Progress is the licence: a round that removed something has earned another look
+                // at what it gave up on — its neighbours may have been what made it unreachable.
+                int reopened = clearedThisRound > 0 ? reopenRefusals() : 0;
+                enter(Phase.VERIFYING, ctx, now, reopened);
             }
             case DONE -> {
             }
@@ -295,17 +307,45 @@ public final class ClearArea implements PartyProject {
     }
 
     private void enter(Phase next, @Nullable BrainContext ctx, long now) {
+        enter(next, ctx, now, 0);
+    }
+
+    private void enter(Phase next, @Nullable BrainContext ctx, long now, int reopened) {
         this.phase = next;
+        if (next == Phase.CLEARING) {
+            this.clearedThisRound = 0;
+        }
         withdrawAll();
         refresh(now);
         if (ctx != null) {
             ctx.journal().record(Category.PROJECT, name(), switch (next) {
                 case CLEARING -> "surveyed — " + count(TargetState.OPEN) + " to clear";
-                case VERIFYING -> "cleared — checking the whole box again";
+                case VERIFYING -> "cleared — checking the whole box again"
+                        + (reopened == 0 ? "" : ", and giving " + reopened
+                                + " we gave up on another go now their neighbours are down");
                 case DONE -> closingLine();
                 case SURVEYING -> "surveying";
             });
         }
+    }
+
+    /**
+     * Puts every refused target back on offer, its failure count wiped.
+     *
+     * <p>Called only when the round that just ended actually removed something — see
+     * {@link #clearedThisRound}. The count is wiped rather than carried because the question being
+     * re-asked is a different one: not "can this be felled" but "can this be felled NOW, with the
+     * wood that was around it gone".
+     */
+    private int reopenRefusals() {
+        int reopened = 0;
+        for (Target target : List.copyOf(ledger.values())) {
+            if (target.state() == TargetState.REFUSED) {
+                settle(target.anchor(), TargetState.OPEN, 0, 0L);
+                reopened++;
+            }
+        }
+        return reopened;
     }
 
     private String closingLine() {
@@ -350,6 +390,7 @@ public final class ClearArea implements PartyProject {
                             + (found == 0 ? "nothing new" : found + " found"));
         } else {
             settle(key.at(), TargetState.CLEARED, 0, 0L);
+            clearedThisRound++;
         }
         withdraw(key);
         refresh(now);
@@ -633,7 +674,7 @@ public final class ClearArea implements PartyProject {
      */
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<Integer> reported, List<SliceCooldown> sliceCooldowns,
-                        List<Target> targets) {
+                        List<Target> targets, int clearedThisRound) {
     }
 
     /** What this project would need to carry on exactly where it left off. */
@@ -641,7 +682,8 @@ public final class ClearArea implements PartyProject {
         List<SliceCooldown> cooldowns = new ArrayList<>();
         sliceRetryAfter.forEach((slice, until) -> cooldowns.add(new SliceCooldown(slice, until)));
         return new State(clearing.id(), bounds, priority, phase,
-                List.copyOf(reported), List.copyOf(cooldowns), List.copyOf(ledger.values()));
+                List.copyOf(reported), List.copyOf(cooldowns), List.copyOf(ledger.values()),
+                clearedThisRound);
     }
 
     /**
@@ -660,6 +702,7 @@ public final class ClearArea implements PartyProject {
             for (Target target : state.targets()) {
                 project.ledger.put(target.anchor(), target);
             }
+            project.clearedThisRound = state.clearedThisRound();
             project.refresh(now);
             return project;
         });
