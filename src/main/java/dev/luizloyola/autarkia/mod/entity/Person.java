@@ -503,6 +503,13 @@ public class Person extends Avatar implements AgentBody {
                     + (walk.goal() == null ? "nowhere" : walk.goal().toShortString()));
         }
         super.tick();
+        // After super.tick(), where vanilla puts the equivalent call for a player. The flag it
+        // reads was set by baseTick's updateSwimming, which runs before the navigator, so it
+        // answers with last tick's leg — one tick of lag, against a second call site that would
+        // have to agree with the first. Server side only: the pose is synched.
+        if (level() instanceof ServerLevel) {
+            updateSwimmingPose();
+        }
     }
 
     /**
@@ -588,6 +595,85 @@ public class Person extends Avatar implements AgentBody {
         if (isInWater()) {
             setJumping(true); // held-jump-in-water rises via aiStep's jumpInLiquid
         }
+    }
+
+    /**
+     * Whether this Person is swimming, replacing the rule vanilla uses for everything else.
+     *
+     * <p>{@code Entity.updateSwimming} asks "is it SPRINTING and under water", which can never be
+     * yes here: sprint is gated on {@link #driveSprint} and the metabolism, and
+     * {@link #floatInWater} presses from the instant any part of the body is wet, so the head is
+     * back up before the eyes-under test can be true. The intent comes instead from the follower —
+     * {@link Navigator#isCrossingWater()} — kept in vanilla's two-state shape, harder to enter than
+     * to stay in, because a single condition flickers where two do not.
+     *
+     * <p>The entry test is {@code !onGround()} rather than vanilla's eyes-under, because it
+     * separates <em>swimming</em> from <em>wading</em>: feet on the bed of a one-deep stream is a
+     * walk that happens to be wet, and the planner calls that leg a SWIM (it has no shallow-water
+     * move yet). Climbing out ends it on the same test, the instant the feet are planted, with no
+     * grace.
+     *
+     * <p>Staying in it is measured in {@link #SWIM_GRACE_TICKS}, not the live conditions: a swimmer
+     * BOBS, because {@link #floatInWater} lifts it clear and the swimming box is 0.6 tall, so a
+     * small hop takes all of it out of the water — and the navigator alternates too, since a tick
+     * out of the water on a climb-out leg is not steered as a swim. The first cut flipped the pose
+     * twenty times a second, resizing the hitbox and broadcasting synched data each time; half a
+     * second of grace over both facts rides out the bob.
+     *
+     * <p>Server only: the flag is synched, and the client's Navigator never ticks, so it would
+     * always answer "not swimming".
+     */
+    @Override
+    public void updateSwimming() {
+        if (!(level() instanceof ServerLevel)) {
+            return; 
+        }
+        boolean swimmingNow = this.navigator.isCrossingWater() && isInWater();
+        if (swimmingNow) {
+            this.swimTicks = SWIM_GRACE_TICKS;
+        } else if (this.swimTicks > 0) {
+            this.swimTicks--;
+        }
+        if (onGround()) {
+            setSwimming(false); 
+            return;
+        }
+        setSwimming(isSwimming() ? this.swimTicks > 0 : swimmingNow);
+    }
+
+    /**
+     * How long a swimmer stays a swimmer after the last tick that plainly was one — long enough
+     * to ride out the bob {@link #updateSwimming} describes, short enough that it is over before
+     * anyone could see it. Ticks.
+     */
+    private static final int SWIM_GRACE_TICKS = 10;
+
+    /** Ticks left of {@link #SWIM_GRACE_TICKS}; reset to full on any tick that is plainly a swim. */
+    private int swimTicks;
+
+    /**
+     * Puts the body into the shape the swim flag says it is in — a Person's version of
+     * {@code Player.updatePlayerPose}, which does not apply to an {@link Avatar}. Everything else
+     * already works unmodified: {@code Avatar.POSES} carries the 0.6×0.6 swimming box,
+     * {@code LivingEntity.tick} ramps {@code swimAmount} off it, and {@code AvatarRenderer} reads
+     * both.
+     *
+     * <p>A pose change resizes the hitbox in place, so the fit check keeps a body that swam under a
+     * ledge from standing up into it — vanilla guards the same way. Refusing to stand leaves them
+     * swimming, which out of water is vanilla's crawl.
+     */
+    private void updateSwimmingPose() {
+        Pose desired = isSwimming() ? Pose.SWIMMING : Pose.STANDING;
+        if (getPose() == desired || !fitsAs(desired)) {
+            return;
+        }
+        setPose(desired);
+    }
+
+    /** Whether the body's box in {@code pose} would be clear of the world where it stands now. */
+    private boolean fitsAs(Pose pose) {
+        return level().noCollision(
+                this, getDimensions(pose).makeBoundingBox(position()).deflate(1.0E-7));
     }
 
     /** This person's movement/navigation state machine. See {@link Navigator}. */
