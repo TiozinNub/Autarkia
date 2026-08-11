@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import java.util.List;
@@ -51,6 +52,18 @@ public interface Project {
 
     /** An item's root FAILED. Pacing the retry is the project's business, not the arbiter's. */
     void failed(WorkItem item, BrainContext ctx);
+
+    /**
+     * The same failure, with the worker it came from — for projects that treat a failure as EVIDENCE
+     * about the errand rather than as a setback.
+     *
+     * <p>Who failed separates "this cannot be done" from "this body could not do it": one stuck
+     * worker charged 134 perfectly fellable trees to the trees themselves (live, 2026-08-11). Count
+     * per WORKER, so giving up means several people agreed.
+     */
+    default void failed(WorkItem item, AgentId who, BrainContext ctx) {
+        failed(item, ctx);
+    }
 
     /**
      * A claim on one of this project's items lapsed — the worker suspended it and never came back,

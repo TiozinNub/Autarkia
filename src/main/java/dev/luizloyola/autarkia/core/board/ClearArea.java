@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
@@ -114,13 +115,29 @@ public final class ClearArea implements PartyProject {
      *
      * @param retryAfter game time before which this is not offered again, 0 when it never failed
      */
-    public record Target(Pos anchor, TargetState state, int failures, long retryAfter) {
+    public record Target(Pos anchor, TargetState state, int failures, long retryAfter,
+                        List<AgentId> failedBy) {
         static Target fresh(Pos anchor) {
-            return new Target(anchor, TargetState.OPEN, 0, 0L);
+            return new Target(anchor, TargetState.OPEN, 0, 0L, List.of());
         }
 
         boolean offerableAt(long now) {
             return state == TargetState.OPEN && retryAfter <= now;
+        }
+
+        /**
+         * The same target with one more failure recorded against the worker who had it.
+         *
+         * <p>{@link #failedBy} is a SET of workers, not a tally of attempts: giving up must mean
+         * several people tried. One stuck worker refused a hundred and thirty-four fellable trees on
+         * its own (live, 2026-08-11), each failure charged to a different tree.
+         */
+        Target andFailedBy(@Nullable AgentId who, long retryAfter) {
+            List<AgentId> tried = new ArrayList<>(failedBy);
+            if (who != null && !tried.contains(who)) {
+                tried.add(who);
+            }
+            return new Target(anchor, state, failures + 1, retryAfter, List.copyOf(tried));
         }
     }
 
@@ -341,7 +358,7 @@ public final class ClearArea implements PartyProject {
         int reopened = 0;
         for (Target target : List.copyOf(ledger.values())) {
             if (target.state() == TargetState.REFUSED) {
-                settle(target.anchor(), TargetState.OPEN, 0, 0L);
+                ledger.put(target.anchor(), Target.fresh(target.anchor()));
                 reopened++;
             }
         }
@@ -399,6 +416,11 @@ public final class ClearArea implements PartyProject {
 
     @Override
     public void failed(WorkItem item, BrainContext ctx) {
+        failed(item, null, ctx);
+    }
+
+    @Override
+    public void failed(WorkItem item, @Nullable AgentId who, BrainContext ctx) {
         long now = ctx.percepts().time();
         Optional<WorkKey> named = keyOf(item);
         if (named.isEmpty()) {
@@ -409,13 +431,22 @@ public final class ClearArea implements PartyProject {
         if (WorkKey.SURVEY.equals(key.flavour())) {
             sliceRetryAfter.put(indexOf(key), now + FAIL_COOLDOWN);
         } else {
-            Target target = ledger.get(key.at());
-            int failures = (target == null ? 0 : target.failures()) + 1;
-            boolean giveUp = failures >= REFUSE_AFTER;
-            settle(key.at(), giveUp ? TargetState.REFUSED : TargetState.OPEN,
-                    failures, giveUp ? 0L : now + FAIL_COOLDOWN);
+            Target was = ledger.getOrDefault(key.at(), Target.fresh(key.at()));
+            Target tried = was.andFailedBy(who, now + FAIL_COOLDOWN);
+            // Distinct WORKERS, not attempts — see Target.andFailedBy for what counting attempts
+            // cost. Falling back to attempts when nobody is named keeps termination: corroboration
+            // needs identities, and production always names the worker, so this is the seam's
+            // default rather than a path a settlement takes.
+            boolean giveUp = tried.failedBy().isEmpty()
+                    ? tried.failures() >= REFUSE_AFTER
+                    : tried.failedBy().size() >= REFUSE_AFTER;
+            ledger.put(key.at(), giveUp
+                    ? new Target(key.at(), TargetState.REFUSED, tried.failures(), 0L,
+                            tried.failedBy())
+                    : tried);
             ctx.journal().record(Category.PROJECT, name(), giveUp
-                    ? "gave up on " + at(key.at()) + " after " + failures + " tries"
+                    ? "gave up on " + at(key.at()) + " — " + tried.failedBy().size()
+                            + " different people could not"
                     : "failed at " + at(key.at()) + ", retry in " + FAIL_COOLDOWN + "t");
         }
         withdraw(key);
@@ -445,7 +476,8 @@ public final class ClearArea implements PartyProject {
     }
 
     private void settle(Pos anchor, TargetState state, int failures, long retryAfter) {
-        ledger.put(anchor, new Target(anchor, state, failures, retryAfter));
+        List<AgentId> tried = ledger.containsKey(anchor) ? ledger.get(anchor).failedBy() : List.of();
+        ledger.put(anchor, new Target(anchor, state, failures, retryAfter, tried));
     }
 
     // ── durable names ────────────────────────────────────────────────────────────────────────

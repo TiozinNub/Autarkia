@@ -123,6 +123,9 @@ public class Board {
         if (asker == null) {
             return Optional.empty(); // an agent that does not yet know who it is cannot owe anything
         }
+        if (isBenched(asker, now)) {
+            return Optional.empty(); // failing everything: let them do something else for a while
+        }
         WorkItem best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         for (Entry entry : entries) {
@@ -205,6 +208,7 @@ public class Board {
 
     /** The item's root SUCCEEDED: the hold clears and the project is told. */
     public void completed(WorkItem item, AgentId who, BrainContext ctx) {
+        flailing.remove(who); // anything at all going right ends the streak
         leases.remove(item);
         Project owner = ownerOf(item);
         if (owner != null) {
@@ -217,8 +221,48 @@ public class Board {
         leases.remove(item);
         Project owner = ownerOf(item);
         if (owner != null) {
-            owner.failed(item, ctx);
+            owner.failed(item, who, ctx);
         }
+        benchIfFlailing(who, ctx);
+    }
+
+    /**
+     * Notices a worker who is failing everything and stops offering it work for a while.
+     *
+     * <p>A body that can succeed at nothing (stuck in geometry, unable to path) otherwise walks
+     * the whole ledger in seconds, and every failure is recorded against the WORK rather than
+     * against it. Not benching cost a hundred and thirty-four trees; benching costs one worker for
+     * {@link #BENCH_TICKS}. The streak resets on any success.
+     */
+    private void benchIfFlailing(AgentId who, BrainContext ctx) {
+        if (who == null) {
+            return;
+        }
+        int streak = flailing.merge(who, 1, Integer::sum);
+        if (streak >= BENCH_AFTER) {
+            benched.put(who, ctx.percepts().time() + BENCH_TICKS);
+            flailing.remove(who);
+            ctx.journal().record(Category.PROJECT, "board",
+                    "nothing is working — standing down from errands for " + BENCH_TICKS + "t");
+        }
+    }
+
+    /** Consecutive failures, with no success in between, before a worker is stood down. */
+    public static final int BENCH_AFTER = 4;
+
+    /** How long a stood-down worker is offered nothing. */
+    public static final int BENCH_TICKS = 600;
+
+    /** Consecutive failures per worker; any success clears the entry. */
+    private final Map<AgentId, Integer> flailing = new java.util.HashMap<>();
+
+    /** Workers stood down, and the tick they may be offered work again. */
+    private final Map<AgentId, Long> benched = new java.util.HashMap<>();
+
+    /** Whether this worker is currently stood down — the offer scan skips them. */
+    public boolean isBenched(AgentId who, long now) {
+        Long until = benched.get(who);
+        return until != null && until > now;
     }
 
     /**

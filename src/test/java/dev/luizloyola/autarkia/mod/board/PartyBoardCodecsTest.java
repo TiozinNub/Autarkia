@@ -39,9 +39,10 @@ class PartyBoardCodecsTest {
     @Test
     void aProjectComesBackWithItsBoxItsPhaseAndItsLedger() {
         ClearArea.State before = state(ClearArea.Phase.CLEARING, List.of(
-                new ClearArea.Target(new Pos(3, 61, 4), ClearArea.TargetState.OPEN, 0, 0L),
-                new ClearArea.Target(new Pos(9, 62, 9), ClearArea.TargetState.CLEARED, 0, 0L),
-                new ClearArea.Target(new Pos(11, 63, 2), ClearArea.TargetState.REFUSED, 3, 0L)));
+                new ClearArea.Target(new Pos(3, 61, 4), ClearArea.TargetState.OPEN, 0, 0L, List.of()),
+                new ClearArea.Target(new Pos(9, 62, 9), ClearArea.TargetState.CLEARED, 0, 0L, List.of()),
+                new ClearArea.Target(new Pos(11, 63, 2), ClearArea.TargetState.REFUSED, 3, 0L,
+                        List.of(AgentId.random(), AgentId.random(), AgentId.random()))));
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
         assertEquals(before, after.project());
@@ -51,7 +52,8 @@ class PartyBoardCodecsTest {
     void aRefusalKeepsItsCountAcrossTheFile() {
         // The count is what decides whether a reloaded target gets three more tries or none.
         ClearArea.Target stubborn =
-                new ClearArea.Target(new Pos(1, 2, 3), ClearArea.TargetState.OPEN, 2, 900L);
+                new ClearArea.Target(new Pos(1, 2, 3), ClearArea.TargetState.OPEN, 2, 900L,
+                        List.of(AgentId.random(), AgentId.random()));
         PartyBoard.Row after = roundTrip(
                 new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of(stubborn)), List.of()));
         assertEquals(stubborn, after.project().targets().get(0));
@@ -101,6 +103,20 @@ class PartyBoardCodecsTest {
         PartyBoard.Row after =
                 roundTrip(new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of()), List.of()));
         assertEquals(7, after.project().clearedThisRound());
+    }
+
+    @Test
+    void whoFailedATargetSurvivesTheFile() {
+        // Refusing means several DIFFERENT people could not do it, so the set of who tried is the
+        // evidence. A reload that dropped it would hand a stuck worker a fresh chance to condemn
+        // the same tree over and over.
+        AgentId alice = AgentId.random();
+        AgentId bob = AgentId.random();
+        ClearArea.Target tried = new ClearArea.Target(new Pos(4, 5, 6),
+                ClearArea.TargetState.OPEN, 2, 0L, List.of(alice, bob));
+        PartyBoard.Row after = roundTrip(
+                new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of(tried)), List.of()));
+        assertEquals(List.of(alice, bob), after.project().targets().get(0).failedBy());
     }
 
     @Test

@@ -290,6 +290,43 @@ class ClearAreaTest {
     }
 
     @Test
+    void oneWorkerFailingOverAndOverCannotCondemnATree() {
+        // The 134-tree bug: one body in a try-fail loop refused a whole ledger, because failures
+        // were charged to the tree rather than the worker. Giving up means several DIFFERENT people
+        // could not.
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos tree = new Pos(3, 60, 3);
+        ctx.remember(THING, tree);
+        project.completed(project.open().get(0), ctx);
+
+        AgentId stuck = AgentId.random();
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER * 3; attempt++) {
+            project.failed(itemAt(project, tree), stuck, ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(tree).state(),
+                "one body failing repeatedly is evidence about the body, not about the tree");
+    }
+
+    @Test
+    void enoughDifferentPeopleFailingIsWhatRefusesIt() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos tree = new Pos(3, 60, 3);
+        ctx.remember(THING, tree);
+        project.completed(project.open().get(0), ctx);
+
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(itemAt(project, tree), AgentId.random(), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(tree).state());
+    }
+
+    @Test
     void aFailedSliceIsOfferedAgainAfterItsCooldown() {
         ClearArea project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();

@@ -49,8 +49,11 @@ public final class PartyBoardCodecs {
                     POS.fieldOf("at").forGetter(ClearArea.Target::anchor),
                     TARGET_STATE.fieldOf("state").forGetter(ClearArea.Target::state),
                     Codec.INT.optionalFieldOf("failures", 0).forGetter(ClearArea.Target::failures),
-                    Codec.LONG.optionalFieldOf("retry", 0L).forGetter(ClearArea.Target::retryAfter)
-            ).apply(target, ClearArea.Target::new));
+                    Codec.LONG.optionalFieldOf("retry", 0L).forGetter(ClearArea.Target::retryAfter),
+                    UUIDUtil.CODEC.listOf().optionalFieldOf("failed_by", List.of())
+                            .forGetter(t -> t.failedBy().stream().map(AgentId::value).toList())
+            ).apply(target, (at, state, failures, retry, failedBy) -> new ClearArea.Target(
+                    at, state, failures, retry, failedBy.stream().map(AgentId::of).toList())));
 
     public static final Codec<ClearArea.SliceCooldown> SLICE_COOLDOWN =
             RecordCodecBuilder.create(cooldown -> cooldown.group(
