@@ -20,8 +20,12 @@ import dev.luizloyola.autarkia.core.person.Look;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.Metabolism;
+import dev.luizloyola.anima.core.agent.need.BreathNeed;
 import dev.luizloyola.anima.core.agent.need.Company;
 import dev.luizloyola.anima.core.agent.need.FoodNeed;
+import dev.luizloyola.anima.core.agent.need.Gauge;
+import dev.luizloyola.anima.core.agent.need.NeedKind;
+import dev.luizloyola.anima.core.agent.need.NeedLevel;
 import dev.luizloyola.anima.core.agent.need.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Being;
@@ -356,12 +360,13 @@ public class Person extends Avatar implements AgentBody {
     private final Company company = new Company(this::profile);
 
     /**
-     * Everything this settler feels, in one roster: hunger (a view over the {@link #metabolism}
-     * above, never a second number) and {@link #company}. One tick site, one readout, and where a
-     * registered need Anima has never heard of would appear.
+     * Everything this settler feels, in one roster: hunger (a view over the {@link #metabolism},
+     * never a second number), breath (a view over the air supply the game already keeps), and
+     * {@link #company}. One tick site, one readout, and where a registered need would appear.
      */
     private final Needs needs = new Needs()
             .add(new FoodNeed(this.metabolism, this::profile))
+            .add(new BreathNeed(this::getAirSupply, this::getMaxAirSupply, this::profile))
             .add(this.company);
 
     /**
@@ -871,7 +876,34 @@ public class Person extends Avatar implements AgentBody {
         }
         this.company.observe(knownPeopleNearby());
         this.needs.tick();
+        recordBreathChange();
     }
+
+    /**
+     * Writes a line when this settler's breath level changes — the whole of what makes drowning
+     * legible, since nothing yet acts on it.
+     *
+     * <p>Every change, not just the alarming ones, which is affordable because air only moves while
+     * the EYES are under: swimming across a lake with the head up costs nothing, and a crossing
+     * that does dip produces a line or two.
+     *
+     * <p>The first observation after a load only remembers, never writes — otherwise every restart
+     * would announce a level the settler has been at all along.
+     */
+    private void recordBreathChange() {
+        NeedLevel level = this.needs.gauge(NeedKind.BREATH).map(Gauge::level).orElse(null);
+        if (level == null || level.key().equals(this.lastBreathLevel)) {
+            return;
+        }
+        String had = this.lastBreathLevel;
+        this.lastBreathLevel = level.key();
+        if (had != null) {
+            journal().record(Category.BODY, "breath", had + " -> " + level.key());
+        }
+    }
+
+    /** What {@link #recordBreathChange()} last saw; null until the first observation after a load. */
+    private @Nullable String lastBreathLevel;
 
     /**
      * How many people this settler can currently perceive and has already met — what feeds the
