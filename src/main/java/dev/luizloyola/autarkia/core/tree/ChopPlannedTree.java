@@ -1410,14 +1410,25 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return new TreeShape.Trunk(List.of(entry), column, branches, leaves);
     }
 
-    /** The memory was wrong — no tree here. Heal the belief and end. */
+    /**
+     * The memory was wrong — no tree here. Heal the belief and end, SUCCESSFULLY.
+     *
+     * <p>This task's goal is that nothing is standing at the anchor, and nothing is. Reporting
+     * that as a failure cost the caller a retry cooldown for the same nothing: a clearing project
+     * spent three attempts and two cooldowns on a phantom, then carried the refusal into every
+     * later pass. A ledger row for a felled tree now settles the first time somebody looks.
+     *
+     * <p>Right for the other caller too: a body chopping FOR LOGS gets a success carrying no
+     * wood, and {@code ObtainItem} is an achieve-goal — it re-checks, finds itself unsatisfied
+     * and picks another way, and the healed belief keeps the same ghost from being chosen twice.
+     */
     private TaskStatus ghost(BrainContext ctx) {
         ctx.journal().record(Category.BRAIN, "chop", "no tree at " + shortPos(anchor)
-                + " — forgetting it");
+                + " — forgetting it; nothing standing here is what was wanted");
         ctx.knowledge().forget(Pois.TREE, anchor);
         ctx.claims().release(Pois.TREE, anchor);
-        ending = "the remembered tree is gone";
-        return TaskStatus.FAILED;
+        ending = "the remembered tree was already gone";
+        return TaskStatus.SUCCESS;
     }
 
     private TaskStatus fail(BrainContext ctx, String why) {
