@@ -1022,6 +1022,7 @@ public class Person extends Avatar implements AgentBody {
     /** Movement control: hold still this tick — no forward input, no jump, walk gait. */
     public void stopMoving() {
         this.zza = 0.0F;
+        this.yya = 0.0F;
         setJumping(false);
         // A navigator that stops mid-sprint must not leave the ×1.3 modifier latched for its
         // next plain walk.
@@ -1055,6 +1056,17 @@ public class Person extends Avatar implements AgentBody {
      */
     public void driveJump() {
         setJumping(true);
+    }
+
+    /**
+     * Movement control: swim down. Vanilla's fluid travel reads {@code yya} as the vertical half of
+     * the movement input (a player's sneak key drives the same field), and it is the only way
+     * down. Per tick like {@code zza}: {@code travel} consumes it and {@link #stopMoving} clears
+     * it, so a dive that ends leaves nothing latched pulling a settler to the next lake's bottom.
+     */
+    @Override
+    public void driveDown(float throttle) {
+        this.yya = -PLAYER_INPUT_DAMPING * throttle;
     }
 
     /**
