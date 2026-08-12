@@ -29,6 +29,7 @@ import dev.luizloyola.anima.core.agent.need.NeedLevel;
 import dev.luizloyola.anima.core.agent.need.Needs;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.brain.sense.Setbacks;
 import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.autarkia.core.person.PersonDanger;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
@@ -170,6 +171,7 @@ public class Person extends Avatar implements AgentBody {
     /** A swing and a climb in flight — paired with the task flags that say one is under way. */
     private static final String TAG_SWING = "Swing";
     private static final String TAG_STEP = "Step";
+    private static final String TAG_SETBACKS = "Setbacks";
     /** Ground this body has already surveyed, so it does not walk it all again. */
     private static final String TAG_SURVEY = "Survey";
     /** The anchor hunger is measured against, so a reload is not one free step. */
@@ -354,6 +356,11 @@ public class Person extends Avatar implements AgentBody {
      */
     private final AgentBlockBreaker blockBreaker = new AgentBlockBreaker(this);
     private final AgentRiser riser = new AgentRiser(this);
+    /**
+     * Where these legs have lately been beaten. A body organ like the others and persisted like
+     * them: a settler re-walking the doorway it was wedged in could tell a reboot had happened.
+     */
+    private final Setbacks setbacks = new Setbacks();
 
     /**
      * This person's food physiology ({@link Metabolism}) — body state beside the
@@ -699,6 +706,12 @@ public class Person extends Avatar implements AgentBody {
     @Override
     public AgentRiser riser() {
         return this.riser;
+    }
+
+    /** Where these legs have lately been beaten — see {@link Setbacks}. */
+    @Override
+    public Setbacks setbacks() {
+        return this.setbacks;
     }
 
     /** This person's water organ — buoyancy, wading, climbing out. See {@link Swimmer}. */
@@ -1356,6 +1369,9 @@ public class Person extends Avatar implements AgentBody {
         // that came back "breaking" while its breaker rested waited on a swing nobody was swinging.
         output.store(TAG_SWING, BrainState.SWING, this.blockBreaker.snapshot());
         output.store(TAG_STEP, BrainState.STEP, this.riser.snapshot());
+        if (!this.setbacks.isEmpty()) {
+            output.store(TAG_SETBACKS, BrainState.SETBACKS, this.setbacks.snapshot());
+        }
         this.poiSensor.snapshot().ifPresent(survey ->
                 output.store(TAG_SURVEY, BrainState.SURVEY, survey));
         if (!Double.isNaN(this.lastX)) {
@@ -1405,6 +1421,7 @@ public class Person extends Avatar implements AgentBody {
         this.pendingJournal = input.read(TAG_JOURNAL, BrainState.JOURNAL).orElse(null);
         input.read(TAG_SWING, BrainState.SWING).ifPresent(this.blockBreaker::restore);
         input.read(TAG_STEP, BrainState.STEP).ifPresent(this.riser::restore);
+        input.read(TAG_SETBACKS, BrainState.SETBACKS).ifPresent(this.setbacks::restore);
         input.read(TAG_SURVEY, BrainState.SURVEY).ifPresent(this.poiSensor::restore);
         // NaN is the "never moved yet" marker the field initializer uses, and the right default:
         // the next tick anchors it wherever the body actually stands.
