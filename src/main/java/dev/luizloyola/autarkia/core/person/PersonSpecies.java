@@ -30,6 +30,10 @@ public final class PersonSpecies {
             // --- senses: human-shaped vision, wide across and flat up-down --------------------
             .set(ProfileAspect.SENSES_RADIUS, 24)
             .set(ProfileAspect.SENSES_SNEAK_RANGE_MULT, 0.75)
+            // Invisibility is sneaking turned up: a tenth of 24 blocks is a couple of paces, so an
+            // invisible body has to be almost close enough to touch before a settler sees it. It
+            // can still be heard the whole time.
+            .set(ProfileAspect.SENSES_INVISIBLE_RANGE_MULT, 0.1)
             .set(ProfileAspect.SENSES_CONE_DEGREES, 150)
             .set(ProfileAspect.SENSES_VERTICAL_DEGREES, 60)
             .set(ProfileAspect.SENSES_HEARING_RADIUS, 12)
