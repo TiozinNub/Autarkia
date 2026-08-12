@@ -84,6 +84,8 @@ public final class PersonSpecies {
             .set(ProfileAspect.BODY_MAX_DROP, 3)
             .set(ProfileAspect.BODY_MAX_LEAP, 3)
             .set(ProfileAspect.BODY_CAN_SWIM, true)
+            .set(ProfileAspect.BODY_CAN_DIG, true)
+            .set(ProfileAspect.ESCAPE_PRESSURE, 0.9)
             // --- gaze: a person's neck, and how long a person's eye rests -------------------
             // 12°/tick is a head that arrives in about half a second from anywhere it can reach:
             // quick enough to have looked before you notice it looking, slow enough to read as a
