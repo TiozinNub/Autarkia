@@ -33,7 +33,7 @@ class PartyBoardCodecsTest {
         return new ClearArea.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
                 0.5, phase, List.of(0, 2), List.of(new ClearArea.SliceCooldown(1, 12_345L)),
-                targets, 7);
+                targets, 7, 4_242L);
     }
 
     @Test
@@ -103,6 +103,9 @@ class PartyBoardCodecsTest {
         PartyBoard.Row after =
                 roundTrip(new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of()), List.of()));
         assertEquals(7, after.project().clearedThisRound());
+        assertEquals(4_242L, after.project().passStartedAt(),
+                "the pass cut-off decides what a reporter may report — a reload that lost it "
+                        + "would let every stale memory back in");
     }
 
     @Test

@@ -74,7 +74,9 @@ public final class PartyBoardCodecs {
                     TARGET.listOf().optionalFieldOf("targets", List.of())
                             .forGetter(ClearArea.State::targets),
                     Codec.INT.optionalFieldOf("cleared_this_round", 0)
-                            .forGetter(ClearArea.State::clearedThisRound)
+                            .forGetter(ClearArea.State::clearedThisRound),
+                    Codec.LONG.optionalFieldOf("pass_started", 0L)
+                            .forGetter(ClearArea.State::passStartedAt)
             ).apply(project, ClearArea.State::new));
 
     public static final Codec<WorkKey> WORK_KEY = RecordCodecBuilder.create(key -> key.group(

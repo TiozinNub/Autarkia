@@ -168,6 +168,16 @@ public final class ClearArea implements PartyProject {
     private final Set<Pos> foundThisPass = new LinkedHashSet<>();
 
     /**
+     * Game time the current survey pass began — the cut-off for what a reporter may report.
+     *
+     * <p>A memory whose last sighting predates the pass is not evidence about what is standing there
+     * now. Taking everything a surveyor knows reopened cleared anchors, sent people to fell ghosts,
+     * and marked their cells dirty so the skip rule could never settle: the box cycled 197 cleared,
+     * 186, 197, 186 (live, 2026-08-12).
+     */
+    private long passStartedAt;
+
+    /**
      * What the last COMPLETED survey pass found, and the only thing the skip rule judges by.
      *
      * <p>Judging by the whole ledger never converges: a cell that once held a tree stays dirty, so a
@@ -349,6 +359,9 @@ public final class ClearArea implements PartyProject {
         if (next == Phase.CLEARING) {
             this.clearedThisRound = 0;
         }
+        if (next == Phase.SURVEYING || next == Phase.VERIFYING) {
+            this.passStartedAt = now; // nothing seen before this moment counts as seen this pass
+        }
         withdrawAll();
         refresh(now);
         if (ctx != null) {
@@ -483,8 +496,8 @@ public final class ClearArea implements PartyProject {
         int added = 0;
         for (PoiMemory memory : ctx.knowledge().all(clearing.kind())) {
             Pos anchor = memory.anchor();
-            if (!bounds.contains(anchor)) {
-                continue;
+            if (!bounds.contains(anchor) || memory.lastSeenTick() < passStartedAt) {
+                continue; // remembered from before this pass — not evidence about now
             }
             Target known = ledger.get(anchor);
             if (known != null && known.state() != TargetState.CLEARED) {
@@ -501,7 +514,7 @@ public final class ClearArea implements PartyProject {
         // to the ledger or a row somebody else already filed — the skip rule asks what was there,
         // not who reported it first.
         for (PoiMemory memory : ctx.knowledge().all(clearing.kind())) {
-            if (bounds.contains(memory.anchor())) {
+            if (bounds.contains(memory.anchor()) && memory.lastSeenTick() >= passStartedAt) {
                 foundThisPass.add(memory.anchor());
             }
         }
@@ -810,7 +823,7 @@ public final class ClearArea implements PartyProject {
      */
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<Integer> reported, List<SliceCooldown> sliceCooldowns,
-                        List<Target> targets, int clearedThisRound) {
+                        List<Target> targets, int clearedThisRound, long passStartedAt) {
     }
 
     /** What this project would need to carry on exactly where it left off. */
@@ -819,7 +832,7 @@ public final class ClearArea implements PartyProject {
         sliceRetryAfter.forEach((slice, until) -> cooldowns.add(new SliceCooldown(slice, until)));
         return new State(clearing.id(), bounds, priority, phase,
                 List.copyOf(reported), List.copyOf(cooldowns), List.copyOf(ledger.values()),
-                clearedThisRound);
+                clearedThisRound, passStartedAt);
     }
 
     /**
@@ -839,6 +852,7 @@ public final class ClearArea implements PartyProject {
                 project.ledger.put(target.anchor(), target);
             }
             project.clearedThisRound = state.clearedThisRound();
+            project.passStartedAt = state.passStartedAt();
             project.refresh(now);
             return project;
         });
