@@ -379,6 +379,42 @@ class ClearAreaTest {
         assertFalse(skip.isEmpty());
     }
 
+    @Test
+    void eachPassJudgesOnWhatITselfSaw_notOnEverythingEverFound() {
+        // Judging by the whole ledger never settles: a cell that once held a tree stays dirty, so a
+        // worked box reads dirty everywhere and every later pass re-walks it. What matters is what
+        // was standing last time somebody looked.
+        ClearArea project = posted(ABLE, bigBox());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos west = new Pos(2, 60, 18);
+        Pos east = new Pos(34, 60, 18);
+        ctx.remember(THING, west);
+        ctx.remember(THING, east);
+        project.completed(project.open().get(0), ctx);          // pass 1 sees both
+        for (WorkItem item : List.copyOf(project.open())) {
+            project.completed(item, ctx);                        // fell them
+        }
+        ctx.forget(THING, west);
+        ctx.forget(THING, east);
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+        // Pass 1 saw both, so both ends are still in play going into the verify.
+        assertFalse(project.skippable().contains(new Pos(0, 60, 16)));
+        assertFalse(project.skippable().contains(new Pos(32, 60, 16)));
+
+        // The verify sees only the west one standing again; the east end is genuinely empty.
+        ctx.remember(THING, west);
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.CLEARING, project.phase());
+        project.completed(project.open().get(0), ctx);
+        ctx.forget(THING, west);
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+
+        java.util.Set<Pos> skip = project.skippable();
+        assertFalse(skip.contains(new Pos(0, 60, 16)), "still beside what the LAST pass saw");
+        assertTrue(skip.contains(new Pos(32, 60, 16)),
+                "the last pass saw nothing here — a tree that stood here once does not keep it dirty");
+    }
+
     /** Five coverage cells a side, so a find in the middle leaves ground beyond its ring. */
     private static Region bigBox() {
         return new Region(new Pos(0, 60, 0), new Pos(39, 70, 39));

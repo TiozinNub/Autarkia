@@ -164,6 +164,19 @@ public final class ClearArea implements PartyProject {
     /** Everything anybody has ever reported inside the bounds, by anchor, in report order. */
     private final Map<Pos, Target> ledger = new LinkedHashMap<>();
 
+    /** Anchors reported during the pass now under way — emptied when a new pass begins. */
+    private final Set<Pos> foundThisPass = new LinkedHashSet<>();
+
+    /**
+     * What the last COMPLETED survey pass found, and the only thing the skip rule judges by.
+     *
+     * <p>Judging by the whole ledger never converges: a cell that once held a tree stays dirty, so a
+     * worked box reads as dirty everywhere and every later pass re-walks all of it (Luiz:
+     * "blacklisting didn't work, they always re-scan everything"). What was standing last time
+     * somebody looked is what matters, so the empty quarters of the box drop out for good.
+     */
+    private Set<Pos> foundLastPass = new LinkedHashSet<>();
+
     /**
      * Targets removed since this clearing round began — the licence to reopen refusals.
      *
@@ -303,6 +316,9 @@ public final class ClearArea implements PartyProject {
                 if (!clearing.surveys() || reported.size() < slices.size()) {
                     return;
                 }
+                // What this pass saw becomes the slate the next one is judged against.
+                foundLastPass = new LinkedHashSet<>(foundThisPass);
+                foundThisPass.clear();
                 boolean anything = ledger.values().stream().anyMatch(t -> t.state() == TargetState.OPEN);
                 enter(anything ? Phase.CLEARING : Phase.DONE, ctx, now);
             }
@@ -481,6 +497,14 @@ public final class ClearArea implements PartyProject {
             ledger.put(anchor, Target.fresh(anchor));
             added++;
         }
+        // Everything in bounds this pass can see counts as "standing here now", whether it is new
+        // to the ledger or a row somebody else already filed — the skip rule asks what was there,
+        // not who reported it first.
+        for (PoiMemory memory : ctx.knowledge().all(clearing.kind())) {
+            if (bounds.contains(memory.anchor())) {
+                foundThisPass.add(memory.anchor());
+            }
+        }
         return added;
     }
 
@@ -524,8 +548,8 @@ public final class ClearArea implements PartyProject {
             return Set.of();
         }
         Set<Long> dirty = new java.util.HashSet<>();
-        for (Target target : ledger.values()) {
-            dirty.add(cellKey(target.anchor().x(), target.anchor().z()));
+        for (Pos anchor : foundLastPass) {
+            dirty.add(cellKey(anchor.x(), anchor.z()));
         }
         if (dirty.isEmpty()) {
             return Set.of();
