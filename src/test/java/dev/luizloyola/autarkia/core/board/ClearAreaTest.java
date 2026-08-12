@@ -46,7 +46,7 @@ class ClearAreaTest {
         }
 
         @Override
-        public Task survey(Region slice) {
+        public Task survey(Region slice, java.util.Set<Pos> settled) {
             return new Idle(1);
         }
 
@@ -126,6 +126,8 @@ class ClearAreaTest {
         for (WorkItem item : List.copyOf(project.open())) {
             project.completed(item, ctx);
         }
+        ctx.forget(THING, new Pos(3, 60, 3)); // felling one is also forgetting it
+        ctx.forget(THING, new Pos(7, 60, 8));
         // Everything reported is gone, so the box is walked again — from scratch, because what a
         // first pass missed is precisely where nobody went.
         assertEquals(ClearArea.Phase.VERIFYING, project.phase());
@@ -144,6 +146,7 @@ class ClearAreaTest {
 
         project.completed(project.open().get(0), ctx);
         project.completed(project.open().get(0), ctx);
+        ctx.forget(THING, new Pos(3, 60, 3));
         assertEquals(ClearArea.Phase.VERIFYING, project.phase());
 
         // The second surveyor walks ground the first one hurried past.
@@ -154,17 +157,37 @@ class ClearAreaTest {
     }
 
     @Test
-    void aClearedAnchorIsNeverReportedBackIntoTheLedger() {
+    void somethingStandingAtAClearedAnchorAgainIsFoundAgain() {
+        // Regrowth. Sealing a cleared anchor off for good blinded the review to a sapling grown back
+        // where one was taken — the one thing a review exists to catch (Luiz replanted mid-run; no
+        // pass saw it). A chop that finds nothing now SUCCEEDS, so a stale memory costs one cheap
+        // walk rather than three failures and a permanent refusal.
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos spot = new Pos(3, 60, 3);
+        ctx.remember(THING, spot);
+        project.completed(project.open().get(0), ctx);
+        project.completed(project.open().get(0), ctx);
+        ctx.forget(THING, spot); // felled, and the belief healed with it
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+
+        ctx.remember(THING, spot); // something is standing there again
+        project.completed(project.open().get(0), ctx);
+        assertEquals(ClearArea.Phase.CLEARING, project.phase(), "the review must notice regrowth");
+        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(spot).state());
+    }
+
+    @Test
+    void aFelledTreeNobodyRemembersDoesNotComeBack() {
+        // The other half: once the belief is healed, the anchor stays settled and the box closes.
         ClearArea project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos gone = new Pos(3, 60, 3);
         ctx.remember(THING, gone);
-
         project.completed(project.open().get(0), ctx);
         project.completed(project.open().get(0), ctx);
+        ctx.forget(THING, gone);
 
-        // The verifier still REMEMBERS it — another member can easily be carrying a memory of
-        // something felled while they were away — and the ledger must not send anybody back.
         assertEquals(ClearArea.Phase.VERIFYING, project.phase());
         project.completed(project.open().get(0), ctx);
         assertEquals(ClearArea.Phase.DONE, project.phase());
@@ -324,6 +347,41 @@ class ClearAreaTest {
             project.tick(ctx.now());
         }
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(tree).state());
+    }
+
+    @Test
+    void nothingIsWrittenOffBeforeAnybodyHasSwept() {
+        // The guard that makes the whole rule safe: on a first pass no cell is dirty, so without
+        // it every cell would read as clear-and-surrounded-by-clear and the box would be skipped
+        // entirely, unseen.
+        ClearArea project = posted(ABLE, bigBox());
+        assertTrue(project.skippable().isEmpty());
+    }
+
+    @Test
+    void groundBesideSomethingFoundIsStillWalked_butFarClearGroundIsNot() {
+        // Luiz's rule, as his own worked example: a clear cell is written off only when none of
+        // its EIGHT neighbours held anything either, so one find keeps its whole ring in play.
+        ClearArea project = posted(ABLE, bigBox());
+        BoardBrainContext ctx = new BoardBrainContext();
+        // One thing, in the cell whose corner is (16, 16) — the middle of a 5x5 grid of cells.
+        ctx.remember(THING, new Pos(18, 60, 18));
+        project.completed(project.open().get(0), ctx);
+        project.completed(project.open().get(0), ctx); // fell it; the box moves to VERIFYING
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+
+        java.util.Set<Pos> skip = project.skippable();
+        assertFalse(skip.contains(new Pos(16, 60, 16)), "the cell it was found in");
+        assertFalse(skip.contains(new Pos(8, 60, 16)), "orthogonally beside it");
+        assertFalse(skip.contains(new Pos(24, 60, 24)), "diagonally beside it");
+        assertTrue(skip.contains(new Pos(0, 60, 0)), "two cells away and never near anything");
+        assertTrue(skip.contains(new Pos(32, 60, 32)), "the far corner");
+        assertFalse(skip.isEmpty());
+    }
+
+    /** Five coverage cells a side, so a find in the middle leaves ground beyond its ring. */
+    private static Region bigBox() {
+        return new Region(new Pos(0, 60, 0), new Pos(39, 70, 39));
     }
 
     @Test

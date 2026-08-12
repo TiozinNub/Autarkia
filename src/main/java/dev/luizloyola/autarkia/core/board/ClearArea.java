@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
@@ -466,9 +467,17 @@ public final class ClearArea implements PartyProject {
         int added = 0;
         for (PoiMemory memory : ctx.knowledge().all(clearing.kind())) {
             Pos anchor = memory.anchor();
-            if (!bounds.contains(anchor) || ledger.containsKey(anchor)) {
+            if (!bounds.contains(anchor)) {
                 continue;
             }
+            Target known = ledger.get(anchor);
+            if (known != null && known.state() != TargetState.CLEARED) {
+                continue; // already on the list, or given up on — the reopen rule owns that one
+            }
+            // A CLEARED anchor reported again is something standing there again. Sealing those off
+            // guarded a stale memory sending somebody to an empty patch, when that cost three
+            // failed chops and a permanent refusal; a chop that finds nothing now SUCCEEDS, so it
+            // costs one short walk, and the seal hid real regrowth (Luiz replanted at (418, -136)).
             ledger.put(anchor, Target.fresh(anchor));
             added++;
         }
@@ -497,6 +506,73 @@ public final class ClearArea implements PartyProject {
         return Optional.ofNullable(open.get(key));
     }
 
+    /**
+     * Ground a later pass may skip: cells no target has ever been found in, and none of whose eight
+     * neighbours has either.
+     *
+     * <p>The margin is the point — what a first pass walks past is nearly always beside something it
+     * did find, so a cell is written off only when it is clear and surrounded by clear (decision:
+     * Luiz). One dirty cell keeps its whole ring in play.
+     *
+     * <p>Empty on a first pass, and load-bearing: with nothing dirty yet, every cell would look
+     * clear-and-surrounded-by-clear and the whole box would be written off unseen.
+     *
+     * <p>Not persisted — a pure function of the ledger and the bounds, so a reload recomputes it.
+     */
+    private Set<Pos> settledCells() {
+        if (phase != Phase.VERIFYING) {
+            return Set.of();
+        }
+        Set<Long> dirty = new java.util.HashSet<>();
+        for (Target target : ledger.values()) {
+            dirty.add(cellKey(target.anchor().x(), target.anchor().z()));
+        }
+        if (dirty.isEmpty()) {
+            return Set.of();
+        }
+        Set<Pos> settled = new LinkedHashSet<>();
+        for (int x = bounds.min().x(); x <= bounds.max().x(); x += SurveyArea.CELL) {
+            for (int z = bounds.min().z(); z <= bounds.max().z(); z += SurveyArea.CELL) {
+                if (nearDirty(dirty, x, z)) {
+                    continue;
+                }
+                settled.add(new Pos(x, bounds.min().y(), z));
+            }
+        }
+        return settled;
+    }
+
+    /** Whether this cell or any of its eight neighbours has ever held a target. */
+    private boolean nearDirty(Set<Long> dirty, int x, int z) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dirty.contains(cellKey(x + dx * SurveyArea.CELL, z + dz * SurveyArea.CELL))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** A cell of the coverage grid, named by the box-relative square a world position falls in. */
+    private long cellKey(int x, int z) {
+        long cx = Math.floorDiv(x - bounds.min().x(), SurveyArea.CELL);
+        long cz = Math.floorDiv(z - bounds.min().z(), SurveyArea.CELL);
+        return cx << 32 ^ (cz & 0xFFFFFFFFL);
+    }
+
+    /** How many coverage cells the whole box divides into — the denominator for what is skipped. */
+    private int cellsInBox() {
+        int wide = (bounds.max().x() - bounds.min().x()) / SurveyArea.CELL + 1;
+        int deep = (bounds.max().z() - bounds.min().z()) / SurveyArea.CELL + 1;
+        return wide * deep;
+    }
+
+    /** How much ground a verify pass may skip — for the readout and the debug view. */
+    public Set<Pos> skippable() {
+        return settledCells();
+    }
+
     // ── the readout ──────────────────────────────────────────────────────────────────────────
 
     @Override
@@ -519,9 +595,13 @@ public final class ClearArea implements PartyProject {
         return switch (phase) {
             case SURVEYING, VERIFYING -> {
                 String pass = phase == Phase.SURVEYING ? "surveying " : "verifying ";
-                yield clearing.surveys()
-                        ? pass + reported.size() + "/" + slices.size() + " slices" + tail
-                        : pass + "— nobody can survey " + clearing.label() + " yet";
+                if (!clearing.surveys()) {
+                    yield pass + "— nobody can survey " + clearing.label() + " yet";
+                }
+                int skipped = skippable().size();
+                yield pass + reported.size() + "/" + slices.size() + " slices"
+                        + (skipped == 0 ? "" : ", skipping " + skipped + "/" + cellsInBox()
+                                + " cells") + tail;
             }
             case CLEARING -> "clearing " + count(TargetState.CLEARED) + "/"
                     + (ledger.size() - refused) + tail;
@@ -627,7 +707,7 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public Task root() {
-            return clearing.survey(area);
+            return clearing.survey(area, settledCells());
         }
 
         @Override
