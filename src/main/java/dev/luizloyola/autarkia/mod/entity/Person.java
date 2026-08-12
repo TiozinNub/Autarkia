@@ -91,7 +91,9 @@ import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
 import dev.luizloyola.anima.core.agent.Pronouns;
+import dev.luizloyola.anima.core.brain.act.Gazer;
 import dev.luizloyola.anima.mod.body.AgentBody;
+import dev.luizloyola.anima.mod.body.Gaze;
 import com.mojang.serialization.Codec;
 import dev.luizloyola.anima.mod.body.Modifiers;
 import dev.luizloyola.anima.mod.brain.BrainState;
@@ -247,6 +249,13 @@ public class Person extends Avatar implements AgentBody {
      * spread across this class and the {@link Navigator}, where each fix broke the next.
      */
     private final Swimmer swimmer = new Swimmer(this);
+
+    /**
+     * Where this settler is looking — and, when nothing needs its eyes, what it looks at of its own
+     * accord. {@link Gaze} owns the head now; everything else asks. It had three writers and no
+     * owner before, so a settler that stopped walking stood staring at its last waypoint.
+     */
+    private final Gaze gaze = new Gaze(this);
 
     /**
      * This person's own board — where wants stated about this body live, and nobody else can reach.
@@ -593,6 +602,10 @@ public class Person extends Avatar implements AgentBody {
         // ("never coast on stale input"), which would wipe the rise's centring shuffle and its
         // held jump every tick.
         this.riser.tick();
+        // The gaze after everything that might want the head: this tick's claims are its input,
+        // and what is left over is the body's own to look at. Before the swimmer, which owns a
+        // wet body's pitch.
+        this.gaze.tick();
         // The swimmer last: it reads the follower's water intent for this tick, and it owns every
         // vertical press while wet, so it has to be the last word on the matter.
         this.swimmer.tick();
@@ -692,6 +705,12 @@ public class Person extends Avatar implements AgentBody {
     @Override
     public Swimmer swimmer() {
         return this.swimmer;
+    }
+
+    /** Where this person is looking, and what it looks at unprompted. See {@link Gaze}. */
+    @Override
+    public Gaze gaze() {
+        return this.gaze;
     }
 
     /** This person's food physiology — body state the brain reads, never owns. See {@link #metabolism}. */
@@ -1073,39 +1092,19 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * Snap body and head to face {@code heading} (degrees), pitch pinned flat (0°) so the gaze stays
-     * at eye level rather than tilting at the ground — without the reset the head kept whatever
-     * downward pitch it spawned or loaded with. Pitch is render-only for a walking entity
-     * ({@code travel} steers by yaw alone), so leveling it never affects motion.
+     * Steer toward {@code heading} (degrees) — the walking half of facing, and the whole of what
+     * the legs write. {@code yRot} is the steering wheel: vanilla's {@code travel} rotates the
+     * movement input by it. {@code yBodyRot} goes with it so the shoulders are square to the walk
+     * from the first tick.
+     *
+     * <p><b>The head is not here.</b> Snapping {@code yHeadRot} every walking tick is
+     * why a body that stopped walking froze looking at its last waypoint. The legs now
+     * <em>ask</em>, at {@link Gazer.Priority#NAV}, and {@link Gaze} decides.
      */
     private void face(float heading) {
         setYRot(heading);
-        setYHeadRot(heading);
         this.yBodyRot = heading;
-        setXRot(0.0F);
-    }
-
-    /**
-     * Turn the gaze onto the centre of {@code cell} — head, eyes, and, unless the cell is straight
-     * underfoot, body. The one shared answer to "look at that block" for every arm actuator
-     * (breaker, placer), so none re-derives the trig. A cell in their own column, underfoot or
-     * overhead, has no meaningful bearing (horizontal distance ~0), so the travel yaw is kept and
-     * only the pitch tilts.
-     */
-    public void faceBlock(BlockPos cell) {
-        Vec3 center = Vec3.atCenterOf(cell);
-        Vec3 eye = getEyePosition();
-        double dx = center.x - eye.x;
-        double dy = center.y - eye.y;
-        double dz = center.z - eye.z;
-        setXRot((float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))));
-        BlockPos self = blockPosition();
-        if (cell.getX() != self.getX() || cell.getZ() != self.getZ()) {
-            float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
-            setYRot(yaw);
-            setYHeadRot(yaw);
-            this.yBodyRot = yaw;
-        }
+        this.gaze.lookAlong(heading, Gazer.Priority.NAV, 1);
     }
 
     /**

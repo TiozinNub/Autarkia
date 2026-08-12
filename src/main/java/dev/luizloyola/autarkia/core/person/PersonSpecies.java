@@ -84,6 +84,19 @@ public final class PersonSpecies {
             .set(ProfileAspect.BODY_MAX_DROP, 3)
             .set(ProfileAspect.BODY_MAX_LEAP, 3)
             .set(ProfileAspect.BODY_CAN_SWIM, true)
+            // --- gaze: a person's neck, and how long a person's eye rests -------------------
+            // 12°/tick is a head that arrives in about half a second from anywhere it can reach:
+            // quick enough to have looked before you notice it looking, slow enough to read as a
+            // turn rather than a cut.
+            .set(ProfileAspect.GAZE_TURN_DEGREES, 12.0)
+            // Vanilla clamps a body to 50° off its steering yaw, so anything past that is a look a
+            // walking settler cannot hold anyway; 60 lets a standing one twist a little further
+            // before the shoulders come round.
+            .set(ProfileAspect.GAZE_MAX_TWIST_DEGREES, 60)
+            // Two to six seconds on one thing. Below about a second the head reads as nervous;
+            // much above six and a settler standing about stops looking alive again.
+            .set(ProfileAspect.GAZE_SCAN_MIN_TICKS, 40)
+            .set(ProfileAspect.GAZE_SCAN_MAX_TICKS, 120)
             .build();
 
     /** The same declaration as tunables in {@code autarkia.toml}, under {@code person.*}. */
