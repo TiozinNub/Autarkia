@@ -51,8 +51,8 @@ public final class TreeClearing implements Clearing {
     }
 
     @Override
-    public Task survey(Region slice) {
-        return new SurveyArea(slice, Pois.TREE);
+    public Task survey(Region slice, java.util.Set<Pos> settled) {
+        return new SurveyArea(slice, Pois.TREE, settled);
     }
 
     @Override

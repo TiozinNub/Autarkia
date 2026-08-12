@@ -91,6 +91,9 @@ public final class BoardViewer {
     private static final int TARGET_REFUSED = 0xFFFF2020;
     private static final int TARGET_REFUSED_FILL = 0x60FF2020;
 
+    /** Ground written off for later passes — clear, and nothing found anywhere near it. */
+    private static final int SETTLED = 0x281060C0;
+
     // The live sweep's coverage, shaded by how well the cell is known.
     private static final int COVER_KNOWN = 0x5040E060;
     private static final int COVER_PARTIAL = 0x40C0C040;
@@ -182,6 +185,7 @@ public final class BoardViewer {
                     board == null ? Map.of() : board.holdsOn(project, now);
             paintSlices(frame, project, holds, now);
             paintTargets(frame, project, holds, now);
+            paintSkippable(frame, project);
             paintSweeps(frame, server, project);
             frame.groundOutline(project.bounds(), BOUNDS, BOUNDS_WIDTH);
             frame.label(project.describe(), centreOf(project.bounds()), 3);
@@ -257,6 +261,21 @@ public final class BoardViewer {
                     .filter(sweep -> project.slices().stream()
                             .anyMatch(slice -> slice.min().equals(sweep.area().min())))
                     .ifPresent(sweep -> paintCoverage(frame, sweep));
+        }
+    }
+
+    /**
+     * Ground a verify pass will not walk again: clear last time, and clear all around it.
+     *
+     * <p>Worth drawing because it is the one part of the plan that is an ABSENCE — the surveyor
+     * skipping it looks identical to the surveyor never getting to it. Empty until a first pass
+     * has finished.
+     */
+    private static void paintSkippable(Frame frame, ClearArea project) {
+        for (Pos corner : project.skippable()) {
+            frame.groundPane(corner.x(), corner.z(),
+                    corner.x() + SurveyArea.CELL - 1, corner.z() + SurveyArea.CELL - 1,
+                    0, SETTLED, 0.0F);
         }
     }
 

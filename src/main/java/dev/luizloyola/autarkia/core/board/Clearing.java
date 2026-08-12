@@ -41,10 +41,14 @@ public interface Clearing {
      * A task that walks this slice to confidence and comes back knowing what is in it. Called only
      * when {@link #surveys()}.
      *
-     * <p><b>The surveyor must WALK.</b> A standing {@code Survey} emits glimpses on a coarse grid,
-     * while the individual anchors a ledger needs come from the near field alone.
+     * <p>{@code settled} names the min corners of ground a previous pass proved empty and far from
+     * anything — skippable, and empty on a first pass.
+     *
+     * <p><b>The surveyor must WALK.</b> A {@code Survey} from a standing spot emits only coarse-grid
+     * glimpses (<em>woodland roughly there</em>) while the anchors a ledger needs are grown by the
+     * near field alone.
      */
-    Task survey(Region slice);
+    Task survey(Region slice, java.util.Set<Pos> settled);
 
     /** A task that removes the one thing standing at this anchor. */
     Task clear(Pos anchor);
