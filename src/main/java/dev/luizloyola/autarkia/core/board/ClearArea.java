@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -779,6 +780,12 @@ public final class ClearArea implements PartyProject {
         @Override
         public Task root() {
             return clearing.clear(key.at());
+        }
+
+        /** The clearing kind's answer, not this project's — see {@link Clearing#kit()}. */
+        @Override
+        public Kit kit() {
+            return clearing.kit();
         }
 
         @Override

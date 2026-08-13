@@ -4,6 +4,7 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.inv.Kit;
 
 /**
  * What it means to clear one kind of thing out of a box — the kind, the looking and the removing,
@@ -52,4 +53,12 @@ public interface Clearing {
 
     /** A task that removes the one thing standing at this anchor. */
     Task clear(Pos anchor);
+
+    /**
+     * What removing one of these calls for — {@link Kit#NONE} by default, right for any clearing
+     * that works bare-handed. The kind owns this for the same reason it owns {@link #clear}.
+     */
+    default Kit kit() {
+        return Kit.NONE;
+    }
 }

@@ -5,6 +5,7 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.List;
 
@@ -32,6 +33,8 @@ public final class KeepStocked implements PersonalProject {
     private final int target;
     private final double priority;
     private final int offset;
+    /** What working the posted item calls for — content wired in by whoever posts the project. */
+    private final Kit kit;
 
     /** The one item this project posts at a time, or null when it wants nothing right now. */
     private WorkItem open;
@@ -43,10 +46,15 @@ public final class KeepStocked implements PersonalProject {
     private int beats;
 
     public KeepStocked(ItemSpec spec, int target, double priority, int offset) {
+        this(spec, target, priority, offset, Kit.NONE);
+    }
+
+    public KeepStocked(ItemSpec spec, int target, double priority, int offset, Kit kit) {
         this.spec = spec;
         this.target = target;
         this.priority = priority;
         this.offset = offset;
+        this.kit = kit;
     }
 
     @Override
@@ -141,6 +149,11 @@ public final class KeepStocked implements PersonalProject {
         @Override
         public Task root() {
             return new ObtainItem(spec, target);
+        }
+
+        @Override
+        public Kit kit() {
+            return kit;
         }
 
         @Override

@@ -18,6 +18,12 @@ public final class Stock {
             ItemSpec.register(
                     new ItemSpec("logs", id -> id.endsWith("_log") || id.endsWith("_stem")));
 
+    /** Any axe, any tier — what chopping WANTS (never needs: a chop works bare-handed, slower).
+     *  Same string-level convention as {@link #LOGS}; the wield step never reads this — it
+     *  measures — so the spec only has to be right where there is no block to measure against. */
+    public static final ItemSpec AXES =
+            ItemSpec.register(new ItemSpec("axes", id -> id.endsWith("_axe")));
+
     private Stock() {
     }
 }

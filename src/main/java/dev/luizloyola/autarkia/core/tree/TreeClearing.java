@@ -5,7 +5,10 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.inv.ItemCall;
+import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.autarkia.core.board.Clearing;
+import dev.luizloyola.autarkia.core.board.Stock;
 
 /**
  * Clearing a box of its trees — the first {@link Clearing}.
@@ -59,4 +62,12 @@ public final class TreeClearing implements Clearing {
     public Task clear(Pos anchor) {
         return new ChopPlannedTree(anchor);
     }
+
+    /** A chop WANTS an axe and never needs one — bare-handed felling is slower, not impossible. */
+    @Override
+    public Kit kit() {
+        return CHOP_KIT;
+    }
+
+    private static final Kit CHOP_KIT = Kit.of(ItemCall.want(Stock.AXES, 1));
 }

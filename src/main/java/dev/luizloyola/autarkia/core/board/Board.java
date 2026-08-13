@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.board.SiteClaims;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
+import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -134,6 +135,15 @@ public class Board {
                 if (lease != null && lease.liveAt(now)) {
                     continue; 
                 }
+                List<ItemCall> missing = item.kit().missingNeeds(ctx.percepts().inventory());
+                if (!missing.isEmpty()) {
+                    // The kit gate, v0 (no fetching yet): a body whose pack lacks a NEED declines
+                    // rather than claims, so it cannot camp an item it cannot work, and the
+                    // project pays no cooldown for an empty pack. Fetching will invert this to
+                    // claim-then-kit-up. Wants gate nothing, by definition.
+                    notePassedOver(item, missing, ctx, now);
+                    continue;
+                }
                 double score = item.priority() - item.estimatedCost(ctx);
                 if (score > bestScore) {
                     best = item;
@@ -143,6 +153,34 @@ public class Board {
         }
         return Optional.ofNullable(best);
     }
+
+    /**
+     * The plain line for a decline — {@code passed over: no axes} — paced per item so an offer
+     * scan that runs every tick does not write it every tick. The pace map is identity-keyed like
+     * the leases and pruned as it goes, so an item that closed does not pin a row forever.
+     */
+    private void notePassedOver(WorkItem item, List<ItemCall> missing, BrainContext ctx, long now) {
+        passedOver.entrySet().removeIf(noted -> noted.getValue() < now - PASS_OVER_LOG_INTERVAL * 4);
+        Long lastNoted = passedOver.get(item);
+        if (lastNoted != null && lastNoted > now - PASS_OVER_LOG_INTERVAL) {
+            return;
+        }
+        passedOver.put(item, now);
+        StringBuilder wanted = new StringBuilder();
+        for (ItemCall call : missing) {
+            if (wanted.length() > 0) {
+                wanted.append(", ");
+            }
+            wanted.append(call.spec().name());
+        }
+        ctx.journal().record(Category.PROJECT, item.describe(), "passed over: no " + wanted);
+    }
+
+    /** Ticks between repeated passed-over lines for one item — the same pace a failed retry gets. */
+    public static final int PASS_OVER_LOG_INTERVAL = 600;
+
+    /** Last passed-over journal line per item, for pacing. Identity-keyed like {@link #leases}. */
+    private final Map<WorkItem, Long> passedOver = new IdentityHashMap<>();
 
     /**
      * Takes the hold for {@code who} until {@code now + }{@link #ttlTicks()}, and tells the project.

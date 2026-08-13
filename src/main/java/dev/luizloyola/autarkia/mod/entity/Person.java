@@ -9,6 +9,8 @@ import dev.luizloyola.anima.compat.inv.Inventories;
 import dev.luizloyola.anima.compat.inv.ItemStacks;
 import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.inv.ItemCall;
+import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.log.AgentJournal;
@@ -292,7 +294,10 @@ public class Person extends Avatar implements AgentBody {
     /** A fresh settler's own board, carrying the one standing want everybody starts with. */
     private static PersonalBoard personalBoard(int offset) {
         PersonalBoard board = new PersonalBoard();
-        board.post(new KeepStocked(Stock.LOGS, STOCK_LOGS, STOCK_PRIORITY, offset));
+        // Logs come from chopping, and a chop WANTS an axe (never needs one — a want gates
+        // nothing; it is wielded at the block when the pack has one).
+        board.post(new KeepStocked(Stock.LOGS, STOCK_LOGS, STOCK_PRIORITY, offset,
+                Kit.of(ItemCall.want(Stock.AXES, 1))));
         return board;
     }
 
