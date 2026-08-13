@@ -462,13 +462,16 @@ public class Person extends Avatar implements AgentBody {
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        // Same LivingEntity.travel physics a player uses, so matching a player's walk is just
-        // matching a player's MOVEMENT_SPEED (0.1) — verified in-world within ~2%. STEP_HEIGHT
-        // stays at the living default (0.6, player-equal): slabs and stair-bottoms walkable, full
-        // blocks still need a jump we don't do yet. AgentAttributes adds the four a mining body
-        // needs (see there for why an undeclared attribute is a silent hole rather than a zero).
-        return AgentAttributes.mining(LivingEntity.createLivingAttributes()
-                .add(Attributes.MOVEMENT_SPEED, 0.1));
+        // A Person drives itself through the same LivingEntity.travel physics a player uses, so
+        // matching a player's walk means matching MOVEMENT_SPEED (0.1) — verified in-world side by
+        // side, within ~2%. STEP_HEIGHT stays at the living default (0.6, player-equal): slabs and
+        // stair-bottoms walkable, full blocks still need a jump. AgentAttributes adds the mining
+        // and combat sets — see there for why an undeclared attribute is a silent hole, not a zero.
+        AttributeSupplier.Builder builder = LivingEntity.createLivingAttributes()
+                .add(Attributes.MOVEMENT_SPEED, 0.1);
+        AgentAttributes.mining(builder);
+        AgentAttributes.combat(builder);
+        return builder;
     }
 
     @Override
