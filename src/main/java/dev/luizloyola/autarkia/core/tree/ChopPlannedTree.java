@@ -78,6 +78,13 @@ public final class ChopPlannedTree implements PrimitiveTask {
      */
     private static final int STUCK_TICKS = 300;
 
+    /**
+     * How high above the anchor a leftover of this tree may be hiding — a trunk's worth, because
+     * a remnant is invisible to everything else in the mod and the whole cost of overreaching is
+     * a few block reads once per chop.
+     */
+    private static final int REMNANT_REACH = 24;
+
     /** How far from the anchor the tail chases this fell's log drops, and how many walks. */
     private static final int GATHER_RADIUS = 10;
     private static final int GATHER_WALKS_MAX = 16;
@@ -1352,10 +1359,37 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return cells;
     }
 
+    /**
+     * Somewhere to start the scan: the lowest log at or above the anchor.
+     *
+     * <p>Wide and shallow at the bottom, where a standing tree's base is, then narrow and TALL up
+     * the anchor's own column — what hides up there is a remnant of a previous fell, and it hides
+     * completely: a suspended last log is UNGROUNDED, so the growth rules do not call it a tree,
+     * a survey never notes it, and no ledger row is ever raised for it.
+     *
+     * <p>The ceiling was {@code dy = 2} and both remnants a 184-tree box left behind sat at
+     * {@code dy = 3}, so the chop declared the memory wrong and the project marked the tree
+     * cleared with the wood still hanging. Finding it hands the job to {@link #remnantTrunk};
+     * the ghost path is then only reached when the ground is truly bare.
+     */
     private Optional<Pos> findSeed(BlockProbe probe) {
         for (int dy = 0; dy <= 2; dy++) {
             for (int dx = -2; dx <= 2; dx++) {
                 for (int dz = -2; dz <= 2; dz++) {
+                    int x = anchor.x() + dx;
+                    int y = anchor.y() + dy;
+                    int z = anchor.z() + dz;
+                    if (probe.at(x, y, z) == BlockKind.LOG) {
+                        return Optional.of(new Pos(x, y, z));
+                    }
+                }
+            }
+        }
+        // Up the column the trunk stood in. Narrow on purpose: this is looking for what is left OF
+        // this TREE, not for a neighbour's canopy passing overhead.
+        for (int dy = 3; dy <= REMNANT_REACH; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
                     int x = anchor.x() + dx;
                     int y = anchor.y() + dy;
                     int z = anchor.z() + dz;
