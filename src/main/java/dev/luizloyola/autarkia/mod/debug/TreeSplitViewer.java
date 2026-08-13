@@ -9,12 +9,16 @@ import dev.luizloyola.autarkia.core.tree.SplitReport;
 import dev.luizloyola.autarkia.core.tree.TreeMasses;
 import dev.luizloyola.autarkia.core.tree.TreeSeams;
 import dev.luizloyola.autarkia.core.tree.TreeShape;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -133,6 +137,56 @@ public final class TreeSplitViewer {
         return fresh.radius;
     }
 
+    /**
+     * Follows wood standing on the box's lid or floor out through it, so a tree taller than the
+     * survey radius is drawn whole — without it the monocle individuates a clipped crown: a giant
+     * called ungrounded, or a seam that exists only because the lid cut the canopy. Since
+     * {@code TreeRule.standsTall} height is not measured at all.
+     *
+     * <p>Horizontally it stays inside the box. The cost is the tail alone: the flood starts on the
+     * two planes and dies at the first cell that is not wood.
+     */
+    private static void followWoodPastTheLid(LevelProbe probe, Map<Pos, BlockKind> wood,
+            Level level, BlockPos centre, int r, int minY, int maxY) {
+        Deque<Pos> frontier = new ArrayDeque<>();
+        for (Pos cell : wood.keySet()) {
+            if (cell.y() == minY || cell.y() == maxY) {
+                frontier.add(cell);
+            }
+        }
+        Set<Pos> looked = new HashSet<>();
+        while (!frontier.isEmpty()) {
+            Pos p = frontier.poll();
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        int y = p.y() + dy;
+                        if (y >= minY && y <= maxY) {
+                            continue; // inside the lid: the box scan already has it
+                        }
+                        if (y < level.getMinY() || y > level.getMaxY()) {
+                            continue;
+                        }
+                        int x = p.x() + dx;
+                        int z = p.z() + dz;
+                        if (Math.abs(x - centre.getX()) > r || Math.abs(z - centre.getZ()) > r) {
+                            continue; // the survey's own footprint, unchanged
+                        }
+                        Pos n = new Pos(x, y, z);
+                        if (!looked.add(n)) {
+                            continue;
+                        }
+                        BlockKind kind = probe.at(x, y, z);
+                        if (kind == BlockKind.LOG || kind == BlockKind.LEAVES) {
+                            wood.put(n, kind);
+                            frontier.add(n);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** One frame: scan the box around them, individuate, paint, push. */
     private static void render(ServerPlayer player, Watch watch) {
         Level level = player.level();
@@ -158,6 +212,7 @@ public final class TreeSplitViewer {
                 }
             }
         }
+        followWoodPastTheLid(probe, wood, level, centre, r, minY, maxY);
 
         List<CellOverlayPayload.Group> solid = new ArrayList<>();
         List<CellOverlayPayload.Group> airy = new ArrayList<>();

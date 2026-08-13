@@ -43,6 +43,17 @@ public final class TreeRule implements GrowthRule {
         return kind == BlockKind.LOG || kind == BlockKind.LEAVES;
     }
 
+    /**
+     * Yes: a tree is as tall as it grew. A jungle giant or mega spruce clears thirty blocks
+     * against a spread cap of twenty-four, so capping vertically lost whichever end the seed
+     * was not — the sensor seeds at the top and loses the stump (nothing grounded, so giants
+     * went unseen), the chopper seeds at the stump and leaves the crown hanging.
+     */
+    @Override
+    public boolean standsTall() {
+        return true;
+    }
+
     @Override
     public List<Evaluation> evaluate(Map<Pos, BlockKind> blocks, BlockProbe probe) {
         List<Evaluation> trees = new ArrayList<>();

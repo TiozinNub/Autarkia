@@ -256,6 +256,116 @@ class RegionGrowthTest {
                 "all six logs, corner-hung branch included — a face-only walk finds only four");
     }
 
+    /**
+     * A tall trunk shaped like {@link FakeProbe#placeOak}: {@code logs} logs on the ground, a
+     * leaf ring at the top log, a 3×3 cap above it. Every cap column top is a leaf, so the crown
+     * test passes — the reach is under examination, not the botany.
+     */
+    private static void placeGiant(FakeProbe probe, int x, int z, int logs) {
+        int topLog = FakeProbe.GROUND_Y + logs;
+        for (int y = FakeProbe.GROUND_Y + 1; y <= topLog; y++) {
+            probe.set(x, y, z, BlockKind.LOG);
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx != 0 || dz != 0) {
+                    probe.set(x + dx, topLog, z + dz, BlockKind.LEAVES);
+                }
+                probe.set(x + dx, topLog + 1, z + dz, BlockKind.LEAVES);
+            }
+        }
+    }
+
+    /**
+     * The chopper re-grows from the stump and fells what it surveyed, so a tree taller
+     * than the spread cap came back crownless and left its top hanging in the air. A tree is as
+     * tall as it grew; the cap is about how far a place WANDERS.
+     */
+    @Test
+    void aTreeTallerThanTheSpreadCapIsGrownWholeFromItsStump() {
+        FakeProbe probe = new FakeProbe();
+        placeGiant(probe, 10, 10, 30); // 30 logs against a cap of 24
+        Pos stump = new Pos(10, FakeProbe.GROUND_Y + 1, 10);
+
+        GrownRegion region = grow(
+                new RegionGrowth(TreeRule.INSTANCE, stump, BlockKind.LOG, TestSpecies.PROFILE),
+                probe, 100_000);
+
+        assertTrue(region.accepted(), "a giant is a tree");
+        assertFalse(region.partial(), "nothing about it was cut short");
+        GrownRegion.Part tree = only(region);
+        assertEquals(30, tree.units(), "every log, crown included — 24 is what a clipped one gives");
+        assertTrue(tree.complete(), "and it stands against no cut edge");
+        assertTrue(tree.blocks().containsKey(new Pos(10, FakeProbe.GROUND_Y + 30, 10)),
+                "the top log, six blocks past where the cap used to end the walk");
+    }
+
+    /**
+     * The sensor seeds at the TOP of a column ({@code probe.topY}), so a giant was walked down
+     * and lost its stump — and nothing grounded means no tree, so the biggest trees were not cut
+     * short but <em>invisible</em>.
+     */
+    @Test
+    void andWholeFromTheCanopyTheSensorActuallySeedsAt() {
+        FakeProbe probe = new FakeProbe();
+        placeGiant(probe, 10, 10, 30);
+        Pos crown = new Pos(10, probe.topY(10, 10), 10);
+        assertEquals(FakeProbe.GROUND_Y + 31, crown.y(), "the leaf cap is what a column top is");
+
+        GrownRegion region = grow(
+                new RegionGrowth(TreeRule.INSTANCE, crown, BlockKind.LEAVES, TestSpecies.PROFILE),
+                probe, 100_000);
+
+        assertTrue(region.accepted(), "seen from above, it is still a tree");
+        assertFalse(region.partial());
+        GrownRegion.Part tree = only(region);
+        assertEquals(new Pos(10, FakeProbe.GROUND_Y + 1, 10), tree.anchorFrom(crown),
+                "the stump — thirty blocks below the cell that raised the hypothesis");
+        assertEquals(30, tree.units());
+    }
+
+    /**
+     * The other arm of the cap, which did not move: height is the structure's business, width is
+     * the mind's. Two giants forty blocks apart are two places however tall either of them is.
+     */
+    @Test
+    void butSidewaysTheCapIsExactlyWhereItWas() {
+        FakeProbe probe = new FakeProbe();
+        placeGiant(probe, 10, 10, 30);
+        placeGiant(probe, 50, 10, 30); // 40 apart, against a cap of 24
+        Pos stump = new Pos(10, FakeProbe.GROUND_Y + 1, 10);
+
+        GrownRegion region = grow(
+                new RegionGrowth(TreeRule.INSTANCE, stump, BlockKind.LOG, TestSpecies.PROFILE),
+                probe, 100_000);
+
+        assertEquals(1, region.parts().size(), "the far giant is somewhere else, not something else");
+        assertFalse(region.blocks().containsKey(new Pos(50, FakeProbe.GROUND_Y + 1, 10)),
+                "and none of its wood came home in this mass");
+    }
+
+    /**
+     * The height exemption is the tree rule's alone. Water is a height field: {@code WaterRule}
+     * joins only cells at their own column's surface, so a stepped stream climbing away is
+     * several reaches — documented v1 behaviour, and different places to fetch water from.
+     */
+    @Test
+    void aRuleThatDoesNotStandTallIsStillHeldToItsHeight() {
+        FakeProbe probe = new FakeProbe();
+        for (int x = 0; x < 60; x++) {
+            probe.set(x, FakeProbe.GROUND_Y + 1 + x, 0, BlockKind.WATER);
+        }
+        GrownRegion region = grow(
+                new RegionGrowth(WaterRule.INSTANCE, new Pos(0, FakeProbe.GROUND_Y + 1, 0),
+                        BlockKind.WATER, TestSpecies.PROFILE),
+                probe, 100_000);
+
+        assertTrue(region.accepted());
+        assertTrue(region.partial(), "the stair climbs past this reach");
+        assertTrue(only(region).units() <= RegionGrowth.maxSpread(TestSpecies.PROFILE) + 1,
+                "only the steps within the cap: " + only(region).units());
+    }
+
     @Test
     void theSpreadCapTurnsALongRiverIntoAPartialReach() {
         FakeProbe probe = new FakeProbe();
