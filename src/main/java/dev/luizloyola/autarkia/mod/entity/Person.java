@@ -93,6 +93,7 @@ import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
 import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.core.brain.act.Gazer;
+import dev.luizloyola.anima.mod.body.AgentAttributes;
 import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.body.Gaze;
 import com.mojang.serialization.Codec;
@@ -461,11 +462,13 @@ public class Person extends Avatar implements AgentBody {
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        // A Person drives itself through the same LivingEntity.travel physics a player uses, so
-        // matching a player's walk means matching MOVEMENT_SPEED (0.1) — verified in-world within
-        // ~2%. STEP_HEIGHT stays at the living default (0.6, player-equal).
-        return LivingEntity.createLivingAttributes()
-                .add(Attributes.MOVEMENT_SPEED, 0.1);
+        // Same LivingEntity.travel physics a player uses, so matching a player's walk is just
+        // matching a player's MOVEMENT_SPEED (0.1) — verified in-world within ~2%. STEP_HEIGHT
+        // stays at the living default (0.6, player-equal): slabs and stair-bottoms walkable, full
+        // blocks still need a jump we don't do yet. AgentAttributes adds the four a mining body
+        // needs (see there for why an undeclared attribute is a silent hole rather than a zero).
+        return AgentAttributes.mining(LivingEntity.createLivingAttributes()
+                .add(Attributes.MOVEMENT_SPEED, 0.1));
     }
 
     @Override
