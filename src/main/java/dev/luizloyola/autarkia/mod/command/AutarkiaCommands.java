@@ -254,6 +254,10 @@ public final class AutarkiaCommands {
                                         .then(Commands.argument("on", BoolArgumentType.bool())
                                                 .executes(ctx -> boardView(ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "on")))))
+                                // Every row of the ledger, one line each — the only way to ask
+                                // "did that tree actually go?" of the world afterwards.
+                                .then(Commands.literal("targets")
+                                        .executes(ctx -> boardTargets(ctx.getSource())))
                                 .then(Commands.literal("cancel")
                                         .then(Commands.argument("project", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> boardCancel(ctx.getSource(),
@@ -337,6 +341,40 @@ public final class AutarkiaCommands {
         }
         MinecraftServer server = level.getServer();
         return Optional.of(PartyBoards.of(server, PartyData.get(server).partyOf(who)));
+    }
+
+    /**
+     * Dumps every ledger row of every clearing project on the resolved Person's party board.
+     *
+     * <p>One line per target, machine-shaped ({@code TARGET x y z STATE}), because the question is
+     * asked of the WORLD and not of the project: a project reports a tree cleared when the errand
+     * for it ended, and only the blocks can settle whether anything is still standing there.
+     */
+    private static int boardTargets(CommandSourceStack source) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        Optional<PartyBoard> board = partyBoardOf(person);
+        if (board.isEmpty()) {
+            Replies.fail(source, Component.literal(
+                    person.getName().getString() + " does not know who they are yet."));
+            return 0;
+        }
+        int rows = 0;
+        for (dev.luizloyola.autarkia.core.board.Project project : board.get().projects()) {
+            if (!(project instanceof ClearArea area)) {
+                continue;
+            }
+            for (ClearArea.Target target : area.ledger().values()) {
+                Pos at = target.anchor();
+                String line = "TARGET " + at.x() + " " + at.y() + " " + at.z() + " " + target.state();
+                Replies.send(source, () -> Component.literal(line).withStyle(ChatFormatting.GRAY));
+                rows++;
+            }
+        }
+        int total = rows;
+        Replies.send(source, () -> Component.literal("TARGETS " + total)
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
+        return total;
     }
 
     /**
