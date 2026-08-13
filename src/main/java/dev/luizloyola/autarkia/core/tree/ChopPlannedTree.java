@@ -1191,6 +1191,20 @@ public final class ChopPlannedTree implements PrimitiveTask {
         return "chop the tree at " + shortPos(anchor);
     }
 
+    /**
+     * Yes — this is the operation the flag was written for.
+     *
+     * <p>The dance spends almost all of itself on a one-block column, where the grid sees a
+     * Person who can reach exactly one cell and has no legal move out of it: every way down is a
+     * drop past what she will willingly take. That reads as confinement and is not — the card
+     * ends with her back on the ground, mining the pillar out from under herself — and saying so
+     * here is what keeps the escape drive from "rescuing" her off her own scaffold mid-fell.
+     */
+    @Override
+    public boolean reshapesGround() {
+        return true;
+    }
+
     // ---- the small mechanics ----
 
     /** True while a break is in flight; a finished/failed break clears for the next order. */

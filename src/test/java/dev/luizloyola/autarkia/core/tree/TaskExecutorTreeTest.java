@@ -357,4 +357,74 @@ class TaskExecutorTreeTest {
         assertFalse(executor.isBusy());
         assertEquals("idle", executor.describe());
     }
+
+    // --- is the body mid-operation on the ground? ------------------------------------------------
+
+    /** A primitive that says it places or breaks the blocks holding bodies up. */
+    private static final class Groundwork implements PrimitiveTask {
+        @Override
+        public TaskStatus tick(BrainContext ctx) {
+            return TaskStatus.RUNNING;
+        }
+
+        @Override
+        public void cancel(BrainContext ctx) {
+        }
+
+        @Override
+        public String describe() {
+            return "groundwork";
+        }
+
+        @Override
+        public boolean reshapesGround() {
+            return true;
+        }
+    }
+
+    @Test
+    void anIdleBodyIsNotReshapingAnything() {
+        assertFalse(executor.reshapingGround());
+    }
+
+    @Test
+    void ordinaryWorkIsNotReshapingAnything() {
+        executor.run(new GoTo(1, 2, 3), ctx);
+        executor.tick(ctx);
+        assertFalse(executor.reshapingGround(), "walking somewhere leaves the ground where it was");
+    }
+
+    /**
+     * The whole chain is asked, not just the root: the autonomous chop is reached through an
+     * errand ({@code ObtainItem(LOGS)}), so reading the root alone would see the errand, answer
+     * no, and hand the escape drive the fell to interrupt.
+     */
+    @Test
+    void anOperationNestedUnderAnErrandStillCounts() {
+        FakeCompound errand = goal("obtain logs",
+                new FakeMethod("by felling", 0.0, () -> List.of(new Groundwork())));
+        executor.run(errand, ctx);
+        executor.tick(ctx);
+        assertTrue(executor.reshapingGround(), "the errand's chosen way is a terrain operation");
+    }
+
+    @Test
+    void itEndsWithTheOperation() {
+        executor.run(new Groundwork(), ctx);
+        executor.tick(ctx);
+        assertTrue(executor.reshapingGround());
+        executor.cancel(ctx);
+        assertFalse(executor.reshapingGround(), "nothing running, nothing being reshaped");
+    }
+
+    /**
+     * The chop is the operation the flag exists for: it rides a one-block mast for the whole fell,
+     * which the navigation grid reads as a one-cell region with no way out — true, and not the
+     * same fact as being trapped.
+     */
+    @Test
+    void theChopDeclaresItself() {
+        assertTrue(new ChopPlannedTree(new dev.luizloyola.anima.core.brain.sense.Pos(0, -60, 0))
+                .reshapesGround());
+    }
 }
