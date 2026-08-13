@@ -149,6 +149,9 @@ public final class AutarkiaCommands {
                         .then(AgentCommands.select())
                         .then(Commands.literal("list")
                                 .executes(ctx -> listPersons(ctx.getSource())))
+                        // Who died, and everything that could be known about how. Anima's, because
+                        // a grave is a fact about a mind ending and nothing about being a settler.
+                        .then(AgentCommands.grave())
                         .then(Commands.literal("whois")
                                 .executes(ctx -> whoisResolved(ctx.getSource()))
                                 .then(Commands.argument("targets", EntityArgument.entities())
