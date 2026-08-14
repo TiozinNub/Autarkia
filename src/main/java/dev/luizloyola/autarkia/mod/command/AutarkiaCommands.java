@@ -185,6 +185,18 @@ public final class AutarkiaCommands {
                                                 .executes(ctx -> brainObtain(ctx.getSource(), 16))
                                                 .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                                         .executes(ctx -> brainObtain(ctx.getSource(),
+                                                                IntegerArgumentType.getInteger(ctx, "count")))))
+                                        // Any concrete item, by id — an exact-item spec built on
+                                        // the spot (ItemSpec.anyOf: canonical and persistable, so
+                                        // the order survives a reload). Also the craft verb:
+                                        // "obtain stick 4" plans the whole planks-then-sticks
+                                        // chain out of one carried log.
+                                        .then(Commands.argument("item", ItemArgument.item(registryAccess))
+                                                .executes(ctx -> brainObtainItem(ctx.getSource(),
+                                                        ItemArgument.getItem(ctx, "item"), 1))
+                                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> brainObtainItem(ctx.getSource(),
+                                                                ItemArgument.getItem(ctx, "item"),
                                                                 IntegerArgumentType.getInteger(ctx, "count")))))))
                         // Thinking out loud: forwards the resolved Person's `think` journal lines
                         // to chat (gray italics) until toggled off.
@@ -542,6 +554,34 @@ public final class AutarkiaCommands {
         Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new ObtainItem(Stock.LOGS, count));
+        String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
+        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
+                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
+        return 1;
+    }
+
+    /**
+     * {@link ObtainItem} for one concrete item — scavenge, produce or CRAFT, whatever prices
+     * cheapest. The spec is {@link dev.luizloyola.anima.core.inv.ItemSpec#anyOf}, so the order
+     * persists like any other plan and two sessions asking for the same item mean the same spec.
+     */
+    private static int brainObtainItem(CommandSourceStack source,
+                                       net.minecraft.commands.arguments.item.ItemInput item,
+                                       int count) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        // Through the compat template rather than ItemInput's own accessors, which changed shape
+        // across targets — the same seam `inv give` already crosses on.
+        String id;
+        try {
+            id = dev.luizloyola.anima.compat.inv.ItemStacks
+                    .templateOf(item, source.registryAccess()).id();
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException invalid) {
+            Replies.fail(source, Component.literal("Not an obtainable item."));
+            return 0;
+        }
+        boolean autoDisabled = person.brain().run(new ObtainItem(
+                dev.luizloyola.anima.core.inv.ItemSpec.anyOf(java.util.Set.of(id)), count));
         String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
         Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
                 + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
