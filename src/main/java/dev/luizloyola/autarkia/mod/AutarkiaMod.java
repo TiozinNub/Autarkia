@@ -85,6 +85,9 @@ public class AutarkiaMod implements ModInitializer {
         PathfinderService.init();
         Journals.init();
         Claims.init();
+        // Settlers craft: the vanilla recipe book becomes the library's RecipeSource. Anima
+        // ships the mechanism unregistered — this call is the consumer saying recipes exist.
+        dev.luizloyola.anima.mod.craft.VanillaRecipeSource.install();
         // Layer 3's shared half: one board per party, ticked here rather than by anybody's body.
         PartyBoards.init();
         DamageMarks.init();
