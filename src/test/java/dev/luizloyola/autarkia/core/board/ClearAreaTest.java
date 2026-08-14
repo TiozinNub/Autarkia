@@ -11,6 +11,7 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Idle;
+import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import java.util.List;
 import java.util.Optional;
@@ -89,6 +90,45 @@ class ClearAreaTest {
         assertEquals(new Pos(0, 60, 0), project.slices().get(0).min());
         assertEquals(new Pos(60, 70, 50), project.slices().get(3).max());
         assertEquals(4, project.open().size());
+    }
+
+    /** Widths of the slices along x, in order, for a box only one block deep. */
+    private static List<Integer> widths(int fromX, int toX) {
+        return posted(ABLE, new Region(new Pos(fromX, 60, 0), new Pos(toX, 70, 0)))
+                .slices().stream()
+                .map(slice -> slice.max().x() - slice.min().x() + 1)
+                .toList();
+    }
+
+    @Test
+    void aRemainderIsSharedOutRatherThanLeftAsASliver() {
+        // SLICE_SIZE is a ceiling, so the count comes first and the span is split evenly between
+        // that many. One block over a whole slice used to mean a full slice and a 1-block ribbon.
+        assertEquals(List.of(48, 48), widths(0, 95));
+        assertEquals(List.of(25, 24), widths(0, 48));
+        assertEquals(List.of(32, 33, 32), widths(0, 96));
+        // Rounded evenly rather than front-loaded, and the same shape wherever the box sits.
+        assertEquals(List.of(32, 33, 32), widths(-1000, -904));
+    }
+
+    @Test
+    void theSlicesTileTheBoxWithNoGapNoOverlapAndNothingOversized() {
+        Region box = new Region(new Pos(-7, 60, 12), new Pos(123, 70, 60));
+        ClearArea project = posted(ABLE, box);
+        int covered = 0;
+        for (Region slice : project.slices()) {
+            int wide = slice.max().x() - slice.min().x() + 1;
+            int deep = slice.max().z() - slice.min().z() + 1;
+            assertTrue(wide <= ClearArea.SLICE_SIZE && deep <= ClearArea.SLICE_SIZE,
+                    "slice " + wide + "×" + deep + " is over the ceiling");
+            assertTrue(wide > 0 && deep > 0, "an empty slice is still a whole errand");
+            covered += wide * deep;
+        }
+        // Area adds up and the corners are the box's own — enough together to rule out both a gap
+        // and an overlap.
+        assertEquals(131 * 49, covered);
+        assertEquals(box.min(), project.slices().get(0).min());
+        assertEquals(box.max(), project.slices().get(project.slices().size() - 1).max());
     }
 
     @Test
@@ -413,6 +453,33 @@ class ClearAreaTest {
         assertFalse(skip.contains(new Pos(0, 60, 16)), "still beside what the LAST pass saw");
         assertTrue(skip.contains(new Pos(32, 60, 16)),
                 "the last pass saw nothing here — a tree that stood here once does not keep it dirty");
+    }
+
+    @Test
+    void aSliceOffTheBoxsCellGridStillGetsItsSkipCredited() {
+        // SurveyArea credits a settled cell only when handed that cell's EXACT corner, and slice
+        // corners are no longer multiples of a cell from the box's — so corners built on the box's
+        // grid would match almost nothing and a verify pass would re-walk the whole box for nothing.
+        // Against a real SurveyArea: the agreement between the two grids is the subject.
+        Region box = new Region(new Pos(0, 60, 0), new Pos(96, 70, 39));
+        ClearArea project = posted(ABLE, box);
+        Region far = project.slices().get(project.slices().size() - 1);
+        assertTrue((far.min().x() - box.min().x()) % SurveyArea.CELL != 0,
+                "this test is only about a slice that is OFF the box's cell grid");
+
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, new Pos(2, 60, 2)); // one find, at the opposite end from `far`
+        for (WorkItem item : List.copyOf(project.open())) {
+            project.completed(item, ctx); // walk every slice
+        }
+        for (WorkItem item : List.copyOf(project.open())) {
+            project.completed(item, ctx); // clear what the walk found
+        }
+        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+
+        SurveyArea sweep = new SurveyArea(far, THING, project.skippable());
+        assertEquals(sweep.cells(), sweep.cellsKnown(),
+                "a slice nowhere near anything the last pass saw should start already known");
     }
 
     /** Five coverage cells a side, so a find in the middle leaves ground beyond its ring. */

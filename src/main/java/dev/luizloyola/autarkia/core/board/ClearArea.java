@@ -65,10 +65,13 @@ import org.jspecify.annotations.Nullable;
 public final class ClearArea implements PartyProject {
 
     /**
-     * Edge of one slice, in blocks. Sized against {@code places.max_per_kind}: dense forest runs
-     * roughly one tree per 25–50 m², so 48×48 yields ~50–90 anchors against a Person's memory of
-     * 160, leaving room for everything else a walk notices. Raising this past what a surveyor can
-     * hold does not make surveying faster, it makes reports quietly short.
+     * <b>Longest</b> edge one slice may have, in blocks — a ceiling, not a stride. Sized against
+     * {@code places.max_per_kind}: dense forest runs about one tree per 25–50 m², so 48×48 yields
+     * ~50–90 anchors against a Person's memory of 160. Raising it past what a surveyor can hold
+     * makes reports quietly short.
+     *
+     * <p>A ceiling because a stride leaves a sliver: 49 across cut every 48 leaves a one-block
+     * ribbon, and that ribbon is a whole errand. See {@link #sliceUp}.
      */
     public static final int SLICE_SIZE = 48;
 
@@ -548,16 +551,23 @@ public final class ClearArea implements PartyProject {
      * Ground a later pass may skip: cells no target has ever been found in, and none of whose eight
      * neighbours has either.
      *
-     * <p>The margin is the point — what a first pass walks past is nearly always beside something it
-     * did find, so a cell is written off only when it is clear and surrounded by clear (decision:
-     * Luiz). One dirty cell keeps its whole ring in play.
+     * <p><b>Why a margin.</b> What a pass walks past is nearly always beside something it did find —
+     * a tree fused into a neighbour's canopy, a stump behind the one being felled — so a cell is
+     * written off only when it is clear and surrounded by clear (decision: Luiz).
      *
-     * <p>Empty on a first pass, and load-bearing: with nothing dirty yet, every cell would look
-     * clear-and-surrounded-by-clear and the whole box would be written off unseen.
+     * <p><b>Empty on a first pass</b>, and load-bearing: before anybody has swept no cell is dirty,
+     * so without this guard every cell would look clear-and-surrounded-by-clear and the whole box
+     * would be written off unseen.
      *
-     * <p>Not persisted — a pure function of the ledger and the bounds, so a reload recomputes it.
+     * <p><b>Asked per slice, on that slice's own grid.</b> A {@link SurveyArea} credits a settled
+     * cell only when it is given that cell's exact corner, so a caller on another grid gets no
+     * discount rather than a wrong one. Slice corners no longer sit on the box's grid, so a set
+     * built from the box's corner would match almost nothing and quietly lose the 82–93% a second
+     * pass skips.
+     *
+     * <p>Not persisted: a pure function of the ledger and the bounds, so a reload recomputes it.
      */
-    private Set<Pos> settledCells() {
+    private Set<Pos> settledCells(Region area) {
         if (phase != Phase.VERIFYING) {
             return Set.of();
         }
@@ -569,22 +579,32 @@ public final class ClearArea implements PartyProject {
             return Set.of();
         }
         Set<Pos> settled = new LinkedHashSet<>();
-        for (int x = bounds.min().x(); x <= bounds.max().x(); x += SurveyArea.CELL) {
-            for (int z = bounds.min().z(); z <= bounds.max().z(); z += SurveyArea.CELL) {
+        for (int x = area.min().x(); x <= area.max().x(); x += SurveyArea.CELL) {
+            for (int z = area.min().z(); z <= area.max().z(); z += SurveyArea.CELL) {
                 if (nearDirty(dirty, x, z)) {
                     continue;
                 }
-                settled.add(new Pos(x, bounds.min().y(), z));
+                settled.add(new Pos(x, area.min().y(), z));
             }
         }
         return settled;
     }
 
-    /** Whether this cell or any of its eight neighbours has ever held a target. */
+    /**
+     * Whether this corner's cell, or the ring one cell out, has ever held a target.
+     *
+     * <p>The ring is computed in WORLD blocks and mapped to whichever dirty-grid cells overlap it;
+     * stepping the index by ±1 falls a block short whenever the asker's grid is offset from the
+     * box's, which is now the normal case. On an aligned corner it is the same 3×3 as before.
+     */
     private boolean nearDirty(Set<Long> dirty, int x, int z) {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                if (dirty.contains(cellKey(x + dx * SurveyArea.CELL, z + dz * SurveyArea.CELL))) {
+        long fromX = cellX(x - SurveyArea.CELL);
+        long toX = cellX(x + 2 * SurveyArea.CELL - 1);
+        long fromZ = cellZ(z - SurveyArea.CELL);
+        long toZ = cellZ(z + 2 * SurveyArea.CELL - 1);
+        for (long cx = fromX; cx <= toX; cx++) {
+            for (long cz = fromZ; cz <= toZ; cz++) {
+                if (dirty.contains(cx << 32 ^ (cz & 0xFFFFFFFFL))) {
                     return true;
                 }
             }
@@ -594,21 +614,46 @@ public final class ClearArea implements PartyProject {
 
     /** A cell of the coverage grid, named by the box-relative square a world position falls in. */
     private long cellKey(int x, int z) {
-        long cx = Math.floorDiv(x - bounds.min().x(), SurveyArea.CELL);
-        long cz = Math.floorDiv(z - bounds.min().z(), SurveyArea.CELL);
-        return cx << 32 ^ (cz & 0xFFFFFFFFL);
+        return cellX(x) << 32 ^ (cellZ(z) & 0xFFFFFFFFL);
     }
 
-    /** How many coverage cells the whole box divides into — the denominator for what is skipped. */
+    private long cellX(int x) {
+        return Math.floorDiv(x - bounds.min().x(), SurveyArea.CELL);
+    }
+
+    private long cellZ(int z) {
+        return Math.floorDiv(z - bounds.min().z(), SurveyArea.CELL);
+    }
+
+    /**
+     * How many coverage cells the box divides into — the denominator for what is skipped. Summed
+     * over the slices rather than measured across the box, because the slices are where the cells
+     * actually are: their grids restart at their own corners, so a box that is thirteen cells wide
+     * can be two slices of seven.
+     */
     private int cellsInBox() {
-        int wide = (bounds.max().x() - bounds.min().x()) / SurveyArea.CELL + 1;
-        int deep = (bounds.max().z() - bounds.min().z()) / SurveyArea.CELL + 1;
-        return wide * deep;
+        int cells = 0;
+        for (Region slice : slices) {
+            cells += cellsAcross(slice.max().x() - slice.min().x() + 1)
+                    * cellsAcross(slice.max().z() - slice.min().z() + 1);
+        }
+        return cells;
     }
 
-    /** How much ground a verify pass may skip — for the readout and the debug view. */
+    private static int cellsAcross(int blocks) {
+        return Math.max(1, (blocks + SurveyArea.CELL - 1) / SurveyArea.CELL);
+    }
+
+    /**
+     * How much ground a verify pass may skip — for the readout and the debug view. The union of
+     * what every slice would be let off, so the number shown is the number that will happen.
+     */
     public Set<Pos> skippable() {
-        return settledCells();
+        Set<Pos> all = new LinkedHashSet<>();
+        for (Region slice : slices) {
+            all.addAll(settledCells(slice));
+        }
+        return all;
     }
 
     // ── the readout ──────────────────────────────────────────────────────────────────────────
@@ -680,21 +725,51 @@ public final class ClearArea implements PartyProject {
     // ── internals ────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Divides the box's footprint into a fixed grid, keeping the box's full height in every slice —
-     * a slice is ground to walk, not a cube to fill. Row-major and deterministic, so slice 3 is the
-     * same ground before and after a restart. That is what makes the index a durable name.
+     * Divides the box's footprint into a fixed grid, full height in every slice. Row-major and
+     * deterministic, so a slice index is the same ground across a restart — that is what makes it a
+     * durable name. The axes are cut independently by {@link #cuts}, so a long thin box is cut only
+     * along its length.
      */
     private static List<Region> sliceUp(Region bounds) {
+        int[] xs = cuts(bounds.min().x(), bounds.max().x());
+        int[] zs = cuts(bounds.min().z(), bounds.max().z());
         List<Region> out = new ArrayList<>();
-        for (int x = bounds.min().x(); x <= bounds.max().x(); x += SLICE_SIZE) {
-            for (int z = bounds.min().z(); z <= bounds.max().z(); z += SLICE_SIZE) {
+        for (int i = 0; i + 1 < xs.length; i++) {
+            for (int j = 0; j + 1 < zs.length; j++) {
                 out.add(new Region(
-                        new Pos(x, bounds.min().y(), z),
-                        new Pos(Math.min(x + SLICE_SIZE - 1, bounds.max().x()), bounds.max().y(),
-                                Math.min(z + SLICE_SIZE - 1, bounds.max().z()))));
+                        new Pos(xs[i], bounds.min().y(), zs[j]),
+                        new Pos(xs[i + 1] - 1, bounds.max().y(), zs[j + 1] - 1)));
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Where one axis is cut, as {@code n + 1} boundaries from {@code min} to {@code max + 1} — the
+     * fenceposts, so the caller reads slices off consecutive pairs and the last one lands exactly on
+     * the far edge.
+     *
+     * <p><b>The count is decided first, and the span is then shared out evenly between that many
+     * slices</b> (decision: Luiz): {@link #SLICE_SIZE} only says how few slices we can get away
+     * with, {@code ceil(span / SLICE_SIZE)}. Striding instead dumped the remainder on the last
+     * slice (65 came out 48 + 17, 49 came out 48 + 1), and that sliver is a whole errand, bid on
+     * and walked to, for a strip of ground with nothing in it.
+     *
+     * <p>Rounded evenly, not front-loaded: a boundary sits at {@code round(i × span / n)}, so 65
+     * across at a 32 ceiling is 22, 21, 22 and 70 is 23, 24, 23. No slice can exceed the ceiling
+     * ({@code span ≤ n × SLICE_SIZE} by construction), and none can be empty for any box at least
+     * one block across.
+     */
+    private static int[] cuts(int min, int max) {
+        int span = max - min + 1;
+        int n = Math.max(1, (span + SLICE_SIZE - 1) / SLICE_SIZE);
+        int[] fenceposts = new int[n + 1];
+        for (int i = 0; i <= n; i++) {
+            // + n/2 before the divide is integer round-half-up; i == n lands on min + span exactly,
+            // since n/2 < n can never carry.
+            fenceposts[i] = min + (int) (((long) i * span + n / 2) / n);
+        }
+        return fenceposts;
     }
 
     /** Which slice a survey key names — its corner is the key, so this is a lookup, not a guess. */
@@ -745,7 +820,7 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public Task root() {
-            return clearing.survey(area, settledCells());
+            return clearing.survey(area, settledCells(area));
         }
 
         @Override
