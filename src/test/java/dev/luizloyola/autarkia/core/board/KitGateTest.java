@@ -64,6 +64,8 @@ class KitGateTest {
                 spec.matches("minecraft:wooden_pickaxe")
                         ? java.util.List.of(inHandPickaxeRecipe())
                         : java.util.List.of());
+        // The recipe's bill must have a floor (reachability): planks in the pack give it one.
+        ctx.inventory().add(ItemStack.of("minecraft:oak_planks", 3, 64));
         KitProject project = new KitProject();
         WorkItem mine = project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
         board.post(project);
@@ -80,11 +82,28 @@ class KitGateTest {
                 spec.matches("minecraft:wooden_pickaxe")
                         ? java.util.List.of(tablePickaxeRecipe())
                         : java.util.List.of());
+        ctx.inventory().add(ItemStack.of("minecraft:oak_planks", 3, 64));
         KitProject project = new KitProject();
         WorkItem mine = project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
         board.post(project);
 
         assertSame(mine, board.bestFor(asker, ctx, ctx.now()).orElseThrow());
+    }
+
+    @Test
+    void aRecipeWhoseBillHasNoFloorStillDeclines() {
+        // A pickaxe recipe exists, but its planks come from nowhere this asker can reach: no
+        // pack, no producer, no deeper recipe. Claiming it would be the claim-fail-cooldown
+        // wheel; the gate asks CraftFor's own reachability question and passes over instead.
+        dev.luizloyola.anima.core.craft.Recipes.provide(spec ->
+                spec.matches("minecraft:wooden_pickaxe")
+                        ? java.util.List.of(inHandPickaxeRecipe())
+                        : java.util.List.of());
+        KitProject project = new KitProject();
+        project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
+        board.post(project);
+
+        assertTrue(board.bestFor(asker, ctx, ctx.now()).isEmpty());
     }
 
     private static dev.luizloyola.anima.core.craft.CraftRecipe inHandPickaxeRecipe() {

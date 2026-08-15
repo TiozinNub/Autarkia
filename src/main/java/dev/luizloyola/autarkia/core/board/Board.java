@@ -7,7 +7,6 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.brain.task.Producers;
-import dev.luizloyola.anima.core.craft.Recipes;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
@@ -138,7 +137,7 @@ public class Board {
                     continue; 
                 }
                 List<ItemCall> unreachable = uncoverable(
-                        item.kit().missingNeeds(ctx.percepts().inventory()));
+                        item.kit().missingNeeds(ctx.percepts().inventory()), ctx);
                 if (!unreachable.isEmpty()) {
                     // The kit gate, flipped: a missing NEED no longer declines — the claim goes
                     // through and the KittedErrand fetches it under the lease. Only a need with no
@@ -158,14 +157,15 @@ public class Board {
     }
 
     /**
-     * The needs among {@code missing} this asker cannot get at all: no producer a mod registered,
-     * no recipe of any shape — table recipes count, because {@code EnsureTable} makes a bench a
-     * thing an errand can reach or create for itself.
+     * The needs among {@code missing} this asker cannot get at all: no registered producer and no
+     * REACHABLE recipe — the same recursive question {@code CraftFor} asks of its own book, so an
+     * item is only claimed toward a craft some plan can finish.
      */
-    private static List<ItemCall> uncoverable(List<ItemCall> missing) {
+    private static List<ItemCall> uncoverable(List<ItemCall> missing, BrainContext ctx) {
         List<ItemCall> unreachable = new ArrayList<>();
         for (ItemCall need : missing) {
-            if (!Producers.knows(need.spec()) && Recipes.producing(need.spec()).isEmpty()) {
+            if (!Producers.knows(need.spec())
+                    && !dev.luizloyola.anima.core.brain.task.CraftFor.anyReachable(need.spec(), ctx)) {
                 unreachable.add(need);
             }
         }

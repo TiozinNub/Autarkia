@@ -115,7 +115,9 @@ final class BoardBrainContext implements BrainContext {
 
             @Override
             public List<Drop> drops() {
-                throw new UnsupportedOperationException();
+                // The offer path legitimately looks here now: the kit gate's reachability
+                // question counts a sighted drop as a way to cover a need.
+                return List.of();
             }
 
             @Override

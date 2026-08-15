@@ -9,8 +9,6 @@ import dev.luizloyola.anima.compat.inv.Inventories;
 import dev.luizloyola.anima.compat.inv.ItemStacks;
 import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
-import dev.luizloyola.anima.core.inv.ItemCall;
-import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.log.AgentJournal;
@@ -44,7 +42,6 @@ import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.autarkia.core.board.ComposedBoards;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.board.PersonalBoard;
-import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentRiser;
@@ -275,13 +272,6 @@ public class Person extends Avatar implements AgentBody {
             personalBoard.viewFor(this::getAgentId), this::partyWork));
 
     /**
-     * The standing stock rule every fresh settler wants: keep this many logs, at this priority.
-     * Autarkia's to own — Anima has no opinion about what an agent should stockpile.
-     */
-    private static final int STOCK_LOGS = 16;
-    private static final double STOCK_PRIORITY = 0.35;
-
-    /**
      * The party board view handed to the brain, and the party it was built for — re-checked every
      * ask, rebuilt only when membership moves, since a view cached for life would quietly keep
      * serving a board they no longer belong to.
@@ -289,14 +279,14 @@ public class Person extends Avatar implements AgentBody {
     private @Nullable PartyId boardParty;
     private @Nullable WorkSource partyWork;
 
-    /** A fresh settler's own board, carrying the one standing want everybody starts with. */
+    /**
+     * A fresh settler's own board — EMPTY since 2026-08-15 (decision: Luiz). The standing
+     * "keep 16 logs" quota posted here was a disposable placeholder; work comes from real projects
+     * now. The {@link KeepStocked} machinery stays, and old saves still load — with nothing posted,
+     * the restored rows have nothing to attach to.
+     */
     private static PersonalBoard personalBoard(int offset) {
-        PersonalBoard board = new PersonalBoard();
-        // Logs come from chopping, and a chop WANTS an axe (never needs one — a want gates
-        // nothing; it is wielded at the block when the pack has one).
-        board.post(new KeepStocked(Stock.LOGS, STOCK_LOGS, STOCK_PRIORITY, offset,
-                Kit.of(ItemCall.want(Stock.AXES, 1))));
-        return board;
+        return new PersonalBoard();
     }
 
     /** This person's own board — what the board command reads and, later, posts to. */
