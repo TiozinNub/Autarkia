@@ -73,18 +73,18 @@ class KitGateTest {
     }
 
     @Test
-    void aNeedWhoseOnlyRecipeWantsATableStillDeclines() {
-        // Until the table era: an errand cannot reach a workbench, so a table-only recipe is
-        // not a way to cover a need yet. This assertion FLIPS when EnsureTable lands.
+    void aTableRecipeNowCoversANeedToo() {
+        // A bench is something an errand can reach or create (EnsureTable), so a table-only recipe
+        // makes the need coverable and the claim goes through.
         dev.luizloyola.anima.core.craft.Recipes.provide(spec ->
                 spec.matches("minecraft:wooden_pickaxe")
                         ? java.util.List.of(tablePickaxeRecipe())
                         : java.util.List.of());
         KitProject project = new KitProject();
-        project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
+        WorkItem mine = project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
         board.post(project);
 
-        assertTrue(board.bestFor(asker, ctx, ctx.now()).isEmpty());
+        assertSame(mine, board.bestFor(asker, ctx, ctx.now()).orElseThrow());
     }
 
     private static dev.luizloyola.anima.core.craft.CraftRecipe inHandPickaxeRecipe() {

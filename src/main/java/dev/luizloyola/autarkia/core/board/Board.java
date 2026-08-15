@@ -7,7 +7,6 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.brain.task.Producers;
-import dev.luizloyola.anima.core.craft.CraftRecipe;
 import dev.luizloyola.anima.core.craft.Recipes;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.log.Category;
@@ -160,23 +159,13 @@ public class Board {
 
     /**
      * The needs among {@code missing} this asker cannot get at all: no producer a mod registered,
-     * nothing an in-hand recipe makes. In-hand only until the table era teaches errands to reach
-     * a workbench — a need whose every recipe wants a table flips to coverable with that slice.
+     * no recipe of any shape — table recipes count, because {@code EnsureTable} makes a bench a
+     * thing an errand can reach or create for itself.
      */
     private static List<ItemCall> uncoverable(List<ItemCall> missing) {
         List<ItemCall> unreachable = new ArrayList<>();
         for (ItemCall need : missing) {
-            if (Producers.knows(need.spec())) {
-                continue;
-            }
-            boolean craftable = false;
-            for (CraftRecipe recipe : Recipes.producing(need.spec())) {
-                if (!recipe.needsTable()) {
-                    craftable = true;
-                    break;
-                }
-            }
-            if (!craftable) {
+            if (!Producers.knows(need.spec()) && Recipes.producing(need.spec()).isEmpty()) {
                 unreachable.add(need);
             }
         }
