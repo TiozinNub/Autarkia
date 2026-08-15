@@ -6,6 +6,9 @@ import dev.luizloyola.anima.core.brain.board.SiteClaims;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
+import dev.luizloyola.anima.core.brain.task.Producers;
+import dev.luizloyola.anima.core.craft.CraftRecipe;
+import dev.luizloyola.anima.core.craft.Recipes;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
@@ -135,13 +138,14 @@ public class Board {
                 if (lease != null && lease.liveAt(now)) {
                     continue; 
                 }
-                List<ItemCall> missing = item.kit().missingNeeds(ctx.percepts().inventory());
-                if (!missing.isEmpty()) {
-                    // The kit gate, v0 (no fetching yet): a body whose pack lacks a NEED declines
-                    // rather than claims, so it cannot camp an item it cannot work, and the
-                    // project pays no cooldown for an empty pack. Fetching will invert this to
-                    // claim-then-kit-up. Wants gate nothing, by definition.
-                    notePassedOver(item, missing, ctx, now);
+                List<ItemCall> unreachable = uncoverable(
+                        item.kit().missingNeeds(ctx.percepts().inventory()));
+                if (!unreachable.isEmpty()) {
+                    // The kit gate, flipped: a missing NEED no longer declines — the claim goes
+                    // through and the KittedErrand fetches it under the lease. Only a need with no
+                    // WAY to get it declines (not in the pack, no producer, nothing craftable),
+                    // since claiming that spins the claim-fail-cooldown wheel. Wants gate nothing.
+                    notePassedOver(item, unreachable, ctx, now);
                     continue;
                 }
                 double score = item.priority() - item.estimatedCost(ctx);
@@ -155,9 +159,34 @@ public class Board {
     }
 
     /**
-     * The plain line for a decline — {@code passed over: no axes} — paced per item so an offer
-     * scan that runs every tick does not write it every tick. The pace map is identity-keyed like
-     * the leases and pruned as it goes, so an item that closed does not pin a row forever.
+     * The needs among {@code missing} this asker cannot get at all: no producer a mod registered,
+     * nothing an in-hand recipe makes. In-hand only until the table era teaches errands to reach
+     * a workbench — a need whose every recipe wants a table flips to coverable with that slice.
+     */
+    private static List<ItemCall> uncoverable(List<ItemCall> missing) {
+        List<ItemCall> unreachable = new ArrayList<>();
+        for (ItemCall need : missing) {
+            if (Producers.knows(need.spec())) {
+                continue;
+            }
+            boolean craftable = false;
+            for (CraftRecipe recipe : Recipes.producing(need.spec())) {
+                if (!recipe.needsTable()) {
+                    craftable = true;
+                    break;
+                }
+            }
+            if (!craftable) {
+                unreachable.add(need);
+            }
+        }
+        return unreachable;
+    }
+
+    /**
+     * The decline line — {@code passed over: no way to get axes} — paced per item so a per-tick
+     * offer scan does not write it every tick. The pace map is identity-keyed like the leases and
+     * pruned as it goes, so a closed item does not pin a row forever.
      */
     private void notePassedOver(WorkItem item, List<ItemCall> missing, BrainContext ctx, long now) {
         passedOver.entrySet().removeIf(noted -> noted.getValue() < now - PASS_OVER_LOG_INTERVAL * 4);
@@ -173,7 +202,8 @@ public class Board {
             }
             wanted.append(call.spec().name());
         }
-        ctx.journal().record(Category.PROJECT, item.describe(), "passed over: no " + wanted);
+        ctx.journal().record(Category.PROJECT, item.describe(),
+                "passed over: no way to get " + wanted);
     }
 
     /** Ticks between repeated passed-over lines for one item — the same pace a failed retry gets. */

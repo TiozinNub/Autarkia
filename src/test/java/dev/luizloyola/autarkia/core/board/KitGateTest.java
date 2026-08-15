@@ -18,10 +18,11 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * The kit gate at the offer path, v0: an asker whose pack lacks a NEED is not offered the item —
- * they cannot do the work, so they must not camp the claim — while a WANT gates nothing. The
- * decline is explicit (a paced {@code passed over} journal line) and costs the project no cooldown.
- * This gate inverts to claim-then-fetch when obtaining lands.
+ * The kit gate at the offer path, flipped: a coverable missing NEED no longer hides an item (the
+ * claim goes through and the {@code KittedErrand} fetches under the lease) — what still declines
+ * is a need this asker has no WAY to get: not in pack, no producer, nothing craftable in hand.
+ * WANTs gate nothing at all, and the decline stays explicit (a paced {@code passed over} line) and
+ * costs the project no cooldown.
  */
 class KitGateTest {
 
@@ -34,21 +35,72 @@ class KitGateTest {
     private final Board board = new Board();
     private final AgentId asker = AgentId.random();
 
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() {
+        dev.luizloyola.anima.core.craft.Recipes.reset();
+    }
+
     private static ItemStack pickaxe() {
         return ItemStack.of("minecraft:wooden_pickaxe", 1, 1);
     }
 
     @Test
-    void aMissingNeedHidesTheItemUntilThePackCoversIt() {
+    void anUncoverableNeedHidesTheItemUntilThePackCoversIt() {
+        // No producer, no recipe: a pickaxe this asker has no way to get.
         KitProject project = new KitProject();
         project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
         board.post(project);
 
         assertTrue(board.bestFor(asker, ctx, ctx.now()).isEmpty(),
-                "no pickaxe in the pack -> the item is not for this asker");
+                "no pickaxe and no way to make one -> the item is not for this asker");
         ctx.inventory().add(pickaxe());
         assertTrue(board.bestFor(asker, ctx, ctx.now()).isPresent(),
                 "the pack now covers the need -> on offer again");
+    }
+
+    @Test
+    void aCraftableNeedClaimsThroughAndFetchesUnderTheLease() {
+        dev.luizloyola.anima.core.craft.Recipes.provide(spec ->
+                spec.matches("minecraft:wooden_pickaxe")
+                        ? java.util.List.of(inHandPickaxeRecipe())
+                        : java.util.List.of());
+        KitProject project = new KitProject();
+        WorkItem mine = project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
+        board.post(project);
+
+        assertSame(mine, board.bestFor(asker, ctx, ctx.now()).orElseThrow(),
+                "an empty pack is no bar when the need is craftable — the errand kits itself");
+    }
+
+    @Test
+    void aNeedWhoseOnlyRecipeWantsATableStillDeclines() {
+        // Until the table era: an errand cannot reach a workbench, so a table-only recipe is
+        // not a way to cover a need yet. This assertion FLIPS when EnsureTable lands.
+        dev.luizloyola.anima.core.craft.Recipes.provide(spec ->
+                spec.matches("minecraft:wooden_pickaxe")
+                        ? java.util.List.of(tablePickaxeRecipe())
+                        : java.util.List.of());
+        KitProject project = new KitProject();
+        project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
+        board.post(project);
+
+        assertTrue(board.bestFor(asker, ctx, ctx.now()).isEmpty());
+    }
+
+    private static dev.luizloyola.anima.core.craft.CraftRecipe inHandPickaxeRecipe() {
+        return new dev.luizloyola.anima.core.craft.CraftRecipe("test:pickaxe",
+                dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:wooden_pickaxe", 1, 1),
+                java.util.List.of(new dev.luizloyola.anima.core.craft.CraftRecipe.Ingredient(
+                        java.util.Set.of("minecraft:oak_planks"), 3)),
+                false);
+    }
+
+    private static dev.luizloyola.anima.core.craft.CraftRecipe tablePickaxeRecipe() {
+        return new dev.luizloyola.anima.core.craft.CraftRecipe("test:pickaxe-table",
+                dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:wooden_pickaxe", 1, 1),
+                java.util.List.of(new dev.luizloyola.anima.core.craft.CraftRecipe.Ingredient(
+                        java.util.Set.of("minecraft:oak_planks"), 3)),
+                true);
     }
 
     @Test
@@ -83,7 +135,7 @@ class KitGateTest {
         List<Entry> lines = ctx.journal().recent(10);
         assertEquals(1, passedOverLines(lines),
                 "one line, not one per offer scan: " + lines);
-        assertTrue(lines.get(0).detail().contains("no gate-test-pickaxes"),
+        assertTrue(lines.get(0).detail().contains("no way to get gate-test-pickaxes"),
                 "the line names what is missing: " + lines.get(0).detail());
 
         ctx.advance(Board.PASS_OVER_LOG_INTERVAL + 1);
