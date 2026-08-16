@@ -1,0 +1,59 @@
+# See https://stonecutter.kikugie.dev/wiki/config/properties#centralized-properties
+#
+# This is a single-mod repo with a ROOT branch, so `mod.*` sits at the top level rather than in a
+# `[<mod>]` table the way it did in the combined tree this was split out of.
+mod.id = "autarkia"
+mod.name = "Autarkia"
+mod.group = "dev.luizloyola"
+# Released by an `autarkia-v<version>` tag on HEAD. Anything else builds as `<mod.version>-SNAPSHOT`.
+# Anima carries its own number and is cut separately — that is the point of the per-mod tags.
+mod.version = "0.1.0"
+
+publish.modrinth_id = "uj0QkqNF"
+
+# ── The library ────────────────────────────────────────────────────────────────────────────
+# Anima, resolved from Maven the way a third-party consumer would resolve it. The
+# ARTIFACT ID carries the Minecraft version (`anima-26.1.2`) — see Anima's build.gradle.kts for
+# why it cannot live in the version string — so only the number goes here and the build appends
+# the node's Minecraft version.
+#
+# An exact pin rather than a range, and this is where "one repo, one version" used
+# to do the work for free: both mods came from one commit, so a mismatched pair was always a
+# mistake. Now they are cut separately and nothing enforces the pairing but this line. A range
+# would need Anima to have an API-stability policy, and it does not have one yet — 151 of its
+# types are named by this mod and the surface still moves weekly. `-SNAPSHOT` is loose in
+# practice anyway: every dev build of Anima declares 0.1.0-SNAPSHOT, so any of them satisfies it.
+deps.anima = "0.1.0-SNAPSHOT"
+
+deps.fabric_loader = "0.19.3"
+loomx.loom_version = "1.17-SNAPSHOT"
+
+# night-config is not declared here any more. It arrives transitively through Anima's POM, which
+# is the proper way: this mod never names the library, and Anima's config machinery reads and
+# writes `config/autarkia.toml` on its behalf. It was only ever listed explicitly because the old
+# `namedElements` project dependency published a jar without its dependencies.
+
+# ⚠ THE PER-NODE PINS BELOW MUST MATCH ANIMA'S. Two mods built against different Fabric API
+# versions load side by side without a build ever complaining; the failure surfaces in a player's
+# game. Until 2026-08-16 one file served both mods and this was structural.
+#
+# 1.20.1 and 1.21.1 are TEMPORARILY DROPPED — the Person entity needs the 1.21.9+ Avatar/render
+# pipeline. See settings.gradle.kts.
+
+["1.21.11"]
+mod.mc_compat = "1.21.11"
+mod.mc_releases = ["1.21.11"]
+
+deps.fabric_api = "0.141.3+1.21.11"
+
+["26.1.x"]
+mod.mc_compat = "~26.1"
+mod.mc_releases = ["26.1.2"]
+
+deps.fabric_api = "0.155.2+26.1.2"
+
+["26.2.x"]
+mod.mc_compat = "~26.2"
+mod.mc_releases = ["26.2"]
+
+deps.fabric_api = "0.152.2+26.2"

@@ -1,0 +1,57 @@
+# gradle
+
+.gradle/
+build/
+out/
+classes/
+
+# log4j initialises against the node's own directory when a unit test touches a class with a
+# static logger, leaving an empty versions/<v>/logs/latest.log in the source tree
+**/versions/*/logs/
+
+# eclipse
+
+*.launch
+
+# idea
+
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# vscode
+
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# macos
+
+*.DS_Store
+
+# fabric
+
+run/
+
+# python — running a script never writes these, but importing one does, and the analysis scripts
+# get imported ad hoc from a REPL often enough to keep leaving a cache in the source tree
+
+__pycache__/
+*.py[cod]
+
+# java
+
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# Agent state: memory, machine-local settings and worktrees stay out. The SKILLS are tracked —
+# they document how to build, launch and drive this repo, so they rot exactly like CLAUDE.md
+# does and need to rot in a diff where somebody can see it. Untracked, they drifted a whole mod
+# split behind (dead Gradle nodes, commands that had moved) with nothing to catch it.
+.claude/*
+!.claude/skills/

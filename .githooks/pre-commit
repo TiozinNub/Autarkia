@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Block commits while the Stonecutter active version differs from the VCS version,
+# so preprocessor comment-state churn never lands in git history.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+active=$(grep -oP 'stonecutter active "\K[^"]+' stonecutter.gradle.kts)
+vcs=$(grep -oP 'vcsVersion = "\K[^"]+' settings.gradle.kts)
+
+if [[ "$active" != "$vcs" ]]; then
+    echo "Stonecutter active version is '$active' but the VCS version is '$vcs'." >&2
+    echo "Run scripts/reset.sh (or: ./gradlew \"Reset active project\") before committing." >&2
+    exit 1
+fi

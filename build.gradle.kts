@@ -24,34 +24,38 @@ fun git(vararg args: String): String = providers.exec {
     isIgnoreExitValue = true
 }.standardOutput.asText.get().trim()
 
-// Resolves to "autarkia" via the `[autarkia]` table in stonecutter.properties.toml —
-// `sc.branch.id` is a default property tag, so `autarkia:mod:id` shortens to `mod:id` here.
-// Read before the version, which is now derived from it.
+// Top-level `mod.id` in stonecutter.properties.toml. This repo has a ROOT branch and one mod,
+// so there are no `[<mod>]` tables and no `sc.branch.id` tag shortening a path to reach them.
+// Read before the version, which is derived from it.
 val modId: String = sc.properties["mod.id"]
 
-// One mod's version from its own `[<mod>]` table and its own tag prefix. Written as a function
-// because this script needs it TWICE: once for itself, and once for Anima, whose exact version
-// this jar declares a dependency on.
-fun versionOf(mod: String): String {
-    val prefix = "$mod-v"
-    val tag = git("describe", "--tags", "--exact-match", "--match", "$prefix*")
-    if (tag.startsWith(prefix)) return tag.removePrefix(prefix)
-    // The key is ASYMMETRIC, and quietly so. `sc.branch.id` is a default property tag, and a tag
-    // shortens the path it matches — so from here `autarkia:mod:version` is already shortened to
-    // `mod.version` and the long form does not resolve, while a sibling's `anima:mod:version` is
-    // untouched and only the long form does.
-    val base: String = sc.properties[if (mod == modId) "mod.version" else "$mod.mod.version"]
-    return "$base-build.${git("log", "-1", "--format=%cd", "--date=format:%Y%m%d%H%M%S")}"
-}
+val tagPrefix = "$modId-v"
+val exactTag = git("describe", "--tags", "--exact-match", "--match", "$tagPrefix*")
+val isRelease = exactTag.startsWith(tagPrefix)
 
-val modVersion = versionOf(modId)
+// A release is the tag's number; anything else is `<mod.version>-SNAPSHOT`. Same rule as Anima,
+// and for the same reason: these are published, and a timestamped version would mint a permanent
+// entry in the registry on every workstation build. The commit stamp moves to the jar manifest.
+val modVersion = if (isRelease) exactTag.removePrefix(tagPrefix)
+    else "${sc.properties.get<String>("mod.version")}-SNAPSHOT"
 
-// Anima's version, computed exactly as Anima computes it, so `fabric.mod.json` can pin the
-// dependency to the library actually built beside this jar. Both mods still come from one commit
-// today, so an exact pin is right and a mismatched pair should fail loudly at load rather than
-// subtly at runtime. This goes away at slice 3, when Anima arrives from Maven and the pin becomes
-// a RANGE — which is the point at which Anima needs real API-stability semantics.
-val animaVersion = versionOf("anima")
+/** The commit this jar was built from — the identity `-SNAPSHOT` does not carry. */
+val buildStamp = git("log", "-1", "--format=%cd", "--date=format:%Y%m%d%H%M%S")
+
+// Anima's version is now a PIN, read from stonecutter.properties.toml, not a number recomputed
+// from this repo's git tags. It could be recomputed while both mods shared a commit; they are
+// separate repositories now and this repo's history says nothing about the library's.
+val animaGroup = "dev.luizloyola"
+val animaVersion: String = sc.properties["deps.anima"]
+
+// The Minecraft version lives in Anima's ARTIFACT ID — see its build.gradle.kts for why it cannot
+// live in the version string and still be a real snapshot. Derived from this node rather than
+// written down. That is what restores the one safety property lost with the sibling project
+// dependency: `sc.node.sibling("anima")` made it structurally impossible to compile against a
+// library built for a different Minecraft version, and a Maven coordinate can say anything at all.
+// Now a 26.1.2 build can only ever ask for anima-26.1.2, and asking for a version Anima has not
+// published fails the build outright instead of producing a pair that loads and misbehaves.
+val animaArtifact = "anima-${sc.current.version}"
 
 version = "$modVersion+${sc.current.version}"
 base.archivesName = modId
@@ -79,6 +83,42 @@ repositories {
     }
     strictMaven("https://www.cursemaven.com", "CurseForge", "curse.maven")
     strictMaven("https://api.modrinth.com/maven", "Modrinth", "maven.modrinth")
+
+    // ── Where Anima comes from ─────────────────────────────────────────────────────────────
+    //
+    // Two sources, tried in this order, and the order is the point. The local directory is what
+    // the Anima-Workspace helper publishes into, so a change to the library is visible here
+    // without a round trip through a server; Gitea is what a clone of this repo alone resolves
+    // from. Both are restricted to Anima's group, so a typo in any other coordinate cannot
+    // silently start hunting a private server for it.
+    //
+    // Not `mavenLocal()`: ~/.m2 is machine-global and parallel sessions share one
+    // checkout on this box, so two sessions publishing different Animas would poison each other
+    // with nothing in any log to say where the wrong jar came from.
+    // `content { includeGroup(...) }` on each rather than one `exclusiveContent` block:
+    // exclusiveContent takes a SINGLE repository, and two of them both claiming the group would
+    // be contradictory. This form gives the half that matters — neither repository is ever
+    // searched for anything but Anima — while still letting either one satisfy it.
+    maven {
+        name = "LocalMaven"
+        url = uri(providers.gradleProperty("localMaven")
+            .getOrElse(rootProject.file("../anima/build/local-maven").path))
+        content { includeGroup("dev.luizloyola") }
+    }
+    maven {
+        name = "Gitea"
+        url = uri("https://gitea.luizloyola.dev/api/packages/TiozinNub/maven")
+        // The instance serves nothing anonymously (the user is `limited`), so a clone needs
+        // credentials to build. Absent ones are not an error here — the local directory above
+        // may well satisfy the dependency on its own.
+        credentials {
+            username = providers.environmentVariable("GITEA_USER").getOrElse("TiozinNub")
+            password = providers.environmentVariable("GITEA_TOKEN").orNull
+        }
+        // not snapshotsOnly(): dev builds are snapshots but an `anima-v0.2.0` release is not,
+        // and this is the only place a release would be found.
+        content { includeGroup("dev.luizloyola") }
+    }
 }
 
 dependencies {
@@ -94,33 +134,26 @@ dependencies {
     // Applies Mojang Mappings on obfuscated versions
     loomx.applyMojangMappings()
 
-    // Anima — the mind Autarkia's Persons run on. The SIBLING node: `:anima:<this version>`,
-    // resolved through Stonecutter rather than hardcoded, so it can never drift onto a
-    // different Minecraft version than the one being built here.
-    // `namedElements` is Loom's configuration for an already-named (un-remapped) subproject
-    // jar — the standard way one Fabric project depends on another in the same build.
-    val anima = requireNotNull(sc.node.sibling("anima")) {
-        "No `anima` sibling for ${sc.current.project} — every branch must carry the same nodes"
-    }.project
-    // Compile and dev-run against it, but do not nest it (decision: Luiz). Anima is a mod in
-    // its own right and is downloaded as its own file; jar-in-jar would mean a player who also
-    // runs a second Anima consumer carries two copies and lets Loader pick, and it would make
-    // Anima's release cadence a detail of Autarkia's jar. fabric.mod.json declares the
-    // dependency instead, pinned to the exact version — both are built from one commit, so a
-    // mismatched pair is always a mistake and should fail loudly at load rather than subtly at
-    // runtime.
-    implementation(project(path = anima.path, configuration = "namedElements"))
+    // Anima — the mind Autarkia's Persons run on, resolved from MAVEN the way any other
+    // consumer would resolve it. It used to be the sibling Stonecutter node
+    // (`project(":anima:<version>", "namedElements")`), which made it structurally impossible to
+    // build against an Anima meant for a different Minecraft version. Nothing in Maven does that,
+    // so the assertion below replaces the guarantee the project dependency used to give for free.
+    //
+    // `modImplementation`, not `implementation`: a published artifact has to be remapped to this
+    // node's mappings, where a sibling's `namedElements` jar was already named.
+    //
+    // not `include`d (decision: Luiz). Anima is a mod in its own right and is downloaded as its
+    // own file; jar-in-jar would mean a player running a second Anima consumer carries two copies
+    // and lets Loader pick, and it would make Anima's release cadence a detail of this jar.
+    // fabric.mod.json declares the dependency instead.
+    modImplementation("$animaGroup:$animaArtifact:$animaVersion")
 
-    // night-config, for the DEV RUN only — Autarkia never names it. Anima's config machinery
-    // reads and writes `config/autarkia.toml` on Autarkia's behalf, so the classes must be on the
-    // classpath when the dev client/server launches, and `namedElements` publishes Anima's jar
-    // without Anima's dependencies. A shipped Autarkia gets them the proper way: Anima nests
-    // them, and fabric.mod.json already makes Anima a hard dependency. Not
-    // `include`d here — two copies of one library is the whole problem jar-in-jar creates.
-    val nightConfig: String = sc.properties["deps.night_config"]
-    for (module in listOf("core", "toml")) {
-        implementation("com.electronwill.night-config:$module:$nightConfig")
-    }
+    // night-config is gone from here, and that is the split working. It was only ever listed
+    // because `namedElements` published Anima's jar without Anima's dependencies, so the classes
+    // Anima's config machinery needs to write `config/autarkia.toml` were missing from the dev
+    // run's classpath. A Maven POM carries them transitively, so this mod goes back to never
+    // naming a library it does not use.
 
     // Use `mod{dependency type}` even on 26.1+ - loom-back-compat converts them
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
@@ -152,7 +185,7 @@ dependencies {
     // Named by configuration rather than testFixtures(project(...)): the main dependency above
     // already takes Anima through an explicit `namedElements` configuration, and mixing that
     // with normal variant selection collides on the project's own capability.
-    testImplementation(project(path = anima.path, configuration = "testFixturesRuntimeElements"))
+    testImplementation(testFixtures("$animaGroup:$animaArtifact:$animaVersion"))
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -171,7 +204,7 @@ tasks.named<Test>("test") {
     // See the same block in anima/build.gradle.kts: ArchitectureTest reads the BRANCH's source as
     // text (`autarkia/src`), because that is the one form that still carries `//?` directives and
     // the one form every node is generated from.
-    val branchSources = sc.branch.project.file("src/main/java")
+    val branchSources = rootProject.file("src/main/java")
     systemProperty("autarkia.arch.sourceRoot", branchSources.absolutePath)
     inputs.dir(branchSources).withPropertyName("branchSources").withPathSensitivity(PathSensitivity.RELATIVE)
 
@@ -223,11 +256,11 @@ tasks.withType<Jar>().configureEach {
 }
 
 loom {
-    // The BRANCH's own source dir (`autarkia/src`) — `sc.branch.project` is the safe way to
-    // say `project(":autarkia")` from inside a node.
-    fabricModJsonPath = sc.branch.project.file("src/main/resources/fabric.mod.json") // Useful for interface injection
+    // The root project's own source dir. Was `sc.branch.project.file(...)` while this mod was a
+    // branch of a shared tree; with a root branch the branch project is the root project.
+    fabricModJsonPath = rootProject.file("src/main/resources/fabric.mod.json") // Useful for interface injection
     accessWidenerPath = sc.process(
-        sc.branch.project.file("src/main/resources/autarkia.ct"),
+        rootProject.file("src/main/resources/autarkia.ct"),
         "build/processed.ct"
     )
 
@@ -446,8 +479,20 @@ tasks {
     // TRADEMARKS.md was dropped on 2026-08-16 with the file — see the same block in
     // anima/build.gradle.kts.
     named<Jar>("jar") {
-        from(sc.branch.project.file("LICENSE"))
-        from(sc.branch.project.file("licenses")) { into("licenses") }
+        // Which commit this is. The version string stopped saying so when dev builds became
+        // `-SNAPSHOT`; `unzip -p <jar> META-INF/MANIFEST.MF` answers it. Anima-Version is here
+        // because a mismatched pair is the failure mode this split introduced, and a bug report
+        // that carries both jars' manifests can be diagnosed without asking anybody anything.
+        manifest.attributes(
+            "Implementation-Title" to (sc.properties["mod.name"] as String),
+            "Implementation-Version" to modVersion,
+            "Implementation-Build" to buildStamp,
+            "Minecraft-Version" to sc.current.version,
+            "Anima-Version" to animaVersion,
+        )
+
+        from(rootProject.file("LICENSE"))
+        from(rootProject.file("licenses")) { into("licenses") }
     }
 
     register<Copy>("buildAndCollect") {
