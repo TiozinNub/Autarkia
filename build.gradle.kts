@@ -9,25 +9,51 @@ plugins {
 
 // DO NOT set group = ...!
 
-// Release version comes from an exact `v*` tag on HEAD; anything else is a dev build
+// Release version comes from an exact `<modid>-v*` tag on HEAD; anything else is a dev build
 // versioned "<mod.version>-build.<commit timestamp yyyyMMddHHmmss>" - deterministic per commit,
 // so parallel CI jobs and rebuilds of the same commit agree on the version.
 // The `<mod.version>-` prefix is not decoration: a bare "build.<ts>" is not valid semver, and
-// Anima now ships as a NESTED jar, whose version Fabric Loader resolves as semver.
+// Fabric Loader resolves every version it reads as semver.
+//
+// The tag is PREFIXED with the MOD ID (`autarkia-v0.2.0`, never a bare `v0.2.0`), because each
+// mod in this repo now carries its own number and is released on its own. See
+// docs/superpowers/specs/2026-08-16-repo-split-design.md, slice 1.
 fun git(vararg args: String): String = providers.exec {
     workingDir(rootDir)
     commandLine("git", *args)
     isIgnoreExitValue = true
 }.standardOutput.asText.get().trim()
 
-val exactTag = git("describe", "--tags", "--exact-match", "--match", "v*")
-val modVersion = if (exactTag.startsWith("v")) exactTag.removePrefix("v")
-    else "${sc.properties.get<String>("mod.version")}-build.${git("log", "-1", "--format=%cd", "--date=format:%Y%m%d%H%M%S")}"
-
-version = "$modVersion+${sc.current.version}"
 // Resolves to "autarkia" via the `[autarkia]` table in stonecutter.properties.toml —
 // `sc.branch.id` is a default property tag, so `autarkia:mod:id` shortens to `mod:id` here.
+// Read before the version, which is now derived from it.
 val modId: String = sc.properties["mod.id"]
+
+// One mod's version from its own `[<mod>]` table and its own tag prefix. Written as a function
+// because this script needs it TWICE: once for itself, and once for Anima, whose exact version
+// this jar declares a dependency on.
+fun versionOf(mod: String): String {
+    val prefix = "$mod-v"
+    val tag = git("describe", "--tags", "--exact-match", "--match", "$prefix*")
+    if (tag.startsWith(prefix)) return tag.removePrefix(prefix)
+    // The key is ASYMMETRIC, and quietly so. `sc.branch.id` is a default property tag, and a tag
+    // shortens the path it matches — so from here `autarkia:mod:version` is already shortened to
+    // `mod.version` and the long form does not resolve, while a sibling's `anima:mod:version` is
+    // untouched and only the long form does.
+    val base: String = sc.properties[if (mod == modId) "mod.version" else "$mod.mod.version"]
+    return "$base-build.${git("log", "-1", "--format=%cd", "--date=format:%Y%m%d%H%M%S")}"
+}
+
+val modVersion = versionOf(modId)
+
+// Anima's version, computed exactly as Anima computes it, so `fabric.mod.json` can pin the
+// dependency to the library actually built beside this jar. Both mods still come from one commit
+// today, so an exact pin is right and a mismatched pair should fail loudly at load rather than
+// subtly at runtime. This goes away at slice 3, when Anima arrives from Maven and the pin becomes
+// a RANGE — which is the point at which Anima needs real API-stability semantics.
+val animaVersion = versionOf("anima")
+
+version = "$modVersion+${sc.current.version}"
 base.archivesName = modId
 
 val requiredJava: JavaVersion = when {
@@ -391,10 +417,15 @@ tasks {
         }
 
         inputs.property("version", modVersion)
+        // Declared as an input in its own right: Anima's version can move while this mod's does
+        // not (that is the whole point of decoupling them), and without this the task is
+        // UP-TO-DATE across the change that alters the dependency it writes.
+        inputs.property("anima_version", animaVersion)
         val props = buildMap {
             register("id", "mod.id")
             register("name", "mod.name")
             put("version", modVersion)
+            put("anima_version", animaVersion)
             register("minecraft", "mod.mc_compat")
         }
 
@@ -405,11 +436,18 @@ tasks {
     }
 
     // The licence travels with the jar: someone who has only the file, not the repository,
-    // still has the terms. TRADEMARKS.md rides along because the licences say
-    // nothing about the name, so the jar would otherwise imply the name came with the code.
+    // still has the terms.
+    //
+    // licenses/ rides along because LICENSE here is the LGPL, and the LGPL is not a whole licence
+    // — it is a set of additional permissions written on top of the GPL, which it incorporates by
+    // reference. Shipping it alone would convey terms that point at a document the reader does not
+    // have, so the GPL text travels beside it.
+    //
+    // TRADEMARKS.md was dropped on 2026-08-16 with the file — see the same block in
+    // anima/build.gradle.kts.
     named<Jar>("jar") {
-        from(rootProject.file("TRADEMARKS.md"))
         from(sc.branch.project.file("LICENSE"))
+        from(sc.branch.project.file("licenses")) { into("licenses") }
     }
 
     register<Copy>("buildAndCollect") {

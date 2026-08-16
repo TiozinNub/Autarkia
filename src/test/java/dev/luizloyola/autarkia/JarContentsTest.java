@@ -21,40 +21,52 @@ import org.junit.jupiter.api.Test;
 class JarContentsTest {
 
     private static final String MOD_ID = "autarkia";
-    private static final String LICENCE = "GPL-3.0-only";
+    private static final String LICENCE = "LGPL-3.0-only";
 
     /**
-     * The licence text's own heading. Autarkia is the strong-copyleft half of the repo and Anima
-     * the weak one; shipping either file under the other's name has consequences outside the code.
+     * The licence text's own heading; LESSER is the word carrying the assertion. Autarkia is the
+     * copyleft half of the repo and Anima the permissive one, so the wrong file here has consequences
+     * outside the code.
+     *
+     * <p>Against the title line, not the contents: the jar ships the GPL too, in
+     * {@code licenses/}, so a whole-jar search would match a correctly present file. See
+     * {@link ModJar#licenceTitle()}.
      */
-    private static final String LICENCE_HEADING = "GNU GENERAL PUBLIC LICENSE";
+    private static final String LICENCE_HEADING = "GNU LESSER GENERAL PUBLIC LICENSE";
 
     /** Where a jar entry is allowed to be — see Anima's copy. */
     private static final List<String> ALLOWED_PREFIXES = List.of(
             "dev/luizloyola/" + MOD_ID + "/", "assets/" + MOD_ID + "/", "data/" + MOD_ID + "/",
-            "META-INF/");
+            "META-INF/", "licenses/");
 
-    /** Top-level files that belong in the jar by name. */
+    /** Top-level files that belong in the jar by name — see Anima's copy for why TRADEMARKS.md left. */
     private static final List<String> ALLOWED_FILES = List.of(
             "fabric.mod.json", MOD_ID + ".mixins.json", MOD_ID + ".accesswidener", MOD_ID + ".ct",
-            "LICENSE", "TRADEMARKS.md");
+            "LICENSE");
 
     private static final ModJar JAR = ModJar.fromSystemProperty("autarkia.jar");
     private static final JsonObject METADATA =
             JsonParser.parseString(JAR.text("fabric.mod.json")).getAsJsonObject();
 
     @Test
-    @DisplayName("the licence and the trademark notice travel with the jar")
+    @DisplayName("the licence travels with the jar")
     void legalTextIsPackaged() {
         assertTrue(JAR.has("LICENSE"), JAR.name() + " ships no LICENSE");
-        assertTrue(JAR.has("TRADEMARKS.md"), JAR.name() + " ships no TRADEMARKS.md — the licences "
-                + "deliberately say nothing about the name, so the jar would otherwise imply the "
-                + "name came with the code");
-        assertTrue(JAR.text("LICENSE").contains(LICENCE_HEADING),
-                "LICENSE does not contain \"" + LICENCE_HEADING + "\", but fabric.mod.json declares "
+        assertEquals(LICENCE_HEADING, JAR.licenceTitle(),
+                "LICENSE is not titled \"" + LICENCE_HEADING + "\", but fabric.mod.json declares "
                         + LICENCE + " — one of the two is wrong");
         assertEquals(LICENCE, METADATA.get("license").getAsString(),
                 "fabric.mod.json declares a licence this mod does not ship");
+    }
+
+    @Test
+    @DisplayName("the licence the licence points at travels too")
+    void incorporatedLicenceTextIsPackaged() {
+        assertTrue(JAR.has("licenses/GPL-3.0.txt"),
+                JAR.name() + " ships the LGPL but not the GPL. The LGPL is not a whole licence — "
+                        + "it is a set of additional permissions on top of the GPL, which it "
+                        + "incorporates by reference. Alone, it grants terms that point at a "
+                        + "document the reader does not have");
     }
 
     @Test

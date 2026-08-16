@@ -7,7 +7,7 @@
   "authors": [
     "Luiz Loyola"
   ],
-  "license": "GPL-3.0-only",
+  "license": "LGPL-3.0-only",
   "icon": "assets/autarkia/icon.png",
   "environment": "*",
   "entrypoints": {
@@ -24,7 +24,7 @@
   "accessWidener": "autarkia.ct",
   "depends": {
     "fabricloader": ">=0.17",
-    "anima": "${version}",
+    "anima": "${anima_version}",
     "minecraft": "${minecraft}",
     "fabric-api": "*"
   }
