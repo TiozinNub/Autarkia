@@ -296,6 +296,16 @@ loom {
             jvmArguments.add("-Danima.appearance.dump=$into")
         }
 
+        // Anima's web debugger, up with every dev world. Off in anything that ships — this is the
+        // launcher saying yes, not a default anybody inherits.
+        //
+        // Client and server get their own port for exactly the reason the JDWP ports below differ:
+        // in single-player the client hosts its own integrated server, so BOTH processes start one
+        // and a shared port means whichever loses the race logs "Address already in use". These are
+        // defaults only — an edited web_debugger.port still wins.
+        jvmArguments.add("-Danima.web_debugger.autostart=true")
+        jvmArguments.add("-Danima.web_debugger.port=${if (name == "client") 25598 else 25599}")
+
         // -Pjoin=host:port sends the client straight into a server on launch, skipping the menus.
         // Vanilla's own quick-play argument, not a mod feature. It exists because anything the
         // CLIENT does (and the whole appearance bake does) cannot be checked from the headless
