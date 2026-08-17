@@ -20,6 +20,7 @@ import dev.luizloyola.autarkia.core.person.Look;
 import dev.luizloyola.autarkia.core.person.Gender;
 import dev.luizloyola.autarkia.core.person.ModelType;
 import dev.luizloyola.anima.core.agent.Metabolism;
+import dev.luizloyola.anima.compat.agent.BodyEffects;
 import dev.luizloyola.anima.core.agent.need.BreathNeed;
 import dev.luizloyola.anima.core.agent.need.Company;
 import dev.luizloyola.anima.core.agent.need.FoodNeed;
@@ -27,6 +28,7 @@ import dev.luizloyola.anima.core.agent.need.Gauge;
 import dev.luizloyola.anima.core.agent.need.NeedKind;
 import dev.luizloyola.anima.core.agent.need.NeedLevel;
 import dev.luizloyola.anima.core.agent.need.Needs;
+import dev.luizloyola.anima.core.agent.need.Vigor;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.Setbacks;
@@ -377,13 +379,16 @@ public class Person extends Avatar implements AgentBody {
 
     /**
      * Everything this settler feels, in one roster: hunger (a view over the {@link #metabolism},
-     * never a second number), breath (a view over the air supply the game already keeps), and
-     * {@link #company}. One tick site, one readout, and where a registered need would appear.
+     * never a second number), breath (a view over the air supply the game already keeps),
+     * {@link #company}, and vigor — hit points read off the same organ, less what is dragging this
+     * body down and plus what is holding it up. One tick site, one readout, and where a registered
+     * need would appear.
      */
     private final Needs needs = new Needs()
             .add(new FoodNeed(this.metabolism, this::profile))
             .add(new BreathNeed(this::getAirSupply, this::getMaxAirSupply, this::profile))
-            .add(this.company);
+            .add(this.company)
+            .add(new Vigor(this.metabolism, BodyEffects.of(this), this::profile));
 
     /**
      * Per-agent aspect modifiers — see {@link #profile()}. Empty until something shifts one.
@@ -774,9 +779,10 @@ public class Person extends Avatar implements AgentBody {
      * <ol>
      *   <li><b>Movement exhaustion</b> — vanilla's 0.1/m sprinting and 0.01/m swimming, walking
      *       free, measured against last tick's position.</li>
-     *   <li><b>Regen/starvation inputs</b> — the {@code naturalRegeneration} gamerule and
-     *       hurt-ness; {@code isHurt()} is Player-only on 26.1.2, so this inlines it: alive and
-     *       below max health.</li>
+     *   <li><b>Regen/starvation inputs</b> — the {@code naturalRegeneration} gamerule and this
+     *       body's hit points, which are also how the metabolism comes to have health to offer
+     *       ({@code Metabolism.health()}); it works hurt-ness out from them, since
+     *       {@code isHurt()} is Player-only on 26.1.2 and was always that comparison.</li>
      *   <li><b>Effects</b> — core decides ({@link Metabolism.TickResult}), the body applies: a
      *       half-heart on regen, a starvation hit on vanilla's 80-tick cadence, not
      *       difficulty-clamped because starvation has to be able to kill.</li>
@@ -815,8 +821,8 @@ public class Person extends Avatar implements AgentBody {
         }
         boolean naturalRegen =
                 ((ServerLevel) level()).getGameRules().get(GameRules.NATURAL_HEALTH_REGENERATION);
-        boolean isHurt = getHealth() > 0.0F && getHealth() < getMaxHealth();
-        Metabolism.TickResult result = this.metabolism.tick(naturalRegen, isHurt);
+        Metabolism.TickResult result =
+                this.metabolism.tick(naturalRegen, getHealth(), getMaxHealth());
         if (result.heal() > 0.0F) {
             heal(result.heal());
         }
