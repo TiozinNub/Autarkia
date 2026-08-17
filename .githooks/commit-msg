@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Reject a commit message carrying an authorship trailer. Every SHA in the mods changed on
+# 2026-08-16 to strip exactly these lines from 619 of 620 commits; a tool that helpfully re-adds
+# one rebuilds that problem a commit at a time, and the next fix is another history rewrite.
+#
+# commit-msg, not pre-commit: at pre-commit time the message does not exist yet — COMMIT_EDITMSG
+# still holds the PREVIOUS commit's text, so a pre-commit guard would check the wrong thing.
+set -euo pipefail
+
+# Strip `#` lines first, so a template or a comment quoting the trailer is not an offence.
+# stripspace honours core.commentChar, which a hand-rolled `grep -v '^#'` would not.
+msg=$(git stripspace --strip-comments < "$1")
+
+if offenders=$(grep -iE '^[[:space:]]*(co-authored-by|claude-session)[[:space:]]*:' <<<"$msg"); then
+    echo "Commit rejected: authorship trailer in the commit message." >&2
+    sed 's/^/  /' <<<"$offenders" >&2
+    echo >&2
+    echo "This repo carries no trailers, ever. Delete the line(s) and commit again." >&2
+    echo "The message you wrote is kept in .git/COMMIT_EDITMSG." >&2
+    exit 1
+fi
