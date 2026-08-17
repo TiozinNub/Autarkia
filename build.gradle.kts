@@ -306,12 +306,6 @@ loom {
         jvmArguments.add("-Danima.web_debugger.autostart=true")
         jvmArguments.add("-Danima.web_debugger.port=${if (name == "client") 25598 else 25599}")
 
-        // And it loads its UI from the Vite server beside it (scripts/frontend.sh), not from the
-        // site: working on the debugger means editing it and seeing the change, which is what the
-        // dev entry and the loopback CSP exception exist for. Start that server or the stub says
-        // it could not — a default, again, so an edited web_debugger.app_url still wins.
-        jvmArguments.add("-Danima.web_debugger.app_url=http://localhost:25597/src/dev.tsx")
-
         // -Pjoin=host:port sends the client straight into a server on launch, skipping the menus.
         // Vanilla's own quick-play argument, not a mod feature. It exists because anything the
         // CLIENT does (and the whole appearance bake does) cannot be checked from the headless
