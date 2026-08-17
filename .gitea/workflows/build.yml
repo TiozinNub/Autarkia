@@ -1,0 +1,151 @@
+# Autarkia's CI: build every Minecraft node against the library as a stranger would resolve it,
+# and release when a tag says to.
+#
+# This runs with no Anima checkout anywhere. The workspace's local-Maven directory
+# (`../anima/build/local-maven`) simply is not there, Gradle falls through to the Gitea registry,
+# and that is the point — the path a third party takes is the path CI takes, so it is broken here
+# first rather than in somebody's clone.
+#
+# Booting is not done here either: a Person needs a server, and driving one headlessly needs the
+# workspace's harness. The last job asks Anima-Workspace to run that.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    # `autarkia-v0.1.5`, never a bare `v*`: each mod is cut on its own, so a tag that cannot say
+    # which mod it releases releases nothing.
+    tags: ['autarkia-v*']
+  pull_request:
+  # The STRICT run — non-primary nodes are allowed to lag on an ordinary push (see
+  # continue-on-error), which without this would let a broken node report green until a release
+  # tag found it. Staggered from the other two repos: one runner serves all three.
+  schedule:
+    - cron: '27 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.20.1 and 1.21.1 are temporarily dropped: Person is built on the 1.21.9+ Avatar and
+        # retained-mode render pipeline. This list must match Anima's — the workspace's
+        # scripts/check-pins.sh is what notices when it stops.
+        version: ['1.21.11', '26.1.x', '26.2.x']
+    continue-on-error: >-
+      ${{ matrix.version != '26.1.x'
+          && github.event_name != 'schedule'
+          && !startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `git describe --tags --exact-match` decides release vs snapshot, and a shallow
+          # checkout fetches no tags — which would stamp a release with a snapshot version.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Per-node toolchains: 26.x compiles on 25, 1.21.11 on 21. JAVA_HOME follows the last
+          # entry, so Gradle itself runs on 25.
+          java-version: |
+            21
+            25
+
+      - name: Point Gradle at the installed JDKs
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64' > ~/.gradle/gradle.properties
+
+      # v3, not v4: the newer cache protocol assumes github.com. Never fatal — an unreachable
+      # cache is a slow build, not a broken one.
+      - name: Cache the Gradle and Loom caches
+        uses: actions/cache@v3
+        continue-on-error: true
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/fabric-loom
+            ~/.gradle/wrapper
+            ~/.gradle/jdks
+          key: gradle-${{ matrix.version }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties', 'stonecutter.properties.toml') }}
+          restore-keys: gradle-${{ matrix.version }}-
+
+      # THE CACHE WOULD OTHERWISE HIDE THE LIBRARY MOVING. `0.1.0-SNAPSHOT` is a changing module,
+      # and Gradle holds a changing module for 24 hours before it asks again — so a restored cache
+      # builds this mod against yesterday's Anima and reports green on a pair that was never
+      # tried. Only our own group is dropped, so every other dependency stays cached.
+      - name: Forget any cached Anima
+        run: |
+          rm -rf ~/.gradle/caches/modules-2/files-2.1/dev.luizloyola \
+                 ~/.gradle/caches/modules-2/metadata-*/descriptors/dev.luizloyola
+
+      - name: Compute the build label
+        id: ver
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "label=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=build.$(git log -1 --format=%cd --date=format:%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+          fi
+
+      # One segment: a ROOT branch, so `:26.1.x`, never `:autarkia:26.1.x`.
+      #
+      # The credentials are for RESOLVING, not publishing: the instance serves nothing
+      # anonymously, and Anima lives on it. Without them the build fails at dependency
+      # resolution with a 401, which is the honest failure — there is no other copy to fall back
+      # to on a runner.
+      - name: Build ${{ matrix.version }}
+        run: ./gradlew ":${{ matrix.version }}:build" --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          # Not named GITEA_* — Gitea reserves that prefix for the token it injects itself.
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      - name: Upload jars
+        # v4 hard-fails on non-github.com hosts (its GHES check); v3 is the Gitea-supported path.
+        uses: actions/upload-artifact@v3
+        with:
+          name: autarkia-${{ steps.ver.outputs.label }}-mc${{ matrix.version }}
+          path: versions/${{ matrix.version }}/build/libs/*.jar
+          retention-days: 14
+
+      - name: Upload the test reports
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: autarkia-test-reports-mc${{ matrix.version }}
+          path: versions/${{ matrix.version }}/build/reports/tests/
+          retention-days: 14
+
+      # No maven publish: nothing compiles against this mod. Modrinth is where its players get it,
+      # and only a tag puts it there. Anima is released first and its `deps.anima` pin bumped
+      # here — that ordering is manual on purpose, because it is where somebody decides the pair
+      # is good.
+      - name: Release ${{ matrix.version }} to Modrinth
+        if: startsWith(github.ref, 'refs/tags/autarkia-v')
+        run: ./gradlew ":${{ matrix.version }}:publishMods" --no-daemon
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+  # A build proves this mod agrees with Anima's API. It cannot see a mixin that fails to apply or
+  # a Person that never ticks, and only the workspace has both mods and the headless harness
+  # needed to find out. Its own job, so a failed dispatch says exactly that — the pair was never
+  # exercised — instead of hiding inside a green build.
+  integration:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the workspace to run the pair end to end
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: token ${{ secrets.CI_TOKEN }}" \
+            -H 'Content-Type: application/json' \
+            -d '{"ref":"refs/heads/main","inputs":{"reason":"autarkia ${{ github.ref_name }} @ ${{ github.sha }}"}}' \
+            "${{ github.server_url }}/api/v1/repos/${{ github.repository_owner }}/Anima-Workspace/actions/workflows/integration.yml/dispatches"
