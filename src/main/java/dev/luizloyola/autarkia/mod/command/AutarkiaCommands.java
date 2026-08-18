@@ -329,11 +329,13 @@ public final class AutarkiaCommands {
     private static int boardShow(CommandSourceStack source) {
         Person person = resolve(source);
         if (person == null) return 0;
-        Replies.send(source, () -> Component.literal(person.getName().getString() + " boards:")
-                .withStyle(ChatFormatting.LIGHT_PURPLE));
+        Replies.send(source, () -> Component.translatable("autarkia.command.board.header",
+                person.getName()).withStyle(ChatFormatting.LIGHT_PURPLE));
+        // The rows themselves are describeBoard()'s, which the journal and the debug feed read
+        // too — one shape for all three rather than a second one only chat would see.
         for (String line : person.brain().describeBoard()) {
-            Replies.send(source, () -> Component.literal("  " + line)
-                    .withStyle(ChatFormatting.LIGHT_PURPLE));
+            Replies.send(source, () -> indent(Component.literal(line)
+                    .withStyle(ChatFormatting.LIGHT_PURPLE)));
         }
         return 1;
     }
@@ -344,6 +346,11 @@ public final class AutarkiaCommands {
      * hungry.
      */
     private static final double CLEAR_PRIORITY = 0.5;
+
+    /** One line nested under the one above it — see {@code ConfigCommands.indent}. */
+    private static Component indent(Component line) {
+        return Component.literal("  ").append(line);
+    }
 
     /** Longest side one clearing project takes, in blocks. See the refusal for why. */
     private static final int CLEAR_MAX_SIDE = 512;
@@ -370,8 +377,8 @@ public final class AutarkiaCommands {
         if (person == null) return 0;
         Optional<PartyBoard> board = partyBoardOf(person);
         if (board.isEmpty()) {
-            Replies.fail(source, Component.literal(
-                    person.getName().getString() + " does not know who they are yet."));
+            Replies.fail(source, Component.translatable(
+                    "autarkia.command.no_identity", person.getName()));
             return 0;
         }
         int rows = 0;
@@ -442,8 +449,8 @@ public final class AutarkiaCommands {
         if (person == null) return 0;
         AgentId who = person.getAgentId();
         if (who == null || !(person.level() instanceof ServerLevel level)) {
-            Replies.fail(source, Component.literal(
-                    person.getName().getString() + " does not know who they are yet."));
+            Replies.fail(source, Component.translatable(
+                    "autarkia.command.no_identity", person.getName()));
             return 0;
         }
         Region bounds = new Region(
@@ -456,9 +463,8 @@ public final class AutarkiaCommands {
         if (wide > CLEAR_MAX_SIDE || deep > CLEAR_MAX_SIDE) {
             // Refused rather than clamped: a box quietly shrunk is a box whose edges are not where
             // the operator put them, and every slice index after it names different ground.
-            Replies.fail(source, Component.literal("That box is " + wide + "×" + deep
-                    + " blocks. " + CLEAR_MAX_SIDE + " a side is the most one project takes — "
-                    + "post several, or somebody is walking it until the heat death."));
+            Replies.fail(source, Component.translatable("autarkia.command.clear.too_big",
+                    wide, deep, CLEAR_MAX_SIDE));
             return 0;
         }
         MinecraftServer server = level.getServer();
@@ -471,9 +477,8 @@ public final class AutarkiaCommands {
         PartyBoards.touch(server);
         // LOGGED: this creates durable, shared, persisted state that outlives everyone who works
         // it — the same reason cancel below is logged.
-        Replies.send(source, () -> Component.literal("Posted #" + handle + " to "
-                        + person.getName().getString() + "'s party — " + project.describe()
-                        + ", " + project.slices().size() + " slices")
+        Replies.send(source, () -> Component.translatable("autarkia.command.clear.posted",
+                        handle, person.getName(), project.describe(), project.slices().size())
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
@@ -500,9 +505,10 @@ public final class AutarkiaCommands {
             PartyBoards.touch(level.getServer());
         }
         if (cancelled.isEmpty()) {
-            Replies.fail(source, Component.literal("No project #" + handle + " on "
-                    + person.getName().getString() + "'s " + (party ? "party's" : "own")
-                    + " board."));
+            Replies.fail(source, Component.translatable(party
+                            ? "autarkia.command.board.no_project_party"
+                            : "autarkia.command.board.no_project_own",
+                    handle, person.getName()));
             return 0;
         }
         String what = cancelled.get().describe();
@@ -510,9 +516,10 @@ public final class AutarkiaCommands {
         // to the agent, and an agent does not narrate what was done TO it — so left unlogged a
         // cancel is invisible everywhere, the board reading "nothing posted" afterwards.
         // Caught live, chasing a Person whose want had evaporated.
-        Replies.send(source, () -> Component.literal(person.getName().getString()
-                        + " drops " + (party ? "the party's " : "their own ") + "#" + handle
-                        + " — " + what)
+        Replies.send(source, () -> Component.translatable(party
+                                ? "autarkia.command.board.dropped_party"
+                                : "autarkia.command.board.dropped_own",
+                        person.getName(), handle, what)
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
@@ -535,16 +542,17 @@ public final class AutarkiaCommands {
             var memory = Knowledges.of(source.getServer()).forPerson(person.agentId())
                     .nearest(Pois.TREE, feet);
             if (memory.isEmpty()) {
-                Replies.fail(source, Component.literal(
-                        person.getName().getString() + " knows no tree to fell."));
+                Replies.fail(source, Component.translatable("autarkia.command.chop.no_tree",
+                        person.getName()));
                 return 0;
             }
             anchor = memory.get().anchor();
         }
         boolean autoDisabled = person.brain().run(new ChopPlannedTree(anchor));
-        String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
-        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
-                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
+        Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
+        Replies.send(source, () -> Component.translatable("anima.command.state",
+                person.getName(), person.brain().describe())
+                .append(suffix).withStyle(ChatFormatting.AQUA));
         return 1;
     }
 
@@ -554,9 +562,10 @@ public final class AutarkiaCommands {
         Person person = resolve(source);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new ObtainItem(Stock.LOGS, count));
-        String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
-        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
-                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
+        Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
+        Replies.send(source, () -> Component.translatable("anima.command.state",
+                person.getName(), person.brain().describe())
+                .append(suffix).withStyle(ChatFormatting.AQUA));
         return 1;
     }
 
@@ -577,14 +586,15 @@ public final class AutarkiaCommands {
             id = dev.luizloyola.anima.compat.inv.ItemStacks
                     .templateOf(item, source.registryAccess()).id();
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException invalid) {
-            Replies.fail(source, Component.literal("Not an obtainable item."));
+            Replies.fail(source, Component.translatable("autarkia.command.obtain.not_an_item"));
             return 0;
         }
         boolean autoDisabled = person.brain().run(new ObtainItem(
                 dev.luizloyola.anima.core.inv.ItemSpec.anyOf(java.util.Set.of(id)), count));
-        String suffix = AgentCommands.autoDisabledSuffix(autoDisabled);
-        Replies.send(source, () -> Component.literal(person.getName().getString() + ": "
-                + person.brain().describe() + suffix).withStyle(ChatFormatting.AQUA));
+        Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
+        Replies.send(source, () -> Component.translatable("anima.command.state",
+                person.getName(), person.brain().describe())
+                .append(suffix).withStyle(ChatFormatting.AQUA));
         return 1;
     }
 
@@ -672,13 +682,13 @@ public final class AutarkiaCommands {
                                    Mind mind) {
         String trimmed = name == null ? null : name.trim();
         if (trimmed != null && trimmed.isEmpty()) {
-            Replies.fail(source, Component.literal("Name must not be blank."));
+            Replies.fail(source, Component.translatable("autarkia.command.spawn.blank_name"));
             return 0;
         }
         ServerLevel level = source.getLevel();
         Person person = ModEntities.PERSON.create(level, EntitySpawnReason.COMMAND);
         if (person == null) {
-            Replies.fail(source, Component.literal("Could not create the Person entity."));
+            Replies.fail(source, Component.translatable("autarkia.command.spawn.no_entity"));
             return 0;
         }
         PersonDirectory directory = PersonDirectory.get(source.getServer());
@@ -697,19 +707,21 @@ public final class AutarkiaCommands {
             case FULL -> { }
         }
         if (!level.addFreshEntity(person)) {
-            Replies.fail(source, Component.literal("Could not add the Person to the world."));
+            Replies.fail(source, Component.translatable("autarkia.command.spawn.not_added"));
             return 0;
         }
         Appearance appearance = identity.appearance();
         String where = String.format(Locale.ROOT, "%.1f %.1f %.1f", spawnPos.x, spawnPos.y, spawnPos.z);
-        String brainNote = switch (mind) {
-            case FULL -> "";
-            case NO_BRAIN -> " — brain off (/autarkia brain auto true to enable)";
-            case NO_WANDER -> " — wander muted (/autarkia brain wander true to enable)";
+        Component brainNote = switch (mind) {
+            case FULL -> Component.empty();
+            case NO_BRAIN -> Component.translatable("autarkia.command.spawn.brain_off");
+            case NO_WANDER -> Component.translatable("autarkia.command.spawn.wander_muted");
         };
-        Replies.send(source, () -> Component.literal("Spawned ")
+        Replies.send(source, () -> Component.translatable("autarkia.command.spawn.spawned")
                 .append(Component.literal(identity.name()).withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (" + appearance.gender() + ") at " + where + brainNote)
+                .append(Component.translatable("autarkia.command.spawn.at",
+                                Component.translatable(appearance.gender().nameKey()), where)
+                        .append(brainNote)
                         .withStyle(ChatFormatting.GRAY)), true);
         return 1;
     }
@@ -752,34 +764,35 @@ public final class AutarkiaCommands {
                     .toList();
         }
         if (matches.isEmpty()) {
-            Replies.fail(source, Component.literal(
-                    "No identity matches '" + token + "' — try a name or id from the list command."));
+            Replies.fail(source, Component.translatable("autarkia.command.erase.no_match", token));
             return 0;
         }
         if (matches.size() > 1) {
             String ids = matches.stream().map(i -> AgentCommands.shortId(i.id()))
                     .collect(Collectors.joining(", "));
-            Replies.fail(source, Component.literal(matches.size() + " identities named '" + token
-                    + "' — pick one by id: " + ids));
+            Replies.fail(source, Component.translatable("autarkia.command.erase.ambiguous",
+                    matches.size(), token, ids));
             return 0;
         }
 
         PersonIdentity identity = matches.get(0);
         AgentId id = identity.id();
         if (findLoaded(server, id) != null) {
-            Replies.fail(source, Component.literal(identity.name() + " is loaded — kill or remove "
-                    + "the body first, or it will mint a fresh identity on its next tick."));
+            Replies.fail(source, Component.translatable("autarkia.command.erase.loaded",
+                    identity.name()));
             return 0;
         }
 
         List<String> touched = AgentRecords.erase(server, id);
         // LOGGED, like the spawn it undoes, and for the same reason the old command was: erasing
         // destroys the record that would have said what happened to it.
-        Replies.send(source, () -> Component.literal("Erased " + identity.name() + " ("
-                + AgentCommands.shortId(id) + ") from "
-                + (touched.isEmpty() ? "nothing — no store held anything"
-                        : String.join(", ", touched))
-                + ".").withStyle(ChatFormatting.GRAY), true);
+        Replies.send(source, () -> (touched.isEmpty()
+                        ? Component.translatable("autarkia.command.erase.erased_nothing",
+                                identity.name(), AgentCommands.shortId(id))
+                        : Component.translatable("autarkia.command.erase.erased",
+                                identity.name(), AgentCommands.shortId(id),
+                                String.join(", ", touched)))
+                .withStyle(ChatFormatting.GRAY), true);
         return 1;
     }
 
@@ -793,8 +806,8 @@ public final class AutarkiaCommands {
                 .min((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .orElse(null);
         if (nearest == null) {
-            Replies.fail(source, Component.literal(
-                    "No Person within " + (int) NEAREST_RADIUS + " blocks."));
+            Replies.fail(source, Component.translatable("autarkia.command.no_person_near",
+                    (int) NEAREST_RADIUS));
         }
         return nearest;
     }
@@ -808,8 +821,8 @@ public final class AutarkiaCommands {
         if (body instanceof Person person) {
             return person;
         }
-        Replies.fail(source, Component.literal(body.entity().getName().getString()
-                + " is not a Person — that command is Autarkia's, not Anima's."));
+        Replies.fail(source, Component.translatable("autarkia.command.not_a_person",
+                body.entity().getName()));
         return null;
     }
 
@@ -821,7 +834,8 @@ public final class AutarkiaCommands {
         Vec3 origin = source.getPosition();
         List<Person> loaded = loadedPersons(server);
         if (loaded.isEmpty()) {
-            Replies.send(source, () -> Component.literal("No Persons are loaded.").withStyle(ChatFormatting.GRAY));
+            Replies.send(source, () -> Component.translatable("autarkia.command.list.none")
+                    .withStyle(ChatFormatting.GRAY));
             return 0;
         }
         Optional<AgentId> pin = AgentSelection.pinned(source);
@@ -867,7 +881,7 @@ public final class AutarkiaCommands {
                                     java.util.Collection<? extends Entity> targets) {
         List<Person> persons = targets.stream().filter(e -> e instanceof Person).map(e -> (Person) e).toList();
         if (persons.isEmpty()) {
-            Replies.fail(source, Component.literal("No Person among the selected entities."));
+            Replies.fail(source, Component.translatable("autarkia.command.whois.no_person"));
             return 0;
         }
         persons.forEach(person -> report(source, person));
@@ -877,20 +891,23 @@ public final class AutarkiaCommands {
     private static void report(CommandSourceStack source, Person person) {
         AgentId id = person.agentId();
         if (id == null) {
-            Replies.send(source, () -> Component.literal("Person not yet identified (spawning).")
+            Replies.send(source, () -> Component.translatable("autarkia.command.whois.spawning")
                     .withStyle(ChatFormatting.GRAY));
             return;
         }
         PersonIdentity identity = PersonDirectory.get(source.getServer()).find(id).orElse(null);
         if (identity == null) {
-            Replies.send(source, () -> Component.literal(id + "  <unknown>").withStyle(ChatFormatting.GRAY));
+            Replies.send(source, () -> Component.translatable("autarkia.command.whois.unknown", id)
+                    .withStyle(ChatFormatting.GRAY));
             return;
         }
         Appearance appearance = identity.appearance();
         // Full tier (name) + external tier (gender, skin) + the stable id.
         ChatFormatting genderColor = appearance.gender().choose(ChatFormatting.BLUE, ChatFormatting.LIGHT_PURPLE);
         MutableComponent line = Component.literal(identity.name()).withStyle(ChatFormatting.AQUA)
-                .append(Component.literal(" " + appearance.gender()).withStyle(genderColor))
+                .append(Component.literal(" ")
+                        .append(Component.translatable(appearance.gender().nameKey()))
+                        .withStyle(genderColor))
                 .append(Component.literal(" " + appearance.model()).withStyle(ChatFormatting.DARK_AQUA))
                 .append(Component.literal("  " + appearance.look().describe()).withStyle(ChatFormatting.GRAY))
                 .append(Component.literal("  " + id).withStyle(ChatFormatting.DARK_GRAY));

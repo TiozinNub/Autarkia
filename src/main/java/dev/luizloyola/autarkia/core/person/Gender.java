@@ -25,6 +25,11 @@ public enum Gender implements Pronouns {
         return this == MALE ? ifMale : ifFemale;
     }
 
+    /** What to call this to a reader: {@code autarkia.gender.male} → "male". */
+    public String nameKey() {
+        return "autarkia.gender." + name().toLowerCase(java.util.Locale.ROOT);
+    }
+
     /**
      * The subject pronoun for narration ("the someone he/she had heard"). Gains a "they" if the
      * enum grows: NOTHING that narrates a person may spell a pronoun itself, or the day a third
