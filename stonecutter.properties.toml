@@ -23,10 +23,12 @@ publish.modrinth_id = "uj0QkqNF"
 # would need Anima to have an API-stability policy, and it does not have one yet — 151 of its
 # types are named by this mod and the surface still moves weekly.
 #
-# Pinned to a RELEASE for the v0.0.1 cut: a released Autarkia that asks for `0.1.0-SNAPSHOT`
-# resolves to whatever the registry's snapshot slot holds that week, which is not a thing to ship.
-# Back to a snapshot pin once the next dev cycle starts.
-deps.anima = "0.0.1"
+# Back on the snapshot pin: v0.0.1 is cut and both mods have moved past their tags. It goes to a
+# RELEASE number again as part of cutting the next one — a released Autarkia that asks for
+# `0.1.0-SNAPSHOT` resolves to whatever the registry's snapshot slot holds that week, which is not
+# a thing to ship. JarContentsTest fails the build whenever this drifts from `mod.version`, so the
+# order at release time is: tag Anima, set this to that number, tag Autarkia.
+deps.anima = "0.1.0-SNAPSHOT"
 
 deps.fabric_loader = "0.19.3"
 loomx.loom_version = "1.17-SNAPSHOT"
