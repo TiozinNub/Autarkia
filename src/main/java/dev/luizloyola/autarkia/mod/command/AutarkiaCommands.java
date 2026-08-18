@@ -141,9 +141,16 @@ public final class AutarkiaCommands {
 
     private static final double NEAREST_RADIUS = 32.0;
 
+    /**
+     * Registers {@code /autarkia …}. <b>Op-gated whole, matching {@code /anima}</b> — every node
+     * under it either drives a Person, spawns or erases one, or reads out the machinery, so there
+     * is none an ordinary player wants and several a shared server should not hand out. Brigadier
+     * drops a failing root from the tree, so a non-op does not see it at all.
+     */
     public static void register(ConfigFile configFile) {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(Commands.literal("autarkia")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         // Pin the Person that this source's later commands target. "clear"/"show" are
                         // literals, so they win over a Person literally named clear/show — pin those by id.
                         .then(AgentCommands.select())
