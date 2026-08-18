@@ -486,8 +486,8 @@ tasks {
     // reference. Shipping it alone would convey terms that point at a document the reader does not
     // have, so the GPL text travels beside it.
     //
-    // TRADEMARKS.md was dropped on 2026-08-16 with the file — see the same block in
-    // anima/build.gradle.kts.
+    // NOTICE carries the prose: the name reservation, and where the Person textures came from.
+    // JarContentsTest asserts it landed — a `from()` naming a missing file is a silent no-op.
     named<Jar>("jar") {
         // Which commit this is. The version string stopped saying so when dev builds became
         // `-SNAPSHOT`; `unzip -p <jar> META-INF/MANIFEST.MF` answers it. Anima-Version is here
@@ -502,6 +502,7 @@ tasks {
         )
 
         from(rootProject.file("LICENSE"))
+        from(rootProject.file("NOTICE"))
         from(rootProject.file("licenses")) { into("licenses") }
     }
 

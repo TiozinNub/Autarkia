@@ -1,0 +1,48 @@
+Autarkia
+
+Copyright (C) 2026 Luiz Loyola
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, version 3.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see
+
+    https://www.gnu.org/licenses/lgpl-3.0.html
+
+---
+
+Full text in LICENSE, beside this file. `licenses/GPL-3.0.txt` travels with it because
+the LGPL is not a whole licence: it is additional permissions written on top of the GPL, and one
+without the other conveys nothing.
+
+## What is not in this jar
+
+No third-party code. Anima is required and does the thinking, but it is a separate download under
+its own licence — read Anima's own LICENSE and NOTICE for it, not this file.
+
+## About the name
+
+"Autarkia" comes from the Greek *autarkeia*, self-sufficiency. It is an old word and I did not
+invent it, but the association between that name and this mod is mine, as is the mod id `autarkia`
+that identifies it to the game. Neither is covered by the LGPL: the licence is about code, and says
+nothing about naming.
+
+Fork freely, rename before you publish or clearly state it's a fork. Let me know if you do, I'd love
+to see other people's work on it.
+
+## About the art
+
+Autarkia's Person textures — bodies, hair, shirts, pants, beards, eyes and mouths under
+`textures/person/` — are drawn by Luiz Loyola, worked up from the game's own default player skins
+and named after the ones they echo. They are derived from Minecraft's assets: Mojang's terms cover
+what is Mojang's, and the LGPL above covers this mod's code without granting you anything about
+Minecraft's art.
+
+Nothing here comes from a skin gallery or another mod.

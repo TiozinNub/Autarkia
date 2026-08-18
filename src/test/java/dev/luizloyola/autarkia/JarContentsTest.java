@@ -39,10 +39,10 @@ class JarContentsTest {
             "dev/luizloyola/" + MOD_ID + "/", "assets/" + MOD_ID + "/", "data/" + MOD_ID + "/",
             "META-INF/", "licenses/");
 
-    /** Top-level files that belong in the jar by name — see Anima's copy for why TRADEMARKS.md left. */
+    /** Top-level files that belong in the jar by name — see Anima's copy. */
     private static final List<String> ALLOWED_FILES = List.of(
             "fabric.mod.json", MOD_ID + ".mixins.json", MOD_ID + ".accesswidener", MOD_ID + ".ct",
-            "LICENSE");
+            "LICENSE", "NOTICE");
 
     private static final ModJar JAR = ModJar.fromSystemProperty("autarkia.jar");
     private static final JsonObject METADATA =
@@ -57,6 +57,7 @@ class JarContentsTest {
                         + LICENCE + " — one of the two is wrong");
         assertEquals(LICENCE, METADATA.get("license").getAsString(),
                 "fabric.mod.json declares a licence this mod does not ship");
+        assertTrue(JAR.has("NOTICE"), JAR.name() + " ships no NOTICE");
     }
 
     @Test

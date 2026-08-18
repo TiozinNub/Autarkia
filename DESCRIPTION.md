@@ -91,4 +91,8 @@ Writing this to clarify that there is a very big difference between a literal ch
 
 This mod is licensed under the **LGPLv3** (`LGPL-3.0-only`) license.
 
-TL;DR: Use, modify, fork, redistribute. Write addons, patches and integrations: those are separate mods and stay entirely yours, under any license you like. Do not claim it as your own, do not close source your fork **of Autarkia itself**. Do not come complaining if the mod corrupts your world. Full license here.
+TL;DR: Use, modify, fork, redistribute. Write addons, patches and integrations: those are separate mods and stay entirely yours, under any license you like. Do not claim it as your own, do not close source your fork **of Autarkia itself**. Do not come complaining if the mod corrupts your world. [Full license here](https://www.gnu.org/licenses/lgpl-3.0.html).
+
+The name is not part of the license. *Autarkia* comes from the Greek *autarkeia*, self-sufficiency — an old word I did not invent, but the association between it and this mod is mine, as is the mod id `autarkia`. Fork freely, rename before you publish or clearly state it's a fork. Let me know if you do, I'd love to see other people's work on it. `LICENSE` and `NOTICE` ride inside every jar.
+
+The Person textures are mine, worked up from the game's own default player skins — derived from Minecraft's assets, so Mojang's terms cover what is Mojang's. Nothing here comes from a skin gallery or another mod.

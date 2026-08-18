@@ -5,9 +5,10 @@ package dev.luizloyola.autarkia.core.person;
  * the catalog could not be read at all. A settler with no catalog must look <b>wrong</b>, not be
  * invisible and not be magenta, and vanilla's own Steve is the one texture every client has.
  *
- * <p><b>Autarkia bundles no skin PNGs.</b> Public skin galleries license nothing to a downloader —
- * an uploader grants the SITE a licence, not the world — while naming a vanilla texture ships
- * nothing.
+ * <p><b>Autarkia bundles no whole-canvas skin PNGs</b> — the wardrobe under
+ * {@code textures/person/} is layered garments, drawn here and accounted for in NOTICE. Public
+ * skin galleries license nothing to a downloader — an uploader grants the SITE a licence, not the
+ * world — while naming a vanilla texture ships nothing.
  *
  * <p>Ids are asset ids ({@code namespace:path}, without {@code textures/} or {@code .png}). The
  * string is opaque to the rest of the simulation; the renderer gives it meaning.
