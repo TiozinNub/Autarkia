@@ -1,3 +1,13 @@
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.security.MessageDigest
+import javax.imageio.ImageIO
+import me.modmuss50.mpp.platforms.modrinth.ModrinthEnvironment
 import net.ltgt.gradle.errorprone.errorprone
 
 plugins {
@@ -529,7 +539,7 @@ publishMods {
     dryRun = providers.environmentVariable("MODRINTH_TOKEN").orNull == null
 
     modrinth {
-        // Resolves to uj0QkqNF via the `[autarkia]` table
+        // Resolves to uj0QkqNF from the top-level `publish.modrinth_id`
         val modrinthId: String = sc.properties["publish.modrinth_id"]
         projectId = modrinthId
         // Anima is no longer nested, so the page has to say it is required — otherwise the
@@ -537,5 +547,85 @@ publishMods {
         requires { id = "l8eKuisB" }
         accessToken = providers.environmentVariable("MODRINTH_TOKEN")
         minecraftVersions.addAll(compatibleVersions)
+        // The page body IS DESCRIPTION.md. The plugin PATCHes it on every publish, so this repo is
+        // the only place it is written — editing the page on the site is undone by the next tag.
+        projectDescription = providers.fileContents(
+            rootProject.layout.projectDirectory.file("DESCRIPTION.md"),
+        ).asText
+        // fabric.mod.json declares `"environment": "*"`; Modrinth's equivalent is both sides
+        // required. Left unset it shows as "unknown", which reads as broken on the page.
+        environment = ModrinthEnvironment.CLIENT_AND_SERVER
     }
 }
+
+// ── The Modrinth project icon ──────────────────────────────────────────────────────────────────
+// `publishMods` uploads VERSIONS; every PROJECT-level field is ours to send. Modrinth wants 512px
+// and the jar ships 128, so this upscales x4 with nearest-neighbour — pixel-identical to the 512
+// export in the workspace, which is why no mod repo carries a second copy of the art.
+//
+// A Modrinth CDN filename is the SHA1 of the stored bytes, so an unchanged icon costs one GET and
+// no upload. That is what makes this safe to hang off every node of a matrix release.
+//
+// The java.* types are imported at the top of this file rather than written out: inside a build
+// script `java` is the JavaPluginExtension, so a fully-qualified `java.net.http...` does not
+// resolve to the package at all.
+val syncModrinthIcon = tasks.register("syncModrinthIcon") {
+    group = "publishing"
+    description = "Uploads the mod icon to Modrinth at 512px, when it differs from what is there."
+
+    val projectId: String = sc.properties["publish.modrinth_id"]
+    val iconFile = rootProject.layout.projectDirectory
+        .file("src/main/resources/assets/$modId/icon.png").asFile
+    val token = providers.environmentVariable("MODRINTH_TOKEN")
+    val agent = "$modId-build (dev.luizloyola)"
+    inputs.file(iconFile)
+
+    doLast {
+        val key = token.orNull
+        if (key == null) {
+            logger.lifecycle("No MODRINTH_TOKEN - icon sync skipped.")
+            return@doLast
+        }
+
+        val scaled = BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB)
+        scaled.createGraphics().apply {
+            setRenderingHint(
+                RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR,
+            )
+            drawImage(ImageIO.read(iconFile), 0, 0, 512, 512, null)
+            dispose()
+        }
+        val png = ByteArrayOutputStream().also { ImageIO.write(scaled, "png", it) }.toByteArray()
+        val sha1 = MessageDigest.getInstance("SHA-1").digest(png)
+            .joinToString("") { "%02x".format(it) }
+
+        val http = HttpClient.newHttpClient()
+        val base = "https://api.modrinth.com/v2/project/$projectId"
+        val live = http.send(
+            HttpRequest.newBuilder(URI.create(base))
+                .header("Authorization", key).header("User-Agent", agent).GET().build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        check(live.statusCode() == 200) { "Modrinth GET -> ${live.statusCode()}: ${live.body()}" }
+        if (live.body().contains(sha1)) {
+            logger.lifecycle("Modrinth icon already $sha1 - nothing to upload.")
+            return@doLast
+        }
+
+        val sent = http.send(
+            HttpRequest.newBuilder(URI.create("$base/icon?ext=png"))
+                .header("Authorization", key).header("User-Agent", agent)
+                .header("Content-Type", "image/png")
+                .method("PATCH", HttpRequest.BodyPublishers.ofByteArray(png)).build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        check(sent.statusCode() == 204) { "Modrinth icon PATCH -> ${sent.statusCode()}: ${sent.body()}" }
+        logger.lifecycle("Modrinth icon updated to $sha1.")
+    }
+}
+
+// The icon is project-level and identical for every node, so the SHA1 check above means only the
+// first node of a matrix release uploads. A finalizer rather than a dependency: the jar reaches
+// players first, and a failed icon upload cannot hold it back.
+tasks.named("publishMods") { finalizedBy(syncModrinthIcon) }
