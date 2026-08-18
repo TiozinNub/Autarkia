@@ -1,13 +1,13 @@
-# Autarkia's CI: build every Minecraft node against the library as a stranger would resolve it,
-# and release when a tag says to.
+# Autarkia's CI: unit-test and build every Minecraft node against the library as a stranger would
+# resolve it, boot the pair from the jars that ship, and release when a tag says to.
 #
 # This runs with no Anima checkout anywhere. The workspace's local-Maven directory
 # (`../anima/build/local-maven`) simply is not there, Gradle falls through to the Gitea registry,
 # and that is the point — the path a third party takes is the path CI takes, so it is broken here
-# first rather than in somebody's clone.
+# first rather than in somebody's clone. The smoke then boots what that resolved, so the library
+# under test is the one this was compiled against by construction.
 #
-# Booting is not done here either: a Person needs a server, and driving one headlessly needs the
-# workspace's harness. The last job asks Anima-Workspace to run that.
+# Nothing in this file reaches a private repository. See 2026-08-18-per-repo-ci-smoke-design.md.
 name: CI
 
 on:
@@ -19,7 +19,7 @@ on:
   pull_request:
   # The STRICT run — non-primary nodes are allowed to lag on an ordinary push (see
   # continue-on-error), which without this would let a broken node report green until a release
-  # tag found it. Staggered from the other two repos: one runner serves all three.
+  # tag found it. Staggered from Anima's: one runner serves both.
   schedule:
     - cron: '27 4 * * *'
   workflow_dispatch:
@@ -32,8 +32,10 @@ jobs:
       fail-fast: false
       matrix:
         # 1.20.1 and 1.21.1 are temporarily dropped: Person is built on the 1.21.9+ Avatar and
-        # retained-mode render pipeline. This list must match Anima's — the workspace's
-        # scripts/check-pins.sh is what notices when it stops.
+        # retained-mode render pipeline. This list must match Anima's, and the smoke below is what
+        # notices when it stops: a node Anima never published has no `anima-<mc>` to resolve, and a
+        # fabric_api pin that has drifted is EXERCISED rather than compared, because one API jar is
+        # installed and both mods run against it.
         version: ['1.21.11', '26.1.x', '26.2.x']
     continue-on-error: >-
       ${{ matrix.version != '26.1.x'
@@ -165,6 +167,18 @@ jobs:
             esac
           done
 
+      # `build` depends on `check`, so these already run — but Gradle does not ORDER test before
+      # assemble, so a unit-test failure can arrive after remapJar has run. Asking for it first
+      # costs nothing, fails sooner, and names itself in the step list.
+      #
+      # The credentials are for RESOLVING: the tests read Anima's test fixtures from the registry,
+      # and the instance serves nothing anonymously.
+      - name: Unit-test ${{ matrix.version }}
+        run: ./gradlew ":${{ matrix.version }}:test" --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
       # One segment: a ROOT branch, so `:26.1.x`, never `:autarkia:26.1.x`.
       #
       # The credentials are for RESOLVING, not publishing: the instance serves nothing
@@ -194,6 +208,35 @@ jobs:
           path: versions/${{ matrix.version }}/build/reports/tests/
           retention-days: 14
 
+      # "Download the equivalent Anima" — and equivalent is decided by the RESOLVER, not by a rule.
+      # Same coordinate, same repositories, same Gradle run as the build above, so the snapshot
+      # timestamp is the one the compile picked. A plain configuration rather than
+      # `modImplementation`, because Loom would hand back its dev-remapped copy and a real server
+      # needs the published artifact.
+      - name: Stage this mod and the Anima it was built against
+        run: ./gradlew ":${{ matrix.version }}:smokeMods" --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      # A build proves this mod agrees with Anima's API. It cannot see a mixin that fails to apply,
+      # a client-only class touched from common code, or a Person that never ticks — and only a
+      # REAL server booted from the jars that ship can see the pair load each other at all.
+      #
+      # No artifact upload for the log. Artifacts are write-only on this Gitea: upload-artifact@v3
+      # finalises successfully and neither the API nor the web route can read the result back
+      # (measured 2026-08-18). smoke.sh tails the last 60 lines into THIS log on failure instead,
+      # which is readable.
+      #
+      # The EULA is the operator's legal choice and the script refuses to make it. This line is the
+      # repository owner recording that choice, which is the only place it belongs.
+      - name: Boot the pair, spawn a Person, read it back
+        run: scripts/smoke.sh "${{ matrix.version }}"
+        env:
+          SMOKE_EULA: 'true'
+          # A cold runner downloads Minecraft and its libraries before it can log "Done".
+          READY_TIMEOUT: '900'
+
       # No maven publish: nothing compiles against this mod. Modrinth is where its players get it,
       # and only a tag puts it there. Anima is released first and its `deps.anima` pin bumped
       # here — that ordering is manual on purpose, because it is where somebody decides the pair
@@ -205,20 +248,3 @@ jobs:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           GITEA_USER: ${{ github.repository_owner }}
           GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
-
-  # A build proves this mod agrees with Anima's API. It cannot see a mixin that fails to apply or
-  # a Person that never ticks, and only the workspace has both mods and the headless harness
-  # needed to find out. Its own job, so a failed dispatch says exactly that — the pair was never
-  # exercised — instead of hiding inside a green build.
-  integration:
-    needs: build
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ask the workspace to run the pair end to end
-        run: |
-          curl -fsS -X POST \
-            -H "Authorization: token ${{ secrets.CI_TOKEN }}" \
-            -H 'Content-Type: application/json' \
-            -d '{"ref":"refs/heads/main","inputs":{"reason":"autarkia ${{ github.ref_name }} @ ${{ github.sha }}"}}' \
-            "${{ github.server_url }}/api/v1/repos/${{ github.repository_owner }}/Anima-Workspace/actions/workflows/integration.yml/dispatches"
