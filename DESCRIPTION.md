@@ -91,4 +91,4 @@ Writing this to clarify that there is a very big difference between a literal ch
 
 This mod is licensed under the **LGPLv3** (`LGPL-3.0-only`) license.
 
-TL;DR: Use, modify, fork, redistribute. Write addons, patches and integrations: those are separate mods and stay entirely yours, under any license you like. Do not claim it as your own, do not close source your fork **of Autarkia itself**. Do not come complaining if the mod corrupts your world. Full license [here](LICENSE).
+TL;DR: Use, modify, fork, redistribute. Write addons, patches and integrations: those are separate mods and stay entirely yours, under any license you like. Do not claim it as your own, do not close source your fork **of Autarkia itself**. Do not come complaining if the mod corrupts your world. Full license here.
