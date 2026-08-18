@@ -262,8 +262,17 @@ public class Person extends Avatar implements AgentBody {
     /**
      * This person's own board — where wants stated about this body live, and nobody else can reach.
      * A project posted here is theirs for life (compose, don't merge — see {@link ComposedBoards}).
+     *
+     * <p>EMPTY since 2026-08-15 (decision: Luiz). The standing "keep 16 logs" quota seeded here was
+     * a disposable placeholder; work comes from real projects now. The {@link KeepStocked}
+     * machinery stays, and old saves still load — with nothing posted, the restored rows have
+     * nothing to attach to.
+     *
+     * <p>Built inline, and never from {@code getId()}: a field initialiser runs before the level
+     * assigns an entity id, which from 26.2 makes {@code getId()} throw on the client and drops the
+     * player on the spawn packet. The seed this once took has been unused since the quota went.
      */
-    private final PersonalBoard personalBoard = personalBoard(getId());
+    private final PersonalBoard personalBoard = new PersonalBoard();
 
     /**
      * This person's brain host ({@link BrainDriver}) — a machine beside the {@link #navigator}, on
@@ -280,16 +289,6 @@ public class Person extends Avatar implements AgentBody {
      */
     private @Nullable PartyId boardParty;
     private @Nullable WorkSource partyWork;
-
-    /**
-     * A fresh settler's own board — EMPTY since 2026-08-15 (decision: Luiz). The standing
-     * "keep 16 logs" quota posted here was a disposable placeholder; work comes from real projects
-     * now. The {@link KeepStocked} machinery stays, and old saves still load — with nothing posted,
-     * the restored rows have nothing to attach to.
-     */
-    private static PersonalBoard personalBoard(int offset) {
-        return new PersonalBoard();
-    }
 
     /** This person's own board — what the board command reads and, later, posts to. */
     public PersonalBoard board() {

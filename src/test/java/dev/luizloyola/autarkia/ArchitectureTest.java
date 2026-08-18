@@ -7,6 +7,7 @@ import dev.luizloyola.anima.arch.SourceTree.JavaSource;
 import dev.luizloyola.anima.arch.SourceTree.Line;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +48,20 @@ class ArchitectureTest {
      */
     private static final List<String> FABRIC_INTERNALS =
             List.of("net.fabricmc.fabric.impl.", "net.fabricmc.fabric.mixin.");
+
+    /**
+     * A field initialiser that reads an entity id. From 26.2 the id is handed out by the LEVEL
+     * ({@code Entity.<init>} calls {@code level.getNextEntityId()}), and only a {@code ServerLevel}
+     * returns a real one — the base {@code Level} returns 0, so a client entity stays unassigned
+     * until the spawn packet calls {@code setId}, which happens AFTER every field initialiser has
+     * run. {@code getId()} throws on that 0.
+     *
+     * <p>Matches one line, so a call wrapped onto a continuation line slips through. That is the
+     * cheap 90%: the case this was written for read {@code = personalBoard(getId())} and cost a
+     * released build.
+     */
+    private static final Pattern ID_IN_FIELD_INITIALIZER = Pattern.compile(
+            "^\\s*(?:private|protected|public|static|final)\\b.*=.*\\bgetId\\s*\\(\\s*\\)");
 
     private static final SourceTree TREE = SourceTree.fromSystemProperty(SOURCE_ROOT_PROPERTY);
 
@@ -136,5 +151,38 @@ class ArchitectureTest {
                         + "agent it ran as ([as John] …) — Autarkia has no exemption at all, since "
                         + "Replies itself lives in the library",
                 violations));
+    }
+
+    @Test
+    @DisplayName("no field initialiser reads an entity id")
+    void entityIdIsNotReadDuringConstruction() {
+        List<String> violations = new ArrayList<>();
+        for (JavaSource file : TREE.all()) {
+            for (Line line : matching(file, ID_IN_FIELD_INITIALIZER)) {
+                violations.add(SourceTree.at(file, line));
+            }
+        }
+        assertTrue(violations.isEmpty(), () -> SourceTree.report(
+                "a field initialiser runs before the level assigns an entity id, so getId() throws "
+                        + "on the client from 26.2 on and the spawn packet disconnects the player — "
+                        + "read the id in a method, or drop it if the argument was never used",
+                violations));
+    }
+
+    /**
+     * Lines of {@code file} that {@code rule} matches, searched over the comment-blanked
+     * {@link JavaSource#code()} so prose describing a rule never breaks it, and numbered against
+     * the raw file so the failure reads as what was written.
+     */
+    private static List<Line> matching(JavaSource file, Pattern rule) {
+        String[] code = file.code().split("\n", -1);
+        String[] raw = file.text().split("\n", -1);
+        List<Line> found = new ArrayList<>();
+        for (int i = 0; i < code.length; i++) {
+            if (rule.matcher(code[i]).find()) {
+                found.add(new Line(i + 1, raw[i].strip()));
+            }
+        }
+        return found;
     }
 }
