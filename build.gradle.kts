@@ -19,15 +19,13 @@ plugins {
 
 // DO NOT set group = ...!
 
-// Release version comes from an exact `<modid>-v*` tag on HEAD; anything else is a dev build
-// versioned "<mod.version>-build.<commit timestamp yyyyMMddHHmmss>" - deterministic per commit,
-// so parallel CI jobs and rebuilds of the same commit agree on the version.
-// The `<mod.version>-` prefix is not decoration: a bare "build.<ts>" is not valid semver, and
+// Release version comes from an exact `v*` tag on HEAD; anything else is `<mod.version>-SNAPSHOT`.
+// The `<mod.version>-` prefix is not decoration: a bare "SNAPSHOT" is not valid semver, and
 // Fabric Loader resolves every version it reads as semver.
 //
-// The tag is PREFIXED with the MOD ID (`autarkia-v0.2.0`, never a bare `v0.2.0`), because each
-// mod in this repo now carries its own number and is released on its own. See
-// docs/superpowers/specs/2026-08-16-repo-split-design.md, slice 1.
+// A BARE `v0.2.0` — the `autarkia-v` prefix is gone (2026-08-18). It dated from the combined
+// tree, where a tag had to say which of two mods it cut; this repo holds one mod and one version,
+// so there is nothing left for a prefix to disambiguate.
 fun git(vararg args: String): String = providers.exec {
     workingDir(rootDir)
     commandLine("git", *args)
@@ -36,10 +34,9 @@ fun git(vararg args: String): String = providers.exec {
 
 // Top-level `mod.id` in stonecutter.properties.toml. This repo has a ROOT branch and one mod,
 // so there are no `[<mod>]` tables and no `sc.branch.id` tag shortening a path to reach them.
-// Read before the version, which is derived from it.
 val modId: String = sc.properties["mod.id"]
 
-val tagPrefix = "$modId-v"
+val tagPrefix = "v"
 val exactTag = git("describe", "--tags", "--exact-match", "--match", "$tagPrefix*")
 val isRelease = exactTag.startsWith(tagPrefix)
 
@@ -125,7 +122,7 @@ repositories {
             username = providers.environmentVariable("GITEA_USER").getOrElse("TiozinNub")
             password = providers.environmentVariable("GITEA_TOKEN").orNull
         }
-        // not snapshotsOnly(): dev builds are snapshots but an `anima-v0.2.0` release is not,
+        // not snapshotsOnly(): dev builds are snapshots but an Anima `v0.2.0` release is not,
         // and this is the only place a release would be found.
         content { includeGroup("dev.luizloyola") }
     }

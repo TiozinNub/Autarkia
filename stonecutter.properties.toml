@@ -5,8 +5,8 @@
 mod.id = "autarkia"
 mod.name = "Autarkia"
 mod.group = "dev.luizloyola"
-# Released by an `autarkia-v<version>` tag on HEAD. Anything else builds as `<mod.version>-SNAPSHOT`.
-# Anima carries its own number and is cut separately — that is the point of the per-mod tags.
+# Released by a `v<version>` tag on HEAD. Anything else builds as `<mod.version>-SNAPSHOT`.
+# Anima carries its own number in its own repo and is cut separately.
 mod.version = "0.1.0"
 
 publish.modrinth_id = "uj0QkqNF"

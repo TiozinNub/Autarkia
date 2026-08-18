@@ -13,9 +13,9 @@ name: CI
 on:
   push:
     branches: [main]
-    # `autarkia-v0.1.5`, never a bare `v*`: each mod is cut on its own, so a tag that cannot say
-    # which mod it releases releases nothing.
-    tags: ['autarkia-v*']
+    # A bare `v0.1.5` is unambiguous here: one repo, one mod, one version. The `autarkia-v`
+    # prefix this used to require was a leftover from the combined tree (dropped 2026-08-18).
+    tags: ['v*']
   pull_request:
   # The STRICT run — non-primary nodes are allowed to lag on an ordinary push (see
   # continue-on-error), which without this would let a broken node report green until a release
@@ -199,7 +199,7 @@ jobs:
       # here — that ordering is manual on purpose, because it is where somebody decides the pair
       # is good.
       - name: Release ${{ matrix.version }} to Modrinth
-        if: startsWith(github.ref, 'refs/tags/autarkia-v')
+        if: startsWith(github.ref, 'refs/tags/v')
         run: ./gradlew ":${{ matrix.version }}:publishMods" --no-daemon
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
