@@ -200,6 +200,45 @@ dependencies {
     errorprone("com.google.errorprone:error_prone_core:2.50.0")
 }
 
+// See the same block in anima/build.gradle.kts: the artifact that actually ships (`remapJar` on
+// the Mojang-mapped nodes, `jar` on the unobfuscated ones), and `AbstractArchiveTask` rather than
+// `Jar` because Loom's RemapJarTask is not the `Jar` a build script names by default. Read by
+// JarContentsTest, which inspects it, and by `smokeMods`, which boots it.
+val shippedJar = (if (tasks.names.contains("remapJar")) tasks.named<AbstractArchiveTask>("remapJar")
+                  else tasks.named<AbstractArchiveTask>("jar")).flatMap { it.archiveFile }
+
+// The library, as a jar a SERVER can load — which is not the one `modImplementation` hands back.
+// Loom remaps a published mod dependency into this dev environment's mappings; a real server needs
+// the published artifact exactly as it was uploaded.
+//
+// Same group, same artifact, same pin, same repositories as the compile above — and resolved in
+// the same Gradle invocation, so the snapshot timestamp is the one the compile picked. That is
+// what makes the jar this boots the jar this was BUILT against, decided by the resolver rather
+// than by a rule somebody has to keep true.
+//
+// isTransitive = false: night-config is already nested inside Anima's jar. Resolving the POM's
+// dependencies would drop loose non-mod jars into mods/, where Loader has no use for them.
+//
+// Named `smokeLibs` while the task below is `smokeMods`: Gradle lets a task and a configuration
+// share a name, and a line that does is one nobody reads the same way twice.
+val smokeLibs: Configuration by configurations.creating { isTransitive = false }
+
+dependencies {
+    smokeLibs("$animaGroup:$animaArtifact:$animaVersion")
+}
+
+// Stage what `scripts/smoke.sh` boots: this mod, beside the library it compiled against. A task
+// rather than a glob in the script, because build/libs/ is never cleaned and holds every jar this
+// repo has ever produced.
+tasks.register<Copy>("smokeMods") {
+    group = "verification"
+    description = "Stage this node's shipping jar and the Anima it compiled against, for scripts/smoke.sh."
+    from(shippedJar)
+    from(smokeLibs)
+    into(layout.buildDirectory.dir("smoke-mods"))
+}
+
+
 tasks.named<Test>("test") {
     useJUnitPlatform()
 
@@ -215,12 +254,7 @@ tasks.named<Test>("test") {
     systemProperty("autarkia.arch.sourceRoot", branchSources.absolutePath)
     inputs.dir(branchSources).withPropertyName("branchSources").withPathSensitivity(PathSensitivity.RELATIVE)
 
-    // See the same block in anima/build.gradle.kts: JarContentsTest inspects the artifact that
-    // actually ships (`remapJar` on the Mojang-mapped nodes, `jar` on the unobfuscated ones), and
-    // `AbstractArchiveTask` rather than `Jar` because Loom's RemapJarTask is not the `Jar` a build
-    // script names by default.
-    val shippedJar = (if (tasks.names.contains("remapJar")) tasks.named<AbstractArchiveTask>("remapJar")
-                      else tasks.named<AbstractArchiveTask>("jar")).flatMap { it.archiveFile }
+    // JarContentsTest inspects the shipping jar itself — see its declaration above.
     dependsOn(shippedJar)
     inputs.file(shippedJar).withPropertyName("shippedJar").withPathSensitivity(PathSensitivity.NAME_ONLY)
     // A plain String, not a jvmArgumentProviders lambda — a lambda in a build script captures the
