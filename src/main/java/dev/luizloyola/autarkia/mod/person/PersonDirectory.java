@@ -16,6 +16,7 @@ import dev.luizloyola.anima.mod.store.StoreGuard;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonNames;
 import dev.luizloyola.autarkia.core.person.PersonRegistry;
+import dev.luizloyola.autarkia.core.person.PersonSpecies;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -184,6 +185,17 @@ public final class PersonDirectory extends SavedData
     @Override
     public Optional<PrivateIdentity> identity(AgentId id) {
         return registry.get(id).map(PrivateIdentity.class::cast);
+    }
+
+    /**
+     * Anima's species lookup, answered for Persons — and only for ids this directory actually
+     * holds. Answering unconditionally would label a Fidelia pet a person: the union asks each
+     * directory in turn and takes the first answer, so a provider that never says "not mine"
+     * shadows every provider behind it.
+     */
+    @Override
+    public Optional<String> speciesOf(AgentId id) {
+        return registry.get(id).map(person -> PersonSpecies.KEY);
     }
 
     /** Anima's enumeration, answered for Persons — every one, loaded or not. */
