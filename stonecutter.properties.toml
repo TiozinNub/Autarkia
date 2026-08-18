@@ -21,9 +21,12 @@ publish.modrinth_id = "uj0QkqNF"
 # to do the work for free: both mods came from one commit, so a mismatched pair was always a
 # mistake. Now they are cut separately and nothing enforces the pairing but this line. A range
 # would need Anima to have an API-stability policy, and it does not have one yet — 151 of its
-# types are named by this mod and the surface still moves weekly. `-SNAPSHOT` is loose in
-# practice anyway: every dev build of Anima declares 0.1.0-SNAPSHOT, so any of them satisfies it.
-deps.anima = "0.1.0-SNAPSHOT"
+# types are named by this mod and the surface still moves weekly.
+#
+# Pinned to a RELEASE for the v0.0.1 cut: a released Autarkia that asks for `0.1.0-SNAPSHOT`
+# resolves to whatever the registry's snapshot slot holds that week, which is not a thing to ship.
+# Back to a snapshot pin once the next dev cycle starts.
+deps.anima = "0.0.1"
 
 deps.fabric_loader = "0.19.3"
 loomx.loom_version = "1.17-SNAPSHOT"
