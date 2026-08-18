@@ -27,5 +27,8 @@
     "anima": "${anima_version}",
     "minecraft": "${minecraft}",
     "fabric-api": "*"
+  },
+  "suggests": {
+    "notenoughanimations": "*"
   }
 }

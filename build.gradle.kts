@@ -540,8 +540,19 @@ publishMods {
         val modrinthId: String = sc.properties["publish.modrinth_id"]
         projectId = modrinthId
         // Anima is no longer nested, so the page has to say it is required — otherwise the
-        // first thing a downloader meets is a missing-dependency crash.
+        // first thing a downloader meets is a missing-dependency crash. Fabric API for the same
+        // reason: required by fabric.mod.json since the beginning, unstated here, so a launcher
+        // resolving this page never fetched it.
+        //
+        // Neither carries a version bound. Anima's jar-side pin is exact (`deps.anima`), but that
+        // is Loader's business — a bound here would only stop the launcher fetching the one
+        // Anima build that satisfies it.
         requires { id = "l8eKuisB" }
+        requires { id = "P7dR8mSH" }
+        // Cosmetic, and soft in every direction (see NeaBridge): with NEA a Person borrows the
+        // player animations, without it they fall back to vanilla arm poses and nothing else
+        // changes. Optional so the page offers it instead of a launcher installing it unasked.
+        optional { id = "MPCX6s5C" } // Not Enough Animations
         accessToken = providers.environmentVariable("MODRINTH_TOKEN")
         minecraftVersions.addAll(compatibleVersions)
         // The page body IS DESCRIPTION.md. The plugin PATCHes it on every publish, so this repo is
