@@ -72,6 +72,9 @@ public final class PersonSpecies {
             .set(ProfileAspect.DANGER_BABY_MULT, 1.2)
             // --- social: must outrange sight, or a shout adds nothing to looking -------
             .set(ProfileAspect.SOCIAL_HAIL_RADIUS, 48)
+            // Setbacks' lifetime, and for the same reason: long enough for several cycles of
+            // "call, wait, give up, have another go". A starting value, to be tuned in world.
+            .set(ProfileAspect.SOCIAL_HAIL_PATIENCE_TICKS, 600)
             // Company, as a band a settler tries to sit in: [0.35, 0.85], wide enough that most of a
             // working day passes with nothing to say about it. The two rates only mean anything
             // against each other: two in-game days of solitude empties a settler, one neighbour
