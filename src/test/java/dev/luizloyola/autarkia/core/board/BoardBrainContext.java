@@ -14,6 +14,7 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.brain.sense.Drop;
 import dev.luizloyola.anima.core.brain.sense.FoodLookup;
 import dev.luizloyola.anima.core.brain.sense.Percepts;
@@ -118,6 +119,11 @@ final class BoardBrainContext implements BrainContext {
                 // The offer path legitimately looks here now: the kit gate's reachability
                 // question counts a sighted drop as a way to cover a need.
                 return List.of();
+            }
+
+            @Override
+            public boolean calledLately(BeingId whom) {
+                return false;
             }
 
             @Override
