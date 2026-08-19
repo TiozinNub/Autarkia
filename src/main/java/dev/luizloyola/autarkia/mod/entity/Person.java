@@ -588,6 +588,28 @@ public class Person extends Avatar implements AgentBody {
         this.updateSwingTime();
     }
 
+    /**
+     * The shoulders, on both sides: square to {@code yRot}, which is the invariant {@link Gaze}
+     * already holds server-side — every writer of the pair sets them together.
+     *
+     * <p>It has to be restored here because {@code yBodyRot} is in no packet. A client rebuilds it
+     * from vanilla's guess — ease toward the walk heading, then clamp within 50° of {@code yRot}
+     * — and a body turning on the spot moves nowhere, so the ease has no target and only the clamp
+     * acts. That clamp does not converge: it parks the shoulders at exactly {@code yRot - 50°} and
+     * leaves them there until the body walks or swings. The head, which IS synced and which the
+     * gaze organ allows 60° of twist of its own, then rendered up to 110° round — a neck no body
+     * has, on a person whose shoulders still faced the way they came from.
+     *
+     * <p>Snapping is safe: {@code yRot} is already interpolated client-side before this runs, and
+     * {@code yBodyRotO} was captured earlier in the tick, so the render still eases between them.
+     *
+     * @param target vanilla's guess at where the shoulders belong — the thing being replaced
+     */
+    @Override
+    protected void tickHeadTurn(float target) {
+        this.yBodyRot = getYRot();
+    }
+
     @Override
     protected void serverAiStep() {
         super.serverAiStep();
