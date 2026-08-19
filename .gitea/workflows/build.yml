@@ -203,14 +203,6 @@ jobs:
           path: versions/${{ matrix.version }}/build/libs/*.jar
           retention-days: 14
 
-      - name: Upload the test reports
-        if: failure()
-        uses: actions/upload-artifact@v3
-        with:
-          name: autarkia-test-reports-mc${{ matrix.version }}
-          path: versions/${{ matrix.version }}/build/reports/tests/
-          retention-days: 14
-
       # "Download the equivalent Anima" — and equivalent is decided by the RESOLVER, not by a rule.
       # Same coordinate, same repositories, same Gradle run as the build above, so the snapshot
       # timestamp is the one the compile picked. A plain configuration rather than
@@ -239,6 +231,17 @@ jobs:
           SMOKE_EULA: 'true'
           # A cold runner downloads Minecraft and its libraries before it can log "Done".
           READY_TIMEOUT: '900'
+
+      # Only on red, and only then: on green nobody reads them and they are pure storage.
+      # Below the smoke deliberately: `failure()` only sees the steps BEFORE it, so sitting up by
+      # the build it was skipped on exactly the runs that boot-fail with tests worth reading.
+      - name: Upload the test reports
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: autarkia-test-reports-mc${{ matrix.version }}
+          path: versions/${{ matrix.version }}/build/reports/tests/
+          retention-days: 14
 
       # No maven publish: nothing compiles against this mod. Modrinth is where its players get it,
       # and only a tag puts it there. Anima is released first and its `deps.anima` pin bumped
