@@ -112,6 +112,11 @@ public final class PersonSpecies {
             // much above six and a settler standing about stops looking alive again.
             .set(ProfileAspect.GAZE_SCAN_MIN_TICKS, 40)
             .set(ProfileAspect.GAZE_SCAN_MAX_TICKS, 120)
+            // --- handling: how long a settler's hands take to do a thing --------------------
+            .set(ProfileAspect.HANDLING_OPEN_TICKS, 10)
+            .set(ProfileAspect.HANDLING_SETTLE_TICKS, 5)
+            .set(ProfileAspect.HANDLING_STACK_TICKS, 6)
+            .set(ProfileAspect.HANDLING_CRAFT_TICKS, 10)
             .build();
 
     /** The same declaration as tunables in {@code autarkia.toml}, under {@code person.*}. */
