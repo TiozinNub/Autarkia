@@ -117,6 +117,10 @@ public final class PersonSpecies {
             .set(ProfileAspect.HANDLING_SETTLE_TICKS, 5)
             .set(ProfileAspect.HANDLING_STACK_TICKS, 6)
             .set(ProfileAspect.HANDLING_CRAFT_TICKS, 10)
+            // --- stores: how far a settler trusts an old look inside a container -------------
+            .set(ProfileAspect.STORES_STALENESS_WEIGHT, 0.5)
+            // Matches ChopPlannedTree.AVOID_TICKS, the one existing avoid-mark in the codebase.
+            .set(ProfileAspect.STORES_FULL_AVOID_TICKS, 2400)
             .build();
 
     /** The same declaration as tunables in {@code autarkia.toml}, under {@code person.*}. */
