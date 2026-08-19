@@ -75,6 +75,9 @@ public final class PersonSpecies {
             // Setbacks' lifetime, and for the same reason: long enough for several cycles of
             // "call, wait, give up, have another go". A starting value, to be tuned in world.
             .set(ProfileAspect.SOCIAL_HAIL_PATIENCE_TICKS, 600)
+            // Between lonely (0.50) and mind.preempt (0.60): an idle settler comes when called,
+            // one mid-chop finishes the tree first. That gap IS "he was busy".
+            .set(ProfileAspect.SOCIAL_HAIL_ANSWER_PRESSURE, 0.55)
             // Company, as a band a settler tries to sit in: [0.35, 0.85], wide enough that most of a
             // working day passes with nothing to say about it. The two rates only mean anything
             // against each other: two in-game days of solitude empties a settler, one neighbour
