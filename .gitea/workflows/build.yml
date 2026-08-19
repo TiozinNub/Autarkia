@@ -24,6 +24,9 @@ on:
     - cron: '27 4 * * *'
   workflow_dispatch:
 
+# Step names carry no `${{ matrix.version }}`: Gitea's runner does not evaluate expressions in a
+# step's `name:` (GitHub does), so it renders the template at the reader. The matrix job header
+# already says `build (26.1.x)`. Artifact names under `with:` ARE expanded — leave those alone.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -173,7 +176,7 @@ jobs:
       #
       # The credentials are for RESOLVING: the tests read Anima's test fixtures from the registry,
       # and the instance serves nothing anonymously.
-      - name: Unit-test ${{ matrix.version }}
+      - name: Unit-test
         run: ./gradlew ":${{ matrix.version }}:test" --no-daemon
         env:
           GITEA_USER: ${{ github.repository_owner }}
@@ -185,7 +188,7 @@ jobs:
       # anonymously, and Anima lives on it. Without them the build fails at dependency
       # resolution with a 401, which is the honest failure — there is no other copy to fall back
       # to on a runner.
-      - name: Build ${{ matrix.version }}
+      - name: Build
         run: ./gradlew ":${{ matrix.version }}:build" --no-daemon
         env:
           GITEA_USER: ${{ github.repository_owner }}
@@ -241,7 +244,7 @@ jobs:
       # and only a tag puts it there. Anima is released first and its `deps.anima` pin bumped
       # here — that ordering is manual on purpose, because it is where somebody decides the pair
       # is good.
-      - name: Release ${{ matrix.version }} to Modrinth
+      - name: Release to Modrinth
         if: startsWith(github.ref, 'refs/tags/v')
         run: ./gradlew ":${{ matrix.version }}:publishMods" --no-daemon
         env:
