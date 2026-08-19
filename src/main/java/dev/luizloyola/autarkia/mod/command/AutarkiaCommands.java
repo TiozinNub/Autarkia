@@ -171,6 +171,10 @@ public final class AutarkiaCommands {
                         // Who belongs with whom — layer 3's scope. join/leave are the dev
                         // stand-ins until the social era's group-up handshake exists.
                         .then(AgentCommands.party())
+                        // What the resolved Person or their party OWNS — the claims tier, as
+                        // against knowledge's sightings. found/drop are dev stand-ins for acts
+                        // that do not exist yet, exactly as party join/leave are.
+                        .then(AgentCommands.places())
                         .then(AgentCommands.nav())
                         // The standing order beside the one-shot one: `follow` re-aims the same
                         // legs at somebody who keeps moving, so a scene can be LED into place.
