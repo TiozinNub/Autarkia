@@ -131,10 +131,10 @@ import java.util.stream.Stream;
  * the idle drift muted.
  *
  * <p>Person-scoped subcommands resolve through {@link #resolve}: the Person the command runs
- * <em>as</em> (one line, every Person in turn), else the source's pinned Person, else the nearest.
- * Bare {@code select} pins the Person a player is looking at, unpins when looking at nobody, and
- * pins the nearest from the console; {@code list} exists because names are not unique. Pins live
- * in {@link AgentSelection} — in memory, per source, gone on restart.
+ * <em>as</em> (one line, every Person in turn), else the source's selected Person, else the nearest.
+ * Bare {@code select} takes the Person a player is looking at, clears when looking at nobody, and
+ * takes the nearest from the console; {@code list} exists because names are not unique. Selections
+ * live in {@link AgentSelection} — in memory, per source, gone on restart.
  */
 public final class AutarkiaCommands {
     private AutarkiaCommands() {}
@@ -151,8 +151,9 @@ public final class AutarkiaCommands {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(Commands.literal("autarkia")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
-                        // Pin the Person that this source's later commands target. "clear"/"show" are
-                        // literals, so they win over a Person literally named clear/show — pin those by id.
+                        // Select the Person that this source's later commands target. "clear"/"show"
+                        // are literals, so they win over a Person literally named clear/show — take
+                        // those by id.
                         .then(AgentCommands.select())
                         .then(Commands.literal("list")
                                 .executes(ctx -> listPersons(ctx.getSource())))
@@ -833,7 +834,7 @@ public final class AutarkiaCommands {
         return null;
     }
 
-    /** Lists the loaded Persons, nearest first: a {@code ✓} on the pinned one, then name, short id,
+    /** Lists the loaded Persons, nearest first: a {@code ✓} on the selected one, then name, short id,
      *  dimension, and distance. This is how you find out what to {@code select}. */
     private static int listPersons(CommandSourceStack source) {
         MinecraftServer server = source.getServer();
@@ -845,19 +846,19 @@ public final class AutarkiaCommands {
                     .withStyle(ChatFormatting.GRAY));
             return 0;
         }
-        Optional<AgentId> pin = AgentSelection.pinned(source);
+        Optional<AgentId> selection = AgentSelection.selected(source);
         loaded.stream()
                 .sorted((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
                 .forEach(person -> {
                     AgentId id = person.agentId();
-                    boolean isPinned = id != null && pin.map(id::equals).orElse(false);
+                    boolean isSelected = id != null && selection.map(id::equals).orElse(false);
                     String name = id == null ? "<spawning>" : directory.nameOf(id).orElse("<unknown>");
                     String dimension = person.level().dimension().identifier().getPath();
                     double distance = Math.sqrt(person.entity().distanceToSqr(origin));
                     String line = String.format(Locale.ROOT, "%s%s  %s  %s  %.1fm",
-                            isPinned ? "✓ " : "  ", name, id == null ? "-" : AgentCommands.shortId(id), dimension, distance);
+                            isSelected ? "✓ " : "  ", name, id == null ? "-" : AgentCommands.shortId(id), dimension, distance);
                     Replies.send(source, () -> Component.literal(line)
-                            .withStyle(isPinned ? ChatFormatting.AQUA : ChatFormatting.GRAY));
+                            .withStyle(isSelected ? ChatFormatting.AQUA : ChatFormatting.GRAY));
                 });
         return loaded.size();
     }

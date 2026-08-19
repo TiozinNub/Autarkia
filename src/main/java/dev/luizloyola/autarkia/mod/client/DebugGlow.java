@@ -13,7 +13,7 @@ import net.minecraft.world.entity.Entity;
 
 /**
  * Client-only debug aid: the selected {@link Person} renders with a black glowing outline (see
- * {@link Person#getTeamColor()}). The selection is the player's server-side pin
+ * {@link Person#getTeamColor()}). The selection is the player's server-side slot
  * ({@code AgentSelection}) mirrored by {@link DebugGlowClient}, so the outline follows the debug
  * wand and {@code /autarkia select} alike, whatever the player is holding. Purely local: it sets
  * each rendered person's transient forced-glow flag ({@link Person#setForcedGlow}), ORed into
@@ -32,8 +32,8 @@ public final class DebugGlow {
         if (level == null) {
             return;
         }
-        // Re-evaluated every tick over every rendered person, so the outline follows the pin and
-        // clears the instant it is dropped.
+        // Re-evaluated every tick over every rendered person, so the outline follows the selection
+        // and clears the instant it is dropped.
         //
         // Autarkia's, not Anima's: Who is selected lives in AgentSelection, what a selected body
         // LOOKS like is the consumer's — a pets mod would highlight a wolf its own way.
