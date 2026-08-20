@@ -205,6 +205,13 @@ public final class ClearArea implements PartyProject {
     /**
      * Cargo slots that make the walk to the yard worth taking.
      *
+     * <p><b>Three, not twelve.</b> The first cut borrowed {@code StowSurplus.SURPLUS_SLOTS}, which
+     * was calibrated against a pack somebody had HANDED fourteen stacks. Felling does not work like
+     * that: logs stack to 64, so twelve occupied slots is about 768 logs — a hundred trees — and a
+     * settler clearing an ordinary box would finish it having never once walked to the yard. Three
+     * slots is an armful, up to ~192 logs, and it is what a woodcutter carries over (in-world,
+     * 2026-08-20).
+     *
      * <p><b>It must leave room under the unburden line, and that is load-bearing.</b> The two
      * numbers are in different units: this counts slots HELD, {@code instincts.unburden_slack_slots}
      * counts slots still EMPTY. If a pack fills before this is reached, layer 1 takes the wheel and
@@ -212,7 +219,7 @@ public final class ClearArea implements PartyProject {
      * thing this piece exists to prevent. {@code HaulLineTest} pins the sum against the real
      * profile rather than a repeated literal.
      */
-    public static final int HAUL_LINE = 12;
+    public static final int HAUL_LINE = 3;
 
     /** Where the operator asked the wood to go, or null — see the five-argument constructor. */
     private final @Nullable Pos yard;
