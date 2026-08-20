@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.tree.ChopPlan;
+import dev.luizloyola.autarkia.core.board.HaulingErrand;
 import dev.luizloyola.autarkia.core.tree.ChopPlannedTree;
 import dev.luizloyola.autarkia.core.tree.TreeShape;
 import java.util.List;
@@ -166,6 +167,19 @@ public final class AutarkiaTasks {
         TaskCodecs.register("autarkia:chop", ChopPlannedTree.class,
                 STATE.xmap(state -> new ChopPlannedTree(state.anchor()).restore(state),
                         ChopPlannedTree::snapshot));
+        // A wrapper carries a TASK, so it leans on the dispatch codec the same way anima:try does;
+        // the per-key lookup happens at parse time, which is what makes the recursion legal.
+        //
+        // REGISTERED THE DAY IT WAS WRITTEN, and it must be: an unregistered task does not fail
+        // loudly on save, it NPEs out of a JSON primitive and takes the SERVER down with it
+        // (docs/BUGS.md). A settler with one of these in her plan crashed a world on 2026-08-20
+        // between felling a tree and the next autosave.
+        TaskCodecs.register("autarkia:haul_errand", HaulingErrand.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        TaskCodecs.codec().fieldOf("work").forGetter(HaulingErrand::work),
+                        POS.fieldOf("yard").forGetter(HaulingErrand::yard),
+                        Codec.INT.fieldOf("haul_line").forGetter(HaulingErrand::haulLine)
+                ).apply(t, HaulingErrand::new)));
     }
 
     /**
