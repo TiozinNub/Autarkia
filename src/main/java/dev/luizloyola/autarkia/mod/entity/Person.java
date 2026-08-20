@@ -45,6 +45,7 @@ import dev.luizloyola.autarkia.core.board.ComposedBoards;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.board.StandingWants;
+import dev.luizloyola.autarkia.core.board.StowSurplus;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentRiser;
@@ -277,10 +278,14 @@ public class Person extends Avatar implements AgentBody {
      */
     private final PersonalBoard personalBoard = seededBoard();
 
-    /** The board above, with its non-posting standing wants already on it. */
+    /** The board above: what this body keeps, and the standing want to put the rest away. */
     private static PersonalBoard seededBoard() {
         PersonalBoard board = new PersonalBoard();
         board.post(StandingWants.settlerDefaults());
+        // Offset 0 rather than a per-body stagger: PersonalBoard.tick already runs on this
+        // Person's own brain beat, so a settlement's cadences are spread by their bodies rather
+        // than by a seed. The parameter stays for a species that wants to spread them further.
+        board.post(new StowSurplus(0));
         return board;
     }
 

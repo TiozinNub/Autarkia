@@ -36,6 +36,11 @@ import java.util.List;
 final class BoardBrainContext implements BrainContext {
 
     private final Inventory inventory = new Inventory();
+    /** What a test says is edible, by item id. */
+    final java.util.Map<String, dev.luizloyola.anima.core.agent.FoodValue> edible =
+            new java.util.HashMap<>();
+    /** What a test says is spoken for — the arbiter's publication, stood in for. */
+    java.util.List<dev.luizloyola.anima.core.inv.ItemCall> reserved = java.util.List.of();
     private final AgentKnowledge knowledge = new AgentKnowledge();
     private final JournalService journal = new JournalService(() -> 0L);
     private final AgentJournal view = journal.forPerson(AgentId.random());
@@ -77,6 +82,11 @@ final class BoardBrainContext implements BrainContext {
     }
 
     @Override
+    public java.util.List<dev.luizloyola.anima.core.inv.ItemCall> reserved() {
+        return reserved;
+    }
+
+    @Override
     public Percepts percepts() {
         return new Percepts() {
             @Override
@@ -101,7 +111,22 @@ final class BoardBrainContext implements BrainContext {
 
             @Override
             public FoodLookup foods() {
-                throw new UnsupportedOperationException();
+                // A real, empty registry rather than a throw: the stow machinery asks whether a
+                // stack is edible for every slot it considers, and a board test should not have
+                // to care. Nothing is food here unless a test says otherwise.
+                return new FoodLookup() {
+                    @Override
+                    public java.util.Optional<dev.luizloyola.anima.core.agent.FoodValue> of(
+                            dev.luizloyola.anima.core.inv.ItemStack stack) {
+                        return java.util.Optional.ofNullable(edible.get(stack.id()));
+                    }
+
+                    @Override
+                    public java.util.Optional<dev.luizloyola.anima.core.agent.FoodValue> cookedForm(
+                            dev.luizloyola.anima.core.inv.ItemStack stack) {
+                        return java.util.Optional.empty();
+                    }
+                };
             }
 
             @Override
