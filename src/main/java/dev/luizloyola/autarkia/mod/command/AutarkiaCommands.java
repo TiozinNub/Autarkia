@@ -484,7 +484,10 @@ public final class AutarkiaCommands {
         PartyBoard board = PartyBoards.of(server, party);
         // Trees, because they are the only thing anything knows how to clear. The kind becomes an
         // argument the day a second Clearing is registered; until then a choice of one is noise.
-        ClearArea project = new ClearArea(TreeClearing.INSTANCE, bounds, priority);
+        // The clock matters: it stamps the opening pass's cut-off, so a box posted over ground the
+        // crew already live on banks what the survey SEES rather than everything they remember.
+        ClearArea project = new ClearArea(TreeClearing.INSTANCE, bounds, priority,
+                level.getGameTime());
         int handle = board.post(project);
         PartyBoards.touch(server);
         // LOGGED: this creates durable, shared, persisted state that outlives everyone who works
