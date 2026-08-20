@@ -44,6 +44,7 @@ import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.autarkia.core.board.ComposedBoards;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.board.PersonalBoard;
+import dev.luizloyola.autarkia.core.board.StandingWants;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentRiser;
@@ -263,16 +264,25 @@ public class Person extends Avatar implements AgentBody {
      * This person's own board — where wants stated about this body live, and nobody else can reach.
      * A project posted here is theirs for life (compose, don't merge — see {@link ComposedBoards}).
      *
-     * <p>EMPTY since 2026-08-15 (decision: Luiz). The standing "keep 16 logs" quota seeded here was
-     * a disposable placeholder; work comes from real projects now. The {@link KeepStocked}
-     * machinery stays, and old saves still load — with nothing posted, the restored rows have
-     * nothing to attach to.
+     * <p><b>It posts no WORK</b>, and has not since 2026-08-15 (decision: Luiz): the standing
+     * "keep 16 logs" quota seeded here was a disposable placeholder, and work comes from real
+     * projects now. The {@link KeepStocked} machinery stays, and old saves still load — with
+     * nothing posted, the restored rows have nothing to attach to. What it does carry, since
+     * 2026-08-20, is {@link StandingWants}, which posts nothing either: it answers what this body
+     * KEEPS, so the stow machinery can tell a settler's own axe from cargo.
      *
      * <p>Built inline, and never from {@code getId()}: a field initialiser runs before the level
      * assigns an entity id, which from 26.2 makes {@code getId()} throw on the client and drops the
      * player on the spawn packet. The seed this once took has been unused since the quota went.
      */
-    private final PersonalBoard personalBoard = new PersonalBoard();
+    private final PersonalBoard personalBoard = seededBoard();
+
+    /** The board above, with its non-posting standing wants already on it. */
+    private static PersonalBoard seededBoard() {
+        PersonalBoard board = new PersonalBoard();
+        board.post(StandingWants.settlerDefaults());
+        return board;
+    }
 
     /**
      * This person's brain host ({@link BrainDriver}) — a machine beside the {@link #navigator}, on

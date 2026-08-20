@@ -375,6 +375,18 @@ public class Board {
     }
 
     /**
+     * Everything this board's projects want kept, in the order the projects were posted — which IS
+     * the tiering: the list is read top-down and the first call that can claim a stack does.
+     */
+    public List<ItemCall> reserved() {
+        List<ItemCall> all = new ArrayList<>();
+        for (Entry entry : entries) {
+            all.addAll(entry.project().reserved());
+        }
+        return List.copyOf(all);
+    }
+
+    /**
      * What this board is called in a readout — the one thing that differs between the scopes when
      * an operator is looking at both at once.
      */
@@ -503,6 +515,11 @@ public class Board {
         @Override
         public void tick(BrainContext ctx) {
             Board.this.tick(ctx);
+        }
+
+        @Override
+        public List<ItemCall> reserved(BrainContext ctx) {
+            return Board.this.reserved();
         }
 
         @Override

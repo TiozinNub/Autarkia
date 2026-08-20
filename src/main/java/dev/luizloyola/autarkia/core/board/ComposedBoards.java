@@ -4,6 +4,7 @@ import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
+import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.brain.instinct.Instinct;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -116,6 +117,15 @@ public final class ComposedBoards implements WorkSource {
     @Override
     public boolean stillMine(WorkItem item, BrainContext ctx) {
         return sourceOf(item).stillMine(item, ctx);
+    }
+
+    @Override
+    public List<ItemCall> reserved(BrainContext ctx) {
+        // Personal first, which is the ranking: what a body keeps for itself outranks what a
+        // party project would like it to hold, for the same reason the personal board exists.
+        List<ItemCall> all = new ArrayList<>(personal.reserved(ctx));
+        all.addAll(party.get().reserved(ctx));
+        return all;
     }
 
     @Override

@@ -74,5 +74,14 @@ public interface Project {
     }
 
     /** One line for the board readout: what this project wants and how far along it is. */
+    /**
+     * What this project wants KEPT in a member's pack, best first — read by the stow machinery so
+     * it can tell cargo from kit. Nothing by default: a project that only posts work reserves
+     * nothing, and an errand's own {@code Kit} is the arbiter's business rather than a project's.
+     */
+    default java.util.List<dev.luizloyola.anima.core.inv.ItemCall> reserved() {
+        return java.util.List.of();
+    }
+
     String describe();
 }
