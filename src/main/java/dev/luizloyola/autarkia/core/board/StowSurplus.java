@@ -37,8 +37,14 @@ public final class StowSurplus implements PersonalProject {
     /** Ticks a failed stow sits out. A failure usually means nowhere to put anything. */
     public static final int FAIL_COOLDOWN = 600;
 
-    /** Low enough to lose to anything a project actually wants done. */
-    public static final double PRIORITY = 0.1;
+    /**
+     * Above the wander floor and well below real work. Both bounds are load-bearing and the lower
+     * one was found in-world: at 0.1 this sat UNDER {@code instincts.wander_idle_pressure} (0.15),
+     * so a settler with fourteen stacks of logs preferred to stroll and the errand was posted for
+     * ever without being taken. Clear-area posts at 0.5, which is what keeps tidying from
+     * outranking the job.
+     */
+    public static final double PRIORITY = 0.25;
 
     private final int offset;
 

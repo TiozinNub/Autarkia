@@ -117,17 +117,22 @@ class StowSurplusTest {
                 "one behaviour, two motivations — if these diverge the split is fake");
     }
 
+    /**
+     * The band matters at both ends, and the lower bound was found in-world: at 0.1 the errand sat
+     * under the wander floor, so a settler with fourteen stacks of logs strolled past it for ever.
+     */
     @Test
-    void itLosesToRealWork() {
+    void itBeatsDoingNothingAndLosesToRealWork() {
         BoardBrainContext ctx = new BoardBrainContext();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         StowSurplus stow = new StowSurplus(0);
         beats(stow, ctx, 2);
+        double bid = stow.open().get(0).priority();
 
-        assertTrue(stow.open().get(0).priority() < KeepStocked.CHECK_INTERVAL,
-                "sanity: a priority, not a tick count");
-        assertTrue(stow.open().get(0).priority() <= 0.15,
-                "low enough that anything a project actually wants done wins the board");
+        assertTrue(bid > 0.15,
+                "over instincts.wander_idle_pressure, or a settler would rather stroll for ever");
+        assertTrue(bid < 0.5,
+                "under what a posted clear-area costs, so tidying never outranks the job");
         assertFalse(stow.finished(), "and it is never done");
     }
 }
