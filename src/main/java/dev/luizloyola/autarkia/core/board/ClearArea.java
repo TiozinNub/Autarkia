@@ -202,6 +202,18 @@ public final class ClearArea implements PartyProject {
      */
     private final Set<Pos> sweptThisPass = new LinkedHashSet<>();
 
+    /**
+     * Cargo slots that make the walk to the yard worth taking.
+     *
+     * <p><b>It must leave room under the unburden line, and that is load-bearing.</b> The two
+     * numbers are in different units: this counts slots HELD, {@code instincts.unburden_slack_slots}
+     * counts slots still EMPTY. If a pack fills before this is reached, layer 1 takes the wheel and
+     * stows at the NEAREST store — so the wood scatters and the yard stays empty, which is the one
+     * thing this piece exists to prevent. {@code HaulLineTest} pins the sum against the real
+     * profile rather than a repeated literal.
+     */
+    public static final int HAUL_LINE = 12;
+
     /** Where the operator asked the wood to go, or null — see the five-argument constructor. */
     private final @Nullable Pos yard;
 
@@ -957,7 +969,10 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public Task root() {
-            return clearing.clear(key.at());
+            Task felling = clearing.clear(key.at());
+            // Without a yard this is byte-for-byte the root it has always been — 3a is additive,
+            // and a box posted the old way behaves the old way.
+            return yard == null ? felling : new HaulingErrand(felling, yard, HAUL_LINE);
         }
 
         /** The clearing kind's answer, not this project's — see {@link Clearing#kit()}. */

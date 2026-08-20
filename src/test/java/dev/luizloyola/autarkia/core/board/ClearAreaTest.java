@@ -148,6 +148,35 @@ class ClearAreaTest {
                 "a worker's own chest across the map is not the project's yard");
     }
 
+    @Test
+    void aClearItemHaulsOnlyWhenThereIsAYard() {
+        ClearArea plain = posted(ABLE, oneSlice());
+        plain.completed(plain.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
+        Task withoutYard = plain.open().stream()
+                .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow()
+                .root();
+
+        assertFalse(withoutYard instanceof HaulingErrand,
+                "no destination, and the root is byte-for-byte what it always was");
+
+        ClearArea withYard = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        withYard.tick(0L);
+        withYard.completed(withYard.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
+        Task hauling = withYard.open().stream()
+                .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow()
+                .root();
+
+        assertTrue(hauling instanceof HaulingErrand,
+                "with one, felling is followed by taking the load over when laden");
+    }
+
+    /** A context whose settler remembers a thing to clear at {@code anchor}. */
+    private static BoardBrainContext ctxThatSaw(Pos anchor) {
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, anchor);
+        return ctx;
+    }
+
     // ── the first pass has a cut-off like every other ────────────────────────────────────────
 
     @Test
