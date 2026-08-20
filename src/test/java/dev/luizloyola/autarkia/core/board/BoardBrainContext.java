@@ -177,6 +177,12 @@ final class BoardBrainContext implements BrainContext {
         knowledge.forget(kind, anchor);
     }
 
+    /** As {@link #remember}, but seen at a stated tick — for testing a pass's cut-off. */
+    void rememberSeenAt(PoiKind kind, Pos anchor, long seen) {
+        knowledge.note(new PoiMemory(kind, anchor, Region.of(anchor), 1, false, seen),
+                AgentKnowledge.maxPerKind(profile()));
+    }
+
     /** Puts a remembered place of this kind at this anchor — what a surveyor comes back with. */
     void remember(PoiKind kind, Pos anchor) {
         knowledge.note(new PoiMemory(kind, anchor, Region.of(anchor), 1, false, now),

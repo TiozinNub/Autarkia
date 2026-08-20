@@ -219,10 +219,26 @@ public final class ClearArea implements PartyProject {
     private List<WorkItem> offer = List.of();
 
     public ClearArea(Clearing clearing, Region bounds, double priority) {
+        this(clearing, bounds, priority, 0L);
+    }
+
+    /**
+     * As above, stamping the opening pass's cut-off.
+     *
+     * <p><b>The opening {@code SURVEYING} never goes through {@link #enter}</b> — it comes from the
+     * field initialiser — so before 2026-08-20 its {@code passStartedAt} stayed 0 and
+     * {@link #harvest}'s {@code lastSeenTick() < passStartedAt} guard could never bite. Every tree
+     * the surveyor already remembered got banked as evidence about NOW, whether it was seen this
+     * pass or long before the box was posted, which inflated the dirty set the verify pass judges
+     * its skip by. Posting a box over ground the crew already live on is the normal case, not an
+     * exotic one.
+     */
+    public ClearArea(Clearing clearing, Region bounds, double priority, long now) {
         this.clearing = clearing;
         this.bounds = bounds;
         this.priority = priority;
         this.slices = sliceUp(bounds);
+        this.passStartedAt = now;
     }
 
     /** What this project clears, for the store and the readout. */

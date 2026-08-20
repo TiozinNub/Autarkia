@@ -79,6 +79,37 @@ class ClearAreaTest {
         return project;
     }
 
+    // ── the first pass has a cut-off like every other ────────────────────────────────────────
+
+    @Test
+    void theFirstPassDoesNotBankWhatWasSeenBeforeItStarted() {
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.advance(5_000L);
+        // Remembered long before anybody posted this box — evidence about then, not about now.
+        ctx.rememberSeenAt(THING, new Pos(3, 60, 3), 500L);
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 5_000L);
+        project.tick(5_000L);
+
+        project.completed(project.open().get(0), ctx);
+
+        assertTrue(project.ledger().isEmpty(),
+                "the opening SURVEYING never went through enter(), so its cut-off was 0 and every "
+                        + "stale memory in bounds got banked (BUGS, 2026-08-17)");
+    }
+
+    @Test
+    void whatThisPassActuallySawIsStillBanked() {
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.advance(5_000L);
+        ctx.rememberSeenAt(THING, new Pos(3, 60, 3), 5_100L);
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 5_000L);
+        project.tick(5_000L);
+
+        project.completed(project.open().get(0), ctx);
+
+        assertEquals(1, project.ledger().size(), "seen during the pass, so it counts");
+    }
+
     // ── the coverage a pass keeps ────────────────────────────────────────────────────────────
 
     @Test
