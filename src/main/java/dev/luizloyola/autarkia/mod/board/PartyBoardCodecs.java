@@ -76,7 +76,11 @@ public final class PartyBoardCodecs {
                     Codec.INT.optionalFieldOf("cleared_this_round", 0)
                             .forGetter(ClearArea.State::clearedThisRound),
                     Codec.LONG.optionalFieldOf("pass_started", 0L)
-                            .forGetter(ClearArea.State::passStartedAt)
+                            .forGetter(ClearArea.State::passStartedAt),
+                    // Optional so worlds saved before 2026-08-20 load unchanged: they come back
+                    // with an empty pass and re-walk their box once, which is what they did anyway.
+                    POS.listOf().optionalFieldOf("swept", List.of())
+                            .forGetter(ClearArea.State::swept)
             ).apply(project, ClearArea.State::new));
 
     public static final Codec<WorkKey> WORK_KEY = RecordCodecBuilder.create(key -> key.group(

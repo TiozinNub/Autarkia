@@ -192,6 +192,15 @@ public final class ClearArea implements PartyProject {
     private Set<Pos> foundLastPass = new LinkedHashSet<>();
 
     /**
+     * Cell corners THIS pass has already taken to confidence — what a re-grant and a reload both
+     * resume from. It lives here rather than on {@code SurveyArea} because that task is rebuilt
+     * fresh on every grant and resume, so a preempted sweep used to walk its whole box again; with
+     * the unburden instinct preempting far more often than hunger ever did, that stopped being
+     * theoretical.
+     */
+    private final Set<Pos> sweptThisPass = new LinkedHashSet<>();
+
+    /**
      * Targets removed since this clearing round began — the licence to reopen refusals.
      *
      * <p>A tree can be unreachable BECAUSE of the trees around it (decision: Luiz, 2026-08-11), but
@@ -333,6 +342,8 @@ public final class ClearArea implements PartyProject {
                 // What this pass saw becomes the slate the next one is judged against.
                 foundLastPass = new LinkedHashSet<>(foundThisPass);
                 foundThisPass.clear();
+                // A new pass walks its own ground: coverage is per-pass, never cumulative.
+                sweptThisPass.clear();
                 boolean anything = ledger.values().stream().anyMatch(t -> t.state() == TargetState.OPEN);
                 enter(anything ? Phase.CLEARING : Phase.DONE, ctx, now);
             }
@@ -565,7 +576,10 @@ public final class ClearArea implements PartyProject {
      * built from the box's corner would match almost nothing and quietly lose the 82–93% a second
      * pass skips.
      *
-     * <p>Not persisted: a pure function of the ledger and the bounds, so a reload recomputes it.
+     * <p><b>Not a pure function of the ledger.</b> This used to claim a reload could recompute it;
+     * it cannot — it is a function of {@code foundLastPass}, and the ledger records targets without
+     * recording which pass saw them. What a reload restores is {@code sweptThisPass}, saved beside
+     * the ledger, which is a different set answering a different question.
      */
     private Set<Pos> settledCells(Region area) {
         if (phase != Phase.VERIFYING) {
@@ -820,7 +834,12 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public Task root() {
-            return clearing.survey(area, settledCells(area));
+            // Both sets mean "do not walk here again": one is ground proved empty last pass, the
+            // other is ground this pass has already covered. Handing the union in is what makes a
+            // re-grant resume the sweep instead of restarting it.
+            Set<Pos> known = new LinkedHashSet<>(settledCells(area));
+            known.addAll(sweptThisPass);
+            return clearing.survey(area, known, sweptThisPass::add);
         }
 
         @Override
@@ -905,7 +924,8 @@ public final class ClearArea implements PartyProject {
      */
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<Integer> reported, List<SliceCooldown> sliceCooldowns,
-                        List<Target> targets, int clearedThisRound, long passStartedAt) {
+                        List<Target> targets, int clearedThisRound, long passStartedAt,
+                        List<Pos> swept) {
     }
 
     /** What this project would need to carry on exactly where it left off. */
@@ -914,7 +934,7 @@ public final class ClearArea implements PartyProject {
         sliceRetryAfter.forEach((slice, until) -> cooldowns.add(new SliceCooldown(slice, until)));
         return new State(clearing.id(), bounds, priority, phase,
                 List.copyOf(reported), List.copyOf(cooldowns), List.copyOf(ledger.values()),
-                clearedThisRound, passStartedAt);
+                clearedThisRound, passStartedAt, List.copyOf(sweptThisPass));
     }
 
     /**
@@ -935,6 +955,7 @@ public final class ClearArea implements PartyProject {
             }
             project.clearedThisRound = state.clearedThisRound();
             project.passStartedAt = state.passStartedAt();
+            project.sweptThisPass.addAll(state.swept());
             project.refresh(now);
             return project;
         });

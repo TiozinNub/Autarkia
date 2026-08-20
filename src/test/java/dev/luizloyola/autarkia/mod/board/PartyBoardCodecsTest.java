@@ -33,7 +33,7 @@ class PartyBoardCodecsTest {
         return new ClearArea.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
                 0.5, phase, List.of(0, 2), List.of(new ClearArea.SliceCooldown(1, 12_345L)),
-                targets, 7, 4_242L);
+                targets, 7, 4_242L, List.of(new Pos(0, 60, 0), new Pos(8, 60, 0)));
     }
 
     @Test

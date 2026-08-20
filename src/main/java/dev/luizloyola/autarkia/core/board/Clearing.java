@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.board;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.Kit;
 
@@ -49,7 +50,7 @@ public interface Clearing {
      * glimpses (<em>woodland roughly there</em>) while the anchors a ledger needs are grown by the
      * near field alone.
      */
-    Task survey(Region slice, java.util.Set<Pos> settled);
+    Task survey(Region slice, java.util.Set<Pos> settled, SurveyArea.Coverage coverage);
 
     /** A task that removes the one thing standing at this anchor. */
     Task clear(Pos anchor);
