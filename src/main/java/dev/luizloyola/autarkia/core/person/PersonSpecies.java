@@ -121,6 +121,10 @@ public final class PersonSpecies {
             .set(ProfileAspect.STORES_STALENESS_WEIGHT, 0.5)
             // Matches ChopPlannedTree.AVOID_TICKS, the one existing avoid-mark in the codebase.
             .set(ProfileAspect.STORES_FULL_AVOID_TICKS, 2400)
+            // Three chunks: far enough to reach the bench a settler already walks to, short
+            // enough that a camp two valleys over is a different settlement and gets its own
+            // chest rather than dragging this one across the map.
+            .set(ProfileAspect.STORES_FOUND_RADIUS, 48)
             .build();
 
     /** The same declaration as tunables in {@code autarkia.toml}, under {@code person.*}. */
