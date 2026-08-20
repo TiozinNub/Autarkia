@@ -79,6 +79,75 @@ class ClearAreaTest {
         return project;
     }
 
+    // ── where the wood goes ──────────────────────────────────────────────────────────────────
+
+    private static final Pos YARD = new Pos(6, 60, 6);
+
+    @Test
+    void aBoxWithoutADestinationIsExactlyWhatItWas() {
+        ClearArea project = posted(ABLE, oneSlice());
+
+        assertTrue(project.yard().isEmpty(), "no destination named, none invented");
+        assertFalse(project.describe().contains("yard"), "and the readout says nothing about one");
+    }
+
+    @Test
+    void aNamedDestinationIsCarriedAndSaidOutLoud() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        project.tick(0L);
+
+        assertEquals(YARD, project.yard().orElseThrow());
+        assertTrue(project.describe().contains("yard"),
+                "an operator who asked for a destination should see it in the readout");
+    }
+
+    @Test
+    void theDestinationSurvivesASnapshotRoundTrip() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        project.tick(0L);
+
+        ClearArea restored = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
+
+        assertEquals(YARD, restored.yard().orElseThrow());
+    }
+
+    @Test
+    void aBoxSavedBeforeYardsExistedStillLoads() {
+        ClearArea plain = posted(ABLE, oneSlice());
+
+        ClearArea restored = ClearArea.restore(plain.snapshot(), 0L).orElseThrow();
+
+        assertTrue(restored.yard().isEmpty(), "no destination, no migration, no surprise chest");
+    }
+
+    @Test
+    void itRemembersWhereTheChestActuallyWent() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        project.tick(0L);
+        BoardBrainContext ctx = new BoardBrainContext();
+        // The hauler built it a block off the hint, because the hint was a hint.
+        ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(7, 60, 6));
+
+        project.completed(project.open().get(0), ctx);
+
+        assertEquals(List.of(new Pos(7, 60, 6)), project.yardChests(),
+                "the readout should name where the wood is, not where it was asked for");
+        assertTrue(project.describe().contains("1 chest"));
+    }
+
+    @Test
+    void aChestNowhereNearTheHintIsNotThisProjectsYard() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        project.tick(0L);
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(900, 60, 900));
+
+        project.completed(project.open().get(0), ctx);
+
+        assertTrue(project.yardChests().isEmpty(),
+                "a worker's own chest across the map is not the project's yard");
+    }
+
     // ── the first pass has a cut-off like every other ────────────────────────────────────────
 
     @Test

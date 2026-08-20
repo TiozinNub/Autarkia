@@ -80,8 +80,17 @@ public final class PartyBoardCodecs {
                     // Optional so worlds saved before 2026-08-20 load unchanged: they come back
                     // with an empty pass and re-walk their box once, which is what they did anyway.
                     POS.listOf().optionalFieldOf("swept", List.of())
-                            .forGetter(ClearArea.State::swept)
-            ).apply(project, ClearArea.State::new));
+                            .forGetter(ClearArea.State::swept),
+                    // Both optional: a box posted without a destination writes neither, and a world
+                    // saved before yards existed loads as exactly that.
+                    POS.optionalFieldOf("yard")
+                            .forGetter(state -> java.util.Optional.ofNullable(state.yard())),
+                    POS.listOf().optionalFieldOf("yard_chests", List.of())
+                            .forGetter(ClearArea.State::yardChests)
+            ).apply(project, (clearing, bounds, priority, phase, reported, cooldowns, targets,
+                    cleared, passStarted, swept, yard, chests) -> new ClearArea.State(
+                            clearing, bounds, priority, phase, reported, cooldowns, targets,
+                            cleared, passStarted, swept, yard.orElse(null), chests)));
 
     public static final Codec<WorkKey> WORK_KEY = RecordCodecBuilder.create(key -> key.group(
             Codec.STRING.fieldOf("flavour").forGetter(WorkKey::flavour),

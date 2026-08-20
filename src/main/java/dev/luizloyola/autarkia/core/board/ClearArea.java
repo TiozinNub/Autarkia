@@ -8,6 +8,8 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.agent.ProfileAspect;
+import dev.luizloyola.anima.core.store.Store;
 import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
@@ -200,6 +202,16 @@ public final class ClearArea implements PartyProject {
      */
     private final Set<Pos> sweptThisPass = new LinkedHashSet<>();
 
+    /** Where the operator asked the wood to go, or null — see the five-argument constructor. */
+    private final @Nullable Pos yard;
+
+    /**
+     * The chests actually standing at the yard, learned from workers as they report in. A hint says
+     * where somebody wanted a yard; this says where one is, which is what a readout should name and
+     * what a later hauler walks to.
+     */
+    private final Set<Pos> yardChests = new LinkedHashSet<>();
+
     /**
      * Targets removed since this clearing round began — the licence to reopen refusals.
      *
@@ -234,11 +246,25 @@ public final class ClearArea implements PartyProject {
      * exotic one.
      */
     public ClearArea(Clearing clearing, Region bounds, double priority, long now) {
+        this(clearing, bounds, priority, now, null);
+    }
+
+    /**
+     * As above, with somewhere for the wood to go.
+     *
+     * <p><b>The yard is a hint, not a coordinate to obey</b> (decision: Luiz, 2026-08-20): the first
+     * hauler builds on whatever ground near it will hold a chest, and {@link #yardChests()} is where
+     * the project remembers what they actually built. Completion is unaffected either way — the box
+     * is clear when it is clear, whether or not a single log reached the yard.
+     */
+    public ClearArea(Clearing clearing, Region bounds, double priority, long now,
+            @Nullable Pos yard) {
         this.clearing = clearing;
         this.bounds = bounds;
         this.priority = priority;
         this.slices = sliceUp(bounds);
         this.passStartedAt = now;
+        this.yard = yard;
     }
 
     /** What this project clears, for the store and the readout. */
@@ -458,6 +484,8 @@ public final class ClearArea implements PartyProject {
         }
         WorkKey key = named.get();
         claimed.remove(key);
+        // Whatever the errand was, this worker has been out there and may have opened the yard.
+        learnYard(ctx);
         if (WorkKey.SURVEY.equals(key.flavour())) {
             int slice = indexOf(key);
             reported.add(slice);
@@ -690,7 +718,47 @@ public final class ClearArea implements PartyProject {
 
     @Override
     public String describe() {
-        return name() + " — " + progress();
+        return name() + " — " + progress() + yardNote();
+    }
+
+    /** Where the wood is going, when anywhere: {@code " · yard: 2 chests near (10, 64, 10)"}. */
+    private String yardNote() {
+        if (yard == null) {
+            return "";
+        }
+        String chests = yardChests.isEmpty()
+                ? "not opened yet"
+                : yardChests.size() + (yardChests.size() == 1 ? " chest" : " chests");
+        return " · yard: " + chests + " near " + at(yard);
+    }
+
+    /** Where the operator asked the wood to go, if anywhere. */
+    public Optional<Pos> yard() {
+        return Optional.ofNullable(yard);
+    }
+
+    /** The chests known to stand at the yard, in the order they were learned about. */
+    public List<Pos> yardChests() {
+        return List.copyOf(yardChests);
+    }
+
+    /**
+     * Learns what a returning worker knows about the yard: the nearest store to the hint that they
+     * remember, if it is close enough to BE the yard. Called from {@code completed} because that is
+     * the one moment the project holds both a worker and their knowledge — the board itself never
+     * reads a mind, and this is the same "people bring knowledge to the board" rule layer 3 has had
+     * since it was written.
+     */
+    private void learnYard(BrainContext ctx) {
+        if (yard == null) {
+            return;
+        }
+        double radius = ctx.profile().i(ProfileAspect.STORES_FOUND_RADIUS);
+        for (PoiMemory memory : ctx.knowledge().all(Store.POI)) {
+            if (Store.distance(memory.anchor(), yard) <= radius) {
+                yardChests.add(memory.anchor());
+            }
+        }
     }
 
     /**
@@ -941,7 +1009,7 @@ public final class ClearArea implements PartyProject {
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<Integer> reported, List<SliceCooldown> sliceCooldowns,
                         List<Target> targets, int clearedThisRound, long passStartedAt,
-                        List<Pos> swept) {
+                        List<Pos> swept, @Nullable Pos yard, List<Pos> yardChests) {
     }
 
     /** What this project would need to carry on exactly where it left off. */
@@ -950,7 +1018,8 @@ public final class ClearArea implements PartyProject {
         sliceRetryAfter.forEach((slice, until) -> cooldowns.add(new SliceCooldown(slice, until)));
         return new State(clearing.id(), bounds, priority, phase,
                 List.copyOf(reported), List.copyOf(cooldowns), List.copyOf(ledger.values()),
-                clearedThisRound, passStartedAt, List.copyOf(sweptThisPass));
+                clearedThisRound, passStartedAt, List.copyOf(sweptThisPass), yard,
+                List.copyOf(yardChests));
     }
 
     /**
@@ -960,7 +1029,8 @@ public final class ClearArea implements PartyProject {
      */
     public static Optional<ClearArea> restore(State state, long now) {
         return Clearings.byId(state.clearing()).map(clearing -> {
-            ClearArea project = new ClearArea(clearing, state.bounds(), state.priority());
+            ClearArea project = new ClearArea(clearing, state.bounds(), state.priority(),
+                    state.passStartedAt(), state.yard());
             project.phase = state.phase();
             project.reported.addAll(state.reported());
             for (SliceCooldown cooldown : state.sliceCooldowns()) {
@@ -972,6 +1042,7 @@ public final class ClearArea implements PartyProject {
             project.clearedThisRound = state.clearedThisRound();
             project.passStartedAt = state.passStartedAt();
             project.sweptThisPass.addAll(state.swept());
+            project.yardChests.addAll(state.yardChests());
             project.refresh(now);
             return project;
         });

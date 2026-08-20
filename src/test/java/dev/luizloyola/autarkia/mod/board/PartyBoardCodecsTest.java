@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.board;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonObject;
@@ -33,7 +34,8 @@ class PartyBoardCodecsTest {
         return new ClearArea.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
                 0.5, phase, List.of(0, 2), List.of(new ClearArea.SliceCooldown(1, 12_345L)),
-                targets, 7, 4_242L, List.of(new Pos(0, 60, 0), new Pos(8, 60, 0)));
+                targets, 7, 4_242L, List.of(new Pos(0, 60, 0), new Pos(8, 60, 0)),
+                new Pos(40, 63, 40), List.of(new Pos(41, 63, 40)));
     }
 
     @Test
@@ -46,6 +48,19 @@ class PartyBoardCodecsTest {
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
         assertEquals(before, after.project());
+    }
+
+    @Test
+    void aBoxWithNoYardRoundTripsWithoutOne() {
+        ClearArea.State plain = new ClearArea.State("trees",
+                new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
+                0.5, ClearArea.Phase.CLEARING, List.of(), List.of(), List.of(), 0, 0L,
+                List.of(), null, List.of());
+
+        PartyBoard.Row after = roundTrip(new PartyBoard.Row(plain, List.of()));
+
+        assertEquals(plain, after.project());
+        assertNull(after.project().yard(), "no destination, no migration, no surprise chest");
     }
 
     @Test
