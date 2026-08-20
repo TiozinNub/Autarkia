@@ -265,15 +265,28 @@ public final class AutarkiaCommands {
                                                 .then(Commands.argument("from", BlockPosArgument.blockPos())
                                                         .then(Commands.argument("to", BlockPosArgument.blockPos())
                                                                 .executes(ctx -> boardPostClear(ctx.getSource(),
-                                                                        BlockPosArgument.getLoadedBlockPos(ctx, "from"),
-                                                                        BlockPosArgument.getLoadedBlockPos(ctx, "to"),
-                                                                        CLEAR_PRIORITY))
+                                                                        corner(ctx, "from"), corner(ctx, "to"),
+                                                                        CLEAR_PRIORITY, null))
                                                                 .then(Commands.argument("priority",
                                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
                                                                         .executes(ctx -> boardPostClear(ctx.getSource(),
-                                                                                BlockPosArgument.getLoadedBlockPos(ctx, "from"),
-                                                                                BlockPosArgument.getLoadedBlockPos(ctx, "to"),
-                                                                                DoubleArgumentType.getDouble(ctx, "priority"))))))))
+                                                                                corner(ctx, "from"), corner(ctx, "to"),
+                                                                                DoubleArgumentType.getDouble(ctx, "priority"),
+                                                                                null)))
+                                                                // Where the wood goes. A HINT, not a cell to obey: the
+                                                                // first hauler opens a chest on whatever ground near it
+                                                                // will hold one, and the readout names where it went.
+                                                                .then(Commands.literal("at")
+                                                                        .then(Commands.argument("yard", BlockPosArgument.blockPos())
+                                                                                .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                                        corner(ctx, "from"), corner(ctx, "to"),
+                                                                                        CLEAR_PRIORITY, corner(ctx, "yard")))
+                                                                                .then(Commands.argument("priority",
+                                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
+                                                                                        .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                                                corner(ctx, "from"), corner(ctx, "to"),
+                                                                                                DoubleArgumentType.getDouble(ctx, "priority"),
+                                                                                                corner(ctx, "yard"))))))))))
                                 // The ledger over the world it is about. Layer 3 is the one layer
                                 // with no body to look at, so this is its only visual.
                                 .then(Commands.literal("view")
@@ -455,8 +468,14 @@ public final class AutarkiaCommands {
      * <p>The box is three-dimensional as typed and the reply says so in blocks: a flat one reads
      * {@code ×1} and finds nothing, which has to be visible.
      */
+    /** One corner argument, loaded — the same read every leaf of {@code post clear} makes. */
+    private static BlockPos corner(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx,
+            String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        return BlockPosArgument.getLoadedBlockPos(ctx, name);
+    }
+
     private static int boardPostClear(CommandSourceStack source, BlockPos from, BlockPos to,
-                                      double priority) {
+                                      double priority, @Nullable BlockPos yard) {
         Person person = resolve(source);
         if (person == null) return 0;
         AgentId who = person.getAgentId();
@@ -487,7 +506,8 @@ public final class AutarkiaCommands {
         // The clock matters: it stamps the opening pass's cut-off, so a box posted over ground the
         // crew already live on banks what the survey SEES rather than everything they remember.
         ClearArea project = new ClearArea(TreeClearing.INSTANCE, bounds, priority,
-                level.getGameTime());
+                level.getGameTime(),
+                yard == null ? null : new Pos(yard.getX(), yard.getY(), yard.getZ()));
         int handle = board.post(project);
         PartyBoards.touch(server);
         // LOGGED: this creates durable, shared, persisted state that outlives everyone who works
