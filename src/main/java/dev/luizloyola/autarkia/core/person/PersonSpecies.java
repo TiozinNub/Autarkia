@@ -26,6 +26,12 @@ public final class PersonSpecies {
             .set(ProfileAspect.FLEE_RAMP, 12.0)
             .set(ProfileAspect.FLEE_APPROACH_BONUS, 1.3)
             .set(ProfileAspect.WANDER_IDLE_PRESSURE, 0.15)
+            // The last four slots, not a tidiness line: routine clearing is StowSurplus's job on
+            // the personal board, and this only catches the single act that fills the rest.
+            .set(ProfileAspect.UNBURDEN_SLACK_SLOTS, 4)
+            // About four chunks. Further than that and making a chest is the cheaper answer,
+            // which is exactly the choice EnsureStore then prices out.
+            .set(ProfileAspect.UNBURDEN_TOLERANCE, 64.0)
             .set(ProfileAspect.WANDER_RADIUS, 8)
             // --- senses: human-shaped vision, wide across and flat up-down --------------------
             .set(ProfileAspect.SENSES_RADIUS, 24)
