@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.SweepingErrand;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.store.Store;
@@ -262,6 +263,11 @@ public final class ClearArea implements PartyProject {
     /** Everything this project's workers have covered, corner → squares. */
     public CoverageGrid covered() {
         return covered;
+    }
+
+    /** Where this project's workers bank what they cross — handed to every errand it mints. */
+    public Coverage coverage() {
+        return ground;
     }
 
     public Phase phase() {
@@ -861,9 +867,11 @@ public final class ClearArea implements PartyProject {
         @Override
         public Task root() {
             Task felling = clearing.clear(key.at());
-            // Without a yard this is byte-for-byte the root it has always been — 3a is additive,
-            // and a box posted the old way behaves the old way.
-            return yard == null ? felling : new HaulingErrand(felling, yard, HAUL_LINE);
+            // Without a yard the inner errand is byte-for-byte what it has always been — the haul
+            // is additive, and a box posted the old way behaves the old way.
+            Task work = yard == null ? felling : new HaulingErrand(felling, yard, HAUL_LINE);
+            // Outermost, so the walk out, the felling and the walk to the yard all count.
+            return new SweepingErrand(work, ground);
         }
 
         /** The clearing kind's answer, not this project's — see {@link Clearing#kit()}. */

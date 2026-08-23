@@ -12,6 +12,7 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Idle;
+import dev.luizloyola.anima.core.brain.task.SweepingErrand;
 import dev.luizloyola.anima.core.brain.task.Task;
 import java.util.List;
 import java.util.Optional;
@@ -169,9 +170,9 @@ class ClearAreaTest {
     void aClearItemHaulsOnlyWhenThereIsAYard() {
         ClearArea plain = posted(ABLE, oneSlice());
         plain.completed(plain.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
-        Task withoutYard = plain.open().stream()
+        Task withoutYard = ((SweepingErrand) plain.open().stream()
                 .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow()
-                .root();
+                .root()).work();
 
         assertFalse(withoutYard instanceof HaulingErrand,
                 "no destination, and the root is byte-for-byte what it always was");
@@ -179,12 +180,42 @@ class ClearAreaTest {
         ClearArea withYard = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
         withYard.tick(0L);
         withYard.completed(withYard.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
-        Task hauling = withYard.open().stream()
+        Task hauling = ((SweepingErrand) withYard.open().stream()
                 .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow()
-                .root();
+                .root()).work();
 
         assertTrue(hauling instanceof HaulingErrand,
                 "with one, felling is followed by taking the load over when laden");
+    }
+
+    @Test
+    void aClearErrandBanksTheGroundItCrosses() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+        project.completed(project.open().get(0), ctx);
+        WorkItem tree = project.open().stream()
+                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+
+        Task root = tree.root();
+
+        assertTrue(root instanceof SweepingErrand, "a chopper's walk is evidence about the box");
+        assertSame(project.coverage(), ((SweepingErrand) root).coverage());
+    }
+
+    @Test
+    void theSweepWrapsTheHaulSoTheWalkToTheYardCountsToo() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, new Pos(60, 60, 60));
+        project.tick(0L);
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+        project.completed(project.open().get(0), ctx);
+        WorkItem tree = project.open().stream()
+                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+
+        Task root = tree.root();
+
+        assertTrue(root instanceof SweepingErrand);
+        assertTrue(((SweepingErrand) root).work() instanceof HaulingErrand,
+                "3a is untouched: the haul is still a second step inside the errand");
     }
 
     /** A context whose settler remembers a thing to clear at {@code anchor}. */
