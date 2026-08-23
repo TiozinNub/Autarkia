@@ -463,6 +463,7 @@ public final class ClearArea implements PartyProject {
         claimed.remove(key);
         // Whatever the errand was, this worker has been out there and may have opened the yard.
         learnYard(ctx);
+        int found = harvest(ctx);
         if (WorkKey.SURVEY.equals(key.flavour())) {
             int slice = indexOf(key);
             sliceRetryAfter.remove(slice);
@@ -470,13 +471,16 @@ public final class ClearArea implements PartyProject {
             // that claim. The sink has normally banked it already, cell by cell; saying it once more
             // here is what keeps a slice from being re-offered because one write-off went astray.
             markCovered(slices.get(slice));
-            int found = harvest(ctx);
             ctx.journal().record(Category.PROJECT, name(),
                     "slice " + (slice + 1) + "/" + slices.size() + " walked — "
                             + (found == 0 ? "nothing new" : found + " found"));
         } else {
             settle(key.at(), TargetState.CLEARED, 0, 0L);
             felledSinceReopen++;
+            if (found > 0) {
+                ctx.journal().record(Category.PROJECT, name(),
+                        "cleared " + at(key.at()) + " — and " + found + " more standing nearby");
+            }
         }
         withdraw(key);
         refresh(now);
@@ -497,6 +501,9 @@ public final class ClearArea implements PartyProject {
         }
         WorkKey key = named.get();
         claimed.remove(key);
+        // A worker who walked there and failed still had their near field running the whole way —
+        // the errand's outcome is a different fact from what they saw en route.
+        harvest(ctx);
         if (WorkKey.SURVEY.equals(key.flavour())) {
             sliceRetryAfter.put(indexOf(key), now + FAIL_COOLDOWN);
         } else {

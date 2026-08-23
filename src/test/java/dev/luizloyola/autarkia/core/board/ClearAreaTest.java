@@ -227,6 +227,72 @@ class ClearAreaTest {
         assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(fresh).state());
     }
 
+    // ── what a report may say ────────────────────────────────────────────────────────────────
+
+    @Test
+    void aChopperReportsTheTreesTheyWalkedPast() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+        project.completed(project.open().get(0), ctx);
+        WorkItem tree = project.open().stream()
+                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+        // On the way to the tree the chopper individuates another one.
+        ctx.remember(THING, new Pos(8, 60, 8));
+
+        project.completed(tree, ctx);
+
+        assertTrue(project.ledger().containsKey(new Pos(8, 60, 8)),
+                "a tree spotted mid-chop used to wait for a verify pass to re-walk that ground");
+        assertFalse(project.finished(), "and it is on offer now, not a cycle later");
+    }
+
+    @Test
+    void aReportNeverRewritesARowTheLedgerAlreadyHolds() {
+        ClearArea project = posted(ABLE, oneSlice());
+        Pos anchor = new Pos(3, 60, 3);
+        BoardBrainContext ctx = ctxThatSaw(anchor);
+        project.completed(project.open().get(0), ctx);
+        WorkItem tree = project.open().stream()
+                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+
+        // The memory of the felled tree lingers — the near field has not re-probed that column yet.
+        project.completed(tree, ctx);
+
+        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(anchor).state(),
+                "resurrecting a CLEARED row is the 197/186 cycle; the rule, not a cut-off tick, "
+                        + "is what forbids it now");
+    }
+
+    @Test
+    void aStaleMemoryOfSomethingNobodyHasFelledIsStillWorthBanking() {
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.advance(5_000L);
+        ctx.rememberSeenAt(THING, new Pos(3, 60, 3), 500L);
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5);
+        project.tick(5_000L);
+
+        project.completed(project.open().get(0), ctx);
+
+        assertEquals(1, project.ledger().size(),
+                "nobody has cleared it, so it is probably still standing — and a chop that finds "
+                        + "nothing SUCCEEDS, so being wrong costs one short walk");
+    }
+
+    @Test
+    void aWorkerWhoFailedStillReportsWhatTheySaw() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+        project.completed(project.open().get(0), ctx);
+        WorkItem tree = project.open().stream()
+                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+        ctx.remember(THING, new Pos(8, 60, 8));
+
+        project.failed(tree, AgentId.random(), ctx);
+
+        assertTrue(project.ledger().containsKey(new Pos(8, 60, 8)),
+                "they walked there and their near field ran; the errand's outcome is a different fact");
+    }
+
     // ── the coverage the box keeps ───────────────────────────────────────────────────────────
 
     @Test
@@ -557,9 +623,9 @@ class ClearAreaTest {
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
         project.completed(itemAt(project, easy), ctx);
 
-        assertFalse(project.finished(), "the box does not close over what it has just reopened");
+        assertFalse(project.finished(), "the box would have closed, so the refusal gets its retry");
         assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(stubborn).state(),
-                "something was felled, so the one it gave up on deserves another look");
+                "the trigger is the close, not the end of a round — there are no rounds");
     }
 
     @Test
@@ -579,6 +645,8 @@ class ClearAreaTest {
 
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
         assertEquals(ClearArea.Phase.DONE, project.phase(), "nothing changed, so nothing to retry");
+        assertTrue(project.describe().contains("1 refused"),
+                "the operator can see what stopped it rather than inferring it");
     }
 
     @Test
