@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.tree;
 
+import dev.luizloyola.anima.core.brain.knowledge.Coverage;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -54,8 +55,8 @@ public final class TreeClearing implements Clearing {
     }
 
     @Override
-    public Task survey(Region slice, java.util.Set<Pos> settled, SurveyArea.Coverage coverage) {
-        return new SurveyArea(slice, Pois.TREE, settled, coverage);
+    public Task survey(Region slice, java.util.Map<Pos, Integer> known, Coverage coverage) {
+        return new SurveyArea(slice, Pois.TREE, known, coverage);
     }
 
     @Override

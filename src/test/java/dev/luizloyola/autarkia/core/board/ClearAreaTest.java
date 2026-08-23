@@ -31,9 +31,9 @@ class ClearAreaTest {
 
     /** A clearing that can survey and whose tasks do nothing — the rules are the subject here. */
     /** What the last survey the double handed out was told — the coverage seam, observed. */
-    private static java.util.Set<Pos> lastSettled = java.util.Set.of();
-    private static dev.luizloyola.anima.core.brain.task.SurveyArea.Coverage lastCoverage =
-            dev.luizloyola.anima.core.brain.task.SurveyArea.Coverage.NONE;
+    private static java.util.Map<Pos, Integer> lastKnown = java.util.Map.of();
+    private static dev.luizloyola.anima.core.brain.knowledge.Coverage lastCoverage =
+            dev.luizloyola.anima.core.brain.knowledge.Coverage.NONE;
 
     private record TestClearing(boolean surveys) implements Clearing {
         @Override
@@ -52,9 +52,9 @@ class ClearAreaTest {
         }
 
         @Override
-        public Task survey(Region slice, java.util.Set<Pos> settled,
-                dev.luizloyola.anima.core.brain.task.SurveyArea.Coverage coverage) {
-            lastSettled = java.util.Set.copyOf(settled);
+        public Task survey(Region slice, java.util.Map<Pos, Integer> known,
+                dev.luizloyola.anima.core.brain.knowledge.Coverage coverage) {
+            lastKnown = java.util.Map.copyOf(known);
             lastCoverage = coverage;
             return new Idle(1);
         }
@@ -216,11 +216,12 @@ class ClearAreaTest {
         var errand = project.open().get(0);
 
         errand.root();                      // granted: the double captures the sink
-        lastCoverage.swept(new Pos(0, 60, 0));
-        lastCoverage.swept(new Pos(8, 60, 0));
+        lastCoverage.settled(new Pos(0, 60, 0));
+        lastCoverage.settled(new Pos(8, 60, 0));
         errand.root();                      // preempted, then re-granted: a FRESH task
 
-        assertTrue(lastSettled.containsAll(java.util.Set.of(new Pos(0, 60, 0), new Pos(8, 60, 0))),
+        assertTrue(lastKnown.keySet().containsAll(
+                        java.util.Set.of(new Pos(0, 60, 0), new Pos(8, 60, 0))),
                 "the sweep resumes; it does not walk the box again from the treeline");
     }
 
@@ -228,12 +229,12 @@ class ClearAreaTest {
     void coverageSurvivesASnapshotRoundTrip() {
         ClearArea project = posted(ABLE, oneSlice());
         project.open().get(0).root();
-        lastCoverage.swept(new Pos(0, 60, 0));
+        lastCoverage.settled(new Pos(0, 60, 0));
 
         ClearArea restored = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
         restored.open().get(0).root();
 
-        assertTrue(lastSettled.contains(new Pos(0, 60, 0)),
+        assertTrue(lastKnown.keySet().contains(new Pos(0, 60, 0)),
                 "and it survives a restart, which is the half a reload used to lose");
     }
 
@@ -241,7 +242,7 @@ class ClearAreaTest {
     void aNewPassWalksItsOwnGround() {
         ClearArea project = posted(ABLE, oneSlice());
         project.open().get(0).root();
-        lastCoverage.swept(new Pos(0, 60, 0));
+        lastCoverage.settled(new Pos(0, 60, 0));
 
         // Report the slice done, which turns the pass over.
         BoardBrainContext ctx = new BoardBrainContext();
@@ -249,7 +250,7 @@ class ClearAreaTest {
         project.tick(1L);
         if (project.phase() == ClearArea.Phase.SURVEYING || project.phase() == ClearArea.Phase.VERIFYING) {
             project.open().get(0).root();
-            assertFalse(lastSettled.contains(new Pos(0, 60, 0)),
+            assertFalse(lastKnown.keySet().contains(new Pos(0, 60, 0)),
                     "coverage is per-pass, never cumulative — a verify pass walks its own ground");
         }
     }
@@ -660,7 +661,12 @@ class ClearAreaTest {
         }
         assertEquals(ClearArea.Phase.VERIFYING, project.phase());
 
-        SurveyArea sweep = new SurveyArea(far, THING, project.skippable());
+        // skippable() is corners, not masks; a real sweep wants the whole cell for each.
+        java.util.Map<Pos, Integer> known = new java.util.LinkedHashMap<>();
+        for (Pos corner : project.skippable()) {
+            known.put(corner, dev.luizloyola.anima.core.brain.knowledge.CoverageGrid.FULL);
+        }
+        SurveyArea sweep = new SurveyArea(far, THING, known);
         assertEquals(sweep.cells(), sweep.cellsKnown(),
                 "a slice nowhere near anything the last pass saw should start already known");
     }

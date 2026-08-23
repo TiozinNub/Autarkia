@@ -1,9 +1,9 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.brain.knowledge.Coverage;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
-import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.Kit;
 
@@ -43,14 +43,15 @@ public interface Clearing {
      * A task that walks this slice to confidence and comes back knowing what is in it. Called only
      * when {@link #surveys()}.
      *
-     * <p>{@code settled} names the min corners of ground a previous pass proved empty and far from
-     * anything — skippable, and empty on a first pass.
+     * <p>{@code known} is corner → covered squares for ground somebody has already been over, on the
+     * project's grid. {@code coverage} is where this sweep banks what it covers as it covers it, so
+     * a re-grant resumes rather than restarts.
      *
      * <p><b>The surveyor must WALK.</b> A {@code Survey} from a standing spot emits only coarse-grid
      * glimpses (<em>woodland roughly there</em>) while the anchors a ledger needs are grown by the
      * near field alone.
      */
-    Task survey(Region slice, java.util.Set<Pos> settled, SurveyArea.Coverage coverage);
+    Task survey(Region slice, java.util.Map<Pos, Integer> known, Coverage coverage);
 
     /** A task that removes the one thing standing at this anchor. */
     Task clear(Pos anchor);

@@ -3,6 +3,8 @@ package dev.luizloyola.autarkia.core.board;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.brain.knowledge.Coverage;
+import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -203,6 +205,16 @@ public final class ClearArea implements PartyProject {
     private final Set<Pos> sweptThisPass = new LinkedHashSet<>();
 
     /**
+     * How much of the box anybody has covered, on ONE grid anchored at the bounds. A surveyor's
+     * slice grid and a chopper's near field have to answer for the same ground or a discount is
+     * wrong rather than merely absent.
+     */
+    private final CoverageGrid covered;
+
+    /** Where every worker on this project banks what they cross. */
+    private final Coverage ground = new Ground();
+
+    /**
      * Cargo slots that make the walk to the yard worth taking.
      *
      * <p><b>Three, not twelve.</b> The first cut borrowed {@code StowSurplus.SURPLUS_SLOTS}, which
@@ -282,6 +294,7 @@ public final class ClearArea implements PartyProject {
         this.bounds = bounds;
         this.priority = priority;
         this.slices = sliceUp(bounds);
+        this.covered = new CoverageGrid(bounds);
         this.passStartedAt = now;
         this.yard = yard;
     }
@@ -294,6 +307,11 @@ public final class ClearArea implements PartyProject {
     /** The box, as the operator typed it. */
     public Region bounds() {
         return bounds;
+    }
+
+    /** Everything this project's workers have covered, corner → squares. */
+    public CoverageGrid covered() {
+        return covered;
     }
 
     public Phase phase() {
@@ -915,6 +933,26 @@ public final class ClearArea implements PartyProject {
         this.offer = List.copyOf(open.values());
     }
 
+    /**
+     * The project's own sink: a worker's near field, and cells written off, land here.
+     *
+     * <p>{@code settled} also banks into {@link #sweptThisPass} — the field a reload actually
+     * restores, since {@link #covered} does not yet round-trip through {@link #snapshot()}. Task 7
+     * retires the older field once the grid carries continuity on its own.
+     */
+    private final class Ground implements Coverage {
+        @Override
+        public void near(Pos here, int radius) {
+            covered.markNear(here, radius);
+        }
+
+        @Override
+        public void settled(Pos corner) {
+            covered.markFull(corner);
+            sweptThisPass.add(corner);
+        }
+    }
+
     /** Walk a slice and come back knowing what is in it. Named by the slice's corner. */
     private final class SurveyItem implements WorkItem {
         private final int index;
@@ -937,12 +975,16 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public Task root() {
-            // Both sets mean "do not walk here again": one is ground proved empty last pass, the
-            // other is ground this pass has already covered. Handing the union in is what makes a
-            // re-grant resume the sweep instead of restarting it.
-            Set<Pos> known = new LinkedHashSet<>(settledCells(area));
-            known.addAll(sweptThisPass);
-            return clearing.survey(area, known, sweptThisPass::add);
+            // Both mean "do not walk here again": ground proved empty last pass, and ground anybody
+            // has already covered. Handing the union in is what makes a re-grant resume the sweep.
+            Map<Pos, Integer> known = new LinkedHashMap<>(covered.masksIn(area));
+            for (Pos corner : settledCells(area)) {
+                known.put(corner, CoverageGrid.FULL);
+            }
+            for (Pos corner : sweptThisPass) {
+                known.put(corner, CoverageGrid.FULL);
+            }
+            return clearing.survey(area, known, ground);
         }
 
         @Override
