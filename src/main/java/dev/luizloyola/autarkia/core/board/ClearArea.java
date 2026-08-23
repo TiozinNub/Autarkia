@@ -880,29 +880,29 @@ public final class ClearArea implements PartyProject {
     }
 
     /**
-     * Where one axis is cut, as {@code n + 1} boundaries from {@code min} to {@code max + 1} — the
-     * fenceposts, so the caller reads slices off consecutive pairs and the last one lands exactly on
-     * the far edge.
+     * Where one axis is cut, as {@code n + 1} boundaries from {@code min} to {@code max + 1}.
      *
      * <p><b>The count is decided first, and the span is then shared out evenly between that many
      * slices</b> (decision: Luiz): {@link #SLICE_SIZE} only says how few slices we can get away
-     * with, {@code ceil(span / SLICE_SIZE)}. Striding instead dumped the remainder on the last
-     * slice (65 came out 48 + 17, 49 came out 48 + 1), and that sliver is a whole errand, bid on
-     * and walked to, for a strip of ground with nothing in it.
+     * with, {@code ceil(span / SLICE_SIZE)}. Striding instead dumped the remainder on the last slice
+     * (65 came out 48 + 17), and that sliver is a whole errand walked for a strip with nothing in it.
      *
-     * <p>Rounded evenly, not front-loaded: a boundary sits at {@code round(i × span / n)}, so 65
-     * across at a 32 ceiling is 22, 21, 22 and 70 is 23, 24, 23. No slice can exceed the ceiling
-     * ({@code span ≤ n × SLICE_SIZE} by construction), and none can be empty for any box at least
-     * one block across.
+     * <p><b>Every interior boundary lands on the coverage grid</b>, because a slice whose grid is
+     * offset from the box's can be handed no coverage at all: a cell corner on one grid names
+     * nothing on the other. Rounding to the nearest cell can only move a boundary by half a cell,
+     * so the ceiling still holds by construction.
      */
     private static int[] cuts(int min, int max) {
         int span = max - min + 1;
         int n = Math.max(1, (span + SLICE_SIZE - 1) / SLICE_SIZE);
         int[] fenceposts = new int[n + 1];
-        for (int i = 0; i <= n; i++) {
-            // + n/2 before the divide is integer round-half-up; i == n lands on min + span exactly,
-            // since n/2 < n can never carry.
-            fenceposts[i] = min + (int) (((long) i * span + n / 2) / n);
+        fenceposts[0] = min;
+        fenceposts[n] = min + span;
+        for (int i = 1; i < n; i++) {
+            // + n/2 before the divide is integer round-half-up.
+            int even = (int) (((long) i * span + n / 2) / n);
+            int cells = (even + CoverageGrid.CELL / 2) / CoverageGrid.CELL;
+            fenceposts[i] = min + Math.min(span, cells * CoverageGrid.CELL);
         }
         return fenceposts;
     }

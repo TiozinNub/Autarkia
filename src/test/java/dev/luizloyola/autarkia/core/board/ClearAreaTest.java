@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -267,7 +268,8 @@ class ClearAreaTest {
 
     @Test
     void aBoxDividesIntoWholeSlicesAndTheGridCoversIt() {
-        // Two slices wide, two deep, and the last of each is the short remainder.
+        // Two slices wide, two deep — which one comes out shorter is now the cell grid's call,
+        // not simply "the last one".
         Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
         ClearArea project = posted(ABLE, big);
         assertEquals(4, project.slices().size());
@@ -289,10 +291,38 @@ class ClearAreaTest {
         // SLICE_SIZE is a ceiling, so the count comes first and the span is split evenly between
         // that many. One block over a whole slice used to mean a full slice and a 1-block ribbon.
         assertEquals(List.of(48, 48), widths(0, 95));
-        assertEquals(List.of(25, 24), widths(0, 48));
-        assertEquals(List.of(32, 33, 32), widths(0, 96));
+        // Every interior boundary also rounds to CoverageGrid.CELL (8): the plain 49/2 even split
+        // (25, 24) is not itself a multiple of 8, so it moves to the nearest one that is.
+        assertEquals(List.of(24, 25), widths(0, 48));
+        assertEquals(List.of(32, 32, 33), widths(0, 96));
         // Rounded evenly rather than front-loaded, and the same shape wherever the box sits.
-        assertEquals(List.of(32, 33, 32), widths(-1000, -904));
+        assertEquals(List.of(32, 32, 33), widths(-1000, -904));
+    }
+
+    @Test
+    void everySliceCornerSitsOnTheBoxesCellGrid() {
+        // 130 across at a 48 ceiling is three slices; unaligned they would land on 43 and 87.
+        ClearArea project = posted(ABLE,
+                new Region(new Pos(0, 60, 0), new Pos(129, 70, 129)));
+
+        for (Region slice : project.slices()) {
+            assertEquals(0, (slice.min().x() - 0) % CoverageGrid.CELL,
+                    "a slice whose grid is offset from the box's gets no discount from coverage "
+                            + "a chopper banked, because a corner on one grid names nothing on the other");
+            assertEquals(0, (slice.min().z() - 0) % CoverageGrid.CELL);
+        }
+    }
+
+    @Test
+    void noSliceExceedsTheCeilingOrComesBackEmpty() {
+        ClearArea project = posted(ABLE, new Region(new Pos(0, 60, 0), new Pos(129, 70, 129)));
+
+        for (Region slice : project.slices()) {
+            int wide = slice.max().x() - slice.min().x() + 1;
+            int deep = slice.max().z() - slice.min().z() + 1;
+            assertTrue(wide > 0 && wide <= ClearArea.SLICE_SIZE, "wide: " + wide);
+            assertTrue(deep > 0 && deep <= ClearArea.SLICE_SIZE, "deep: " + deep);
+        }
     }
 
     @Test
@@ -641,15 +671,15 @@ class ClearAreaTest {
 
     @Test
     void aSliceOffTheBoxsCellGridStillGetsItsSkipCredited() {
-        // SurveyArea credits a settled cell only when handed that cell's EXACT corner, and slice
-        // corners are no longer multiples of a cell from the box's — so corners built on the box's
-        // grid would match almost nothing and a verify pass would re-walk the whole box for nothing.
-        // Against a real SurveyArea: the agreement between the two grids is the subject.
+        // SurveyArea credits a settled cell only when handed that cell's EXACT corner. Slice cuts
+        // now round to CoverageGrid.CELL (2026-08-23) precisely so every slice corner names the same
+        // cell on the box's grid as it does on its own — this box exercises that guarantee rather
+        // than the off-grid case it used to, which rounding no longer lets a slice corner fall into.
         Region box = new Region(new Pos(0, 60, 0), new Pos(96, 70, 39));
         ClearArea project = posted(ABLE, box);
         Region far = project.slices().get(project.slices().size() - 1);
-        assertTrue((far.min().x() - box.min().x()) % SurveyArea.CELL != 0,
-                "this test is only about a slice that is OFF the box's cell grid");
+        assertEquals(0, (far.min().x() - box.min().x()) % SurveyArea.CELL,
+                "every slice's min corner sits on the box's cell grid now — the case this test guards");
 
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(THING, new Pos(2, 60, 2)); // one find, at the opposite end from `far`
