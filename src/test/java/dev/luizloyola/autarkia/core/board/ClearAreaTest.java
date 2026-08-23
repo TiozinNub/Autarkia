@@ -358,6 +358,40 @@ class ClearAreaTest {
                 "and it survives a restart, which is the half a reload used to lose");
     }
 
+    /**
+     * The headline path, end to end: a chopper's near field is the only thing that ever touches this
+     * box, and the box must not close until that near field has actually been over all of it.
+     *
+     * <p>Two cells side by side. A body in the middle of the first banks its own cell whole and
+     * eight of the second's sixteen squares — ground whose far edge it is eleven blocks from, which
+     * is three past what it can individuate. A tree standing in that strip is exactly the failure
+     * this feature must never have, so the second cell stays on the frontier until somebody walks
+     * into it.
+     */
+    @Test
+    void aBoxWalkedByAChopperClosesOnlyOnceEveryCellIsCovered() {
+        // Aligned to the coverage grid, so "the cell beside" is a cell of this box.
+        ClearArea project = posted(ABLE, new Region(new Pos(0, 60, 0), new Pos(15, 70, 7)));
+        dev.luizloyola.anima.core.brain.knowledge.Coverage walking = project.coverage();
+
+        walking.near(new Pos(4, 60, 4), 8);
+        project.tick(1L);
+
+        assertEquals(1, project.covered().settledCount(),
+                "the cell underfoot, and only that one — spill into the next is not a walk into it");
+        assertFalse(project.finished(),
+                "half a cell of near-field spill closed this box before 2026-08-23, with the far "
+                        + "strip of the second cell never individuated by anybody");
+        assertFalse(project.open().isEmpty(), "so the slice is still on offer");
+
+        walking.near(new Pos(12, 60, 4), 8);
+        project.tick(2L);
+
+        assertEquals(2, project.covered().settledCount());
+        assertTrue(project.finished(),
+                "and once every cell really has been walked, nothing holds the box open");
+    }
+
     // ── the frontier is the offer ────────────────────────────────────────────────────────────
 
     @Test

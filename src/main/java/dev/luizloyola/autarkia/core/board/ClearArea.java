@@ -473,9 +473,10 @@ public final class ClearArea implements PartyProject {
         if (WorkKey.SURVEY.equals(key.flavour())) {
             int slice = indexOf(key);
             sliceRetryAfter.remove(slice);
-            // A sweep SUCCEEDS only once every cell of its slice is at confidence, so completion is
-            // that claim. The sink has normally banked it already, cell by cell; saying it once more
-            // here is what keeps a slice from being re-offered because one write-off went astray.
+            // A sweep SUCCEEDS only once every cell of its slice is known — the contract on
+            // Clearing.survey — so completion is that claim. The sink has normally banked it
+            // already, cell by cell; saying it once more here is what keeps a slice from being
+            // re-offered because one write-off went astray.
             markCovered(slices.get(slice));
             ctx.journal().record(Category.PROJECT, name(),
                     "slice " + (slice + 1) + "/" + slices.size() + " walked — "

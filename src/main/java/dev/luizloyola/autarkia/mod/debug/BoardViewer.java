@@ -250,9 +250,9 @@ public final class BoardViewer {
      * The fine explored answer: the coverage grid of anybody sweeping a slice of this project,
      * shaded by confidence.
      *
-     * <p>Coverage lives on the running task, not the project — one worker's progress through one
-     * slice, discarded if their hold lapses — so it is read off whatever primitive their executor
-     * is on, and is absent when nobody is surveying.
+     * <p>The project keeps the coverage; this is the LIVE half beside it — one worker's graded
+     * confidence in the slice they are on, look credit and all, which the project's grid does not
+     * hold. Read off whatever primitive their executor is on, so absent when nobody is surveying.
      */
     private static void paintSweeps(Frame frame, MinecraftServer server, ClearArea project) {
         for (AgentBody body : AgentBodies.loaded(server)) {

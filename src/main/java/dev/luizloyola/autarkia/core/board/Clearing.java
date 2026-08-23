@@ -50,6 +50,13 @@ public interface Clearing {
      * <p><b>The surveyor must WALK.</b> A {@code Survey} from a standing spot emits only coarse-grid
      * glimpses (<em>woodland roughly there</em>) while the anchors a ledger needs are grown by the
      * near field alone.
+     *
+     * <p><b>Contract: this task must not SUCCEED until every cell of {@code slice} is known.</b>
+     * {@link ClearArea} takes its success as exactly that claim and banks the whole slice covered,
+     * which is what stops the slice ever being offered again. A task that succeeds early — on a
+     * timeout, on reaching the far corner, on anything short of full coverage — closes the box with
+     * whatever is still standing in the part nobody walked. Write off ground no walk can reach, as
+     * {@code SurveyArea} does after its walk tries; never simply stop.
      */
     Task survey(Region slice, java.util.Map<Pos, Integer> known, Coverage coverage);
 
