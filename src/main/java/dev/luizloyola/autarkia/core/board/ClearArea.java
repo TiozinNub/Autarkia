@@ -887,22 +887,37 @@ public final class ClearArea implements PartyProject {
      * with, {@code ceil(span / SLICE_SIZE)}. Striding instead dumped the remainder on the last slice
      * (65 came out 48 + 17), and that sliver is a whole errand walked for a strip with nothing in it.
      *
-     * <p><b>Every interior boundary lands on the coverage grid</b>, because a slice whose grid is
-     * offset from the box's can be handed no coverage at all: a cell corner on one grid names
-     * nothing on the other. Rounding to the nearest cell can only move a boundary by half a cell,
-     * so the ceiling still holds by construction.
+     * <p><b>The count and the split are both decided in CELLS, not blocks.</b> Rounding a block-based
+     * split to the nearest cell after the fact can round an interior boundary DOWN, growing the far
+     * gap by whatever it lost with nothing to absorb it — 137 across at n=3 rounded that way to
+     * 48/40/49, a slice over the ceiling. Deciding in cells makes every boundary a whole number of
+     * cells from {@code min} by construction, which makes all three guarantees provable rather than
+     * merely usually true:
+     *
+     * <ul>
+     *   <li><b>On the grid:</b> every interior fencepost is {@code min} plus a whole number of
+     *       {@link CoverageGrid#CELL}s.</li>
+     *   <li><b>Never over the ceiling:</b> consecutive cell boundaries differ by at most
+     *       {@code ceil(cells / n)} cells, and {@code n = ceil(cells / perSlice)} forces
+     *       {@code cells / n ≤ perSlice}, i.e. at most {@link #SLICE_SIZE} blocks. The final gap,
+     *       {@code span − fencepost[n-1]}, is bounded the same way: {@code fencepost[n-1] ≥
+     *       (cells − perSlice) × CELL} while {@code span ≤ cells × CELL}.</li>
+     *   <li><b>Never empty:</b> {@code n ≤ cells} always, so every slice owns at least one cell, and
+     *       every interior fencepost is at most {@code (cells − 1) × CELL}, strictly less than
+     *       {@code span}.</li>
+     * </ul>
      */
     private static int[] cuts(int min, int max) {
         int span = max - min + 1;
-        int n = Math.max(1, (span + SLICE_SIZE - 1) / SLICE_SIZE);
+        int cells = Math.max(1, (span + CoverageGrid.CELL - 1) / CoverageGrid.CELL);
+        int perSlice = SLICE_SIZE / CoverageGrid.CELL;
+        int n = Math.max(1, (cells + perSlice - 1) / perSlice);
         int[] fenceposts = new int[n + 1];
         fenceposts[0] = min;
         fenceposts[n] = min + span;
         for (int i = 1; i < n; i++) {
-            // + n/2 before the divide is integer round-half-up.
-            int even = (int) (((long) i * span + n / 2) / n);
-            int cells = (even + CoverageGrid.CELL / 2) / CoverageGrid.CELL;
-            fenceposts[i] = min + Math.min(span, cells * CoverageGrid.CELL);
+            // + n/2 before the divide is integer round-half-up, over CELLS rather than blocks.
+            fenceposts[i] = min + (int) (((long) i * cells + n / 2) / n) * CoverageGrid.CELL;
         }
         return fenceposts;
     }

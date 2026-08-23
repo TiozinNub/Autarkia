@@ -12,7 +12,6 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Idle;
-import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import java.util.List;
 import java.util.Optional;
@@ -291,12 +290,15 @@ class ClearAreaTest {
         // SLICE_SIZE is a ceiling, so the count comes first and the span is split evenly between
         // that many. One block over a whole slice used to mean a full slice and a 1-block ribbon.
         assertEquals(List.of(48, 48), widths(0, 95));
-        // Every interior boundary also rounds to CoverageGrid.CELL (8): the plain 49/2 even split
-        // (25, 24) is not itself a multiple of 8, so it moves to the nearest one that is.
-        assertEquals(List.of(24, 25), widths(0, 48));
-        assertEquals(List.of(32, 32, 33), widths(0, 96));
-        // Rounded evenly rather than front-loaded, and the same shape wherever the box sits.
-        assertEquals(List.of(32, 32, 33), widths(-1000, -904));
+        // The split is decided in whole CELLs (8 blocks), not blocks: 49 needs 7 cells to cover
+        // (ceil(49/8)), splits 4/3 between two slices, and the interior boundary lands at 4×8=32 —
+        // the last slice is whatever span is actually left over, 17.
+        assertEquals(List.of(32, 17), widths(0, 48));
+        assertEquals(List.of(32, 40, 25), widths(0, 96));
+        // Not evenly BALANCED in blocks when the span isn't a multiple of the cell size — the cell
+        // count is a ceiling over the real span — but the split depends only on the span, so it is
+        // still the same shape wherever the box sits.
+        assertEquals(List.of(32, 40, 25), widths(-1000, -904));
     }
 
     @Test
@@ -315,13 +317,28 @@ class ClearAreaTest {
 
     @Test
     void noSliceExceedsTheCeilingOrComesBackEmpty() {
-        ClearArea project = posted(ABLE, new Region(new Pos(0, 60, 0), new Pos(129, 70, 129)));
+        // One span is not proof: 137 across at n=3 used to round an interior boundary DOWN by
+        // rounding blocks after deciding the split in blocks, growing the far gap to 49 with nothing
+        // to absorb the loss — one over the ceiling. Sweeping many spans, on both axes together via
+        // a square box, is what catches a rounding defect a single lucky span does not. 137 is
+        // included explicitly because it is the span that actually caught it.
+        for (int span = 1; span <= 300; span++) {
+            assertSliceInvariants(span);
+        }
+        assertSliceInvariants(137);
+    }
 
+    /** Every ceiling/empty/grid invariant {@code cuts} owes, for a box {@code span} blocks square. */
+    private static void assertSliceInvariants(int span) {
+        ClearArea project =
+                posted(ABLE, new Region(new Pos(0, 60, 0), new Pos(span - 1, 70, span - 1)));
         for (Region slice : project.slices()) {
             int wide = slice.max().x() - slice.min().x() + 1;
             int deep = slice.max().z() - slice.min().z() + 1;
-            assertTrue(wide > 0 && wide <= ClearArea.SLICE_SIZE, "wide: " + wide);
-            assertTrue(deep > 0 && deep <= ClearArea.SLICE_SIZE, "deep: " + deep);
+            assertTrue(wide > 0 && wide <= ClearArea.SLICE_SIZE, "span " + span + " wide: " + wide);
+            assertTrue(deep > 0 && deep <= ClearArea.SLICE_SIZE, "span " + span + " deep: " + deep);
+            assertEquals(0, slice.min().x() % CoverageGrid.CELL, "span " + span + " x corner");
+            assertEquals(0, slice.min().z() % CoverageGrid.CELL, "span " + span + " z corner");
         }
     }
 
@@ -667,38 +684,6 @@ class ClearAreaTest {
         assertFalse(skip.contains(new Pos(0, 60, 16)), "still beside what the LAST pass saw");
         assertTrue(skip.contains(new Pos(32, 60, 16)),
                 "the last pass saw nothing here — a tree that stood here once does not keep it dirty");
-    }
-
-    @Test
-    void aSliceOffTheBoxsCellGridStillGetsItsSkipCredited() {
-        // SurveyArea credits a settled cell only when handed that cell's EXACT corner. Slice cuts
-        // now round to CoverageGrid.CELL (2026-08-23) precisely so every slice corner names the same
-        // cell on the box's grid as it does on its own — this box exercises that guarantee rather
-        // than the off-grid case it used to, which rounding no longer lets a slice corner fall into.
-        Region box = new Region(new Pos(0, 60, 0), new Pos(96, 70, 39));
-        ClearArea project = posted(ABLE, box);
-        Region far = project.slices().get(project.slices().size() - 1);
-        assertEquals(0, (far.min().x() - box.min().x()) % SurveyArea.CELL,
-                "every slice's min corner sits on the box's cell grid now — the case this test guards");
-
-        BoardBrainContext ctx = new BoardBrainContext();
-        ctx.remember(THING, new Pos(2, 60, 2)); // one find, at the opposite end from `far`
-        for (WorkItem item : List.copyOf(project.open())) {
-            project.completed(item, ctx); // walk every slice
-        }
-        for (WorkItem item : List.copyOf(project.open())) {
-            project.completed(item, ctx); // clear what the walk found
-        }
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-
-        // skippable() is corners, not masks; a real sweep wants the whole cell for each.
-        java.util.Map<Pos, Integer> known = new java.util.LinkedHashMap<>();
-        for (Pos corner : project.skippable()) {
-            known.put(corner, dev.luizloyola.anima.core.brain.knowledge.CoverageGrid.FULL);
-        }
-        SurveyArea sweep = new SurveyArea(far, THING, known);
-        assertEquals(sweep.cells(), sweep.cellsKnown(),
-                "a slice nowhere near anything the last pass saw should start already known");
     }
 
     /** Five coverage cells a side, so a find in the middle leaves ground beyond its ring. */
