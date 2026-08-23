@@ -18,8 +18,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /**
- * The phase machine, the slices, the ledger and the refusal rule — everything that decides whether
- * a box gets cleared, proven without a world, a body or a block of perception.
+ * The frontier, the slices, the ledger and the refusal rule — everything that decides whether a box
+ * gets cleared, proven without a world, a body or a block of perception.
  *
  * <p>Blind: a survey here is a member handing back what they "remember". That is what
  * a real one will be. The walking is step 2's and changes no rule below.
@@ -68,15 +68,32 @@ class ClearAreaTest {
     private static final Clearing ABLE = new TestClearing(true);
     private static final Clearing UNABLE = new TestClearing(false);
 
-    /** A box exactly one slice across, so a whole pass is a single errand. */
+    /** A box exactly one slice across, so sweeping the whole box is a single errand. */
     private static Region oneSlice() {
         return new Region(new Pos(0, 60, 0), new Pos(10, 70, 10));
+    }
+
+    /** Two slices at {@link ClearArea#SLICE_SIZE}, so one can be swept while the other is not. */
+    private static Region twoSlices() {
+        return new Region(new Pos(0, 60, 0), new Pos(95, 70, 47));
     }
 
     private static ClearArea posted(Clearing clearing, Region bounds) {
         ClearArea project = new ClearArea(clearing, bounds, 0.5);
         project.tick(0L);
         return project;
+    }
+
+    /** The survey errand on offer — position in the offer is not part of any rule here. */
+    private static WorkItem surveyItem(ClearArea project) {
+        return project.open().stream()
+                .filter(item -> item.describe().startsWith("survey")).findFirst().orElseThrow();
+    }
+
+    /** The clear errand on offer, when exactly one is. */
+    private static WorkItem clearItem(ClearArea project) {
+        return project.open().stream()
+                .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow();
     }
 
     // ── where the wood goes ──────────────────────────────────────────────────────────────────
@@ -93,7 +110,7 @@ class ClearAreaTest {
 
     @Test
     void aNamedDestinationIsCarriedAndSaidOutLoud() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
 
         assertEquals(YARD, project.yard().orElseThrow());
@@ -103,7 +120,7 @@ class ClearAreaTest {
 
     @Test
     void theDestinationSurvivesASnapshotRoundTrip() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
 
         ClearArea restored = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
@@ -122,7 +139,7 @@ class ClearAreaTest {
 
     @Test
     void itRemembersWhereTheChestActuallyWent() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         BoardBrainContext ctx = new BoardBrainContext();
         // The hauler built it a block off the hint, because the hint was a hint.
@@ -137,7 +154,7 @@ class ClearAreaTest {
 
     @Test
     void aChestNowhereNearTheHintIsNotThisProjectsYard() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(900, 60, 900));
@@ -159,7 +176,7 @@ class ClearAreaTest {
         assertFalse(withoutYard instanceof HaulingErrand,
                 "no destination, and the root is byte-for-byte what it always was");
 
-        ClearArea withYard = new ClearArea(ABLE, oneSlice(), 0.5, 0L, YARD);
+        ClearArea withYard = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
         withYard.tick(0L);
         withYard.completed(withYard.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
         Task hauling = withYard.open().stream()
@@ -177,38 +194,40 @@ class ClearAreaTest {
         return ctx;
     }
 
-    // ── the first pass has a cut-off like every other ────────────────────────────────────────
+    // ── a report only ever adds ──────────────────────────────────────────────────────────────
 
     @Test
-    void theFirstPassDoesNotBankWhatWasSeenBeforeItStarted() {
+    void aReportOnlyEverAddsAnAnchorTheLedgerHasNeverHeardOf() {
+        // The one rule harvest has, and the regression test for the 197 cleared / 186 / 197 / 186
+        // cycle (live, 2026-08-12): re-reading rows the ledger already holds reopened cleared
+        // anchors and sent people to fell ghosts. Stated as a rule now, not as a tick comparison.
+        ClearArea project = posted(ABLE, twoSlices());
         BoardBrainContext ctx = new BoardBrainContext();
-        ctx.advance(5_000L);
-        // Remembered long before anybody posted this box — evidence about then, not about now.
-        ctx.rememberSeenAt(THING, new Pos(3, 60, 3), 500L);
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 5_000L);
-        project.tick(5_000L);
+        Pos felled = new Pos(3, 60, 3);
+        Pos stubborn = new Pos(11, 60, 11);
+        ctx.remember(THING, felled);
+        ctx.remember(THING, stubborn);
+        project.completed(surveyItem(project), ctx);
+        project.completed(itemAt(project, felled), ctx);
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(itemAt(project, stubborn), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
 
-        project.completed(project.open().get(0), ctx);
+        // The second sweep still remembers all of it, and finds one more.
+        Pos fresh = new Pos(60, 60, 20);
+        ctx.remember(THING, fresh);
+        project.completed(surveyItem(project), ctx);
 
-        assertTrue(project.ledger().isEmpty(),
-                "the opening SURVEYING never went through enter(), so its cut-off was 0 and every "
-                        + "stale memory in bounds got banked (BUGS, 2026-08-17)");
+        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(felled).state(),
+                "a stale memory of something already felled is not evidence it is back");
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state(),
+                "and re-reporting a refusal would restart the loop REFUSE_AFTER exists to end");
+        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(fresh).state());
     }
 
-    @Test
-    void whatThisPassActuallySawIsStillBanked() {
-        BoardBrainContext ctx = new BoardBrainContext();
-        ctx.advance(5_000L);
-        ctx.rememberSeenAt(THING, new Pos(3, 60, 3), 5_100L);
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, 5_000L);
-        project.tick(5_000L);
-
-        project.completed(project.open().get(0), ctx);
-
-        assertEquals(1, project.ledger().size(), "seen during the pass, so it counts");
-    }
-
-    // ── the coverage a pass keeps ────────────────────────────────────────────────────────────
+    // ── the coverage the box keeps ───────────────────────────────────────────────────────────
 
     @Test
     void aPreemptedSurveyResumesWhereItStopped() {
@@ -238,32 +257,92 @@ class ClearAreaTest {
                 "and it survives a restart, which is the half a reload used to lose");
     }
 
-    @Test
-    void aNewPassWalksItsOwnGround() {
-        ClearArea project = posted(ABLE, oneSlice());
-        project.open().get(0).root();
-        lastCoverage.settled(new Pos(0, 60, 0));
+    // ── the frontier is the offer ────────────────────────────────────────────────────────────
 
-        // Report the slice done, which turns the pass over.
-        BoardBrainContext ctx = new BoardBrainContext();
+    @Test
+    void aFreshBoxOffersOnlySurveys() {
+        ClearArea project = posted(ABLE, twoSlices());
+
+        assertEquals(2, project.open().size());
+        assertTrue(project.open().stream().allMatch(item -> item.describe().startsWith("survey")));
+    }
+
+    @Test
+    void aTreeReportedMidSweepIsOfferedWhileTheRestIsStillBeingWalked() {
+        ClearArea project = posted(ABLE, twoSlices());
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+
         project.completed(project.open().get(0), ctx);
-        project.tick(1L);
-        if (project.phase() == ClearArea.Phase.SURVEYING || project.phase() == ClearArea.Phase.VERIFYING) {
-            project.open().get(0).root();
-            assertFalse(lastKnown.keySet().contains(new Pos(0, 60, 0)),
-                    "coverage is per-pass, never cumulative — a verify pass walks its own ground");
-        }
-    }
 
-    // ── what it offers ───────────────────────────────────────────────────────────────────────
+        assertTrue(project.open().stream().anyMatch(i -> i.describe().startsWith("clear")),
+                "the SURVEYING barrier is gone: the first slice reported puts trees in front of "
+                        + "the crew while the rest of the box is still unwalked");
+        assertTrue(project.open().stream().anyMatch(i -> i.describe().startsWith("survey")),
+                "and the unswept slice is still on offer beside it");
+    }
 
     @Test
-    void aFreshProjectOffersItsSlicesAndNothingElse() {
-        ClearArea project = posted(ABLE, oneSlice());
-        assertEquals(ClearArea.Phase.SURVEYING, project.phase());
-        assertEquals(1, project.open().size());
-        assertTrue(project.open().get(0).describe().startsWith("survey slice 1/1"));
+    void aSliceEverybodyHasAlreadyCoveredIsNeverMintedAsAnErrand() {
+        ClearArea project = posted(ABLE, twoSlices());
+        Region first = project.slices().get(0);
+        for (int x = first.min().x(); x <= first.max().x(); x += CoverageGrid.CELL) {
+            for (int z = first.min().z(); z <= first.max().z(); z += CoverageGrid.CELL) {
+                project.covered().markFull(new Pos(x, first.min().y(), z));
+            }
+        }
+        project.tick(0L);
+
+        assertEquals(1, project.open().size(), "only the slice nobody has been over");
     }
+
+    @Test
+    void theBoxClosesWhenTheFrontierIsEmptyAndNothingIsStanding() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+
+        project.completed(project.open().get(0), ctx);
+
+        assertTrue(project.finished(), "nothing found and nothing left unswept is done");
+        assertTrue(project.open().isEmpty());
+    }
+
+    @Test
+    void theBoxDoesNotCloseWhileAnyTargetIsStillOpen() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+
+        project.completed(project.open().get(0), ctx);
+
+        assertFalse(project.finished(), "a tree is standing in it");
+    }
+
+    @Test
+    void aTargetCoolingOffKeepsTheBoxOpen() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+        project.completed(project.open().get(0), ctx);
+        WorkItem tree = clearItem(project);
+
+        project.failed(tree, AgentId.random(), ctx);
+
+        assertFalse(project.finished(),
+                "OPEN and waiting out a cooldown is still OPEN — the box is not clear");
+    }
+
+    @Test
+    void thereIsNoSecondSweepOfGroundSomebodyAlreadyCovered() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+        project.completed(project.open().get(0), ctx);
+        WorkItem tree = clearItem(project);
+
+        project.completed(tree, ctx);
+
+        assertTrue(project.finished(),
+                "the verify pass is what this design removes — the ground was already covered");
+    }
+
+    // ── how the box is cut up ────────────────────────────────────────────────────────────────
 
     @Test
     void aBoxDividesIntoWholeSlicesAndTheGridCoversIt() {
@@ -374,95 +453,21 @@ class ClearAreaTest {
     // ── the loop ─────────────────────────────────────────────────────────────────────────────
 
     @Test
-    void aSurveyThatFoundNothingFinishesTheWholeProject() {
-        ClearArea project = posted(ABLE, oneSlice());
-        BoardBrainContext ctx = new BoardBrainContext();
-        project.completed(project.open().get(0), ctx);
-        // Walked the whole box, found nothing: there is no second pass worth making.
-        assertEquals(ClearArea.Phase.DONE, project.phase());
-        assertTrue(project.finished());
-    }
-
-    @Test
-    void surveyThenClearThenVerifyThenDone() {
+    void everythingFoundAndFelledClosesTheBox() {
         ClearArea project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(THING, new Pos(3, 60, 3));
         ctx.remember(THING, new Pos(7, 60, 8));
 
         project.completed(project.open().get(0), ctx);
-        assertEquals(ClearArea.Phase.CLEARING, project.phase());
-        assertEquals(2, project.open().size());
+        assertEquals(2, project.open().size(), "both are on offer the moment they are reported");
 
         for (WorkItem item : List.copyOf(project.open())) {
             project.completed(item, ctx);
         }
-        ctx.forget(THING, new Pos(3, 60, 3)); // felling one is also forgetting it
-        ctx.forget(THING, new Pos(7, 60, 8));
-        // Everything reported is gone, so the box is walked again — from scratch, because what a
-        // first pass missed is precisely where nobody went.
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-        assertEquals(1, project.open().size());
 
-        project.completed(project.open().get(0), ctx);
         assertEquals(ClearArea.Phase.DONE, project.phase());
         assertTrue(project.describe().contains("2 cleared"));
-    }
-
-    @Test
-    void aVerifyPassThatFindsSomethingNewGoesBackToClearing() {
-        ClearArea project = posted(ABLE, oneSlice());
-        BoardBrainContext ctx = new BoardBrainContext();
-        ctx.remember(THING, new Pos(3, 60, 3));
-
-        project.completed(project.open().get(0), ctx);
-        project.completed(project.open().get(0), ctx);
-        ctx.forget(THING, new Pos(3, 60, 3));
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-
-        // The second surveyor walks ground the first one hurried past.
-        ctx.remember(THING, new Pos(9, 60, 9));
-        project.completed(project.open().get(0), ctx);
-        assertEquals(ClearArea.Phase.CLEARING, project.phase());
-        assertEquals(1, project.open().size());
-    }
-
-    @Test
-    void somethingStandingAtAClearedAnchorAgainIsFoundAgain() {
-        // Regrowth. Sealing a cleared anchor off for good blinded the review to a sapling grown back
-        // where one was taken — the one thing a review exists to catch (Luiz replanted mid-run; no
-        // pass saw it). A chop that finds nothing now SUCCEEDS, so a stale memory costs one cheap
-        // walk rather than three failures and a permanent refusal.
-        ClearArea project = posted(ABLE, oneSlice());
-        BoardBrainContext ctx = new BoardBrainContext();
-        Pos spot = new Pos(3, 60, 3);
-        ctx.remember(THING, spot);
-        project.completed(project.open().get(0), ctx);
-        project.completed(project.open().get(0), ctx);
-        ctx.forget(THING, spot); // felled, and the belief healed with it
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-
-        ctx.remember(THING, spot); // something is standing there again
-        project.completed(project.open().get(0), ctx);
-        assertEquals(ClearArea.Phase.CLEARING, project.phase(), "the review must notice regrowth");
-        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(spot).state());
-    }
-
-    @Test
-    void aFelledTreeNobodyRemembersDoesNotComeBack() {
-        // The other half: once the belief is healed, the anchor stays settled and the box closes.
-        ClearArea project = posted(ABLE, oneSlice());
-        BoardBrainContext ctx = new BoardBrainContext();
-        Pos gone = new Pos(3, 60, 3);
-        ctx.remember(THING, gone);
-        project.completed(project.open().get(0), ctx);
-        project.completed(project.open().get(0), ctx);
-        ctx.forget(THING, gone);
-
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-        project.completed(project.open().get(0), ctx);
-        assertEquals(ClearArea.Phase.DONE, project.phase());
-        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(gone).state());
     }
 
     @Test
@@ -494,47 +499,47 @@ class ClearAreaTest {
                 // A failure is paced: nothing is on offer until the cooldown runs out, or an agent
                 // would burn every attempt within a second of the first.
                 assertTrue(project.open().isEmpty(), "attempt " + attempt + " must cool down");
-            } else {
-                // The last failure settles the last target. That is what ends the clearing phase
-                // — so the verify pass opens on the same call and its slice is already on offer.
-                assertEquals(ClearArea.Phase.VERIFYING, project.phase());
             }
             ctx.advance(ClearArea.FAIL_COOLDOWN);
             project.tick(ctx.now());
         }
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
         // Refused means gone from the offer for good — this is what stops "repeat until done"
-        // from repeating forever over one thing nobody can remove.
-        assertTrue(project.open().stream().noneMatch(item -> item.describe().contains("clear")));
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-
-        project.completed(project.open().get(0), ctx);
+        // from repeating forever over one thing nobody can remove. The last failure leaves nothing
+        // un-swept and nothing standing, so the box closes on that same call.
+        assertTrue(project.open().isEmpty());
         assertEquals(ClearArea.Phase.DONE, project.phase());
         assertTrue(project.describe().contains("1 refused"));
     }
 
     @Test
     void aRefusedAnchorIsNotReportedBackEither() {
-        ClearArea project = posted(ABLE, oneSlice());
+        // Two slices, so the box stays open on the frontier while the refusal settles and a later
+        // sweep still has somewhere to report from.
+        ClearArea project = posted(ABLE, twoSlices());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
         ctx.remember(THING, stubborn);
-        project.completed(project.open().get(0), ctx);
+        project.completed(surveyItem(project), ctx);
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
-            project.failed(project.open().get(0), ctx);
+            project.failed(itemAt(project, stubborn), ctx);
             ctx.advance(ClearArea.FAIL_COOLDOWN);
             project.tick(ctx.now());
         }
-        // The verifier reports it again, because it is still standing there in plain sight.
-        project.completed(project.open().get(0), ctx);
-        assertEquals(ClearArea.Phase.DONE, project.phase(),
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+
+        // The next sweep reports it again, because it is still standing there in plain sight.
+        project.completed(surveyItem(project), ctx);
+
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state(),
                 "a refused target reported afresh would restart the loop it exists to end");
+        assertTrue(project.finished());
     }
 
     @Test
     void aRefusedTargetGetsAnotherGoOnceItsNeighboursAreDown() {
-        // A thing can be unreachable BECAUSE of what surrounds it, so a round that removed
-        // something has changed the world and earned the refused ones a retry.
+        // A thing can be unreachable BECAUSE of what surrounds it, so a box that removed something
+        // has changed the world and earned the refused ones a retry before it closes.
         ClearArea project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
@@ -552,14 +557,14 @@ class ClearAreaTest {
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
         project.completed(itemAt(project, easy), ctx);
 
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
+        assertFalse(project.finished(), "the box does not close over what it has just reopened");
         assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(stubborn).state(),
-                "the round felled something, so the one it gave up on deserves another look");
+                "something was felled, so the one it gave up on deserves another look");
     }
 
     @Test
-    void aRoundThatFelledNothingDoesNotReopenAndTheProjectEnds() {
-        // The termination guarantee. Reopening costs a felled tree; a round that felled none has
+    void aBoxThatFelledNothingDoesNotReopenAndEnds() {
+        // The termination guarantee. Reopening costs a felled tree; a box that felled none has
         // changed nothing, so retrying would loop forever — which is what REFUSE_AFTER is for.
         ClearArea project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
@@ -571,11 +576,37 @@ class ClearAreaTest {
             ctx.advance(ClearArea.FAIL_COOLDOWN);
             project.tick(ctx.now());
         }
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
 
-        project.completed(project.open().get(0), ctx); // the verify sweep finds nothing new
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
         assertEquals(ClearArea.Phase.DONE, project.phase(), "nothing changed, so nothing to retry");
+    }
+
+    @Test
+    void refusalsAreReopenedOnceAndOnlyOnce() {
+        // The reopening is paid for out of felled targets, and the payment is spent. A second close
+        // with nothing felled since must end the box rather than hand out another free retry.
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos stubborn = new Pos(3, 60, 3);
+        Pos easy = new Pos(8, 60, 8);
+        ctx.remember(THING, stubborn);
+        ctx.remember(THING, easy);
+        project.completed(project.open().get(0), ctx);
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(itemAt(project, stubborn), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+        project.completed(itemAt(project, easy), ctx); // felling buys the one retry
+
+        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+            project.failed(itemAt(project, stubborn), ctx);
+            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            project.tick(ctx.now());
+        }
+
+        assertTrue(project.finished(), "the licence was spent; a box cannot retry on credit");
+        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
     }
 
     /** The open item standing at this anchor — the tests act through the board's own offers. */
@@ -621,77 +652,6 @@ class ClearAreaTest {
     }
 
     @Test
-    void nothingIsWrittenOffBeforeAnybodyHasSwept() {
-        // The guard that makes the whole rule safe: on a first pass no cell is dirty, so without
-        // it every cell would read as clear-and-surrounded-by-clear and the box would be skipped
-        // entirely, unseen.
-        ClearArea project = posted(ABLE, bigBox());
-        assertTrue(project.skippable().isEmpty());
-    }
-
-    @Test
-    void groundBesideSomethingFoundIsStillWalked_butFarClearGroundIsNot() {
-        // Luiz's rule, as his own worked example: a clear cell is written off only when none of
-        // its EIGHT neighbours held anything either, so one find keeps its whole ring in play.
-        ClearArea project = posted(ABLE, bigBox());
-        BoardBrainContext ctx = new BoardBrainContext();
-        // One thing, in the cell whose corner is (16, 16) — the middle of a 5x5 grid of cells.
-        ctx.remember(THING, new Pos(18, 60, 18));
-        project.completed(project.open().get(0), ctx);
-        project.completed(project.open().get(0), ctx); // fell it; the box moves to VERIFYING
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-
-        java.util.Set<Pos> skip = project.skippable();
-        assertFalse(skip.contains(new Pos(16, 60, 16)), "the cell it was found in");
-        assertFalse(skip.contains(new Pos(8, 60, 16)), "orthogonally beside it");
-        assertFalse(skip.contains(new Pos(24, 60, 24)), "diagonally beside it");
-        assertTrue(skip.contains(new Pos(0, 60, 0)), "two cells away and never near anything");
-        assertTrue(skip.contains(new Pos(32, 60, 32)), "the far corner");
-        assertFalse(skip.isEmpty());
-    }
-
-    @Test
-    void eachPassJudgesOnWhatITselfSaw_notOnEverythingEverFound() {
-        // Judging by the whole ledger never settles: a cell that once held a tree stays dirty, so a
-        // worked box reads dirty everywhere and every later pass re-walks it. What matters is what
-        // was standing last time somebody looked.
-        ClearArea project = posted(ABLE, bigBox());
-        BoardBrainContext ctx = new BoardBrainContext();
-        Pos west = new Pos(2, 60, 18);
-        Pos east = new Pos(34, 60, 18);
-        ctx.remember(THING, west);
-        ctx.remember(THING, east);
-        project.completed(project.open().get(0), ctx);          // pass 1 sees both
-        for (WorkItem item : List.copyOf(project.open())) {
-            project.completed(item, ctx);                        // fell them
-        }
-        ctx.forget(THING, west);
-        ctx.forget(THING, east);
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-        // Pass 1 saw both, so both ends are still in play going into the verify.
-        assertFalse(project.skippable().contains(new Pos(0, 60, 16)));
-        assertFalse(project.skippable().contains(new Pos(32, 60, 16)));
-
-        // The verify sees only the west one standing again; the east end is genuinely empty.
-        ctx.remember(THING, west);
-        project.completed(project.open().get(0), ctx);
-        assertEquals(ClearArea.Phase.CLEARING, project.phase());
-        project.completed(project.open().get(0), ctx);
-        ctx.forget(THING, west);
-        assertEquals(ClearArea.Phase.VERIFYING, project.phase());
-
-        java.util.Set<Pos> skip = project.skippable();
-        assertFalse(skip.contains(new Pos(0, 60, 16)), "still beside what the LAST pass saw");
-        assertTrue(skip.contains(new Pos(32, 60, 16)),
-                "the last pass saw nothing here — a tree that stood here once does not keep it dirty");
-    }
-
-    /** Five coverage cells a side, so a find in the middle leaves ground beyond its ring. */
-    private static Region bigBox() {
-        return new Region(new Pos(0, 60, 0), new Pos(39, 70, 39));
-    }
-
-    @Test
     void aFailedSliceIsOfferedAgainAfterItsCooldown() {
         ClearArea project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
@@ -700,7 +660,7 @@ class ClearAreaTest {
         ctx.advance(ClearArea.FAIL_COOLDOWN);
         project.tick(ctx.now());
         assertEquals(1, project.open().size());
-        assertEquals(ClearArea.Phase.SURVEYING, project.phase());
+        assertFalse(project.finished(), "un-swept ground holds the box open however it got there");
     }
 
     // ── holds ────────────────────────────────────────────────────────────────────────────────
@@ -770,7 +730,7 @@ class ClearAreaTest {
         project.completed(project.open().get(0), ctx);
 
         ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
-        assertEquals(ClearArea.Phase.CLEARING, back.phase());
+        assertEquals(ClearArea.Phase.WORKING, back.phase());
         assertEquals(project.ledger(), back.ledger());
         assertEquals(1, back.open().size(), "the one target still standing is on offer again");
         assertEquals(project.describe(), back.describe());
@@ -806,7 +766,8 @@ class ClearAreaTest {
 
         ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
         assertEquals(3, back.open().size(), "a walked slice must not be walked again");
-        assertTrue(back.describe().contains("1/4 slices"));
+        assertEquals(project.describe(), back.describe(),
+                "and the swept fraction comes back where it left off, not at zero");
     }
 
     @Test

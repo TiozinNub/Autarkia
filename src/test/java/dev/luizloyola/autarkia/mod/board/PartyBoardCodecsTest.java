@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.board.ClearArea;
@@ -33,14 +34,16 @@ class PartyBoardCodecsTest {
     private static ClearArea.State state(ClearArea.Phase phase, List<ClearArea.Target> targets) {
         return new ClearArea.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, phase, List.of(0, 2), List.of(new ClearArea.SliceCooldown(1, 12_345L)),
-                targets, 7, 4_242L, List.of(new Pos(0, 60, 0), new Pos(8, 60, 0)),
+                0.5, phase, List.of(new ClearArea.SliceCooldown(1, 12_345L)),
+                targets, 7,
+                List.of(new ClearArea.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
+                        new ClearArea.CellMask(new Pos(8, 60, 0), 0x00FF)),
                 new Pos(40, 63, 40), List.of(new Pos(41, 63, 40)));
     }
 
     @Test
     void aProjectComesBackWithItsBoxItsPhaseAndItsLedger() {
-        ClearArea.State before = state(ClearArea.Phase.CLEARING, List.of(
+        ClearArea.State before = state(ClearArea.Phase.WORKING, List.of(
                 new ClearArea.Target(new Pos(3, 61, 4), ClearArea.TargetState.OPEN, 0, 0L, List.of()),
                 new ClearArea.Target(new Pos(9, 62, 9), ClearArea.TargetState.CLEARED, 0, 0L, List.of()),
                 new ClearArea.Target(new Pos(11, 63, 2), ClearArea.TargetState.REFUSED, 3, 0L,
@@ -54,8 +57,7 @@ class PartyBoardCodecsTest {
     void aBoxWithNoYardRoundTripsWithoutOne() {
         ClearArea.State plain = new ClearArea.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, ClearArea.Phase.CLEARING, List.of(), List.of(), List.of(), 0, 0L,
-                List.of(), null, List.of());
+                0.5, ClearArea.Phase.WORKING, List.of(), List.of(), 0, List.of(), null, List.of());
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(plain, List.of()));
 
@@ -70,7 +72,7 @@ class PartyBoardCodecsTest {
                 new ClearArea.Target(new Pos(1, 2, 3), ClearArea.TargetState.OPEN, 2, 900L,
                         List.of(AgentId.random(), AgentId.random()));
         PartyBoard.Row after = roundTrip(
-                new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of(stubborn)), List.of()));
+                new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of(stubborn)), List.of()));
         assertEquals(stubborn, after.project().targets().get(0));
     }
 
@@ -83,15 +85,18 @@ class PartyBoardCodecsTest {
                 new PartyBoard.Hold(new WorkKey(WorkKey.CLEAR, new Pos(3, 61, 4)), bob));
 
         PartyBoard.Row after =
-                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.SURVEYING, List.of()), holds));
+                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), holds));
         assertEquals(holds, after.holds());
     }
 
     @Test
-    void aSurveysProgressSurvivesTheFile() {
+    void theFrontierSurvivesTheFile() {
+        // The masks, not just which cells were touched: a partial cell read back as a full one is
+        // a box that closes over ground nobody covered, which is the one failure this must not have.
         PartyBoard.Row after =
-                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.VERIFYING, List.of()), List.of()));
-        assertEquals(List.of(0, 2), after.project().reported());
+                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
+        assertEquals(List.of(new ClearArea.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
+                new ClearArea.CellMask(new Pos(8, 60, 0), 0x00FF)), after.project().covered());
         assertEquals(1, after.project().sliceCooldowns().get(0).slice());
         assertEquals(12_345L, after.project().sliceCooldowns().get(0).retryAfter());
     }
@@ -112,15 +117,12 @@ class PartyBoardCodecsTest {
     }
 
     @Test
-    void theRoundsProgressSurvivesTheFile() {
-        // The licence to reopen refusals. A reload that forgot it would either strand refusals
-        // that had earned another go, or hand out a retry the round had not paid for.
+    void theLicenceToReopenRefusalsSurvivesTheFile() {
+        // A reload that forgot it would either strand refusals that had earned another go, or hand
+        // out a retry no felling had paid for.
         PartyBoard.Row after =
-                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of()), List.of()));
-        assertEquals(7, after.project().clearedThisRound());
-        assertEquals(4_242L, after.project().passStartedAt(),
-                "the pass cut-off decides what a reporter may report — a reload that lost it "
-                        + "would let every stale memory back in");
+                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
+        assertEquals(7, after.project().felledSinceReopen());
     }
 
     @Test
@@ -133,7 +135,7 @@ class PartyBoardCodecsTest {
         ClearArea.Target tried = new ClearArea.Target(new Pos(4, 5, 6),
                 ClearArea.TargetState.OPEN, 2, 0L, List.of(alice, bob));
         PartyBoard.Row after = roundTrip(
-                new PartyBoard.Row(state(ClearArea.Phase.CLEARING, List.of(tried)), List.of()));
+                new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of(tried)), List.of()));
         assertEquals(List.of(alice, bob), after.project().targets().get(0).failedBy());
     }
 
@@ -147,9 +149,9 @@ class PartyBoardCodecsTest {
         minimal.add("bounds", PartyBoardCodecs.REGION.encodeStart(JsonOps.INSTANCE,
                 new Region(new Pos(0, 0, 0), new Pos(1, 1, 1))).getOrThrow());
         minimal.addProperty("priority", 0.5);
-        minimal.addProperty("phase", "SURVEYING");
+        minimal.addProperty("phase", "WORKING");
         ClearArea.State read = PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, minimal).getOrThrow();
-        assertTrue(read.reported().isEmpty());
+        assertTrue(read.covered().isEmpty());
         assertTrue(read.targets().isEmpty());
         assertTrue(read.sliceCooldowns().isEmpty());
     }

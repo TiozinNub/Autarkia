@@ -8,7 +8,6 @@ import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
-import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.store.Store;
@@ -31,19 +30,18 @@ import org.jspecify.annotations.Nullable;
  * remove and not a seeded ledger, which makes <em>going and looking</em> the work rather than a
  * precondition of it.
  *
- * <h2>Phases</h2>
+ * <h2>There are no passes</h2>
  *
- * <pre>
- *   SURVEYING ──(every slice reported)──► CLEARING ──(every target settled)──► VERIFYING
- *                                             ▲                                   │
- *                                             └────(the second pass found new)─────┤
- *                                                                                  ▼
- *                                                              DONE ◄──(it found nothing)
- * </pre>
+ * <p>The offer at any instant is a pure function of two sets: slices still holding ground nobody
+ * has covered, one survey item each, and {@code OPEN} ledger rows, one clear item each. Both stand
+ * at once, so the first slice reported puts trees in front of the crew while the rest of the box is
+ * still being walked, and a tree found mid-chop is actionable the moment it is reported. Sweeping
+ * is the <em>frontier</em> of what nobody has covered, and it only ever shrinks.
  *
- * <p>The phase decides the offer: unreported slices while surveying, unsettled targets while
- * clearing. A verify pass re-sweeps the whole box, because what the first pass missed is
- * <em>precisely</em> where nobody walked.
+ * <p>A slice every cell of which is already covered is never minted as an errand — that, and
+ * nothing else, is what "people chopping mark ground as guaranteed clear" means
+ * (2026-08-23-clear-area-frontier-design.md). The four phases this replaced spent the crew's time
+ * on a mandated re-sweep of ground the choppers had just stood in.
  *
  * <h2>Slices are the claim unit</h2>
  *
@@ -63,8 +61,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A surveyor reports everything they know inside the project's <em>bounds</em>, not just their
  * slice — the near field reaches 8–24 blocks, and discarding what it saw across the border would
- * mean walking that ground twice. Only the claimed slice is marked reported: that flag is what a
- * phase change reads.
+ * mean walking that ground twice. Only the claimed slice is banked as covered, because that is the
+ * only ground the errand actually promised to walk.
  */
 public final class ClearArea implements PartyProject {
 
@@ -98,15 +96,15 @@ public final class ClearArea implements PartyProject {
     public static final int COST_RANGE = 128;
     public static final double COST_AT_RANGE = 0.25;
 
-    /** Which pass the project is on, and what it therefore offers. */
+    /** Whether this project still has work, and what it therefore offers. */
     public enum Phase {
-        /** Nobody has walked the box yet; unreported slices are on offer. */
-        SURVEYING,
-        /** The ledger is known; unsettled targets are on offer. */
-        CLEARING,
-        /** A full second sweep, to catch what the first pass walked past. */
-        VERIFYING,
-        /** Nothing more to find and nothing more to remove. */
+        /**
+         * Un-swept ground is on offer as survey slices, standing targets as clear items, both at
+         * once. There are no passes: sweeping is the frontier of what nobody has covered, and it
+         * only ever shrinks.
+         */
+        WORKING,
+        /** Nothing left to find and nothing left to remove. */
         DONE
     }
 
@@ -161,10 +159,7 @@ public final class ClearArea implements PartyProject {
     /** The grid the box divides into, in a fixed order — index is the durable slice name. */
     private final List<Region> slices;
 
-    private Phase phase = Phase.SURVEYING;
-
-    /** Slices reported in the CURRENT pass. Emptied when a verify pass begins. */
-    private final Set<Integer> reported = new LinkedHashSet<>();
+    private Phase phase = Phase.WORKING;
 
     /** Slice index → game time it may be offered again. Only failures put anything here. */
     private final Map<Integer, Long> sliceRetryAfter = new LinkedHashMap<>();
@@ -172,42 +167,14 @@ public final class ClearArea implements PartyProject {
     /** Everything anybody has ever reported inside the bounds, by anchor, in report order. */
     private final Map<Pos, Target> ledger = new LinkedHashMap<>();
 
-    /** Anchors reported during the pass now under way — emptied when a new pass begins. */
-    private final Set<Pos> foundThisPass = new LinkedHashSet<>();
-
-    /**
-     * Game time the current survey pass began — the cut-off for what a reporter may report.
-     *
-     * <p>A memory whose last sighting predates the pass is not evidence about what is standing there
-     * now. Taking everything a surveyor knows reopened cleared anchors, sent people to fell ghosts,
-     * and marked their cells dirty so the skip rule could never settle: the box cycled 197 cleared,
-     * 186, 197, 186 (live, 2026-08-12).
-     */
-    private long passStartedAt;
-
-    /**
-     * What the last COMPLETED survey pass found, and the only thing the skip rule judges by.
-     *
-     * <p>Judging by the whole ledger never converges: a cell that once held a tree stays dirty, so a
-     * worked box reads as dirty everywhere and every later pass re-walks all of it (Luiz:
-     * "blacklisting didn't work, they always re-scan everything"). What was standing last time
-     * somebody looked is what matters, so the empty quarters of the box drop out for good.
-     */
-    private Set<Pos> foundLastPass = new LinkedHashSet<>();
-
-    /**
-     * Cell corners THIS pass has already taken to confidence — what a re-grant and a reload both
-     * resume from. It lives here rather than on {@code SurveyArea} because that task is rebuilt
-     * fresh on every grant and resume, so a preempted sweep used to walk its whole box again; with
-     * the unburden instinct preempting far more often than hunger ever did, that stopped being
-     * theoretical.
-     */
-    private final Set<Pos> sweptThisPass = new LinkedHashSet<>();
-
     /**
      * How much of the box anybody has covered, on ONE grid anchored at the bounds. A surveyor's
      * slice grid and a chopper's near field have to answer for the same ground or a discount is
      * wrong rather than merely absent.
+     *
+     * <p>Cumulative and never cleared: it is the frontier, and the frontier only shrinks. It also
+     * carries continuity across a re-grant and a reload, because a {@code SurveyArea} is rebuilt
+     * fresh on every grant — a preempted sweep used to walk its whole slice again.
      */
     private final CoverageGrid covered;
 
@@ -244,13 +211,13 @@ public final class ClearArea implements PartyProject {
     private final Set<Pos> yardChests = new LinkedHashSet<>();
 
     /**
-     * Targets removed since this clearing round began — the licence to reopen refusals.
+     * Targets removed since refusals were last reopened — the licence to reopen them again.
      *
      * <p>A tree can be unreachable BECAUSE of the trees around it (decision: Luiz, 2026-08-11), but
      * unconditional reopening is the non-termination {@link #REFUSE_AFTER} prevents. So a retry
-     * costs at least one felled tree, and there are finitely many.
+     * costs at least one felled target, and there are finitely many.
      */
-    private int clearedThisRound;
+    private int felledSinceReopen;
 
     /** What is on offer right now. Held rather than rebuilt: the board leases items by IDENTITY. */
     private final Map<WorkKey, WorkItem> open = new LinkedHashMap<>();
@@ -262,22 +229,7 @@ public final class ClearArea implements PartyProject {
     private List<WorkItem> offer = List.of();
 
     public ClearArea(Clearing clearing, Region bounds, double priority) {
-        this(clearing, bounds, priority, 0L);
-    }
-
-    /**
-     * As above, stamping the opening pass's cut-off.
-     *
-     * <p><b>The opening {@code SURVEYING} never goes through {@link #enter}</b> — it comes from the
-     * field initialiser — so before 2026-08-20 its {@code passStartedAt} stayed 0 and
-     * {@link #harvest}'s {@code lastSeenTick() < passStartedAt} guard could never bite. Every tree
-     * the surveyor already remembered got banked as evidence about NOW, whether it was seen this
-     * pass or long before the box was posted, which inflated the dirty set the verify pass judges
-     * its skip by. Posting a box over ground the crew already live on is the normal case, not an
-     * exotic one.
-     */
-    public ClearArea(Clearing clearing, Region bounds, double priority, long now) {
-        this(clearing, bounds, priority, now, null);
+        this(clearing, bounds, priority, null);
     }
 
     /**
@@ -288,14 +240,12 @@ public final class ClearArea implements PartyProject {
      * the project remembers what they actually built. Completion is unaffected either way — the box
      * is clear when it is clear, whether or not a single log reached the yard.
      */
-    public ClearArea(Clearing clearing, Region bounds, double priority, long now,
-            @Nullable Pos yard) {
+    public ClearArea(Clearing clearing, Region bounds, double priority, @Nullable Pos yard) {
         this.clearing = clearing;
         this.bounds = bounds;
         this.priority = priority;
         this.slices = sliceUp(bounds);
         this.covered = new CoverageGrid(bounds);
-        this.passStartedAt = now;
         this.yard = yard;
     }
 
@@ -328,9 +278,9 @@ public final class ClearArea implements PartyProject {
         return Map.copyOf(ledger);
     }
 
-    /** Which slices have been walked and reported in the CURRENT pass — the "explored" answer. */
-    public Set<Integer> reported() {
-        return Set.copyOf(reported);
+    /** Whether somebody has been over every cell of this slice — the "explored" answer. */
+    public boolean swept(int slice) {
+        return fullyCovered(slices.get(slice));
     }
 
     /** Whether this slice is waiting out a failure rather than genuinely on offer. */
@@ -356,9 +306,9 @@ public final class ClearArea implements PartyProject {
     // ── the beat ─────────────────────────────────────────────────────────────────────────────
 
     /**
-     * One host beat: cooldowns expire into fresh offers, and the phase advances when the current one
-     * has run out of work. All bookkeeping over state and the clock. That is what lets a party
-     * board keep thinking with every member unloaded.
+     * One host beat: cooldowns expire into fresh offers, and the box closes when nothing is left.
+     * All bookkeeping over state and the clock. That is what lets a party board keep thinking with
+     * every member unloaded.
      */
     @Override
     public void tick(long now) {
@@ -366,33 +316,37 @@ public final class ClearArea implements PartyProject {
         advance(null, now);
     }
 
-    /** Rebuilds the offer for the current phase, honouring cooldowns and never touching a hold. */
+    /** Rebuilds the offer, honouring cooldowns and never touching a hold. */
     private void refresh(long now) {
-        switch (phase) {
-            case SURVEYING, VERIFYING -> refreshSurvey(now);
-            case CLEARING -> refreshClearing(now);
-            case DONE -> withdrawAll();
-        }
-    }
-
-    private void refreshSurvey(long now) {
-        if (!clearing.surveys()) {
-            // Nothing can survey for this kind yet (ladder step 2). Offer nothing and say so in
-            // the readout, rather than failing errands into a cooldown forever.
+        if (phase == Phase.DONE) {
             withdrawAll();
             return;
         }
+        refreshSurvey(now);
+        refreshClearing(now);
+        rebuildOffer();
+    }
+
+    /**
+     * One survey item per slice that still holds un-swept ground. A slice everybody has already
+     * been over is never minted — that, and nothing else, is what "marked clear" means here.
+     *
+     * <p>No slice is offered at all while nothing can survey this kind yet (ladder step 2); the
+     * readout says so, rather than failing errands into a cooldown forever.
+     */
+    private void refreshSurvey(long now) {
         for (int i = 0; i < slices.size(); i++) {
             final int index = i;
             Region area = slices.get(index);
             WorkKey key = new WorkKey(WorkKey.SURVEY, area.min());
-            if (!reported.contains(index) && sliceRetryAfter.getOrDefault(index, 0L) <= now) {
+            boolean wanted = clearing.surveys() && !fullyCovered(area)
+                    && sliceRetryAfter.getOrDefault(index, 0L) <= now;
+            if (wanted) {
                 open.computeIfAbsent(key, k -> new SurveyItem(index, area));
             } else {
                 withdraw(key);
             }
         }
-        rebuildOffer();
     }
 
     private void refreshClearing(long now) {
@@ -404,79 +358,65 @@ public final class ClearArea implements PartyProject {
                 withdraw(key);
             }
         }
-        rebuildOffer();
+    }
+
+    /** Whether every cell of this slice has been taken to confidence by somebody. */
+    private boolean fullyCovered(Region area) {
+        for (int x = area.min().x(); x <= area.max().x(); x += CoverageGrid.CELL) {
+            for (int z = area.min().z(); z <= area.max().z(); z += CoverageGrid.CELL) {
+                int cell = covered.cellAt(x, z);
+                if (cell >= 0 && !covered.settled(cell)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean anyOpenTarget() {
+        return ledger.values().stream().anyMatch(t -> t.state() == TargetState.OPEN);
     }
 
     /**
-     * Moves to the next phase when the current one has nothing left to do. Takes the reporter's
-     * context when a report caused the change, so the line lands in that person's journal; a
-     * transition driven by a cooldown gets no line, and the readout carries it.
+     * Closes the box when there is nothing un-swept and nothing standing. Takes the reporter's
+     * context when a report caused it, so the line lands in that person's journal; a close driven by
+     * a cooldown gets no line, and the readout carries it.
+     *
+     * <p><b>Termination.</b> The frontier is monotone — cells only ever gain coverage, and one no
+     * walk can reach is written off into it after {@code SurveyArea.WALK_TRIES}. Anchors are finite
+     * and each ends CLEARED or REFUSED. Reopening is paid for in felled targets, of which there are
+     * finitely many. Nothing here can grow the frontier back.
      */
     private void advance(@Nullable BrainContext ctx, long now) {
-        switch (phase) {
-            case SURVEYING, VERIFYING -> {
-                if (!clearing.surveys() || reported.size() < slices.size()) {
-                    return;
+        if (phase == Phase.DONE || !covered.allSettled() || anyOpenTarget()) {
+            return;
+        }
+        if (felledSinceReopen > 0) {
+            felledSinceReopen = 0;
+            int reopened = reopenRefusals();
+            if (reopened > 0) {
+                refresh(now);
+                if (ctx != null) {
+                    ctx.journal().record(Category.PROJECT, name(), "giving " + reopened
+                            + " we gave up on another go now their neighbours are down");
                 }
-                // What this pass saw becomes the slate the next one is judged against.
-                foundLastPass = new LinkedHashSet<>(foundThisPass);
-                foundThisPass.clear();
-                // A new pass walks its own ground: coverage is per-pass, never cumulative.
-                sweptThisPass.clear();
-                boolean anything = ledger.values().stream().anyMatch(t -> t.state() == TargetState.OPEN);
-                enter(anything ? Phase.CLEARING : Phase.DONE, ctx, now);
-            }
-            case CLEARING -> {
-                if (ledger.values().stream().anyMatch(t -> t.state() == TargetState.OPEN)) {
-                    return;
-                }
-                // A verify pass starts knowing nothing about coverage: what the first pass missed
-                // is where nobody went.
-                reported.clear();
-                sliceRetryAfter.clear();
-                // Progress is the licence: a round that removed something has earned another look
-                // at what it gave up on — its neighbours may have been what made it unreachable.
-                int reopened = clearedThisRound > 0 ? reopenRefusals() : 0;
-                enter(Phase.VERIFYING, ctx, now, reopened);
-            }
-            case DONE -> {
+                return;
             }
         }
-    }
-
-    private void enter(Phase next, @Nullable BrainContext ctx, long now) {
-        enter(next, ctx, now, 0);
-    }
-
-    private void enter(Phase next, @Nullable BrainContext ctx, long now, int reopened) {
-        this.phase = next;
-        if (next == Phase.CLEARING) {
-            this.clearedThisRound = 0;
-        }
-        if (next == Phase.SURVEYING || next == Phase.VERIFYING) {
-            this.passStartedAt = now; // nothing seen before this moment counts as seen this pass
-        }
+        phase = Phase.DONE;
         withdrawAll();
-        refresh(now);
         if (ctx != null) {
-            ctx.journal().record(Category.PROJECT, name(), switch (next) {
-                case CLEARING -> "surveyed — " + count(TargetState.OPEN) + " to clear";
-                case VERIFYING -> "cleared — checking the whole box again"
-                        + (reopened == 0 ? "" : ", and giving " + reopened
-                                + " we gave up on another go now their neighbours are down");
-                case DONE -> closingLine();
-                case SURVEYING -> "surveying";
-            });
+            ctx.journal().record(Category.PROJECT, name(), closingLine());
         }
     }
 
     /**
      * Puts every refused target back on offer, its failure count wiped.
      *
-     * <p>Called only when the round that just ended actually removed something — see
-     * {@link #clearedThisRound}. The count is wiped rather than carried because the question being
-     * re-asked is a different one: not "can this be felled" but "can this be felled NOW, with the
-     * wood that was around it gone".
+     * <p>Called only at the moment the box would otherwise close, and only when something has been
+     * felled since — see {@link #felledSinceReopen}. The count is wiped rather than carried because
+     * the question being re-asked is a different one: not "can this be felled" but "can this be
+     * felled NOW, with the wood that was around it gone".
      */
     private int reopenRefusals() {
         int reopened = 0;
@@ -525,15 +465,18 @@ public final class ClearArea implements PartyProject {
         learnYard(ctx);
         if (WorkKey.SURVEY.equals(key.flavour())) {
             int slice = indexOf(key);
-            reported.add(slice);
             sliceRetryAfter.remove(slice);
+            // A sweep SUCCEEDS only once every cell of its slice is at confidence, so completion is
+            // that claim. The sink has normally banked it already, cell by cell; saying it once more
+            // here is what keeps a slice from being re-offered because one write-off went astray.
+            markCovered(slices.get(slice));
             int found = harvest(ctx);
             ctx.journal().record(Category.PROJECT, name(),
                     "slice " + (slice + 1) + "/" + slices.size() + " walked — "
                             + (found == 0 ? "nothing new" : found + " found"));
         } else {
             settle(key.at(), TargetState.CLEARED, 0, 0L);
-            clearedThisRound++;
+            felledSinceReopen++;
         }
         withdraw(key);
         refresh(now);
@@ -581,40 +524,40 @@ public final class ClearArea implements PartyProject {
     }
 
     /**
-     * Takes everything the reporter knows of this kind inside the bounds into the ledger, and
-     * answers how much of it was new.
+     * Takes what the reporter knows of this kind inside the bounds into the ledger, and answers how
+     * much of it was new.
      *
-     * <p><b>Only ever adds.</b> An anchor already in the ledger keeps the state it has unless that
-     * state is {@code CLEARED}: a re-reported {@code REFUSED} target would restart the loop
-     * {@link #REFUSE_AFTER} exists to end.
+     * <p><b>A report may add an anchor the ledger has never heard of, and nothing else.</b> That one
+     * rule is the whole of it, and it replaces the {@code lastSeenTick} cut-off it used to need: a
+     * stale memory of a felled target is already {@code CLEARED} and skipped by it, so the cycle
+     * that cut-off was written against — a box reading 197 cleared, 186, 197, 186 (live,
+     * 2026-08-12) — cannot form when a settled row is never rewritten.
+     *
+     * <p><b>What it gives up</b> (decision: Luiz, 2026-08-23): regrowth at the exact anchor of a
+     * felled target is not noticed inside an open project, because that row stays {@code CLEARED}.
+     * Regrowth at a new anchor is caught free, since a chopper crossing cleared ground reports what
+     * their near field finds there anyway.
      */
     private int harvest(BrainContext ctx) {
         int added = 0;
         for (PoiMemory memory : ctx.knowledge().all(clearing.kind())) {
             Pos anchor = memory.anchor();
-            if (!bounds.contains(anchor) || memory.lastSeenTick() < passStartedAt) {
-                continue; // remembered from before this pass — not evidence about now
+            if (!bounds.contains(anchor) || ledger.containsKey(anchor)) {
+                continue;
             }
-            Target known = ledger.get(anchor);
-            if (known != null && known.state() != TargetState.CLEARED) {
-                continue; // already on the list, or given up on — the reopen rule owns that one
-            }
-            // A CLEARED anchor reported again is something standing there again. Sealing those off
-            // guarded a stale memory sending somebody to an empty patch, when that cost three
-            // failed chops and a permanent refusal; a chop that finds nothing now SUCCEEDS, so it
-            // costs one short walk, and the seal hid real regrowth (Luiz replanted at (418, -136)).
             ledger.put(anchor, Target.fresh(anchor));
             added++;
         }
-        // Everything in bounds this pass can see counts as "standing here now", whether it is new
-        // to the ledger or a row somebody else already filed — the skip rule asks what was there,
-        // not who reported it first.
-        for (PoiMemory memory : ctx.knowledge().all(clearing.kind())) {
-            if (bounds.contains(memory.anchor()) && memory.lastSeenTick() >= passStartedAt) {
-                foundThisPass.add(memory.anchor());
+        return added;
+    }
+
+    /** Banks every cell of an area whole — what a sweep reporting success has just asserted. */
+    private void markCovered(Region area) {
+        for (int x = area.min().x(); x <= area.max().x(); x += CoverageGrid.CELL) {
+            for (int z = area.min().z(); z <= area.max().z(); z += CoverageGrid.CELL) {
+                covered.markFull(new Pos(x, area.min().y(), z));
             }
         }
-        return added;
     }
 
     private void settle(Pos anchor, TargetState state, int failures, long retryAfter) {
@@ -639,119 +582,12 @@ public final class ClearArea implements PartyProject {
         return Optional.ofNullable(open.get(key));
     }
 
-    /**
-     * Ground a later pass may skip: cells no target has ever been found in, and none of whose eight
-     * neighbours has either.
-     *
-     * <p><b>Why a margin.</b> What a pass walks past is nearly always beside something it did find —
-     * a tree fused into a neighbour's canopy, a stump behind the one being felled — so a cell is
-     * written off only when it is clear and surrounded by clear (decision: Luiz).
-     *
-     * <p><b>Empty on a first pass</b>, and load-bearing: before anybody has swept no cell is dirty,
-     * so without this guard every cell would look clear-and-surrounded-by-clear and the whole box
-     * would be written off unseen.
-     *
-     * <p><b>Asked per slice, on that slice's own grid.</b> A {@link SurveyArea} credits a settled
-     * cell only when it is given that cell's exact corner, so a caller on another grid gets no
-     * discount rather than a wrong one. Slice corners no longer sit on the box's grid, so a set
-     * built from the box's corner would match almost nothing and quietly lose the 82–93% a second
-     * pass skips.
-     *
-     * <p><b>Not a pure function of the ledger.</b> This used to claim a reload could recompute it;
-     * it cannot — it is a function of {@code foundLastPass}, and the ledger records targets without
-     * recording which pass saw them. What a reload restores is {@code sweptThisPass}, saved beside
-     * the ledger, which is a different set answering a different question.
-     */
-    private Set<Pos> settledCells(Region area) {
-        if (phase != Phase.VERIFYING) {
-            return Set.of();
-        }
-        Set<Long> dirty = new java.util.HashSet<>();
-        for (Pos anchor : foundLastPass) {
-            dirty.add(cellKey(anchor.x(), anchor.z()));
-        }
-        if (dirty.isEmpty()) {
-            return Set.of();
-        }
-        Set<Pos> settled = new LinkedHashSet<>();
-        for (int x = area.min().x(); x <= area.max().x(); x += SurveyArea.CELL) {
-            for (int z = area.min().z(); z <= area.max().z(); z += SurveyArea.CELL) {
-                if (nearDirty(dirty, x, z)) {
-                    continue;
-                }
-                settled.add(new Pos(x, area.min().y(), z));
-            }
-        }
-        return settled;
-    }
-
-    /**
-     * Whether this corner's cell, or the ring one cell out, has ever held a target.
-     *
-     * <p>The ring is computed in WORLD blocks and mapped to whichever dirty-grid cells overlap it;
-     * stepping the index by ±1 falls a block short whenever the asker's grid is offset from the
-     * box's, which is now the normal case. On an aligned corner it is the same 3×3 as before.
-     */
-    private boolean nearDirty(Set<Long> dirty, int x, int z) {
-        long fromX = cellX(x - SurveyArea.CELL);
-        long toX = cellX(x + 2 * SurveyArea.CELL - 1);
-        long fromZ = cellZ(z - SurveyArea.CELL);
-        long toZ = cellZ(z + 2 * SurveyArea.CELL - 1);
-        for (long cx = fromX; cx <= toX; cx++) {
-            for (long cz = fromZ; cz <= toZ; cz++) {
-                if (dirty.contains(cx << 32 ^ (cz & 0xFFFFFFFFL))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /** A cell of the coverage grid, named by the box-relative square a world position falls in. */
-    private long cellKey(int x, int z) {
-        return cellX(x) << 32 ^ (cellZ(z) & 0xFFFFFFFFL);
-    }
-
-    private long cellX(int x) {
-        return Math.floorDiv(x - bounds.min().x(), SurveyArea.CELL);
-    }
-
-    private long cellZ(int z) {
-        return Math.floorDiv(z - bounds.min().z(), SurveyArea.CELL);
-    }
-
-    /**
-     * How many coverage cells the box divides into — the denominator for what is skipped. Summed
-     * over the slices rather than measured across the box, because the slices are where the cells
-     * actually are: their grids restart at their own corners, so a box that is thirteen cells wide
-     * can be two slices of seven.
-     */
-    private int cellsInBox() {
-        int cells = 0;
-        for (Region slice : slices) {
-            cells += cellsAcross(slice.max().x() - slice.min().x() + 1)
-                    * cellsAcross(slice.max().z() - slice.min().z() + 1);
-        }
-        return cells;
-    }
-
-    private static int cellsAcross(int blocks) {
-        return Math.max(1, (blocks + SurveyArea.CELL - 1) / SurveyArea.CELL);
-    }
-
-    /**
-     * How much ground a verify pass may skip — for the readout and the debug view. The union of
-     * what every slice would be let off, so the number shown is the number that will happen.
-     */
-    public Set<Pos> skippable() {
-        Set<Pos> all = new LinkedHashSet<>();
-        for (Region slice : slices) {
-            all.addAll(settledCells(slice));
-        }
-        return all;
-    }
-
     // ── the readout ──────────────────────────────────────────────────────────────────────────
+
+    /** How much of the box anybody has taken to confidence — the readout, and the debug view. */
+    public double sweptFraction() {
+        return covered.cells() == 0 ? 1.0 : covered.settledCount() / (double) covered.cells();
+    }
 
     @Override
     public String describe() {
@@ -807,24 +643,22 @@ public final class ClearArea implements PartyProject {
         return "clear " + clearing.label() + " in " + size() + " at " + at(bounds.min());
     }
 
+    /**
+     * Two numbers and nothing else, both of which only ever go up: how much of the ledger is down,
+     * and how much of the box anybody has been over. Watching them fall monotonically is the
+     * termination argument made visible.
+     */
     private String progress() {
         int refused = count(TargetState.REFUSED);
         String tail = refused == 0 ? "" : " (" + refused + " refused)";
-        return switch (phase) {
-            case SURVEYING, VERIFYING -> {
-                String pass = phase == Phase.SURVEYING ? "surveying " : "verifying ";
-                if (!clearing.surveys()) {
-                    yield pass + "— nobody can survey " + clearing.label() + " yet";
-                }
-                int skipped = skippable().size();
-                yield pass + reported.size() + "/" + slices.size() + " slices"
-                        + (skipped == 0 ? "" : ", skipping " + skipped + "/" + cellsInBox()
-                                + " cells") + tail;
-            }
-            case CLEARING -> "clearing " + count(TargetState.CLEARED) + "/"
-                    + (ledger.size() - refused) + tail;
-            case DONE -> "done — " + count(TargetState.CLEARED) + " cleared" + tail;
-        };
+        if (phase == Phase.DONE) {
+            return "done — " + count(TargetState.CLEARED) + " cleared" + tail;
+        }
+        if (!clearing.surveys()) {
+            return "nobody can survey " + clearing.label() + " yet";
+        }
+        return count(TargetState.CLEARED) + "/" + (ledger.size() - refused) + " cleared, "
+                + Math.round(sweptFraction() * 100) + "% swept" + tail;
     }
 
     private String size() {
@@ -948,13 +782,7 @@ public final class ClearArea implements PartyProject {
         this.offer = List.copyOf(open.values());
     }
 
-    /**
-     * The project's own sink: a worker's near field, and cells written off, land here.
-     *
-     * <p>{@code settled} also banks into {@link #sweptThisPass} — the field a reload actually
-     * restores, since {@link #covered} does not yet round-trip through {@link #snapshot()}. Task 7
-     * retires the older field once the grid carries continuity on its own.
-     */
+    /** The project's own sink: a worker's near field, and cells written off, land here. */
     private final class Ground implements Coverage {
         @Override
         public void near(Pos here, int radius) {
@@ -964,7 +792,6 @@ public final class ClearArea implements PartyProject {
         @Override
         public void settled(Pos corner) {
             covered.markFull(corner);
-            sweptThisPass.add(corner);
         }
     }
 
@@ -990,16 +817,9 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public Task root() {
-            // Both mean "do not walk here again": ground proved empty last pass, and ground anybody
-            // has already covered. Handing the union in is what makes a re-grant resume the sweep.
-            Map<Pos, Integer> known = new LinkedHashMap<>(covered.masksIn(area));
-            for (Pos corner : settledCells(area)) {
-                known.put(corner, CoverageGrid.FULL);
-            }
-            for (Pos corner : sweptThisPass) {
-                known.put(corner, CoverageGrid.FULL);
-            }
-            return clearing.survey(area, known, ground);
+            // Ground anybody has covered, on the project's own grid. Handing it in is what makes a
+            // re-grant resume the sweep instead of restarting it.
+            return clearing.survey(area, covered.masksIn(area), ground);
         }
 
         @Override
@@ -1009,7 +829,7 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public String progress(BrainContext ctx) {
-            return reported.size() + "/" + slices.size() + " slices walked";
+            return Math.round(sweptFraction() * 100) + "% of the box swept";
         }
     }
 
@@ -1077,27 +897,32 @@ public final class ClearArea implements PartyProject {
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
+    /** One cell of the coverage grid as the store holds it. */
+    public record CellMask(Pos corner, int mask) {
+    }
+
     /**
      * Everything this project is, minus what its {@link Clearing} rebuilds — the party store's row.
      *
-     * <p>The slice grid is not here: it is a pure function of the bounds and {@link #SLICE_SIZE},
-     * so it comes back identical, and slice indices stay the names they were. If the constant ever
-     * becomes a per-project knob it joins this record on the same day, or every saved index silently
-     * moves to different ground.
+     * <p>The slice grid is not here: it is a pure function of the bounds and {@link #SLICE_SIZE}, so
+     * it comes back identical and slice indices stay the names they were. If either that constant or
+     * {@link CoverageGrid#CELL} ever becomes a per-project knob it joins this record the same day,
+     * or every saved index and every saved corner silently moves to different ground.
      */
     public record State(String clearing, Region bounds, double priority, Phase phase,
-                        List<Integer> reported, List<SliceCooldown> sliceCooldowns,
-                        List<Target> targets, int clearedThisRound, long passStartedAt,
-                        List<Pos> swept, @Nullable Pos yard, List<Pos> yardChests) {
+                        List<SliceCooldown> sliceCooldowns, List<Target> targets,
+                        int felledSinceReopen, List<CellMask> covered,
+                        @Nullable Pos yard, List<Pos> yardChests) {
     }
 
     /** What this project would need to carry on exactly where it left off. */
     public State snapshot() {
         List<SliceCooldown> cooldowns = new ArrayList<>();
         sliceRetryAfter.forEach((slice, until) -> cooldowns.add(new SliceCooldown(slice, until)));
-        return new State(clearing.id(), bounds, priority, phase,
-                List.copyOf(reported), List.copyOf(cooldowns), List.copyOf(ledger.values()),
-                clearedThisRound, passStartedAt, List.copyOf(sweptThisPass), yard,
+        List<CellMask> cells = new ArrayList<>();
+        covered.masks().forEach((corner, mask) -> cells.add(new CellMask(corner, mask)));
+        return new State(clearing.id(), bounds, priority, phase, List.copyOf(cooldowns),
+                List.copyOf(ledger.values()), felledSinceReopen, List.copyOf(cells), yard,
                 List.copyOf(yardChests));
     }
 
@@ -1108,19 +933,19 @@ public final class ClearArea implements PartyProject {
      */
     public static Optional<ClearArea> restore(State state, long now) {
         return Clearings.byId(state.clearing()).map(clearing -> {
-            ClearArea project = new ClearArea(clearing, state.bounds(), state.priority(),
-                    state.passStartedAt(), state.yard());
+            ClearArea project =
+                    new ClearArea(clearing, state.bounds(), state.priority(), state.yard());
             project.phase = state.phase();
-            project.reported.addAll(state.reported());
             for (SliceCooldown cooldown : state.sliceCooldowns()) {
                 project.sliceRetryAfter.put(cooldown.slice(), cooldown.retryAfter());
             }
             for (Target target : state.targets()) {
                 project.ledger.put(target.anchor(), target);
             }
-            project.clearedThisRound = state.clearedThisRound();
-            project.passStartedAt = state.passStartedAt();
-            project.sweptThisPass.addAll(state.swept());
+            project.felledSinceReopen = state.felledSinceReopen();
+            for (CellMask cell : state.covered()) {
+                project.covered.markMask(cell.corner(), cell.mask());
+            }
             project.yardChests.addAll(state.yardChests());
             project.refresh(now);
             return project;

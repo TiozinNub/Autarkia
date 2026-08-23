@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.debug;
 
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.SurveyArea;
@@ -37,7 +38,7 @@ import net.minecraft.server.level.ServerPlayer;
  * <p><b>Hue is STATE:</b>
  *
  * <ul>
- *   <li><b>Slices</b> — grey unwalked, amber being walked, green reported, dashed-dark while
+ *   <li><b>Slices</b> — grey unwalked, amber being walked, green fully covered, dashed-dark while
  *       sitting out a failure, since "nobody is on it" and "nobody may take it yet" differ.</li>
  *   <li><b>The live sweep</b> — the coverage grid of whoever is surveying now, cell by cell,
  *       shaded by confidence.</li>
@@ -91,7 +92,7 @@ public final class BoardViewer {
     private static final int TARGET_REFUSED = 0xFFFF2020;
     private static final int TARGET_REFUSED_FILL = 0x60FF2020;
 
-    /** Ground written off for later passes — clear, and nothing found anywhere near it. */
+    /** Ground behind the frontier — somebody has been over it, so nobody walks it again. */
     private static final int SETTLED = 0x281060C0;
 
     // The live sweep's coverage, shaded by how well the cell is known.
@@ -185,7 +186,7 @@ public final class BoardViewer {
                     board == null ? Map.of() : board.holdsOn(project, now);
             paintSlices(frame, project, holds, now);
             paintTargets(frame, project, holds, now);
-            paintSkippable(frame, project);
+            paintCovered(frame, project);
             paintSweeps(frame, server, project);
             frame.groundOutline(project.bounds(), BOUNDS, BOUNDS_WIDTH);
             frame.label(project.describe(), centreOf(project.bounds()), 3);
@@ -205,17 +206,17 @@ public final class BoardViewer {
     /** The coarse explored answer: one outline per slice, coloured by what the project knows. */
     private static void paintSlices(Frame frame, ClearArea project, Map<WorkKey, AgentId> holds,
                                     long now) {
-        Set<Integer> reported = project.reported();
         List<Region> slices = project.slices();
         for (int index = 0; index < slices.size(); index++) {
             Region slice = slices.get(index);
+            boolean swept = project.swept(index);
             boolean held = holds.containsKey(new WorkKey(WorkKey.SURVEY, slice.min()));
-            int colour = reported.contains(index) ? SLICE_WALKED
+            int colour = swept ? SLICE_WALKED
                     : held ? SLICE_WALKING
                     : project.sliceCoolingAt(index, now) ? SLICE_COOLING
                     : SLICE_UNWALKED;
             frame.groundOutline(slice, colour, SLICE_WIDTH);
-            String state = reported.contains(index) ? "walked"
+            String state = swept ? "walked"
                     : held ? "being walked"
                     : project.sliceCoolingAt(index, now) ? "cooling off"
                     : "unwalked";
@@ -265,16 +266,21 @@ public final class BoardViewer {
     }
 
     /**
-     * Ground a verify pass will not walk again: clear last time, and clear all around it.
+     * The frontier, drawn as its complement: every cell of the box somebody has already taken to
+     * confidence, and which therefore will not be walked again.
      *
-     * <p>Worth drawing because it is the one part of the plan that is an ABSENCE — the surveyor
-     * skipping it looks identical to the surveyor never getting to it. Empty until a first pass
-     * has finished.
+     * <p>Worth drawing because it is the one part of the plan that is an ABSENCE — a slice nobody
+     * is offered because it is covered looks identical to a slice nobody has got to yet.
      */
-    private static void paintSkippable(Frame frame, ClearArea project) {
-        for (Pos corner : project.skippable()) {
+    private static void paintCovered(Frame frame, ClearArea project) {
+        CoverageGrid covered = project.covered();
+        for (int cell = 0; cell < covered.cells(); cell++) {
+            if (!covered.settled(cell)) {
+                continue;
+            }
+            Pos corner = covered.cornerOf(cell);
             frame.groundPane(corner.x(), corner.z(),
-                    corner.x() + SurveyArea.CELL - 1, corner.z() + SurveyArea.CELL - 1,
+                    corner.x() + CoverageGrid.CELL - 1, corner.z() + CoverageGrid.CELL - 1,
                     0, SETTLED, 0.0F);
         }
     }

@@ -463,7 +463,7 @@ public final class AutarkiaCommands {
      *
      * <p>The two corners mark the EDGES and that is the entire brief (decision: Luiz): no list of
      * trees, no seeded ledger — nobody knows what is inside a box until somebody walks it, which
-     * is why the project surveys in slices before it clears anything.
+     * is why the project offers slices to sweep alongside whatever it has found so far.
      *
      * <p>The box is three-dimensional as typed and the reply says so in blocks: a flat one reads
      * {@code ×1} and finds nothing, which has to be visible.
@@ -503,10 +503,7 @@ public final class AutarkiaCommands {
         PartyBoard board = PartyBoards.of(server, party);
         // Trees, because they are the only thing anything knows how to clear. The kind becomes an
         // argument the day a second Clearing is registered; until then a choice of one is noise.
-        // The clock matters: it stamps the opening pass's cut-off, so a box posted over ground the
-        // crew already live on banks what the survey SEES rather than everything they remember.
         ClearArea project = new ClearArea(TreeClearing.INSTANCE, bounds, priority,
-                level.getGameTime(),
                 yard == null ? null : new Pos(yard.getX(), yard.getY(), yard.getZ()));
         int handle = board.post(project);
         PartyBoards.touch(server);

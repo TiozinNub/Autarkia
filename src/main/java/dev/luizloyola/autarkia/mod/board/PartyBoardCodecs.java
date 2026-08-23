@@ -37,12 +37,21 @@ public final class PartyBoardCodecs {
     /**
      * Phases and target states travel by NAME, not by ordinal. An ordinal is a position in a list
      * somebody will reorder, and a save file is the one reader that cannot be recompiled with it.
+     *
+     * <p>The phase names changed on 2026-08-23 and this reader is still strict, so a world saved
+     * before then does not decode yet — the lenient one lands with the rest of the migration.
      */
     public static final Codec<ClearArea.Phase> PHASE =
             Codec.STRING.xmap(ClearArea.Phase::valueOf, Enum::name);
 
     public static final Codec<ClearArea.TargetState> TARGET_STATE =
             Codec.STRING.xmap(ClearArea.TargetState::valueOf, Enum::name);
+
+    public static final Codec<ClearArea.CellMask> CELL_MASK =
+            RecordCodecBuilder.create(cell -> cell.group(
+                    POS.fieldOf("at").forGetter(ClearArea.CellMask::corner),
+                    Codec.INT.fieldOf("mask").forGetter(ClearArea.CellMask::mask)
+            ).apply(cell, ClearArea.CellMask::new));
 
     public static final Codec<ClearArea.Target> TARGET =
             RecordCodecBuilder.create(target -> target.group(
@@ -67,30 +76,26 @@ public final class PartyBoardCodecs {
                     REGION.fieldOf("bounds").forGetter(ClearArea.State::bounds),
                     Codec.DOUBLE.fieldOf("priority").forGetter(ClearArea.State::priority),
                     PHASE.fieldOf("phase").forGetter(ClearArea.State::phase),
-                    Codec.INT.listOf().optionalFieldOf("reported", List.of())
-                            .forGetter(ClearArea.State::reported),
                     SLICE_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(ClearArea.State::sliceCooldowns),
                     TARGET.listOf().optionalFieldOf("targets", List.of())
                             .forGetter(ClearArea.State::targets),
-                    Codec.INT.optionalFieldOf("cleared_this_round", 0)
-                            .forGetter(ClearArea.State::clearedThisRound),
-                    Codec.LONG.optionalFieldOf("pass_started", 0L)
-                            .forGetter(ClearArea.State::passStartedAt),
-                    // Optional so worlds saved before 2026-08-20 load unchanged: they come back
-                    // with an empty pass and re-walk their box once, which is what they did anyway.
-                    POS.listOf().optionalFieldOf("swept", List.of())
-                            .forGetter(ClearArea.State::swept),
+                    Codec.INT.optionalFieldOf("felled_since_reopen", 0)
+                            .forGetter(ClearArea.State::felledSinceReopen),
+                    // The frontier itself. A short read here is a box re-swept from scratch, which
+                    // is what StoreGuard's row count is for.
+                    CELL_MASK.listOf().optionalFieldOf("covered", List.of())
+                            .forGetter(ClearArea.State::covered),
                     // Both optional: a box posted without a destination writes neither, and a world
                     // saved before yards existed loads as exactly that.
                     POS.optionalFieldOf("yard")
                             .forGetter(state -> java.util.Optional.ofNullable(state.yard())),
                     POS.listOf().optionalFieldOf("yard_chests", List.of())
                             .forGetter(ClearArea.State::yardChests)
-            ).apply(project, (clearing, bounds, priority, phase, reported, cooldowns, targets,
-                    cleared, passStarted, swept, yard, chests) -> new ClearArea.State(
-                            clearing, bounds, priority, phase, reported, cooldowns, targets,
-                            cleared, passStarted, swept, yard.orElse(null), chests)));
+            ).apply(project, (clearing, bounds, priority, phase, cooldowns, targets, felled,
+                    covered, yard, chests) -> new ClearArea.State(
+                            clearing, bounds, priority, phase, cooldowns, targets, felled, covered,
+                            yard.orElse(null), chests)));
 
     public static final Codec<WorkKey> WORK_KEY = RecordCodecBuilder.create(key -> key.group(
             Codec.STRING.fieldOf("flavour").forGetter(WorkKey::flavour),
