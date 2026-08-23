@@ -155,4 +155,25 @@ class PartyBoardCodecsTest {
         assertTrue(read.targets().isEmpty());
         assertTrue(read.sliceCooldowns().isEmpty());
     }
+
+    @Test
+    void aRowWrittenBeforeTheFrontierLoadsItsSweptGroundAsCoveredCells() {
+        // Pre-2026-08-23 saves named whole settled corners and a pass that is no longer a state.
+        // Dropping either puts a settler back on ground the party had already walked, and a short
+        // read presents as a clearing that finished early — which is what StoreGuard's count is for.
+        JsonObject legacy = new JsonObject();
+        legacy.addProperty("clearing", "trees");
+        legacy.add("bounds", PartyBoardCodecs.REGION.encodeStart(JsonOps.INSTANCE,
+                new Region(new Pos(0, 60, 0), new Pos(31, 70, 31))).getOrThrow());
+        legacy.addProperty("priority", 0.5);
+        legacy.addProperty("phase", "VERIFYING");
+        legacy.add("swept", PartyBoardCodecs.POS.listOf().encodeStart(JsonOps.INSTANCE,
+                List.of(new Pos(0, 60, 0), new Pos(8, 60, 8))).getOrThrow());
+
+        ClearArea.State read = PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, legacy).getOrThrow();
+
+        assertEquals(ClearArea.Phase.WORKING, read.phase(), "a pass name is not a state any more");
+        assertEquals(2, read.covered().size(), "a short read here is a box re-swept from scratch");
+        assertTrue(read.covered().stream().allMatch(cell -> cell.mask() == CoverageGrid.FULL));
+    }
 }

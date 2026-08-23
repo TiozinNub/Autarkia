@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.board;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.board.ClearArea;
@@ -38,11 +39,12 @@ public final class PartyBoardCodecs {
      * Phases and target states travel by NAME, not by ordinal. An ordinal is a position in a list
      * somebody will reorder, and a save file is the one reader that cannot be recompiled with it.
      *
-     * <p>The phase names changed on 2026-08-23 and this reader is still strict, so a world saved
-     * before then does not decode yet — the lenient one lands with the rest of the migration.
+     * <p>Decoding is lenient because the phase names changed on 2026-08-23: {@code SURVEYING},
+     * {@code CLEARING} and {@code VERIFYING} all mean {@code WORKING} now — see
+     * {@link ClearArea#phaseByName}. Encoding still writes the real name.
      */
     public static final Codec<ClearArea.Phase> PHASE =
-            Codec.STRING.xmap(ClearArea.Phase::valueOf, Enum::name);
+            Codec.STRING.xmap(ClearArea::phaseByName, Enum::name);
 
     public static final Codec<ClearArea.TargetState> TARGET_STATE =
             Codec.STRING.xmap(ClearArea.TargetState::valueOf, Enum::name);
@@ -86,6 +88,11 @@ public final class PartyBoardCodecs {
                     // is what StoreGuard's row count is for.
                     CELL_MASK.listOf().optionalFieldOf("covered", List.of())
                             .forGetter(ClearArea.State::covered),
+                    // Pre-2026-08-23 saves listed whole settled corners under this name. Read them
+                    // as fully covered cells so a live world survives the change rather than losing
+                    // its sweep; never written, since a fresh save always has "covered" instead.
+                    POS.listOf().optionalFieldOf("swept", List.of())
+                            .forGetter(state -> List.<Pos>of()),
                     // Both optional: a box posted without a destination writes neither, and a world
                     // saved before yards existed loads as exactly that.
                     POS.optionalFieldOf("yard")
@@ -93,8 +100,13 @@ public final class PartyBoardCodecs {
                     POS.listOf().optionalFieldOf("yard_chests", List.of())
                             .forGetter(ClearArea.State::yardChests)
             ).apply(project, (clearing, bounds, priority, phase, cooldowns, targets, felled,
-                    covered, yard, chests) -> new ClearArea.State(
-                            clearing, bounds, priority, phase, cooldowns, targets, felled, covered,
+                    covered, legacySwept, yard, chests) -> new ClearArea.State(
+                            clearing, bounds, priority, phase, cooldowns, targets, felled,
+                            covered.isEmpty()
+                                    ? legacySwept.stream()
+                                            .map(at -> new ClearArea.CellMask(at, CoverageGrid.FULL))
+                                            .toList()
+                                    : covered,
                             yard.orElse(null), chests)));
 
     public static final Codec<WorkKey> WORK_KEY = RecordCodecBuilder.create(key -> key.group(

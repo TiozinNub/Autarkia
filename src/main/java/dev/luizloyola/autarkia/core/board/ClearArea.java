@@ -930,6 +930,16 @@ public final class ClearArea implements PartyProject {
                         @Nullable Pos yard, List<Pos> yardChests) {
     }
 
+    /**
+     * The phase a saved name means. Everything that was mid-flight before 2026-08-23 —
+     * {@code SURVEYING}, {@code CLEARING}, {@code VERIFYING} — is simply {@link Phase#WORKING} now:
+     * the frontier and the ledger say what is left, and neither was ever a function of which pass
+     * the project thought it was on.
+     */
+    public static Phase phaseByName(String name) {
+        return Phase.DONE.name().equals(name) ? Phase.DONE : Phase.WORKING;
+    }
+
     /** What this project would need to carry on exactly where it left off. */
     public State snapshot() {
         List<SliceCooldown> cooldowns = new ArrayList<>();

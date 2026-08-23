@@ -898,6 +898,27 @@ class ClearAreaTest {
         assertEquals(held.describe(), back.itemFor(key).orElseThrow().describe());
     }
 
+    @Test
+    void stateRoundTripsTheCoverageGrid() {
+        Clearings.register(ABLE);
+        ClearArea project = posted(ABLE, oneSlice());
+        project.covered().markNear(new Pos(4, 60, 4), 8);
+        int before = project.covered().settledCount();
+
+        ClearArea back = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
+
+        assertEquals(before, back.covered().settledCount(),
+                "a reload must not put a settler back on ground the party already walked");
+    }
+
+    @Test
+    void aWorldSavedBeforeTheFrontierComesBackWorking() {
+        assertEquals(ClearArea.Phase.WORKING, ClearArea.phaseByName("SURVEYING"));
+        assertEquals(ClearArea.Phase.WORKING, ClearArea.phaseByName("CLEARING"));
+        assertEquals(ClearArea.Phase.WORKING, ClearArea.phaseByName("VERIFYING"));
+        assertEquals(ClearArea.Phase.DONE, ClearArea.phaseByName("DONE"));
+    }
+
     // ── the board around it ──────────────────────────────────────────────────────────────────
 
     @Test
