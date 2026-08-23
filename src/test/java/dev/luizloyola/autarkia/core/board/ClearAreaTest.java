@@ -247,20 +247,24 @@ class ClearAreaTest {
     }
 
     @Test
-    void aReportNeverRewritesARowTheLedgerAlreadyHolds() {
+    void aChoppersReportCannotResurrectAnAnchorSomebodyAlreadyCleared() {
+        // The 197/186 cycle: a felled tree lingers in its chopper's memory until the near field
+        // re-probes that column, and a report that rewrote rows would put it straight back.
         ClearArea project = posted(ABLE, oneSlice());
-        Pos anchor = new Pos(3, 60, 3);
-        BoardBrainContext ctx = ctxThatSaw(anchor);
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos felled = new Pos(3, 60, 3);
+        Pos other = new Pos(8, 60, 8);
+        ctx.remember(THING, felled);
+        ctx.remember(THING, other);
         project.completed(project.open().get(0), ctx);
-        WorkItem tree = project.open().stream()
-                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+        project.completed(itemAt(project, felled), ctx);
 
-        // The memory of the felled tree lingers — the near field has not re-probed that column yet.
-        project.completed(tree, ctx);
+        // A different worker finishes a different tree, still remembering the felled one.
+        project.completed(itemAt(project, other), ctx);
 
-        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(anchor).state(),
-                "resurrecting a CLEARED row is the 197/186 cycle; the rule, not a cut-off tick, "
-                        + "is what forbids it now");
+        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(felled).state(),
+                "settle() only ever touches the item's own anchor, so this row is harvest's to "
+                        + "leave alone — and it does, because the rule is membership, not state");
     }
 
     @Test
