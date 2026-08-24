@@ -409,11 +409,48 @@ public final class ClearArea implements PartyProject {
                 return;
             }
         }
+        // Last question before the box closes, and the only one the ledger cannot answer: is there
+        // wood standing that nothing ever had a name for? Asked with a worker's eyes, so a beat
+        // driven by the host clock (ctx null) simply defers it to the next report.
+        if (ctx != null) {
+            int stubs = harvestResidue(ctx);
+            if (stubs > 0) {
+                refresh(now);
+                ctx.journal().record(Category.PROJECT, name(), stubs
+                        + " left standing that nobody could name — taking those too");
+                return;
+            }
+        }
         phase = Phase.DONE;
         withdrawAll();
         if (ctx != null) {
             ctx.journal().record(Category.PROJECT, name(), closingLine());
         }
+    }
+
+    /**
+     * Takes into the ledger whatever {@link Clearing#residue} finds inside the bounds that the
+     * ledger has never held — see that method for why a project needs eyes of its own.
+     *
+     * <p><b>Terminates.</b> Add-only against a ledger no row ever leaves, so an anchor is asked
+     * once however many times the box tries to close; and every stub cleared removes wood from a
+     * box that holds finitely much.
+     *
+     * <p><b>It costs a column read apiece</b>, over the whole box, at the close. On a 128×128 that
+     * is ~16k reads in one tick against {@code SurveyArea}'s 2048-a-tick budget — a one-off spike
+     * at the end of a project rather than a standing cost, and the first thing to spread if a big
+     * box ever stutters on closing.
+     */
+    private int harvestResidue(BrainContext ctx) {
+        int added = 0;
+        for (Pos anchor : clearing.residue(bounds, ctx.percepts().blocks())) {
+            if (!bounds.contains(anchor) || ledger.containsKey(anchor)) {
+                continue;
+            }
+            ledger.put(anchor, Target.fresh(anchor));
+            added++;
+        }
+        return added;
     }
 
     /**

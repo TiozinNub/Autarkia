@@ -64,7 +64,16 @@ class ClearAreaTest {
         public Task clear(Pos anchor) {
             return new Idle(1);
         }
+
+        @Override
+        public java.util.List<Pos> residue(Region area,
+                dev.luizloyola.anima.core.brain.knowledge.BlockProbe probe) {
+            return java.util.List.copyOf(residue);
+        }
     }
+
+    /** Ground the double reports as residue — what perception will not name but a box must take. */
+    private static java.util.List<Pos> residue = java.util.List.of();
 
     private static final Clearing ABLE = new TestClearing(true);
     private static final Clearing UNABLE = new TestClearing(false);
@@ -256,6 +265,50 @@ class ClearAreaTest {
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state(),
                 "and re-reporting a refusal would restart the loop REFUSE_AFTER exists to end");
         assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(fresh).state());
+    }
+
+    // ── residue: what perception will not name ─────────────────────────────────────────────
+
+    @Test
+    void aBoxWillNotCloseOverGroundHoldingResiduePerceptionCannotName() {
+        // A felled tree can strip a fused neighbour's canopy, and TreeRule deliberately refuses to
+        // call a crownless trunk a tree ("a woodpile, a stump"), so the stub is never remembered.
+        // The sweep is honest — that ground WAS covered — which is exactly why the box must ask.
+        residue = java.util.List.of(new Pos(3, 60, 3));
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+
+        project.completed(project.open().get(0), ctx);
+
+        assertFalse(project.finished(),
+                "the ledger was empty and the box fully swept, but a stub still stands in it");
+        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(new Pos(3, 60, 3)).state(),
+                "and it is on offer, not merely counted");
+        residue = java.util.List.of();
+    }
+
+    @Test
+    void residueOutsideTheBoxIsNotTheBoxsToTake() {
+        residue = java.util.List.of(new Pos(500, 60, 500));
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+
+        project.completed(project.open().get(0), ctx);
+
+        assertTrue(project.finished(), "a stub beyond the edges is somebody else's box");
+        assertTrue(project.ledger().isEmpty());
+        residue = java.util.List.of();
+    }
+
+    @Test
+    void aBoxWithNoResidueClosesExactlyAsBefore() {
+        residue = java.util.List.of();
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+
+        project.completed(project.open().get(0), ctx);
+
+        assertTrue(project.finished(), "the residue hook must cost a clean box nothing");
     }
 
     // ── what a report may say ────────────────────────────────────────────────────────────────

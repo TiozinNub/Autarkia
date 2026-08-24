@@ -1,5 +1,7 @@
 package dev.luizloyola.autarkia.core.tree;
 
+import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
+import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.Coverage;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
@@ -62,6 +64,39 @@ public final class TreeClearing implements Clearing {
     @Override
     public Task clear(Pos anchor) {
         return new ChopPlannedTree(anchor);
+    }
+
+    /**
+     * Grounded wood with nothing growing on top of it — the stubs felling leaves behind.
+     *
+     * <p><b>One read a column tells the two apart.</b> {@code surfaceY} is the motion-blocking
+     * heightmap and leaves block motion, so a living tree answers with its own crown and a stub
+     * answers with its topmost log. That is the whole test: every column left standing in the
+     * 2026-08-23 forest box had its surface ON the log, and the one tree that still had a canopy was
+     * found, felled and ledgered by the ordinary path.
+     *
+     * <p>The anchor is the lowest log of the column, matching {@link TreeRule}'s own "lowest base
+     * cell" so a stub and a tree name the same kind of place. {@link ChopPlannedTree} fells one
+     * without changes — proven in-world before this was written.
+     */
+    @Override
+    public java.util.List<Pos> residue(Region area, BlockProbe probe) {
+        java.util.List<Pos> stubs = new java.util.ArrayList<>();
+        for (int x = area.min().x(); x <= area.max().x(); x++) {
+            for (int z = area.min().z(); z <= area.max().z(); z++) {
+                int top = probe.surfaceY(x, z);
+                if (top < area.min().y() || top > area.max().y()
+                        || probe.at(x, top, z) != BlockKind.LOG) {
+                    continue;
+                }
+                int base = top;
+                while (base - 1 >= area.min().y() && probe.at(x, base - 1, z) == BlockKind.LOG) {
+                    base--;
+                }
+                stubs.add(new Pos(x, base, z));
+            }
+        }
+        return stubs;
     }
 
     /** A chop WANTS an axe and never needs one — bare-handed felling is slower, not impossible. */

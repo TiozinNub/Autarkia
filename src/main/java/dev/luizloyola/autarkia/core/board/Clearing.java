@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.Coverage;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
@@ -62,6 +63,26 @@ public interface Clearing {
 
     /** A task that removes the one thing standing at this anchor. */
     Task clear(Pos anchor);
+
+    /**
+     * Anchors inside {@code area} that this box must still remove, and that PERCEPTION WILL NEVER
+     * NAME. Empty by default, and asked only at the moment a box would otherwise close.
+     *
+     * <p><b>Why a project needs its own eyes here.</b> Recognising a thing is deliberately stricter
+     * than clearing one. {@code TreeRule} refuses a crownless trunk — "a woodpile, a stump, a growth
+     * under a roof" — because that guard is what stops a settler reading somebody's log cabin as
+     * forest. Felling in dense woodland then makes exactly that shape: a fused canopy goes with the
+     * tree that owned it, and the neighbour it sheltered stops being a tree before anyone reaches
+     * it. Nothing remembers the stub, so nothing targets it, and the box closes honestly clear over
+     * ground that still holds wood (live, 2026-08-23).
+     *
+     * <p><b>The bounds are the whole safeguard.</b> An operator drew this box, so what it may take
+     * inside it is a different question from what a settler may believe about the world at large.
+     * Answering here changes nothing outside it, and {@code TreeRule} stays exactly as strict.
+     */
+    default java.util.List<Pos> residue(Region area, BlockProbe probe) {
+        return java.util.List.of();
+    }
 
     /**
      * What removing one of these calls for — {@link Kit#NONE} by default, right for any clearing

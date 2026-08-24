@@ -86,6 +86,10 @@ final class BoardBrainContext implements BrainContext {
         return reserved;
     }
 
+    /** The world these percepts read. Tests place logs and leaves in it directly. */
+    public final dev.luizloyola.anima.core.brain.knowledge.FakeProbe blocks =
+            new dev.luizloyola.anima.core.brain.knowledge.FakeProbe();
+
     @Override
     public Percepts percepts() {
         return new Percepts() {
@@ -136,7 +140,7 @@ final class BoardBrainContext implements BrainContext {
 
             @Override
             public BlockProbe blocks() {
-                throw new UnsupportedOperationException();
+                return blocks;
             }
 
             @Override
