@@ -7,12 +7,11 @@ package dev.luizloyola.autarkia.core.board;
  * <p>Sealed so the dispatching codec and {@link PartyProjects} are provably exhaustive over every
  * kind that exists, the same guarantee {@link WorkKey} gets from its own {@code permits}.
  *
- * <p><b>Permits {@link ClearArea.State} only for now.</b> A second project kind — the first is
- * {@code Gather.State} — adds itself to this clause the day it exists; until then a party's board
- * can hold exactly one shape of row, and this interface exists so that stops being true without
- * moving anything that already works.
+ * <p>Every kind names itself in this clause, and a kind that is not here cannot be saved: that is
+ * what makes the dispatching codec and {@link PartyProjects} provably exhaustive rather than
+ * hopefully so.
  */
-public sealed interface ProjectState permits ClearArea.State {
+public sealed interface ProjectState permits ClearArea.State, Gather.State {
 
     /** The id this kind is saved and dispatched by — what {@link PartyProjects#byId} looks up. */
     String type();

@@ -128,6 +128,13 @@ public class AutarkiaMod implements ModInitializer {
         // party's board this kind of project, one level up from the Clearing itself.
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.ClearArea.TYPE);
+        // The second kind: go and get this much of this. How much of it one member takes on a trip
+        // is its own registered policy, so a richer split can be posted later without touching
+        // either the project or the store.
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Gather.TYPE);
+        dev.luizloyola.autarkia.core.board.Splits.register(
+                dev.luizloyola.autarkia.core.board.EvenSplit.INSTANCE);
         // And that a party's work board is checked at boot like every other store: a project
         // outlives every worker who touches it, so a swallowed load would send a settlement to
         // re-walk ground it had already surveyed.

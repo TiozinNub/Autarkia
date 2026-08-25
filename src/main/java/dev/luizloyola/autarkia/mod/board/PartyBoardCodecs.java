@@ -8,7 +8,9 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.ProjectState;
 import dev.luizloyola.autarkia.core.board.WorkKey;
@@ -118,6 +120,40 @@ public final class PartyBoardCodecs {
                                     : covered,
                             yard.orElse(null), chests)));
 
+    /** What one yard chest held when somebody last looked, and when they looked. */
+    public static final Codec<Gather.Reading> READING =
+            RecordCodecBuilder.create(reading -> reading.group(
+                    POS.fieldOf("at").forGetter(Gather.Reading::chest),
+                    Codec.INT.fieldOf("count").forGetter(Gather.Reading::count),
+                    // The tick a belief was formed. Without it a restart makes every reading look
+                    // freshly taken, and a stale reporter overwrites a newer one.
+                    Codec.LONG.fieldOf("seen").forGetter(Gather.Reading::at)
+            ).apply(reading, Gather.Reading::new));
+
+    /**
+     * Everything a {@code gather} row carries beyond its kind. The spec and the split travel as
+     * registry NAMES for the reason {@code AnimaTasks} gives: a declared spec's matcher is a lambda
+     * and cannot be written down.
+     *
+     * <p>No trips are written. An item is exhaust, regenerated on load; what carries a member's
+     * claim across a restart is the {@link WorkKey.ForMember} on its hold, beside this.
+     */
+    public static final MapCodec<Gather.State> GATHER =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    Codec.STRING.fieldOf("spec").forGetter(Gather.State::spec),
+                    Codec.INT.fieldOf("target").forGetter(Gather.State::target),
+                    POS.fieldOf("yard").forGetter(Gather.State::yard),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(Gather.State::priority),
+                    UUIDUtil.CODEC.fieldOf("party").forGetter(state -> state.party().value()),
+                    Codec.STRING.fieldOf("split").forGetter(Gather.State::split),
+                    POS.listOf().optionalFieldOf("yard_chests", List.of())
+                            .forGetter(Gather.State::yardChests),
+                    READING.listOf().optionalFieldOf("readings", List.of())
+                            .forGetter(Gather.State::readings)
+            ).apply(project, (spec, target, yard, priority, party, split, chests, readings) ->
+                    new Gather.State(spec, target, yard, priority, PartyId.of(party), split,
+                            chests, readings)));
+
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this
      * cannot be a bare {@code optionalFieldOf(name, default)} — that omits the field whenever the
@@ -137,9 +173,11 @@ public final class PartyBoardCodecs {
      * different accident from an unknown {@code Clearing} id inside a row that DID decode.
      */
     private static DataResult<? extends MapCodec<? extends ProjectState>> projectCodecFor(String type) {
-        return "clear_area".equals(type)
-                ? DataResult.success(CLEAR_AREA)
-                : DataResult.error(() -> "no project type called \"" + type + "\"");
+        return switch (type) {
+            case "clear_area" -> DataResult.success(CLEAR_AREA);
+            case "gather" -> DataResult.success(GATHER);
+            default -> DataResult.error(() -> "no project type called \"" + type + "\"");
+        };
     }
 
     /** One posted project, named by its kind so a second kind can be told apart with certainty. */

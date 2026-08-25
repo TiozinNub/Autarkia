@@ -6,7 +6,9 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
+import dev.luizloyola.autarkia.core.board.GatheringErrand;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.tree.ChopPlan;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
@@ -180,7 +182,28 @@ public final class AutarkiaTasks {
                         POS.fieldOf("yard").forGetter(HaulingErrand::yard),
                         Codec.INT.fieldOf("haul_line").forGetter(HaulingErrand::haulLine)
                 ).apply(t, HaulingErrand::new)));
+        // A gather's whole trip. Same rule as the wrapper above: registered the day it was
+        // written, because an unregistered task takes the server down at the next autosave.
+        TaskCodecs.register("autarkia:gather_errand", GatheringErrand.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        ITEM_SPEC.fieldOf("spec").forGetter(GatheringErrand::spec),
+                        Codec.INT.fieldOf("count").forGetter(GatheringErrand::count),
+                        POS.fieldOf("yard").forGetter(GatheringErrand::yard)
+                ).apply(t, GatheringErrand::new)));
     }
+
+    /**
+     * A class of items, by the name it is registered under. A spec's matcher is a lambda and cannot
+     * be written down, so the name is the handle; an unregistered name errors rather than inventing
+     * a spec that matches nothing. Narrower than Anima's own, which also carries literal id lists —
+     * a gather is always posted against a declared spec.
+     */
+    private static final Codec<ItemSpec> ITEM_SPEC = Codec.STRING.comapFlatMap(
+            name -> ItemSpec.byName(name)
+                    .map(DataResult::success)
+                    .orElseGet(() -> DataResult.error(
+                            () -> "no item spec is registered as \"" + name + "\"")),
+            ItemSpec::name);
 
     /**
      * A personal board's projects — the whole of layer 3 that lives on a body.

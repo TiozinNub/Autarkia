@@ -11,7 +11,9 @@ import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.mod.brain.AnimaTasks;
 import dev.luizloyola.anima.arch.SourceTree;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
+import dev.luizloyola.autarkia.core.board.GatheringErrand;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
+import dev.luizloyola.autarkia.core.board.Stock;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -103,5 +105,18 @@ class AutarkiaTaskCodecsTest {
         assertEquals(before.yard(), after.yard());
         assertEquals(before.haulLine(), after.haulLine());
         assertInstanceOf(Idle.class, after.work(), "and it carries its work with it");
+    }
+
+    @Test
+    void aGatheringErrandSurvivesTheFile() {
+        // The spec travels as its registry NAME: a declared spec's matcher is a lambda, and a
+        // trip reloaded against the wrong one would fetch nothing and never satisfy.
+        GatheringErrand before = new GatheringErrand(Stock.LOGS, 16, new Pos(10, 64, 10));
+
+        GatheringErrand after = assertInstanceOf(GatheringErrand.class, roundTrip(before));
+
+        assertEquals(Stock.LOGS, after.spec());
+        assertEquals(16, after.count());
+        assertEquals(before.yard(), after.yard());
     }
 }

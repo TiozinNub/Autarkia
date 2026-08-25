@@ -10,7 +10,9 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.ProjectState;
 import dev.luizloyola.autarkia.core.board.WorkKey;
@@ -230,6 +232,43 @@ class PartyBoardCodecsTest {
         assertEquals(new WorkKey.AtPlace(WorkKey.SURVEY, new Pos(0, 60, 48)), read.key(),
                 "a hold saved before this change is a place key — losing it costs a settler the "
                         + "errand they were walking to, and StoreGuard counts rows, not holds");
+    }
+
+    @Test
+    void aGatherRowComesBackWithItsLedgerAndItsHolds() {
+        AgentId alice = AgentId.random();
+        PartyId party = PartyId.of(java.util.UUID.randomUUID());
+        Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5, party, "even",
+                List.of(new Pos(11, 64, 10), new Pos(12, 64, 10)),
+                List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L),
+                        new Gather.Reading(new Pos(12, 64, 10), 8, 1_200L)));
+        List<PartyBoard.Hold> holds =
+                List.of(new PartyBoard.Hold(new WorkKey.ForMember(WorkKey.GATHER, alice), alice));
+
+        PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, holds));
+
+        assertEquals("gather",
+                PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, new PartyBoard.Row(before, holds))
+                        .getOrThrow().getAsJsonObject().getAsJsonObject("project")
+                        .get("type").getAsString());
+        assertEquals(before, after.project());
+        assertEquals(holds, after.holds(),
+                "a member-keyed hold is what hands each settler their own trip back on load");
+    }
+
+    @Test
+    void aGatherReadingKeepsTheTickItWasTakenAt() {
+        // Without it a restart makes every belief look freshly taken, and a member arriving with
+        // an hour-old memory overwrites a newer reading — the ledger is the chest as LAST read.
+        Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5,
+                PartyId.of(java.util.UUID.randomUUID()), "even", List.of(new Pos(11, 64, 10)),
+                List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L)));
+
+        Gather.State after = (Gather.State) roundTrip(new PartyBoard.Row(before, List.of()))
+                .project();
+
+        assertEquals(900L, after.readings().get(0).at());
+        assertEquals(24, after.readings().get(0).count());
     }
 
     @Test
