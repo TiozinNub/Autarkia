@@ -1,7 +1,9 @@
 package dev.luizloyola.autarkia.mod.board;
 
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
+import dev.luizloyola.autarkia.core.board.PartyMembers;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -70,6 +72,11 @@ public final class PartyBoards {
      * were walking to still theirs, not back on offer.
      */
     private static void load(MinecraftServer server) {
+        // Before the first restore, not in a SERVER_STARTED handler of its own: rebuilding a
+        // gather mints one trip per member, so a board loaded against an un-wired roster would
+        // offer nothing and drop every saved hold on the floor. Fabric runs these handlers in
+        // registration order, and this is the one that must come first.
+        PartyMembers.asks(PartyData.get(server)::members);
         PartyBoardData store = PartyBoardData.get(server);
         long now = server.overworld().getGameTime();
         for (PartyId party : store.parties()) {
