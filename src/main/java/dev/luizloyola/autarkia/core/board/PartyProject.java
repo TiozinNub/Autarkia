@@ -27,6 +27,13 @@ public interface PartyProject extends Project {
     void tick(long now);
 
     /**
+     * Everything this project needs to carry on exactly where it left off — the store's row, minus
+     * the holds {@link PartyBoard#snapshot} adds beside it. Every implementer already has one of
+     * these; this exists only so {@link PartyBoard} can call it without knowing which kind it holds.
+     */
+    ProjectState snapshot();
+
+    /**
      * This item's durable name, or empty if it is not one of ours. Called when the board is saved,
      * once per live lease.
      */

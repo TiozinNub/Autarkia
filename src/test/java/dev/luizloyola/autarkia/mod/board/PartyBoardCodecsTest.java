@@ -12,6 +12,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
+import dev.luizloyola.autarkia.core.board.ProjectState;
 import dev.luizloyola.autarkia.core.board.WorkKey;
 import java.util.List;
 import net.minecraft.core.UUIDUtil;
@@ -43,6 +44,17 @@ class PartyBoardCodecsTest {
     }
 
     @Test
+    void aRowNamesTheKindOfProjectItHolds() {
+        PartyBoard.Row row = new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of());
+        var encoded = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow();
+
+        assertEquals("clear_area",
+                encoded.getAsJsonObject().getAsJsonObject("project").get("type").getAsString(),
+                "a row that does not name its kind cannot be read back once a second kind exists");
+        assertEquals(row, PartyBoardCodecs.ROW.parse(JsonOps.INSTANCE, encoded).getOrThrow());
+    }
+
+    @Test
     void aProjectComesBackWithItsBoxItsPhaseAndItsLedger() {
         ClearArea.State before = state(ClearArea.Phase.WORKING, List.of(
                 new ClearArea.Target(new Pos(3, 61, 4), ClearArea.TargetState.OPEN, 0, 0L, List.of()),
@@ -63,7 +75,8 @@ class PartyBoardCodecsTest {
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(plain, List.of()));
 
         assertEquals(plain, after.project());
-        assertNull(after.project().yard(), "no destination, no migration, no surprise chest");
+        assertNull(((ClearArea.State) after.project()).yard(),
+                "no destination, no migration, no surprise chest");
     }
 
     @Test
@@ -74,7 +87,7 @@ class PartyBoardCodecsTest {
                         List.of(AgentId.random(), AgentId.random()));
         PartyBoard.Row after = roundTrip(
                 new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of(stubborn)), List.of()));
-        assertEquals(stubborn, after.project().targets().get(0));
+        assertEquals(stubborn, ((ClearArea.State) after.project()).targets().get(0));
     }
 
     @Test
@@ -96,10 +109,11 @@ class PartyBoardCodecsTest {
         // a box that closes over ground nobody covered, which is the one failure this must not have.
         PartyBoard.Row after =
                 roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
+        ClearArea.State project = (ClearArea.State) after.project();
         assertEquals(List.of(new ClearArea.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
-                new ClearArea.CellMask(new Pos(8, 60, 0), 0x00FF)), after.project().covered());
-        assertEquals(1, after.project().sliceCooldowns().get(0).slice());
-        assertEquals(12_345L, after.project().sliceCooldowns().get(0).retryAfter());
+                new ClearArea.CellMask(new Pos(8, 60, 0), 0x00FF)), project.covered());
+        assertEquals(1, project.sliceCooldowns().get(0).slice());
+        assertEquals(12_345L, project.sliceCooldowns().get(0).retryAfter());
     }
 
     @Test
@@ -123,7 +137,7 @@ class PartyBoardCodecsTest {
         // out a retry no felling had paid for.
         PartyBoard.Row after =
                 roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
-        assertEquals(7, after.project().felledSinceReopen());
+        assertEquals(7, ((ClearArea.State) after.project()).felledSinceReopen());
     }
 
     @Test
@@ -137,7 +151,8 @@ class PartyBoardCodecsTest {
                 ClearArea.TargetState.OPEN, 2, 0L, List.of(alice, bob));
         PartyBoard.Row after = roundTrip(
                 new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of(tried)), List.of()));
-        assertEquals(List.of(alice, bob), after.project().targets().get(0).failedBy());
+        assertEquals(List.of(alice, bob),
+                ((ClearArea.State) after.project()).targets().get(0).failedBy());
     }
 
     @Test
@@ -151,7 +166,10 @@ class PartyBoardCodecsTest {
                 new Region(new Pos(0, 0, 0), new Pos(1, 1, 1))).getOrThrow());
         minimal.addProperty("priority", 0.5);
         minimal.addProperty("phase", "WORKING");
-        ClearArea.State read = PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, minimal).getOrThrow();
+        // CLEAR_AREA, not the dispatching PROJECT: this is testing clear_area's OWN field defaults,
+        // a level below which kind of row it is.
+        ClearArea.State read =
+                PartyBoardCodecs.CLEAR_AREA.codec().parse(JsonOps.INSTANCE, minimal).getOrThrow();
         assertTrue(read.covered().isEmpty());
         assertTrue(read.targets().isEmpty());
         assertTrue(read.sliceCooldowns().isEmpty());
@@ -171,11 +189,29 @@ class PartyBoardCodecsTest {
         legacy.add("swept", PartyBoardCodecs.POS.listOf().encodeStart(JsonOps.INSTANCE,
                 List.of(new Pos(0, 60, 0), new Pos(8, 60, 8))).getOrThrow());
 
-        ClearArea.State read = PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, legacy).getOrThrow();
+        ClearArea.State read =
+                PartyBoardCodecs.CLEAR_AREA.codec().parse(JsonOps.INSTANCE, legacy).getOrThrow();
 
         assertEquals(ClearArea.Phase.WORKING, read.phase(), "a pass name is not a state any more");
         assertEquals(2, read.covered().size(), "a short read here is a box re-swept from scratch");
         assertTrue(read.covered().stream().allMatch(cell -> cell.mask() == CoverageGrid.FULL));
+    }
+
+    @Test
+    void aRowWrittenBeforeTypesExistedStillReadsAsClearArea() {
+        // Absent "type" must default exactly as absent "kind" does for WorkKey: every row saved
+        // before a second project kind existed lacks the field, and it was always a clearing.
+        JsonObject legacy = new JsonObject();
+        legacy.addProperty("clearing", "trees");
+        legacy.add("bounds", PartyBoardCodecs.REGION.encodeStart(JsonOps.INSTANCE,
+                new Region(new Pos(0, 0, 0), new Pos(1, 1, 1))).getOrThrow());
+        legacy.addProperty("priority", 0.5);
+        legacy.addProperty("phase", "WORKING");
+
+        ProjectState read = PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, legacy).getOrThrow();
+
+        assertEquals("clear_area", read.type());
+        assertTrue(read instanceof ClearArea.State, "no type field predates a second kind existing");
     }
 
     @Test

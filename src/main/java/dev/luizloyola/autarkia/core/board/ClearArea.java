@@ -971,7 +971,12 @@ public final class ClearArea implements PartyProject {
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<SliceCooldown> sliceCooldowns, List<Target> targets,
                         int felledSinceReopen, List<CellMask> covered,
-                        @Nullable Pos yard, List<Pos> yardChests) {
+                        @Nullable Pos yard, List<Pos> yardChests) implements ProjectState {
+
+        @Override
+        public String type() {
+            return "clear_area";
+        }
     }
 
     /**
@@ -1020,4 +1025,22 @@ public final class ClearArea implements PartyProject {
             return project;
         });
     }
+
+    /**
+     * What {@link PartyProjects} and the dispatching codec both mean by {@code "clear_area"} —
+     * registered in {@code AutarkiaMod} beside {@link Clearings} itself. By the time a row's
+     * {@code type} has dispatched to this branch at all, the state handed in is provably a
+     * {@link State}, so an unmatched instance here would be a dispatch bug, not a saved world.
+     */
+    public static final ProjectType TYPE = new ProjectType() {
+        @Override
+        public String id() {
+            return "clear_area";
+        }
+
+        @Override
+        public Optional<ClearArea> restore(ProjectState state, long now) {
+            return state instanceof State s ? ClearArea.restore(s, now) : Optional.empty();
+        }
+    };
 }

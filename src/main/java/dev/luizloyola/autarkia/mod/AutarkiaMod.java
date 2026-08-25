@@ -124,6 +124,10 @@ public class AutarkiaMod implements ModInitializer {
         // phases, slices and a ledger; the kind, the looking and the felling all arrive through
         // here, which leaves room for boulders later.
         dev.luizloyola.autarkia.core.board.Clearings.register(TreeClearing.INSTANCE);
+        // And what a saved row means when it says "clear_area" — the other half of teaching a
+        // party's board this kind of project, one level up from the Clearing itself.
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.ClearArea.TYPE);
         // And that a party's work board is checked at boot like every other store: a project
         // outlives every worker who touches it, so a swallowed load would send a settlement to
         // re-walk ground it had already surveyed.

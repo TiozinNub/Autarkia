@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.board;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.core.agent.AgentId;
@@ -9,8 +10,10 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
+import dev.luizloyola.autarkia.core.board.ProjectState;
 import dev.luizloyola.autarkia.core.board.WorkKey;
 import java.util.List;
+import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 
@@ -73,8 +76,13 @@ public final class PartyBoardCodecs {
                     Codec.LONG.fieldOf("retry").forGetter(ClearArea.SliceCooldown::retryAfter)
             ).apply(cooldown, ClearArea.SliceCooldown::new));
 
-    public static final Codec<ClearArea.State> PROJECT =
-            RecordCodecBuilder.create(project -> project.group(
+    /**
+     * Everything a {@code clear_area} row carries beyond its kind — a {@link MapCodec} rather than
+     * the plain {@link Codec} this used to be, because {@link #PROJECT} below needs its fields flat
+     * in the same object as {@code type}, not nested under a sub-key.
+     */
+    public static final MapCodec<ClearArea.State> CLEAR_AREA =
+            RecordCodecBuilder.mapCodec(project -> project.group(
                     Codec.STRING.fieldOf("clearing").forGetter(ClearArea.State::clearing),
                     REGION.fieldOf("bounds").forGetter(ClearArea.State::bounds),
                     Codec.DOUBLE.fieldOf("priority").forGetter(ClearArea.State::priority),
@@ -109,6 +117,34 @@ public final class PartyBoardCodecs {
                                             .toList()
                                     : covered,
                             yard.orElse(null), chests)));
+
+    /**
+     * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this
+     * cannot be a bare {@code optionalFieldOf(name, default)} — that omits the field whenever the
+     * value already equals the default, and {@code "clear_area"} IS the default, which is exactly
+     * the row a second kind existing must be able to tell apart from. {@code Optional::of} on the
+     * way in means the field is written every time; absent still reads as {@code "clear_area"}, so
+     * a pre-dispatch save loads unchanged.
+     */
+    private static final MapCodec<String> PROJECT_TYPE = Codec.STRING.optionalFieldOf("type")
+            .xmap(found -> found.orElse("clear_area"), Optional::of);
+
+    /**
+     * Which flat shape a {@code type} value decodes as. A closed set the codec layer knows by hand,
+     * like {@link #workKeyCodecFor} — not {@code PartyProjects}' runtime registry, which answers a
+     * different question (how a state RESTORES, not how it reads off disk). An id neither branch
+     * claims fails decode outright: the row drops and {@code StoreGuard}'s count catches it, a
+     * different accident from an unknown {@code Clearing} id inside a row that DID decode.
+     */
+    private static DataResult<? extends MapCodec<? extends ProjectState>> projectCodecFor(String type) {
+        return "clear_area".equals(type)
+                ? DataResult.success(CLEAR_AREA)
+                : DataResult.error(() -> "no project type called \"" + type + "\"");
+    }
+
+    /** One posted project, named by its kind so a second kind can be told apart with certainty. */
+    public static final Codec<ProjectState> PROJECT = PROJECT_TYPE.partialDispatch(
+            state -> DataResult.success(state.type()), PartyBoardCodecs::projectCodecFor);
 
     private static final MapCodec<WorkKey.AtPlace> AT_PLACE =
             RecordCodecBuilder.mapCodec(place -> place.group(

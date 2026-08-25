@@ -1011,6 +1011,9 @@ class ClearAreaTest {
     @Test
     void aPartyBoardHandsEveryHolderBackTheirOwnErrand() {
         Clearings.register(ABLE);
+        // restore() now resolves the row's kind through PartyProjects before it ever asks a
+        // Clearing for anything — a mod's bootstrap does this once; a plain core test has to.
+        PartyProjects.register(ClearArea.TYPE);
         PartyBoard board = new PartyBoard(
                 dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
         Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));

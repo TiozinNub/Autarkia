@@ -72,7 +72,7 @@ public final class PartyBoard extends Board {
      * <p>Holds travel with the project because a {@link WorkKey} names an item <em>within</em> the
      * project that minted it: two projects clearing overlapping boxes would write the same key.
      */
-    public record Row(ClearArea.State project, List<Hold> holds) {
+    public record Row(ProjectState project, List<Hold> holds) {
     }
 
     /** Who was holding which item when the world stopped. */
@@ -82,21 +82,21 @@ public final class PartyBoard extends Board {
     /**
      * Every party project posted here, with its holds, in post order.
      *
-     * <p>Only {@link ClearArea} for now, and typed as such deliberately: a second party project
-     * type will arrive with its own row shape and its own codec.
+     * <p>A project that is not a {@link PartyProject} is never saved — the same rule {@link #tick}
+     * follows for ticking one.
      */
     public List<Row> snapshot(long now) {
         List<Map.Entry<WorkItem, AgentId>> live = held(now);
         List<Row> rows = new ArrayList<>();
         for (Project project : projects()) {
-            if (!(project instanceof ClearArea area)) {
+            if (!(project instanceof PartyProject party)) {
                 continue;
             }
             List<Hold> holds = new ArrayList<>();
             for (Map.Entry<WorkItem, AgentId> hold : live) {
-                area.keyOf(hold.getKey()).ifPresent(key -> holds.add(new Hold(key, hold.getValue())));
+                party.keyOf(hold.getKey()).ifPresent(key -> holds.add(new Hold(key, hold.getValue())));
             }
-            rows.add(new Row(area.snapshot(), List.copyOf(holds)));
+            rows.add(new Row(party.snapshot(), List.copyOf(holds)));
         }
         return List.copyOf(rows);
     }
@@ -108,18 +108,22 @@ public final class PartyBoard extends Board {
      * through scoring and can hand it to somebody else. Ticks do not pass while a server is down, so
      * a hold was never near expiring. A hold whose item is gone is dropped.
      *
-     * @return how many saved projects could not be rebuilt, because no {@link Clearing} in this
-     *         build answers to their id — never silently zero
+     * @return how many saved projects could not be rebuilt — its {@link ProjectState#type()} names
+     *         nothing {@link PartyProjects} has, or (an unknown {@link Clearing} id, today) that
+     *         type's own {@link ProjectType#restore} refused it — never silently zero. A row whose
+     *         type the CODEC never recognised at all never reaches here: that failure is caught
+     *         earlier, by {@code StoreGuard}'s row count, and is a different accident from this one.
      */
     public int restore(List<Row> rows, long now) {
         int unknown = 0;
         for (Row row : rows) {
-            Optional<ClearArea> rebuilt = ClearArea.restore(row.project(), now);
+            Optional<? extends PartyProject> rebuilt = PartyProjects.byId(row.project().type())
+                    .flatMap(type -> type.restore(row.project(), now));
             if (rebuilt.isEmpty()) {
                 unknown++;
                 continue;
             }
-            ClearArea project = rebuilt.get();
+            PartyProject project = rebuilt.get();
             post(project);
             for (Hold hold : row.holds()) {
                 project.itemFor(hold.key()).ifPresent(item -> {
