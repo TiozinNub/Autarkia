@@ -2,7 +2,9 @@ package dev.luizloyola.autarkia.core.board;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +13,10 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemCall;
+import dev.luizloyola.anima.core.brain.task.EnsureStore;
+import dev.luizloyola.anima.core.brain.task.ObtainItem;
+import dev.luizloyola.anima.core.brain.task.PutItems;
+import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.Entry;
 import dev.luizloyola.anima.core.social.PartyId;
@@ -52,6 +58,9 @@ class GatherTest {
     @AfterEach
     void unwireTheRoster() {
         PartyMembers.reset();
+        // Restored here rather than at the end of the one test that clears it: an assertion that
+        // fails mid-test would otherwise leave the registry empty for every class after this one.
+        Splits.register(EvenSplit.INSTANCE);
     }
 
     private void party(int size) {
@@ -87,10 +96,29 @@ class GatherTest {
      */
     private static BoardBrainContext depositor(Pos chest, int held) {
         BoardBrainContext ctx = new BoardBrainContext();
+        saw(ctx, chest, held, ctx.now());
+        return ctx;
+    }
+
+    /** A member standing at this tick, remembering nothing about the yard yet. */
+    private static BoardBrainContext reporterAt(long tick) {
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.advance(tick);
+        return ctx;
+    }
+
+    /** Gives this member a memory of that chest, and of what was in it when they looked. */
+    private static void saw(BoardBrainContext ctx, Pos chest, int held, long when) {
         ctx.remember(Store.POI, chest);
         ctx.knowledge().sawInside(chest, List.of(ItemStack.of("minecraft:oak_log", held, 64)),
-                ctx.now(), AgentKnowledge.maxPerKind(ctx.profile()));
-        return ctx;
+                when, AgentKnowledge.maxPerKind(ctx.profile()));
+    }
+
+    /** Hands the project a report from this member, with the trip they were holding. */
+    private void reports(Gather project, int member, BoardBrainContext ctx) {
+        WorkItem trip = tripOf(project, member);
+        project.claimed(trip);
+        project.completed(trip, ctx);
     }
 
     // ── the arithmetic ───────────────────────────────────────────────────────────────────────
@@ -292,13 +320,47 @@ class GatherTest {
         project.claimed(second);
         // Somebody broke the chest and Store.wouldNotOpen disproved it — or this member's memory
         // cap simply evicted the place. The project cannot tell the two apart, and must not try.
-        project.completed(second, new BoardBrainContext());
+        project.completed(second, reporterAt(40L));
 
         assertEquals(0, project.stored(),
                 "the error has to be collect-too-much, never a project closing satisfied over an "
                         + "empty hole");
         assertFalse(project.finished());
         assertEquals(64, project.remainder());
+        assertEquals(List.of(new Gather.Reading(CHEST, 0, 40L)), project.readings(),
+                "and it is recorded as a reading of EMPTY taken now, not erased — an erased row "
+                        + "has no tick for a later belief to lose to");
+    }
+
+    @Test
+    void aReporterWhoNeverWentBackCannotRaiseADisprovedChest() {
+        party(3);
+        Gather project = posted(64);
+        Pos other = new Pos(12, 64, 10);
+        // Zoe banks 32 in the first chest and everybody's beliefs start there.
+        reports(project, 0, depositor(CHEST, 32));
+        assertEquals(32, project.stored());
+
+        // A creeper takes that chest. Alice deposits into the second one; Store.wouldNotOpen has
+        // disproved the first for her, so she cannot remember it at all.
+        BoardBrainContext alice = reporterAt(100L);
+        saw(alice, other, 32, 100L);
+        reports(project, 1, alice);
+        assertEquals(32, project.stored(), "one chest gone, the other holding 32");
+
+        // Bob looked inside the first chest last week and has never been back. His belief about it
+        // is a week old; his deposit into the second one is now.
+        BoardBrainContext bob = reporterAt(200L);
+        saw(bob, CHEST, 32, 0L);
+        saw(bob, other, 32, 200L);
+        reports(project, 2, bob);
+
+        assertEquals(32, project.stored(),
+                "a chest disproved at tick 100 must not be raised again by a belief formed at "
+                        + "tick 0 — that is a phantom, and the project would close over it");
+        assertFalse(project.finished(),
+                "closing satisfied over an empty hole is the one failure this ledger exists to "
+                        + "prevent");
     }
 
     @Test
@@ -396,6 +458,37 @@ class GatherTest {
         assertEquals(List.of(his), project.open());
     }
 
+    // ── the errand ───────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aTripFetchesWithoutRaidingTheStoreItIsFilling() {
+        party(1);
+        Gather project = posted(64);
+
+        GatheringErrand errand =
+                assertInstanceOf(GatheringErrand.class, tripOf(project, 0).root());
+        List<Task> steps = errand.methods().get(0).decompose(new BoardBrainContext());
+
+        assertEquals(3, steps.size(), "fetch it, get to the yard, put it down");
+        ObtainItem fetch = assertInstanceOf(ObtainItem.class, steps.get(0));
+        assertEquals(ObtainItem.Sources.NOT_STORES, fetch.sources(),
+                "the remainder is measured against what the yard already holds, so an errand "
+                        + "allowed to take from storage would be sent to fetch the very goods it "
+                        + "is counting: wanting 64 with 32 banked, it would make a new 32 by "
+                        + "emptying the yard");
+        assertEquals(Stock.LOGS, fetch.spec());
+        assertEquals(64, fetch.count());
+
+        assertEquals(YARD, assertInstanceOf(EnsureStore.class, steps.get(1)).hint(),
+                "the yard is a hint, and this is what grows a chest on it");
+
+        PutItems deposit = assertInstanceOf(PutItems.class, steps.get(2));
+        assertEquals(Stock.LOGS, deposit.spec());
+        assertEquals(64, deposit.count());
+        assertNull(deposit.at(),
+                "the chest is resolved on arrival — nobody knows its anchor when the trip is minted");
+    }
+
     // ── what a member must keep hold of ──────────────────────────────────────────────────────
 
     @Test
@@ -477,7 +570,7 @@ class GatherTest {
     @Test
     void aGatherForSomethingThisBuildDoesNotKnowComesBackAsNothing() {
         Gather.State unknown = new Gather.State("dilithium", 64, YARD, 0.5, PARTY, "even",
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
 
         // Never silently an empty project: the store's job is to refuse the world, and it can only
         // do that if this says so rather than handing back something plausible.
@@ -487,24 +580,70 @@ class GatherTest {
     @Test
     void reloadingHandsEachMemberTheirOwnTripBack() {
         party(4);
+        AgentId alice = roster.get(0);
+        AgentId bob = roster.get(1);
+        AgentId carol = roster.get(2);
+        AgentId dan = roster.get(3);
         PartyBoard board = new PartyBoard(PARTY);
         Gather project = new Gather(Stock.LOGS, 64, YARD, 0.5, PARTY, EvenSplit.INSTANCE);
         board.post(project);
         board.tick(0L);
-        AgentId alice = roster.get(0);
-        AgentId bob = roster.get(1);
-        assertTrue(board.claim(project.itemFor(keyFor(alice)).orElseThrow(), alice, 0L));
-        assertTrue(board.claim(project.itemFor(keyFor(bob)).orElseThrow(), bob, 0L));
+
+        // Alice and Bob have been and come back with sixteen each; Carol and Dan are mid-walk.
+        // What matters is that the remainder no longer covers the whole party, so roster order
+        // and hold order cannot coincide.
+        WorkItem hers = project.itemFor(keyFor(alice)).orElseThrow();
+        assertTrue(board.claim(hers, alice, 0L));
+        board.completed(hers, alice, depositor(CHEST, 16));
+        WorkItem his = project.itemFor(keyFor(bob)).orElseThrow();
+        assertTrue(board.claim(his, bob, 0L));
+        board.completed(his, bob, depositor(CHEST, 32));
+        assertEquals(32, project.stored());
+        assertTrue(board.claim(project.itemFor(keyFor(carol)).orElseThrow(), carol, 0L));
+        assertTrue(board.claim(project.itemFor(keyFor(dan)).orElseThrow(), dan, 0L));
 
         List<PartyBoard.Row> saved = board.snapshot(0L);
         PartyBoard reloaded = new PartyBoard(PARTY);
         assertEquals(0, reloaded.restore(saved, 0L));
 
         Gather back = (Gather) reloaded.projects().get(0);
-        assertTrue(reloaded.holds(back.itemFor(keyFor(alice)).orElseThrow(), alice, 0L),
-                "a member's id is exactly what survives a restart — Alice gets HER trip, not "
-                        + "whichever one scores best");
-        assertTrue(reloaded.holds(back.itemFor(keyFor(bob)).orElseThrow(), bob, 0L));
-        assertEquals(4, back.open().size());
+        assertTrue(reloaded.holds(back.itemFor(keyFor(carol)).orElseThrow(), carol, 0L),
+                "a member's id is exactly what survives a restart — Carol gets HER trip back, "
+                        + "not whoever the roster happens to name first");
+        assertTrue(reloaded.holds(back.itemFor(keyFor(dan)).orElseThrow(), dan, 0L));
+        assertTrue(back.itemFor(keyFor(alice)).isEmpty(),
+                "and nobody is sent for goods somebody else is already carrying — minting in "
+                        + "roster order would give these two the trips and drop the saved holds");
+        assertTrue(back.itemFor(keyFor(bob)).isEmpty());
+        assertEquals(2, back.open().size());
+        assertEquals(32, back.inFlight(), "exactly what was out when the world stopped");
+        assertEquals(0, back.remainder());
+    }
+
+    @Test
+    void aTripComesBackTheSizeItWasHandedOutAt() {
+        party(2);
+        Gather project = posted(512);
+        assertEquals(64, tripSize(tripOf(project, 0)));
+
+        Gather back = Gather.restore(project.snapshot(), 0L).orElseThrow();
+
+        assertEquals(64, tripSize(back.itemFor(keyFor(roster.get(0))).orElseThrow()));
+        assertEquals(64, tripSize(back.itemFor(keyFor(roster.get(1))).orElseThrow()));
+        assertEquals(128, back.inFlight());
+    }
+
+    @Test
+    void aSavedTripForSomebodyWhoHasLeftIsSweptOnLoad() {
+        party(2);
+        Gather project = posted(512);
+        Gather.State state = project.snapshot();
+        AgentId gone = roster.get(1);
+        roster = roster.subList(0, 1);
+
+        Gather back = Gather.restore(state, 0L).orElseThrow();
+
+        assertTrue(back.itemFor(keyFor(gone)).isEmpty(), "a trip cannot outlive its member's party");
+        assertEquals(64, back.inFlight());
     }
 }

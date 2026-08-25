@@ -67,6 +67,20 @@ public final class Gather implements PartyProject {
     public record Reading(Pos chest, int count, long at) {
     }
 
+    /**
+     * One member's outstanding trip, as the store holds it.
+     *
+     * <p><b>The size has to be written down.</b> A trip's SIZE is not derivable from anything else
+     * the row carries — it was decided by the split against a remainder that has moved since — and
+     * a reload that re-derived it would mint in ROSTER order, before {@code PartyBoard.restore} has
+     * reclaimed a single hold. A party whose remainder no longer covers everybody would then hand
+     * the trips to the wrong members and drop the saved holds on the floor, while the members
+     * actually mid-walk carried on walking: an overshoot of several trips, past the one the
+     * per-trip cap is supposed to bound the error to.
+     */
+    public record Trip(AgentId who, int size) {
+    }
+
     private final ItemSpec spec;
     private final int target;
 
@@ -155,7 +169,7 @@ public final class Gather implements PartyProject {
     public int inFlight() {
         int total = 0;
         for (WorkItem item : open.values()) {
-            total += ((Trip) item).size();
+            total += ((TripItem) item).size();
         }
         return total;
     }
@@ -225,7 +239,7 @@ public final class Gather implements PartyProject {
             if (size <= 0) {
                 return;
             }
-            open.put(key, new Trip(size));
+            open.put(key, new TripItem(size));
         }
     }
 
@@ -296,7 +310,7 @@ public final class Gather implements PartyProject {
         claimed.remove(key);
         // Whatever the trip was, this worker has just been standing in the yard with a lid open.
         learnYard(ctx);
-        readYard(ctx);
+        readYard(ctx, ctx.percepts().time());
         open.remove(key);
         if (finished()) {
             withdrawAll();
@@ -321,27 +335,31 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * Takes the reporter's belief about each yard chest into the ledger, and drops the reading for
-     * any chest they no longer remember as a store at all.
+     * Takes the reporter's belief about each yard chest into the ledger, keeping only the LATEST
+     * belief about each — a member arriving with an hour-old memory has not seen anything newer,
+     * so their reading is not an update.
      *
-     * <p><b>The drop is deliberately biased to UNDERCOUNT.</b> {@code Store.wouldNotOpen} disproves
-     * a chest that has gone, so a vanished yard chest stops being remembered and its reading leaves
-     * with it. The same rule also drops a perfectly VALID reading when a member's memory cap has
-     * evicted the place, and that asymmetry is the point: the error must always be "collect too
-     * much", never a project closing satisfied over an empty hole. The next reporter who does
-     * remember the chest puts the reading back.
+     * <p><b>A chest the reporter cannot remember at all reads as EMPTY, stamped now.</b> That is a
+     * reading, not an erasure, and the difference is the whole rule. {@code Store.wouldNotOpen}
+     * disproves a chest that has gone, so a vanished yard chest stops being remembered; erasing the
+     * row instead would leave nothing for the staleness guard to compare against, and the next
+     * reporter who happened to look inside it last week would write the old count straight back —
+     * a phantom the project then closes satisfied over. A zero stamped at this tick outranks every
+     * belief older than it, and only somebody who has actually been back can raise it again.
      *
-     * <p>An incoming belief older than the one held is ignored — the ledger is the chest as LAST
-     * read, and a member arriving with an hour-old memory has not seen anything newer.
+     * <p><b>It is deliberately biased to UNDERCOUNT.</b> The same rule zeroes a perfectly VALID
+     * reading when a member's memory cap has evicted the place, and that asymmetry is the point:
+     * the error must always be "collect too much", never a project closing over an empty hole.
      */
-    private void readYard(BrainContext ctx) {
+    private void readYard(BrainContext ctx, long now) {
         Set<Pos> remembered = new HashSet<>();
         for (PoiMemory memory : ctx.knowledge().all(Store.POI)) {
             remembered.add(memory.anchor());
         }
         for (Pos chest : yardChests) {
             if (!remembered.contains(chest)) {
-                readings.remove(chest);
+                // `now` is by construction newer than any belief anybody can be carrying.
+                readings.put(chest, new Reading(chest, 0, now));
                 continue;
             }
             ctx.knowledge().insideOf(chest).ifPresent(seen -> {
@@ -368,7 +386,7 @@ public final class Gather implements PartyProject {
     public List<ItemCall> reserved() {
         int largest = 0;
         for (WorkItem item : open.values()) {
-            largest = Math.max(largest, ((Trip) item).size());
+            largest = Math.max(largest, ((TripItem) item).size());
         }
         return largest == 0 ? List.of() : List.of(ItemCall.need(spec, largest));
     }
@@ -446,10 +464,10 @@ public final class Gather implements PartyProject {
      * it is for — the {@link WorkKey.ForMember} it is filed under already says, and an item holding
      * its own name would be a second copy to keep in step.
      */
-    private final class Trip implements WorkItem {
+    private final class TripItem implements WorkItem {
         private final int size;
 
-        private Trip(int size) {
+        private TripItem(int size) {
             this.size = size;
         }
 
@@ -494,22 +512,21 @@ public final class Gather implements PartyProject {
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
     /**
-     * Everything this project is, minus the trips — the party store's row.
+     * Everything this project is — the party store's row.
      *
-     * <p><b>Live items are not here, and that is the rule the whole board follows</b>: an item is
-     * exhaust, regenerable from state. What survives instead is the {@link WorkKey} on each hold, so
-     * a reload re-mints the trips and {@code reclaim} hands each member back the one named for them.
-     * The size a member was carrying is re-derived rather than restored, which can differ by a trip
-     * if the roster changed while the world was down; the yard's readings, not the trips, are what
-     * says how much is really wanted.
+     * <p><b>The item objects are not here; who owes what IS.</b> An item is exhaust, regenerable
+     * from state — and the outstanding trips are exactly that state, the same way a clearing's
+     * ledger is what re-mints its errands. Deriving them instead from the roster and the remainder
+     * would put the members back in a different order from the holds saved beside this row; see
+     * {@link Trip}.
      *
      * @param spec the {@link ItemSpec} registry name — a mod-declared spec's matcher is a lambda
      *             and cannot be written down
      * @param split the {@link Split} registry id, for the same reason
      */
     public record State(String spec, int target, Pos yard, double priority, PartyId party,
-                        String split, List<Pos> yardChests, List<Reading> readings)
-            implements ProjectState {
+                        String split, List<Pos> yardChests, List<Reading> readings,
+                        List<Trip> trips) implements ProjectState {
 
         @Override
         public String type() {
@@ -520,13 +537,20 @@ public final class Gather implements PartyProject {
     /** What this project would need to carry on exactly where it left off. */
     @Override
     public State snapshot() {
+        List<Trip> trips = new ArrayList<>();
+        open.forEach((key, item) -> {
+            if (key instanceof WorkKey.ForMember named) {
+                trips.add(new Trip(named.who(), ((TripItem) item).size()));
+            }
+        });
         return new State(spec.name(), target, yard, priority, party, split.id(),
-                List.copyOf(yardChests), new ArrayList<>(readings.values()));
+                List.copyOf(yardChests), List.copyOf(readings.values()), List.copyOf(trips));
     }
 
     /**
-     * Rebuilds a saved project and mints its current trips, so a lease can be handed straight back
-     * to the member who held it.
+     * Rebuilds a saved project, puts every outstanding trip back on the member it was minted for,
+     * and only then tops up whoever is free — so a lease can be handed straight back to the member
+     * who held it, and nobody new is sent for goods somebody is already carrying.
      *
      * <p>Empty when no build here registers that {@link ItemSpec} — a real failure for the store to
      * report, never a row to drop quietly, exactly as an unknown {@code Clearing} id is. An unknown
@@ -541,9 +565,19 @@ public final class Gather implements PartyProject {
             for (Reading reading : state.readings()) {
                 project.readings.put(reading.chest(), reading);
             }
+            for (Trip trip : state.trips()) {
+                project.seed(trip.who(), trip.size());
+            }
+            // Sweeps a saved trip whose member has left, and mints for anyone the remainder still
+            // reaches — after the seeding above, so the two can never double-count.
             project.tick(now);
             return project;
         });
+    }
+
+    /** Puts one saved trip back, exactly as it was handed out. */
+    private void seed(AgentId who, int size) {
+        open.put(new WorkKey.ForMember(WorkKey.GATHER, who), new TripItem(size));
     }
 
     /**

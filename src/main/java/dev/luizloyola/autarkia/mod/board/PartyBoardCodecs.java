@@ -123,20 +123,32 @@ public final class PartyBoardCodecs {
     /** What one yard chest held when somebody last looked, and when they looked. */
     public static final Codec<Gather.Reading> READING =
             RecordCodecBuilder.create(reading -> reading.group(
-                    POS.fieldOf("at").forGetter(Gather.Reading::chest),
+                    POS.fieldOf("chest").forGetter(Gather.Reading::chest),
                     Codec.INT.fieldOf("count").forGetter(Gather.Reading::count),
                     // The tick a belief was formed. Without it a restart makes every reading look
-                    // freshly taken, and a stale reporter overwrites a newer one.
+                    // freshly taken, a stale reporter overwrites a newer one, and a disproved chest
+                    // comes back as a phantom the project can close over.
                     Codec.LONG.fieldOf("seen").forGetter(Gather.Reading::at)
             ).apply(reading, Gather.Reading::new));
+
+    /**
+     * One member's outstanding trip. Written down because its SIZE is not derivable from the rest
+     * of the row — see {@code Gather.Trip} for what a reload that re-derived it does to the holds
+     * saved beside it.
+     */
+    public static final Codec<Gather.Trip> TRIP = RecordCodecBuilder.create(trip -> trip.group(
+            UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
+            Codec.INT.fieldOf("size").forGetter(Gather.Trip::size)
+    ).apply(trip, (who, size) -> new Gather.Trip(AgentId.of(who), size)));
 
     /**
      * Everything a {@code gather} row carries beyond its kind. The spec and the split travel as
      * registry NAMES for the reason {@code AnimaTasks} gives: a declared spec's matcher is a lambda
      * and cannot be written down.
      *
-     * <p>No trips are written. An item is exhaust, regenerated on load; what carries a member's
-     * claim across a restart is the {@link WorkKey.ForMember} on its hold, beside this.
+     * <p>The item OBJECTS are not written — they are exhaust — but who owes what is, beside the
+     * {@link WorkKey.ForMember} on each hold. The two have to agree, and only one of them can be
+     * re-derived.
      */
     public static final MapCodec<Gather.State> GATHER =
             RecordCodecBuilder.mapCodec(project -> project.group(
@@ -149,10 +161,12 @@ public final class PartyBoardCodecs {
                     POS.listOf().optionalFieldOf("yard_chests", List.of())
                             .forGetter(Gather.State::yardChests),
                     READING.listOf().optionalFieldOf("readings", List.of())
-                            .forGetter(Gather.State::readings)
-            ).apply(project, (spec, target, yard, priority, party, split, chests, readings) ->
+                            .forGetter(Gather.State::readings),
+                    TRIP.listOf().optionalFieldOf("trips", List.of())
+                            .forGetter(Gather.State::trips)
+            ).apply(project, (spec, target, yard, priority, party, split, chests, readings, trips) ->
                     new Gather.State(spec, target, yard, priority, PartyId.of(party), split,
-                            chests, readings)));
+                            chests, readings, trips)));
 
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this

@@ -241,7 +241,8 @@ class PartyBoardCodecsTest {
         Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5, party, "even",
                 List.of(new Pos(11, 64, 10), new Pos(12, 64, 10)),
                 List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L),
-                        new Gather.Reading(new Pos(12, 64, 10), 8, 1_200L)));
+                        new Gather.Reading(new Pos(12, 64, 10), 8, 1_200L)),
+                List.of(new Gather.Trip(alice, 16)));
         List<PartyBoard.Hold> holds =
                 List.of(new PartyBoard.Hold(new WorkKey.ForMember(WorkKey.GATHER, alice), alice));
 
@@ -254,6 +255,8 @@ class PartyBoardCodecsTest {
         assertEquals(before, after.project());
         assertEquals(holds, after.holds(),
                 "a member-keyed hold is what hands each settler their own trip back on load");
+        assertEquals(List.of(new Gather.Trip(alice, 16)), ((Gather.State) after.project()).trips(),
+                "and the SIZE beside it, which nothing else in the row can re-derive");
     }
 
     @Test
@@ -262,7 +265,7 @@ class PartyBoardCodecsTest {
         // an hour-old memory overwrites a newer reading — the ledger is the chest as LAST read.
         Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5,
                 PartyId.of(java.util.UUID.randomUUID()), "even", List.of(new Pos(11, 64, 10)),
-                List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L)));
+                List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L)), List.of());
 
         Gather.State after = (Gather.State) roundTrip(new PartyBoard.Row(before, List.of()))
                 .project();
