@@ -14,6 +14,8 @@
   "autarkia.command.board.dropped_party": "%s descarta o #%s do grupo — %s",
   "autarkia.command.clear.too_big": "Essa caixa tem %s×%s blocos. %s por lado é o máximo que um projeto aceita — publique vários, ou alguém vai caminhá-la até a morte térmica.",
   "autarkia.command.clear.posted": "Publicado #%s no grupo de %s — %s, %s fatias",
+  "autarkia.command.gather.posted": "Publicado #%s no grupo de %s — %s",
+  "autarkia.command.gather.cannot_make": "Nada aqui sabe fazer %s.",
   "autarkia.command.chop.no_tree": "%s não conhece árvore alguma para derrubar.",
   "autarkia.command.obtain.not_an_item": "Não é um item obtenível.",
   "autarkia.command.spawn.blank_name": "O nome não pode estar em branco.",

@@ -14,6 +14,8 @@
   "autarkia.command.board.dropped_party": "%s drops the party's #%s — %s",
   "autarkia.command.clear.too_big": "That box is %s×%s blocks. %s a side is the most one project takes — post several, or somebody is walking it until the heat death.",
   "autarkia.command.clear.posted": "Posted #%s to %s's party — %s, %s slices",
+  "autarkia.command.gather.posted": "Posted #%s to %s's party — %s",
+  "autarkia.command.gather.cannot_make": "Nothing here knows how to make %s.",
   "autarkia.command.chop.no_tree": "%s knows no tree to fell.",
   "autarkia.command.obtain.not_an_item": "Not an obtainable item.",
   "autarkia.command.spawn.blank_name": "Name must not be blank.",

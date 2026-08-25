@@ -11,6 +11,7 @@ import dev.luizloyola.anima.mod.debug.CellOverlays;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.net.CellOverlayPayload;
 import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.WorkKey;
@@ -95,6 +96,10 @@ public final class BoardViewer {
     /** Ground behind the frontier — somebody has been over it, so nobody walks it again. */
     private static final int SETTLED = 0x281060C0;
 
+    // A gather's yard: one cell per chest it has actually found, no state of its own to shade by.
+    private static final int GATHER_CHEST = 0xFFFFD700;
+    private static final int GATHER_CHEST_FILL = 0x40FFD700;
+
     // The live sweep's coverage, shaded by how well the cell is known.
     private static final int COVER_KNOWN = 0x5040E060;
     private static final int COVER_PARTIAL = 0x40C0C040;
@@ -150,14 +155,18 @@ public final class BoardViewer {
         return nearby(server, player).size();
     }
 
-    private static List<ClearArea> nearby(MinecraftServer server, ServerPlayer player) {
-        List<ClearArea> out = new ArrayList<>();
+    /** Every {@link ClearArea} or {@link Gather} near enough to draw — the only two project kinds
+     *  this view knows how to paint. */
+    private static List<Project> nearby(MinecraftServer server, ServerPlayer player) {
+        List<Project> out = new ArrayList<>();
         Pos here = new Pos(player.blockPosition().getX(), player.blockPosition().getY(),
                 player.blockPosition().getZ());
         for (PartyBoard board : PartyBoards.all(server)) {
             for (Project project : board.projects()) {
                 if (project instanceof ClearArea area && withinRange(area.bounds(), here)) {
                     out.add(area);
+                } else if (project instanceof Gather gather && withinRange(gather.yard(), here)) {
+                    out.add(gather);
                 }
             }
         }
@@ -171,8 +180,13 @@ public final class BoardViewer {
         return dx <= RANGE && dz <= RANGE;
     }
 
+    /** Horizontal distance from a point — a gather has a yard hint, not a box. */
+    private static boolean withinRange(Pos point, Pos here) {
+        return Math.abs(point.x() - here.x()) <= RANGE && Math.abs(point.z() - here.z()) <= RANGE;
+    }
+
     private static void render(MinecraftServer server, ServerPlayer player) {
-        List<ClearArea> projects = nearby(server, player);
+        List<Project> projects = nearby(server, player);
         if (projects.isEmpty()) {
             CellOverlays.clear(player, SOURCE);
             return;
@@ -180,27 +194,43 @@ public final class BoardViewer {
         ServerLevel level = player.level();
         long now = level.getGameTime();
         Frame frame = new Frame(level);
-        for (ClearArea project : projects) {
-            PartyBoard board = boardOf(server, project);
-            Map<WorkKey, AgentId> holds =
-                    board == null ? Map.of() : board.holdsOn(project, now);
-            paintSlices(frame, project, holds, now);
-            paintTargets(frame, project, holds, now);
-            paintCovered(frame, project);
-            paintSweeps(frame, server, project);
-            frame.groundOutline(project.bounds(), BOUNDS, BOUNDS_WIDTH);
-            frame.label(project.describe(), centreOf(project.bounds()), 3);
+        for (Project project : projects) {
+            if (project instanceof ClearArea area) {
+                PartyBoard board = boardOf(server, area);
+                Map<WorkKey, AgentId> holds =
+                        board == null ? Map.of() : board.holdsOn(area, now);
+                paintSlices(frame, area, holds, now);
+                paintTargets(frame, area, holds, now);
+                paintCovered(frame, area);
+                paintSweeps(frame, server, area);
+                frame.groundOutline(area.bounds(), BOUNDS, BOUNDS_WIDTH);
+                frame.label(area.describe(), centreOf(area.bounds()), 3);
+            } else if (project instanceof Gather gather) {
+                paintGather(frame, gather);
+            }
         }
         CellOverlays.show(player, frame.build());
     }
 
-    private static PartyBoard boardOf(MinecraftServer server, ClearArea project) {
+    private static PartyBoard boardOf(MinecraftServer server, Project project) {
         for (PartyBoard board : PartyBoards.all(server)) {
             if (board.projects().contains(project)) {
                 return board;
             }
         }
         return null;
+    }
+
+    /**
+     * One cell per yard chest the project has actually learned about, plus a label carrying what
+     * it wants, what the yard was last seen holding, and how many trips are out — all three are
+     * already in {@link Gather#describe()}, so there is nothing here to compute.
+     */
+    private static void paintGather(Frame frame, Gather gather) {
+        for (Pos chest : gather.yardChests()) {
+            frame.cell(chest, GATHER_CHEST, GATHER_CHEST_FILL, TARGET_WIDTH);
+        }
+        frame.label(gather.describe(), gather.yard(), 3);
     }
 
     /** The coarse explored answer: one outline per slice, coloured by what the project knows. */

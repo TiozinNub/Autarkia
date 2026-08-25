@@ -25,6 +25,7 @@ import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.task.BreakBlock;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
+import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.anima.core.brain.task.SatisfyHunger;
 import dev.luizloyola.anima.core.config.ConfigValues;
 import dev.luizloyola.anima.mod.command.ConfigCommands;
@@ -36,6 +37,8 @@ import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.EvenSplit;
+import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.tree.TreeClearing;
@@ -286,7 +289,31 @@ public final class AutarkiaCommands {
                                                                                         .executes(ctx -> boardPostClear(ctx.getSource(),
                                                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
-                                                                                                corner(ctx, "yard"))))))))))
+                                                                                                corner(ctx, "yard")))))))))
+                                        // Get this many of this item into that yard. `at` is
+                                        // MANDATORY here (unlike clear's) — a gather with nowhere
+                                        // to put the goods has no completion rule — so this is two
+                                        // leaves, not four.
+                                        .then(Commands.literal("gather")
+                                                .then(Commands.argument("spec",
+                                                                ItemArgument.item(registryAccess))
+                                                        .then(Commands.argument("n",
+                                                                        IntegerArgumentType.integer(1))
+                                                                .then(Commands.literal("at")
+                                                                        .then(Commands.argument("pos",
+                                                                                        BlockPosArgument.blockPos())
+                                                                                .executes(ctx -> boardPostGather(ctx.getSource(),
+                                                                                        ItemArgument.getItem(ctx, "spec"),
+                                                                                        IntegerArgumentType.getInteger(ctx, "n"),
+                                                                                        corner(ctx, "pos"), GATHER_PRIORITY))
+                                                                                .then(Commands.argument("priority",
+                                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
+                                                                                        .executes(ctx -> boardPostGather(ctx.getSource(),
+                                                                                                ItemArgument.getItem(ctx, "spec"),
+                                                                                                IntegerArgumentType.getInteger(ctx, "n"),
+                                                                                                corner(ctx, "pos"),
+                                                                                                DoubleArgumentType.getDouble(
+                                                                                                        ctx, "priority"))))))))))
                                 // The ledger over the world it is about. Layer 3 is the one layer
                                 // with no body to look at, so this is its only visual.
                                 .then(Commands.literal("view")
@@ -371,6 +398,11 @@ public final class AutarkiaCommands {
      * hungry.
      */
     private static final double CLEAR_PRIORITY = 0.5;
+
+    /** Default bid for a posted gather — the same scale {@link Gather#COST_RANGE} prices its
+     *  errands on (deliberately equal to {@link ClearArea}'s), so the two kinds of party work
+     *  compete fairly by default. */
+    private static final double GATHER_PRIORITY = 0.5;
 
     /** One line nested under the one above it — see {@code ConfigCommands.indent}. */
     private static Component indent(Component line) {
@@ -511,6 +543,57 @@ public final class AutarkiaCommands {
         // it — the same reason cancel below is logged.
         Replies.send(source, () -> Component.translatable("autarkia.command.clear.posted",
                         handle, person.getName(), project.describe(), project.slices().size())
+                .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
+    /**
+     * Posts "get this many of this item into that yard" to the resolved Person's party board.
+     *
+     * <p>{@code at} is mandatory, unlike {@code post clear}'s optional yard: a clearing's box knows
+     * it is done from its own ledger, but a gather's completion rule IS "the yard holds enough" —
+     * with no yard there is nothing to ever check.
+     *
+     * <p>Refused before anything is posted when nothing registered here can ever make the item —
+     * otherwise the settlement looks busy on a job that can never complete.
+     */
+    private static int boardPostGather(CommandSourceStack source, ItemInput item, int count,
+                                       BlockPos yard, double priority) {
+        Person person = resolve(source);
+        if (person == null) return 0;
+        AgentId who = person.getAgentId();
+        if (who == null || !(person.level() instanceof ServerLevel level)) {
+            Replies.fail(source, Component.translatable(
+                    "autarkia.command.no_identity", person.getName()));
+            return 0;
+        }
+        // Through the compat template rather than ItemInput's own accessors, which changed shape
+        // across targets — the same seam brainObtainItem crosses on.
+        String id;
+        try {
+            id = ItemStacks.templateOf(item, source.registryAccess()).id();
+        } catch (CommandSyntaxException invalid) {
+            Replies.fail(source, Component.translatable("autarkia.command.obtain.not_an_item"));
+            return 0;
+        }
+        // By CONTENT (knowsAnyOf), not by the literal spec's own identity: the registered producer
+        // is keyed on a mod-declared spec like Stock.LOGS, never on this command's freshly built
+        // per-item one, so asking whether IT is a registered key would always say no.
+        if (!Producers.knowsAnyOf(Set.of(id))) {
+            Replies.fail(source, Component.translatable("autarkia.command.gather.cannot_make", id));
+            return 0;
+        }
+        MinecraftServer server = level.getServer();
+        PartyId party = PartyData.get(server).partyOf(who);
+        PartyBoard board = PartyBoards.of(server, party);
+        Gather project = new Gather(ItemSpec.anyOf(Set.of(id)), count,
+                new Pos(yard.getX(), yard.getY(), yard.getZ()), priority, party, EvenSplit.INSTANCE);
+        int handle = board.post(project);
+        PartyBoards.touch(server);
+        // LOGGED: the same reason clear's post is — a posted project is durable, shared, persisted
+        // state that outlives everyone who works it, and nothing else narrates it.
+        Replies.send(source, () -> Component.translatable("autarkia.command.gather.posted",
+                        handle, person.getName(), project.describe())
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
