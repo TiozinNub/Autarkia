@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 
 /**
@@ -11,18 +12,32 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
  * identity means nothing across a restart, and re-offering an item costs a settler the job they were
  * walking to. A personal board dodged it with one slot and one member ({@code KeepStocked.State}).
  *
- * <p><b>Every key is a place</b>: a survey errand is named by its slice's corner, a clearing errand
- * by the anchor of the thing to remove — which is also the site claim the task takes.
+ * <p>A key names whatever survives a reload well enough to be found again: {@link AtPlace} for an
+ * errand about somewhere — a survey slice's corner, a clearing's anchor, which is also the site
+ * claim the task takes — and {@link ForMember} for one about nobody in particular, like a gathering
+ * trip, which only the member who took it can be handed back.
  *
  * @param flavour which sort of errand this is within its project, so two items about the same
- *                place (survey this corner / fell the tree standing on it) never collide
- * @param at      the place that names it
+ *                subject (survey this corner / fell the tree standing on it) never collide
  */
-public record WorkKey(String flavour, Pos at) {
+public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
+
+    String flavour();
 
     /** Walking a slice of a box and reporting what is in it. */
-    public static final String SURVEY = "survey";
+    String SURVEY = "survey";
 
     /** Removing one reported thing. */
-    public static final String CLEAR = "clear";
+    String CLEAR = "clear";
+
+    /** Fetching items toward a quota nobody else is credited for. */
+    String GATHER = "gather";
+
+    /** @param at the place that names it */
+    record AtPlace(String flavour, Pos at) implements WorkKey {
+    }
+
+    /** @param who the member whose trip this is */
+    record ForMember(String flavour, AgentId who) implements WorkKey {
+    }
 }

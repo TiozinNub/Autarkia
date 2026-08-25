@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.board;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
@@ -109,10 +110,29 @@ public final class PartyBoardCodecs {
                                     : covered,
                             yard.orElse(null), chests)));
 
-    public static final Codec<WorkKey> WORK_KEY = RecordCodecBuilder.create(key -> key.group(
-            Codec.STRING.fieldOf("flavour").forGetter(WorkKey::flavour),
-            POS.fieldOf("at").forGetter(WorkKey::at)
-    ).apply(key, WorkKey::new));
+    private static final MapCodec<WorkKey.AtPlace> AT_PLACE =
+            RecordCodecBuilder.mapCodec(place -> place.group(
+                    Codec.STRING.fieldOf("flavour").forGetter(WorkKey.AtPlace::flavour),
+                    POS.fieldOf("at").forGetter(WorkKey.AtPlace::at)
+            ).apply(place, WorkKey.AtPlace::new));
+
+    private static final MapCodec<WorkKey.ForMember> FOR_MEMBER =
+            RecordCodecBuilder.mapCodec(member -> member.group(
+                    Codec.STRING.fieldOf("flavour").forGetter(WorkKey.ForMember::flavour),
+                    UUIDUtil.CODEC.fieldOf("who").forGetter(m -> m.who().value())
+            ).apply(member, (flavour, who) -> new WorkKey.ForMember(flavour, AgentId.of(who))));
+
+    private static MapCodec<? extends WorkKey> workKeyCodecFor(String kind) {
+        return "for_member".equals(kind) ? FOR_MEMBER : AT_PLACE;
+    }
+
+    /**
+     * Absent {@code kind} means a place key: every hold written before a trip could be named by its
+     * member is one, and a world that lost them would put its settlers back through scoring.
+     */
+    public static final Codec<WorkKey> WORK_KEY = Codec.STRING.optionalFieldOf("kind", "at_place")
+            .dispatch(key -> key instanceof WorkKey.ForMember ? "for_member" : "at_place",
+                    PartyBoardCodecs::workKeyCodecFor);
 
     public static final Codec<PartyBoard.Hold> HOLD = RecordCodecBuilder.create(hold -> hold.group(
             WORK_KEY.fieldOf("item").forGetter(PartyBoard.Hold::key),

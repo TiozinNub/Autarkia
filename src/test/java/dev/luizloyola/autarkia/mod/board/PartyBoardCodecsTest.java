@@ -14,6 +14,7 @@ import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.WorkKey;
 import java.util.List;
+import net.minecraft.core.UUIDUtil;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -81,8 +82,8 @@ class PartyBoardCodecsTest {
         AgentId alice = AgentId.random();
         AgentId bob = AgentId.random();
         List<PartyBoard.Hold> holds = List.of(
-                new PartyBoard.Hold(new WorkKey(WorkKey.SURVEY, new Pos(0, 60, 48)), alice),
-                new PartyBoard.Hold(new WorkKey(WorkKey.CLEAR, new Pos(3, 61, 4)), bob));
+                new PartyBoard.Hold(new WorkKey.AtPlace(WorkKey.SURVEY, new Pos(0, 60, 48)), alice),
+                new PartyBoard.Hold(new WorkKey.AtPlace(WorkKey.CLEAR, new Pos(3, 61, 4)), bob));
 
         PartyBoard.Row after =
                 roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), holds));
@@ -175,5 +176,32 @@ class PartyBoardCodecsTest {
         assertEquals(ClearArea.Phase.WORKING, read.phase(), "a pass name is not a state any more");
         assertEquals(2, read.covered().size(), "a short read here is a box re-swept from scratch");
         assertTrue(read.covered().stream().allMatch(cell -> cell.mask() == CoverageGrid.FULL));
+    }
+
+    @Test
+    void aHoldWrittenBeforeKeysCouldNameAMemberStillReads() {
+        AgentId alice = AgentId.random();
+        JsonObject key = new JsonObject();
+        key.addProperty("flavour", WorkKey.SURVEY);
+        key.add("at", PartyBoardCodecs.POS.encodeStart(JsonOps.INSTANCE,
+                new Pos(0, 60, 48)).getOrThrow());
+        JsonObject hold = new JsonObject();
+        hold.add("item", key);
+        hold.add("who", UUIDUtil.CODEC.encodeStart(JsonOps.INSTANCE, alice.value()).getOrThrow());
+
+        PartyBoard.Hold read = PartyBoardCodecs.HOLD.parse(JsonOps.INSTANCE, hold).getOrThrow();
+
+        assertEquals(new WorkKey.AtPlace(WorkKey.SURVEY, new Pos(0, 60, 48)), read.key(),
+                "a hold saved before this change is a place key — losing it costs a settler the "
+                        + "errand they were walking to, and StoreGuard counts rows, not holds");
+    }
+
+    @Test
+    void aMemberKeyedHoldRoundTrips() {
+        AgentId alice = AgentId.random();
+        PartyBoard.Hold hold = new PartyBoard.Hold(
+                new WorkKey.ForMember(WorkKey.GATHER, alice), alice);
+        var encoded = PartyBoardCodecs.HOLD.encodeStart(JsonOps.INSTANCE, hold).getOrThrow();
+        assertEquals(hold, PartyBoardCodecs.HOLD.parse(JsonOps.INSTANCE, encoded).getOrThrow());
     }
 }

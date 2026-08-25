@@ -801,7 +801,7 @@ class ClearAreaTest {
 
     /** The open item standing at this anchor — the tests act through the board's own offers. */
     private static WorkItem itemAt(ClearArea project, Pos anchor) {
-        return project.itemFor(new WorkKey(WorkKey.CLEAR, anchor)).orElseThrow();
+        return project.itemFor(new WorkKey.AtPlace(WorkKey.CLEAR, anchor)).orElseThrow();
     }
 
     @Test
@@ -904,7 +904,7 @@ class ClearAreaTest {
     @Test
     void aNameForSomethingNoLongerOfferedFindsNothing() {
         ClearArea project = posted(ABLE, oneSlice());
-        assertTrue(project.itemFor(new WorkKey(WorkKey.CLEAR, new Pos(1, 1, 1))).isEmpty());
+        assertTrue(project.itemFor(new WorkKey.AtPlace(WorkKey.CLEAR, new Pos(1, 1, 1))).isEmpty());
     }
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────

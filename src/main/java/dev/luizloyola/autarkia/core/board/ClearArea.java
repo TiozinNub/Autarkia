@@ -344,7 +344,7 @@ public final class ClearArea implements PartyProject {
         for (int i = 0; i < slices.size(); i++) {
             final int index = i;
             Region area = slices.get(index);
-            WorkKey key = new WorkKey(WorkKey.SURVEY, area.min());
+            WorkKey.AtPlace key = new WorkKey.AtPlace(WorkKey.SURVEY, area.min());
             boolean wanted = clearing.surveys() && !fullyCovered(area)
                     && sliceRetryAfter.getOrDefault(index, 0L) <= now;
             if (wanted) {
@@ -357,9 +357,9 @@ public final class ClearArea implements PartyProject {
 
     private void refreshClearing(long now) {
         for (Target target : List.copyOf(ledger.values())) {
-            WorkKey key = new WorkKey(WorkKey.CLEAR, target.anchor());
+            WorkKey.AtPlace key = new WorkKey.AtPlace(WorkKey.CLEAR, target.anchor());
             if (target.offerableAt(now)) {
-                open.computeIfAbsent(key, ClearItem::new);
+                open.computeIfAbsent(key, k -> new ClearItem(key));
             } else {
                 withdraw(key);
             }
@@ -507,23 +507,26 @@ public final class ClearArea implements PartyProject {
         // Whatever the errand was, this worker has been out there and may have opened the yard.
         learnYard(ctx);
         int found = harvest(ctx);
-        if (WorkKey.SURVEY.equals(key.flavour())) {
-            int slice = indexOf(key);
-            sliceRetryAfter.remove(slice);
-            // A sweep SUCCEEDS only once every cell of its slice is known — the contract on
-            // Clearing.survey — so completion is that claim. The sink has normally banked it
-            // already, cell by cell; saying it once more here is what keeps a slice from being
-            // re-offered because one write-off went astray.
-            markCovered(slices.get(slice));
-            ctx.journal().record(Category.PROJECT, name(),
-                    "slice " + (slice + 1) + "/" + slices.size() + " walked — "
-                            + (found == 0 ? "nothing new" : found + " found"));
-        } else {
-            settle(key.at(), TargetState.CLEARED, 0, 0L);
-            felledSinceReopen++;
-            if (found > 0) {
+        // Every key this project mints is a place — see the two sites in refreshSurvey/refreshClearing.
+        if (key instanceof WorkKey.AtPlace place) {
+            if (WorkKey.SURVEY.equals(key.flavour())) {
+                int slice = indexOf(place);
+                sliceRetryAfter.remove(slice);
+                // A sweep SUCCEEDS only once every cell of its slice is known — the contract on
+                // Clearing.survey — so completion is that claim. The sink has normally banked it
+                // already, cell by cell; saying it once more here is what keeps a slice from being
+                // re-offered because one write-off went astray.
+                markCovered(slices.get(slice));
                 ctx.journal().record(Category.PROJECT, name(),
-                        "cleared " + at(key.at()) + " — and " + found + " more standing nearby");
+                        "slice " + (slice + 1) + "/" + slices.size() + " walked — "
+                                + (found == 0 ? "nothing new" : found + " found"));
+            } else {
+                settle(place.at(), TargetState.CLEARED, 0, 0L);
+                felledSinceReopen++;
+                if (found > 0) {
+                    ctx.journal().record(Category.PROJECT, name(),
+                            "cleared " + at(place.at()) + " — and " + found + " more standing nearby");
+                }
             }
         }
         withdraw(key);
@@ -548,26 +551,29 @@ public final class ClearArea implements PartyProject {
         // A worker who walked there and failed still had their near field running the whole way —
         // the errand's outcome is a different fact from what they saw en route.
         harvest(ctx);
-        if (WorkKey.SURVEY.equals(key.flavour())) {
-            sliceRetryAfter.put(indexOf(key), now + FAIL_COOLDOWN);
-        } else {
-            Target was = ledger.getOrDefault(key.at(), Target.fresh(key.at()));
-            Target tried = was.andFailedBy(who, now + FAIL_COOLDOWN);
-            // Distinct WORKERS, not attempts — see Target.andFailedBy for what counting attempts
-            // cost. Falling back to attempts when nobody is named keeps termination: corroboration
-            // needs identities, and production always names the worker, so this is the seam's
-            // default rather than a path a settlement takes.
-            boolean giveUp = tried.failedBy().isEmpty()
-                    ? tried.failures() >= REFUSE_AFTER
-                    : tried.failedBy().size() >= REFUSE_AFTER;
-            ledger.put(key.at(), giveUp
-                    ? new Target(key.at(), TargetState.REFUSED, tried.failures(), 0L,
-                            tried.failedBy())
-                    : tried);
-            ctx.journal().record(Category.PROJECT, name(), giveUp
-                    ? "gave up on " + at(key.at()) + " — " + tried.failedBy().size()
-                            + " different people could not"
-                    : "failed at " + at(key.at()) + ", retry in " + FAIL_COOLDOWN + "t");
+        // Every key this project mints is a place — see the two sites in refreshSurvey/refreshClearing.
+        if (key instanceof WorkKey.AtPlace place) {
+            if (WorkKey.SURVEY.equals(key.flavour())) {
+                sliceRetryAfter.put(indexOf(place), now + FAIL_COOLDOWN);
+            } else {
+                Target was = ledger.getOrDefault(place.at(), Target.fresh(place.at()));
+                Target tried = was.andFailedBy(who, now + FAIL_COOLDOWN);
+                // Distinct WORKERS, not attempts — see Target.andFailedBy for what counting attempts
+                // cost. Falling back to attempts when nobody is named keeps termination: corroboration
+                // needs identities, and production always names the worker, so this is the seam's
+                // default rather than a path a settlement takes.
+                boolean giveUp = tried.failedBy().isEmpty()
+                        ? tried.failures() >= REFUSE_AFTER
+                        : tried.failedBy().size() >= REFUSE_AFTER;
+                ledger.put(place.at(), giveUp
+                        ? new Target(place.at(), TargetState.REFUSED, tried.failures(), 0L,
+                                tried.failedBy())
+                        : tried);
+                ctx.journal().record(Category.PROJECT, name(), giveUp
+                        ? "gave up on " + at(place.at()) + " — " + tried.failedBy().size()
+                                + " different people could not"
+                        : "failed at " + at(place.at()) + ", retry in " + FAIL_COOLDOWN + "t");
+            }
         }
         withdraw(key);
         refresh(now);
@@ -808,7 +814,7 @@ public final class ClearArea implements PartyProject {
     }
 
     /** Which slice a survey key names — its corner is the key, so this is a lookup, not a guess. */
-    private int indexOf(WorkKey key) {
+    private int indexOf(WorkKey.AtPlace key) {
         for (int i = 0; i < slices.size(); i++) {
             if (slices.get(i).min().equals(key.at())) {
                 return i;
@@ -886,9 +892,9 @@ public final class ClearArea implements PartyProject {
 
     /** Remove the one thing standing here. Named by its anchor, which is also its site claim. */
     private final class ClearItem implements WorkItem {
-        private final WorkKey key;
+        private final WorkKey.AtPlace key;
 
-        private ClearItem(WorkKey key) {
+        private ClearItem(WorkKey.AtPlace key) {
             this.key = key;
         }
 

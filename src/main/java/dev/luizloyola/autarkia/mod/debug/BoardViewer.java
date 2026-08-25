@@ -210,7 +210,7 @@ public final class BoardViewer {
         for (int index = 0; index < slices.size(); index++) {
             Region slice = slices.get(index);
             boolean swept = project.swept(index);
-            boolean held = holds.containsKey(new WorkKey(WorkKey.SURVEY, slice.min()));
+            boolean held = holds.containsKey(new WorkKey.AtPlace(WorkKey.SURVEY, slice.min()));
             int colour = swept ? SLICE_WALKED
                     : held ? SLICE_WALKING
                     : project.sliceCoolingAt(index, now) ? SLICE_COOLING
@@ -234,7 +234,7 @@ public final class BoardViewer {
                 case CLEARED -> frame.cell(at, TARGET_CLEARED, 0, TARGET_WIDTH);
                 case REFUSED -> frame.cell(at, TARGET_REFUSED, TARGET_REFUSED_FILL, TARGET_WIDTH);
                 case OPEN -> {
-                    if (holds.containsKey(new WorkKey(WorkKey.CLEAR, at))) {
+                    if (holds.containsKey(new WorkKey.AtPlace(WorkKey.CLEAR, at))) {
                         frame.cell(at, TARGET_HELD, TARGET_HELD_FILL, TARGET_WIDTH);
                     } else if (target.retryAfter() > now) {
                         frame.cell(at, TARGET_COOLING, TARGET_COOLING_FILL, TARGET_WIDTH);
