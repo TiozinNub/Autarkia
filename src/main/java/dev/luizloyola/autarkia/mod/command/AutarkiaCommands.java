@@ -9,12 +9,14 @@ import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.command.AgentCommands;
 import dev.luizloyola.anima.mod.command.AgentSelection;
 import dev.luizloyola.anima.mod.command.Replies;
+import dev.luizloyola.anima.mod.command.Subject;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.anima.compat.inv.ItemStacks;
@@ -164,7 +166,7 @@ public final class AutarkiaCommands {
                         // a grave is a fact about a mind ending and nothing about being a settler.
                         .then(AgentCommands.grave())
                         .then(Commands.literal("whois")
-                                .executes(ctx -> whoisResolved(ctx.getSource()))
+                                .executes(ctx -> whoisResolved(ctx))
                                 .then(Commands.argument("targets", EntityArgument.entities())
                                         .executes(ctx -> whoisTargets(ctx.getSource(),
                                                 EntityArgument.getEntities(ctx, "targets")))))
@@ -190,16 +192,16 @@ public final class AutarkiaCommands {
                                 // Fell the nearest remembered tree by walking its compiled dance
                                 // card (ChopPlannedTree).
                                 .then(Commands.literal("chop")
-                                        .executes(ctx -> brainChop(ctx.getSource(), null))
+                                        .executes(ctx -> brainChop(ctx, null))
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
-                                                .executes(ctx -> brainChop(ctx.getSource(),
+                                                .executes(ctx -> brainChop(ctx,
                                                         BlockPosArgument.getBlockPos(
                                                                 ctx, "pos")))))
                                 .then(Commands.literal("obtain")
                                         .then(Commands.literal("logs")
-                                                .executes(ctx -> brainObtain(ctx.getSource(), 16))
+                                                .executes(ctx -> brainObtain(ctx, 16))
                                                 .then(Commands.argument("count", IntegerArgumentType.integer(1))
-                                                        .executes(ctx -> brainObtain(ctx.getSource(),
+                                                        .executes(ctx -> brainObtain(ctx,
                                                                 IntegerArgumentType.getInteger(ctx, "count")))))
                                         // Any concrete item, by id — an exact-item spec built on
                                         // the spot (ItemSpec.anyOf: canonical and persistable, so
@@ -207,10 +209,10 @@ public final class AutarkiaCommands {
                                         // "obtain stick 4" plans the whole planks-then-sticks
                                         // chain out of one carried log.
                                         .then(Commands.argument("item", ItemArgument.item(registryAccess))
-                                                .executes(ctx -> brainObtainItem(ctx.getSource(),
+                                                .executes(ctx -> brainObtainItem(ctx,
                                                         ItemArgument.getItem(ctx, "item"), 1))
                                                 .then(Commands.argument("count", IntegerArgumentType.integer(1))
-                                                        .executes(ctx -> brainObtainItem(ctx.getSource(),
+                                                        .executes(ctx -> brainObtainItem(ctx,
                                                                 ItemArgument.getItem(ctx, "item"),
                                                                 IntegerArgumentType.getInteger(ctx, "count")))))))
                         // Thinking out loud: forwards the resolved Person's `think` journal lines
@@ -259,7 +261,7 @@ public final class AutarkiaCommands {
                         // Layer 3, both scopes at once: the personal board (what this body wants
                         // for itself) and the party board (what the group has posted).
                         .then(Commands.literal("board")
-                                .executes(ctx -> boardShow(ctx.getSource()))
+                                .executes(ctx -> boardShow(ctx))
                                 // Two corners and nothing else — the box is the whole brief; who
                                 // goes in, in what order, and how they learn what is standing
                                 // there is the project's business, not the operator's.
@@ -267,12 +269,12 @@ public final class AutarkiaCommands {
                                         .then(Commands.literal("clear")
                                                 .then(Commands.argument("from", BlockPosArgument.blockPos())
                                                         .then(Commands.argument("to", BlockPosArgument.blockPos())
-                                                                .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                .executes(ctx -> boardPostClear(ctx,
                                                                         corner(ctx, "from"), corner(ctx, "to"),
                                                                         CLEAR_PRIORITY, null))
                                                                 .then(Commands.argument("priority",
                                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                        .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                        .executes(ctx -> boardPostClear(ctx,
                                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
                                                                                 null)))
@@ -281,12 +283,12 @@ public final class AutarkiaCommands {
                                                                 // will hold one, and the readout names where it went.
                                                                 .then(Commands.literal("at")
                                                                         .then(Commands.argument("yard", BlockPosArgument.blockPos())
-                                                                                .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                                .executes(ctx -> boardPostClear(ctx,
                                                                                         corner(ctx, "from"), corner(ctx, "to"),
                                                                                         CLEAR_PRIORITY, corner(ctx, "yard")))
                                                                                 .then(Commands.argument("priority",
                                                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                                        .executes(ctx -> boardPostClear(ctx.getSource(),
+                                                                                        .executes(ctx -> boardPostClear(ctx,
                                                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
                                                                                                 corner(ctx, "yard")))))))))
@@ -302,13 +304,13 @@ public final class AutarkiaCommands {
                                                                 .then(Commands.literal("at")
                                                                         .then(Commands.argument("pos",
                                                                                         BlockPosArgument.blockPos())
-                                                                                .executes(ctx -> boardPostGather(ctx.getSource(),
+                                                                                .executes(ctx -> boardPostGather(ctx,
                                                                                         ItemArgument.getItem(ctx, "spec"),
                                                                                         IntegerArgumentType.getInteger(ctx, "n"),
                                                                                         corner(ctx, "pos"), GATHER_PRIORITY))
                                                                                 .then(Commands.argument("priority",
                                                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                                        .executes(ctx -> boardPostGather(ctx.getSource(),
+                                                                                        .executes(ctx -> boardPostGather(ctx,
                                                                                                 ItemArgument.getItem(ctx, "spec"),
                                                                                                 IntegerArgumentType.getInteger(ctx, "n"),
                                                                                                 corner(ctx, "pos"),
@@ -324,14 +326,14 @@ public final class AutarkiaCommands {
                                 // Every row of the ledger, one line each — the only way to ask
                                 // "did that tree actually go?" of the world afterwards.
                                 .then(Commands.literal("targets")
-                                        .executes(ctx -> boardTargets(ctx.getSource())))
+                                        .executes(ctx -> boardTargets(ctx)))
                                 .then(Commands.literal("cancel")
                                         .then(Commands.argument("project", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> boardCancel(ctx.getSource(),
+                                                .executes(ctx -> boardCancel(ctx,
                                                         IntegerArgumentType.getInteger(ctx, "project"), false)))
                                         .then(Commands.literal("party")
                                                 .then(Commands.argument("project", IntegerArgumentType.integer(1))
-                                                        .executes(ctx -> boardCancel(ctx.getSource(),
+                                                        .executes(ctx -> boardCancel(ctx,
                                                                 IntegerArgumentType.getInteger(ctx, "project"), true))))))
                         // Who they can currently SEE — the peers() sense: Persons and live
                         // players, one seamless list, activity read off the visible body.
@@ -378,8 +380,9 @@ public final class AutarkiaCommands {
      *
      * <p>Both, because a summary could not tell a quiet personal board from an empty party one.
      */
-    private static int boardShow(CommandSourceStack source) {
-        Person person = resolve(source);
+    private static int boardShow(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         Replies.send(source, () -> Component.translatable("autarkia.command.board.header",
                 person.getName()).withStyle(ChatFormatting.LIGHT_PURPLE));
@@ -429,8 +432,9 @@ public final class AutarkiaCommands {
      * asked of the WORLD and not of the project: a project reports a tree cleared when the errand
      * for it ended, and only the blocks can settle whether anything is still standing there.
      */
-    private static int boardTargets(CommandSourceStack source) {
-        Person person = resolve(source);
+    private static int boardTargets(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         Optional<PartyBoard> board = partyBoardOf(person);
         if (board.isEmpty()) {
@@ -506,9 +510,10 @@ public final class AutarkiaCommands {
         return BlockPosArgument.getLoadedBlockPos(ctx, name);
     }
 
-    private static int boardPostClear(CommandSourceStack source, BlockPos from, BlockPos to,
+    private static int boardPostClear(CommandContext<CommandSourceStack> ctx, BlockPos from, BlockPos to,
                                       double priority, @Nullable BlockPos yard) {
-        Person person = resolve(source);
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         AgentId who = person.getAgentId();
         if (who == null || !(person.level() instanceof ServerLevel level)) {
@@ -557,9 +562,10 @@ public final class AutarkiaCommands {
      * <p>Refused before anything is posted when nothing registered here can ever make the item —
      * otherwise the settlement looks busy on a job that can never complete.
      */
-    private static int boardPostGather(CommandSourceStack source, ItemInput item, int count,
+    private static int boardPostGather(CommandContext<CommandSourceStack> ctx, ItemInput item, int count,
                                        BlockPos yard, double priority) {
-        Person person = resolve(source);
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         AgentId who = person.getAgentId();
         if (who == null || !(person.level() instanceof ServerLevel level)) {
@@ -610,8 +616,9 @@ public final class AutarkiaCommands {
      * <p>Any member may cancel a shared project — the dev answer, until layer 4 has opinions about
      * who decides.
      */
-    private static int boardCancel(CommandSourceStack source, int handle, boolean party) {
-        Person person = resolve(source);
+    private static int boardCancel(CommandContext<CommandSourceStack> ctx, int handle, boolean party) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         var cancelled = party
                 ? partyBoardOf(person).flatMap(board -> board.cancel(handle))
@@ -643,8 +650,9 @@ public final class AutarkiaCommands {
      * Runs {@link ChopPlannedTree} on the resolved Person's nearest remembered tree — the
      * dance-card executor, ordered directly for staging.
      */
-    private static int brainChop(CommandSourceStack source, @Nullable BlockPos at) {
-        Person person = resolve(source);
+    private static int brainChop(CommandContext<CommandSourceStack> ctx, @Nullable BlockPos at) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         Pos anchor;
         if (at != null) {
@@ -673,8 +681,9 @@ public final class AutarkiaCommands {
 
     /** Runs {@link ObtainItem} (logs × count): rounds of scavenge-or-chop until the pack holds the
      *  quota, run to completion in one invocation. */
-    private static int brainObtain(CommandSourceStack source, int count) {
-        Person person = resolve(source);
+    private static int brainObtain(CommandContext<CommandSourceStack> ctx, int count) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new ObtainItem(Stock.LOGS, count));
         Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
@@ -689,10 +698,11 @@ public final class AutarkiaCommands {
      * cheapest. The spec is {@link dev.luizloyola.anima.core.inv.ItemSpec#anyOf}, so the order
      * persists like any other plan and two sessions asking for the same item mean the same spec.
      */
-    private static int brainObtainItem(CommandSourceStack source,
+    private static int brainObtainItem(CommandContext<CommandSourceStack> ctx,
                                        net.minecraft.commands.arguments.item.ItemInput item,
                                        int count) {
-        Person person = resolve(source);
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
         if (person == null) return 0;
         // Through the compat template rather than ItemInput's own accessors, which changed shape
         // across targets — the same seam `inv give` already crosses on.
@@ -928,8 +938,9 @@ public final class AutarkiaCommands {
     }
 
     /** {@link #resolveBody} narrowed to a Person, for the commands that are about being one. */
-    private static @Nullable Person resolve(CommandSourceStack source) {
-        AgentBody body = AgentCommands.resolveBody(source);
+    private static @Nullable Person resolve(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        AgentBody body = Subject.body(ctx);
         if (body == null) {
             return null;
         }
@@ -985,8 +996,9 @@ public final class AutarkiaCommands {
 
     // --- contacts: who has been introduced to whom ----------------------------------------------
 
-    private static int whoisResolved(CommandSourceStack source) {
-        Person target = resolve(source);
+    private static int whoisResolved(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        Person target = resolve(ctx);
         if (target == null) return 0;
         report(source, target);
         return 1;
