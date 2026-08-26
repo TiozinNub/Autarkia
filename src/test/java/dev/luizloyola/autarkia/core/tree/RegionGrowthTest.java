@@ -93,14 +93,15 @@ class RegionGrowthTest {
     /**
      * The tree's species is read once, at its stump — the same cell the anchor is chosen from —
      * and travels onto the {@link GrownRegion.Part}'s detail untouched by anything else in the
-     * mass. Naming a different log elsewhere in the crown proves the read is per-trunk, not
-     * per-block: {@link FakeProbe#idAt} is never asked there.
+     * mass. Naming a DIFFERENT id further up the same column and still getting the stump's back
+     * proves the read is per-trunk, not per-block: nothing above the base is ever asked.
      */
     @Test
     void aTreesSpeciesIsRecordedFromItsStump() {
         FakeProbe probe = new FakeProbe();
         probe.placeOak(10, 10);
         probe.setId(10, 64, 10, "minecraft:birch_log");
+        probe.setId(10, 66, 10, "minecraft:oak_log"); // a different id, up in the column
         Pos seed = new Pos(10, 68, 10);
         GrownRegion region = grow(
                 new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES, TestSpecies.PROFILE),

@@ -96,7 +96,9 @@ class ChopForLogsTest {
 
     @Test
     void anAvoidedTreeIsNobodysProducer() {
+        // Funded so the avoid clause is what refuses this, not an unrelated empty pack.
         FakeContext ctx = new FakeContext();
+        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 8, 64));
         ctx.knowledge().note(tree(10, 64, 0, "minecraft:oak_log", 0), 0);
         ctx.knowledge().avoid(Pois.TREE, new Pos(10, 64, 0), 1000);
 
@@ -129,14 +131,29 @@ class ChopForLogsTest {
 
     @Test
     void aTreeNobodyNamedSatisfiesNothing() {
-        // Deliberately unfunded: the pillar this shape would cost is enough on its own to refuse
-        // an empty pack, so an unspeciated tree stays refused for two independent reasons instead
-        // of one — which is fine, since nothing here claims this is the only filter in play.
+        // Funded like its two siblings above, so the species clause is the ONLY reason this
+        // refuses — an unfunded pack would refuse on affordability alone and the species clause
+        // could vanish without this test ever noticing.
         FakeContext ctx = new FakeContext();
+        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
         ctx.knowledge().note(tree(4, 64, 0, "", 0), 64);
 
         assertFalse(new ChopForLogs(Stock.LOGS).applicable(ctx),
                 "an unknown species is not a licence to guess");
+    }
+
+    @Test
+    void aBirchLogFundsAPillarUnderAnOak() {
+        // The affordability budget is species-BLIND on purpose: a birch log is a fine rung in a
+        // pillar under an oak. Funded with birch only, asked for oak only — this pins that
+        // `carried` stays keyed to Stock.LOGS and never narrows to `wanted`; narrowing it once
+        // left a Person with an empty pack unable to accept any tree at all.
+        FakeContext ctx = new FakeContext();
+        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
+        ctx.knowledge().note(tree(4, 64, 0, "minecraft:oak_log", 0), 64);
+
+        assertTrue(new ChopForLogs(ItemSpec.anyOf(Set.of("minecraft:oak_log"))).applicable(ctx),
+                "a birch log is a perfectly good rung in a pillar under an oak");
     }
 
     @Test
