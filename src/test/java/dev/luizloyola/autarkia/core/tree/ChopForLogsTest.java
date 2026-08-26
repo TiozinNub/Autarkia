@@ -12,8 +12,10 @@ import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -109,5 +111,21 @@ class ChopForLogsTest {
         List<Method> methods = obtain.methods();
         assertFalse(methods.get(0) instanceof ChopForLogs,
                 "scavenging keeps its place at the head of the menu");
+    }
+
+    @Test
+    void aProducerIsReachedByWhatItMakes() {
+        // The gate `board post gather` refuses on. Producers is keyed by ItemSpec IDENTITY and the
+        // command builds a fresh anyOf spec for the item named, so asking whether THAT spec is a
+        // registered key refuses every gather ever posted — including this one, for logs, which
+        // ChopForLogs plainly knows how to make.
+        Producers.register(Stock.LOGS, ChopForLogs::new);
+
+        assertTrue(Producers.knowsAnyOf(Set.of("minecraft:oak_log")),
+                "somebody here fells trees, whatever spec object the caller is holding");
+        assertFalse(Producers.knows(ItemSpec.anyOf(Set.of("minecraft:oak_log"))),
+                "and by identity they do not — the trap this gate was drafted with");
+        assertFalse(Producers.knowsAnyOf(Set.of("minecraft:diamond")),
+                "a settlement that cannot make a thing must refuse the job, not look busy on it");
     }
 }
