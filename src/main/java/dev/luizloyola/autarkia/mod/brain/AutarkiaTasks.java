@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.brain;
 
+import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
@@ -14,7 +15,9 @@ import dev.luizloyola.autarkia.core.tree.ChopPlan;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
 import dev.luizloyola.autarkia.core.tree.ChopPlannedTree;
 import dev.luizloyola.autarkia.core.tree.TreeShape;
+import java.util.HashSet;
 import java.util.List;
+import java.util.TreeSet;
 
 /**
  * How Autarkia's own tasks write themselves down.
@@ -193,17 +196,35 @@ public final class AutarkiaTasks {
     }
 
     /**
-     * A class of items, by the name it is registered under. A spec's matcher is a lambda and cannot
-     * be written down, so the name is the handle; an unregistered name errors rather than inventing
-     * a spec that matches nothing. Narrower than Anima's own, which also carries literal id lists —
-     * a gather is always posted against a declared spec.
+     * A class of items, in the two shapes a spec can have — the same fork {@code AnimaTasks} uses,
+     * and no longer narrower than it. A mod-declared spec's matcher is a lambda and cannot be
+     * written down, so its NAME is the handle and an unregistered one errors rather than inventing
+     * a spec that matches nothing. A {@link ItemSpec#anyOf literal} spec has no declarer to put its
+     * name back at boot, so its CONTENT is the handle, re-canonicalised through {@code anyOf} on
+     * load. A gather is NOT always posted against a declared spec:
+     * {@code board post gather <item>} builds a literal one, and the member walking it is holding
+     * it when the world saves.
      */
-    private static final Codec<ItemSpec> ITEM_SPEC = Codec.STRING.comapFlatMap(
-            name -> ItemSpec.byName(name)
-                    .map(DataResult::success)
-                    .orElseGet(() -> DataResult.error(
-                            () -> "no item spec is registered as \"" + name + "\"")),
-            ItemSpec::name);
+    private static final Codec<ItemSpec> ITEM_SPEC =
+            Codec.either(Codec.STRING, Codec.STRING.listOf())
+                    .comapFlatMap(AutarkiaTasks::specFromEither, AutarkiaTasks::specToEither);
+
+    private static DataResult<ItemSpec> specFromEither(Either<String, List<String>> written) {
+        return written.map(
+                name -> ItemSpec.byName(name)
+                        .map(DataResult::success)
+                        .orElseGet(() -> DataResult.error(
+                                () -> "no item spec is registered as \"" + name + "\"")),
+                ids -> ids.isEmpty()
+                        ? DataResult.error(() -> "an item spec with no ids")
+                        : DataResult.success(ItemSpec.anyOf(new HashSet<>(ids))));
+    }
+
+    private static Either<String, List<String>> specToEither(ItemSpec spec) {
+        return ItemSpec.literalIds(spec)
+                .<Either<String, List<String>>>map(ids -> Either.right(List.copyOf(new TreeSet<>(ids))))
+                .orElseGet(() -> Either.left(spec.name()));
+    }
 
     /**
      * A personal board's projects — the whole of layer 3 that lives on a body.

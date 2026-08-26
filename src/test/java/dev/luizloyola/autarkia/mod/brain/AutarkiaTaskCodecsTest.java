@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Idle;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.mod.brain.AnimaTasks;
 import dev.luizloyola.anima.arch.SourceTree;
@@ -109,8 +110,8 @@ class AutarkiaTaskCodecsTest {
 
     @Test
     void aGatheringErrandSurvivesTheFile() {
-        // The spec travels as its registry NAME: a declared spec's matcher is a lambda, and a
-        // trip reloaded against the wrong one would fetch nothing and never satisfy.
+        // A declared spec travels as its registry NAME: its matcher is a lambda, and a trip
+        // reloaded against the wrong one would fetch nothing and never satisfy.
         GatheringErrand before = new GatheringErrand(Stock.LOGS, 16, new Pos(10, 64, 10));
 
         GatheringErrand after = assertInstanceOf(GatheringErrand.class, roundTrip(before));
@@ -118,5 +119,21 @@ class AutarkiaTaskCodecsTest {
         assertEquals(Stock.LOGS, after.spec());
         assertEquals(16, after.count());
         assertEquals(before.yard(), after.yard());
+    }
+
+    @Test
+    void aTripForAnItemNobodyDeclaredSurvivesTheFile() {
+        // `board post gather <item>` posts an ItemSpec.anyOf, so the member walking it is holding
+        // a spec no bootstrap re-registers. By NAME that plan cannot decode at all, and an
+        // undecodable task in a saved plan is the failure this class exists for.
+        ItemSpec literal = ItemSpec.anyOf(java.util.Set.of("minecraft:oak_log"));
+        GatheringErrand before = new GatheringErrand(literal, 16, new Pos(10, 64, 10));
+
+        var written = TaskCodecs.codec().encodeStart(JsonOps.INSTANCE, before).getOrThrow();
+        assertTrue(written.getAsJsonObject().get("spec").isJsonArray(),
+                "the ids, not \"" + literal.name() + "\" — nothing declares that name at boot");
+
+        GatheringErrand after = assertInstanceOf(GatheringErrand.class, roundTrip(before));
+        assertTrue(after.spec().matches("minecraft:oak_log"));
     }
 }

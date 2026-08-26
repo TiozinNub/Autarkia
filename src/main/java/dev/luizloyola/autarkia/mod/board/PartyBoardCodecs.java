@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.board;
 
+import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
@@ -8,14 +9,17 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.ProjectState;
 import dev.luizloyola.autarkia.core.board.WorkKey;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.TreeSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 
@@ -142,9 +146,40 @@ public final class PartyBoardCodecs {
     ).apply(trip, (who, size) -> new Gather.Trip(AgentId.of(who), size)));
 
     /**
-     * Everything a {@code gather} row carries beyond its kind. The spec and the split travel as
-     * registry NAMES for the reason {@code AnimaTasks} gives: a declared spec's matcher is a lambda
-     * and cannot be written down.
+     * The {@link ItemSpec} a gather is for, in the two shapes a spec can have — the fork
+     * {@code AnimaTasks} writes plans with, and for the same reason. A mod-declared spec's matcher
+     * is a lambda and cannot be written down, so its NAME is the handle and the bootstrap that
+     * declares it puts it back. A {@link ItemSpec#anyOf literal} spec — what
+     * {@code board post gather <item>} builds — has no declarer, so nothing re-registers its name
+     * at boot and the name alone is a dead handle; its CONTENT travels instead, re-canonicalised
+     * through {@code anyOf} on load, which is what puts the name back for {@link Gather#restore}.
+     *
+     * <p>An unrecognised NAME passes through rather than erroring, unlike the task codec's: this
+     * row must reach {@code PartyBoardData.refuseUnknown}, which refuses to run a world holding a
+     * project it cannot rebuild. Failing here instead would drop the row inside a party that still
+     * decodes, and the store's guard counts parties, not projects.
+     */
+    public static final Codec<String> SPEC = Codec.either(Codec.STRING, Codec.STRING.listOf())
+            .comapFlatMap(PartyBoardCodecs::specFromEither, PartyBoardCodecs::specToEither);
+
+    private static DataResult<String> specFromEither(Either<String, List<String>> written) {
+        return written.map(
+                DataResult::success,
+                ids -> ids.isEmpty()
+                        ? DataResult.error(() -> "a gather for an item spec with no ids")
+                        : DataResult.success(ItemSpec.anyOf(new HashSet<>(ids)).name()));
+    }
+
+    private static Either<String, List<String>> specToEither(String name) {
+        return ItemSpec.byName(name).flatMap(ItemSpec::literalIds)
+                .<Either<String, List<String>>>map(ids -> Either.right(List.copyOf(new TreeSet<>(ids))))
+                .orElseGet(() -> Either.left(name));
+    }
+
+    /**
+     * Everything a {@code gather} row carries beyond its kind. The split travels as a registry NAME
+     * for the reason {@code AnimaTasks} gives: a policy is picked by id, not written down. The spec
+     * travels as {@link #SPEC}.
      *
      * <p>The item OBJECTS are not written — they are exhaust — but who owes what is, beside the
      * {@link WorkKey.ForMember} on each hold. The two have to agree, and only one of them can be
@@ -152,7 +187,7 @@ public final class PartyBoardCodecs {
      */
     public static final MapCodec<Gather.State> GATHER =
             RecordCodecBuilder.mapCodec(project -> project.group(
-                    Codec.STRING.fieldOf("spec").forGetter(Gather.State::spec),
+                    SPEC.fieldOf("spec").forGetter(Gather.State::spec),
                     Codec.INT.fieldOf("target").forGetter(Gather.State::target),
                     POS.fieldOf("yard").forGetter(Gather.State::yard),
                     Codec.DOUBLE.fieldOf("priority").forGetter(Gather.State::priority),

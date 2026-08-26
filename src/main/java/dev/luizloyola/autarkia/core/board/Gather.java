@@ -521,7 +521,10 @@ public final class Gather implements PartyProject {
      * {@link Trip}.
      *
      * @param spec the {@link ItemSpec} registry name — a mod-declared spec's matcher is a lambda
-     *             and cannot be written down
+     *             and cannot be written down. A name is a durable handle only for a spec somebody
+     *             DECLARES at boot; a literal {@link ItemSpec#anyOf} spec has no declarer, so the
+     *             row that carries this name must also carry its ids and re-register it before
+     *             {@link #restore} looks it up — see {@code PartyBoardCodecs.SPEC}
      * @param split the {@link Split} registry id, for the same reason
      */
     public record State(String spec, int target, Pos yard, double priority, PartyId party,

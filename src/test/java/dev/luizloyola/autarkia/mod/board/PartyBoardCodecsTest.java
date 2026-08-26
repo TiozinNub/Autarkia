@@ -1,22 +1,28 @@
 package dev.luizloyola.autarkia.mod.board;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.ProjectState;
+import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.board.WorkKey;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import org.junit.jupiter.api.Test;
 
@@ -281,5 +287,83 @@ class PartyBoardCodecsTest {
                 new WorkKey.ForMember(WorkKey.GATHER, alice), alice);
         var encoded = PartyBoardCodecs.HOLD.encodeStart(JsonOps.INSTANCE, hold).getOrThrow();
         assertEquals(hold, PartyBoardCodecs.HOLD.parse(JsonOps.INSTANCE, encoded).getOrThrow());
+    }
+
+    /** The gather row a hand-written {@code spec} needs around it to be a whole project. */
+    private static JsonObject gatherRow() {
+        JsonObject project = new JsonObject();
+        project.addProperty("type", "gather");
+        project.addProperty("target", 32);
+        project.add("yard", PartyBoardCodecs.POS.encodeStart(JsonOps.INSTANCE,
+                new Pos(0, 64, 0)).getOrThrow());
+        project.addProperty("priority", 0.5);
+        project.add("party", UUIDUtil.CODEC.encodeStart(JsonOps.INSTANCE,
+                UUID.randomUUID()).getOrThrow());
+        project.addProperty("split", "even");
+        return project;
+    }
+
+    @Test
+    void aGatherPostedForOneItemWritesTheIdsAndNotItsDerivedName() {
+        // What `board post gather <item>` builds: ItemSpec.anyOf, registered by the command in the
+        // running jvm and by NOBODY at boot — no bootstrap declares "oak_log" the way Stock does
+        // "logs". Writing that derived name alone is a dead handle: restore comes back empty, the
+        // board counts the project unknown, and refuseUnknown will not start the world again.
+        ItemSpec posted = ItemSpec.anyOf(Set.of("minecraft:oak_log"));
+        Gather.State before = new Gather.State(posted.name(), 64, new Pos(10, 64, 10), 0.5,
+                PartyId.of(UUID.randomUUID()), "even", List.of(), List.of(), List.of());
+        PartyBoard.Row row = new PartyBoard.Row(before, List.of());
+
+        JsonObject written = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row)
+                .getOrThrow().getAsJsonObject().getAsJsonObject("project");
+
+        assertTrue(written.get("spec").isJsonArray(),
+                "a literal spec travels as its ids — \"" + posted.name() + "\" is a name only this "
+                        + "jvm can resolve");
+        assertEquals("minecraft:oak_log",
+                written.get("spec").getAsJsonArray().get(0).getAsString());
+
+        Gather back = Gather.restore((Gather.State) roundTrip(row).project(), 0L).orElseThrow(
+                () -> new AssertionError("the only gather the command can post must reload"));
+        assertTrue(back.spec().matches("minecraft:oak_log"), "and match what it was posted for");
+    }
+
+    @Test
+    void aGatherRowCarryingIdsRestoresASpecNothingDeclares() {
+        // The load half, from a file this jvm did not write. Nothing declares "cut_copper", so
+        // re-canonicalising the ids through anyOf is the only thing that can put the name back
+        // in the registry Gather.restore then looks it up in.
+        JsonArray ids = new JsonArray();
+        ids.add("minecraft:cut_copper");
+        JsonObject project = gatherRow();
+        project.add("spec", ids);
+
+        ProjectState read = PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, project).getOrThrow();
+
+        Gather back = Gather.restore((Gather.State) read, 0L).orElseThrow(
+                () -> new AssertionError("a saved gather whose spec nobody declares must reload"));
+        assertTrue(back.spec().matches("minecraft:cut_copper"));
+        assertFalse(back.spec().matches("minecraft:oak_log"), "and match nothing else");
+    }
+
+    @Test
+    void aGatherRowWrittenAsABareNameStillReads() {
+        // Every gather written before the ids were carried is name-shaped, and for a DECLARED spec
+        // a name is still the whole handle — Stock puts "logs" back at class load, as a bootstrap
+        // does at boot. An unknown name is deliberately not an error here: it has to reach
+        // refuseUnknown, which stops the world rather than quietly emptying a party's board.
+        JsonObject project = gatherRow();
+        project.addProperty("spec", Stock.LOGS.name());
+
+        Gather.State read =
+                (Gather.State) PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, project).getOrThrow();
+
+        assertEquals("logs", read.spec());
+        assertEquals(Stock.LOGS, Gather.restore(read, 0L).orElseThrow().spec());
+
+        project.addProperty("spec", "dilithium");
+        assertTrue(PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, project).result().isPresent(),
+                "an undeclared name decodes; refusing the WORLD is PartyBoardData's job, not the "
+                        + "codec's — a row that fails here drops inside a party that still counts");
     }
 }
