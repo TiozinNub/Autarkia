@@ -158,6 +158,10 @@ motd=Autarkia smoke test
 EOF
 
 # ── Boot ───────────────────────────────────────────────────────────────────────────────────────
+# A FRESH world every run. Without this the save accumulates one CiProbe per run, and a check that
+# names a Person rather than selecting one with `limit=1` goes ambiguous on the second run — which
+# is a broken smoke, not a broken command: `as <name>` refuses to guess between two of a name.
+rm -rf "$SRV/world"
 rm -f "$FIFO"
 mkfifo "$FIFO"
 : > "$LOG"
