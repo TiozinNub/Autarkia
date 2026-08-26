@@ -479,7 +479,7 @@ public final class AutarkiaCommands {
         int projects = now ? BoardViewer.inRange(server, player) : 0;
         Replies.send(source, () -> Component.literal(now
                         ? "Board view on — " + (projects == 0
-                                ? "no clearing project within " + 512 + " blocks of you yet."
+                                ? "no project within " + 512 + " blocks of you yet."
                                 : projects + " project" + (projects == 1 ? "" : "s") + " in range. "
                                         + "Grey slice = unwalked, amber = being walked, green = "
                                         + "reported. White tree = pending, cyan = somebody is on "
