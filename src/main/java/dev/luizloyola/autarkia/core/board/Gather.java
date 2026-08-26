@@ -59,12 +59,34 @@ public final class Gather implements PartyProject {
     public static final double COST_AT_RANGE = 0.25;
 
     /**
+     * Ticks ONE MEMBER sits out THIS project after a trip of it fails — {@code KeepStocked}'s own
+     * number, for the same reason a quantity project needs any pacing at all: without it, a project
+     * failing everywhere re-offers the identical doomed trip to the same member every beat, and
+     * {@code Board.benchIfFlailing} spends their whole four-strike budget on it alone and stands
+     * them down from every OTHER job too. Live, 2026-08-24: a jungle gather with no jungle in reach
+     * benched a settler off a perfectly reachable oak job standing 26 blocks away, over and over.
+     *
+     * <p>Scoped to the MEMBER, not the project: unlike a place-named errand, "no jungle in reach" is
+     * a fact about one body's surroundings, and a settler who happens to be standing in a jungle
+     * must still be offered the job.
+     */
+    public static final int FAIL_COOLDOWN = 600;
+
+    /**
      * What one yard chest held the last time anybody looked, and when.
      *
      * @param at the game time of the look — carried so a restart cannot make a stale belief look
      *           fresh, and so a reporter with an older memory cannot overwrite a newer reading
      */
     public record Reading(Pos chest, int count, long at) {
+    }
+
+    /**
+     * One member waiting out a failed trip — the same pacing {@code ClearArea.SliceCooldown} gives
+     * a slice, scoped to a member instead of a place because that is what a quantity project can
+     * name.
+     */
+    public record Cooldown(AgentId who, long retryAfter) {
     }
 
     /**
@@ -102,6 +124,9 @@ public final class Gather implements PartyProject {
 
     /** Items somebody is holding, so a withdrawal can never pull one out from under a worker. */
     private final Set<WorkKey> claimed = new LinkedHashSet<>();
+
+    /** Member → the game time before which a fresh trip of THIS project is not minted for them. */
+    private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
 
     /** {@link #open} as the board sees it, rebuilt on change so an ask allocates nothing. */
     private List<WorkItem> offer = List.of();
@@ -217,7 +242,7 @@ public final class Gather implements PartyProject {
             withdrawAll();
             return;
         }
-        mint(members);
+        mint(members, now);
         rebuildOffer();
     }
 
@@ -229,13 +254,13 @@ public final class Gather implements PartyProject {
      * the other four nothing, which is the split table's second row. A zero share ends the pass —
      * the remainder cannot grow again inside it.
      */
-    private void mint(List<AgentId> members) {
+    private void mint(List<AgentId> members, long now) {
         for (AgentId member : members) {
             WorkKey key = new WorkKey.ForMember(WorkKey.GATHER, member);
-            if (open.containsKey(key)) {
+            if (open.containsKey(key) || cooling(member, now)) {
                 continue;
             }
-            int size = split.tripFor(remainder(), free(members));
+            int size = split.tripFor(remainder(), free(members, now));
             if (size <= 0) {
                 return;
             }
@@ -243,11 +268,23 @@ public final class Gather implements PartyProject {
         }
     }
 
-    /** How many members hold no live item of this project — the split's divisor. */
-    private int free(List<AgentId> members) {
+    /** Whether this member's last trip of this project failed too recently to try again. */
+    private boolean cooling(AgentId member, long now) {
+        Long until = cooldownUntil.get(member);
+        return until != null && until > now;
+    }
+
+    /**
+     * How many members hold no live item of this project and are not waiting out a failure — the
+     * split's divisor. A cooling member is excluded rather than merely skipped when minting: they
+     * are not about to receive a trip this beat, so counting them would shrink everyone else's
+     * share against a member who is not actually there to take it.
+     */
+    private int free(List<AgentId> members, long now) {
         int free = 0;
         for (AgentId member : members) {
-            if (!open.containsKey(new WorkKey.ForMember(WorkKey.GATHER, member))) {
+            if (!open.containsKey(new WorkKey.ForMember(WorkKey.GATHER, member))
+                    && !cooling(member, now)) {
                 free++;
             }
         }
@@ -274,12 +311,17 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * A failed fetch is re-offered with no cooldown (v1): unlike a tree, a quantity says nothing
-     * about WHERE it failed, so there is no target to pace. A settler who fails everything is
-     * {@code Board}'s own bench to handle.
+     * A failed trip bars only the member who took it, for {@link #FAIL_COOLDOWN} — see that
+     * constant for why a quantity project needs any pacing at all despite having no place to pace it
+     * against. Every other member is untouched, and the project keeps minting for them next beat.
      */
     @Override
     public void failed(WorkItem item, BrainContext ctx) {
+        keyOf(item).ifPresent(key -> {
+            if (key instanceof WorkKey.ForMember member) {
+                cooldownUntil.put(member.who(), ctx.percepts().time() + FAIL_COOLDOWN);
+            }
+        });
         drop(item);
     }
 
@@ -529,7 +571,7 @@ public final class Gather implements PartyProject {
      */
     public record State(String spec, int target, Pos yard, double priority, PartyId party,
                         String split, List<Pos> yardChests, List<Reading> readings,
-                        List<Trip> trips) implements ProjectState {
+                        List<Trip> trips, List<Cooldown> cooldowns) implements ProjectState {
 
         @Override
         public String type() {
@@ -546,8 +588,11 @@ public final class Gather implements PartyProject {
                 trips.add(new Trip(named.who(), ((TripItem) item).size()));
             }
         });
+        List<Cooldown> cooldowns = new ArrayList<>();
+        cooldownUntil.forEach((who, until) -> cooldowns.add(new Cooldown(who, until)));
         return new State(spec.name(), target, yard, priority, party, split.id(),
-                List.copyOf(yardChests), List.copyOf(readings.values()), List.copyOf(trips));
+                List.copyOf(yardChests), List.copyOf(readings.values()), List.copyOf(trips),
+                List.copyOf(cooldowns));
     }
 
     /**
@@ -567,6 +612,9 @@ public final class Gather implements PartyProject {
             project.yardChests.addAll(state.yardChests());
             for (Reading reading : state.readings()) {
                 project.readings.put(reading.chest(), reading);
+            }
+            for (Cooldown cooldown : state.cooldowns()) {
+                project.cooldownUntil.put(cooldown.who(), cooldown.retryAfter());
             }
             for (Trip trip : state.trips()) {
                 project.seed(trip.who(), trip.size());

@@ -263,7 +263,7 @@ class GatherTest {
     }
 
     @Test
-    void aFailedFetchIsSimplyOfferedAgain() {
+    void aFailedMemberIsNotOfferedAnotherTripUntilTheCooldownExpires() {
         party(1);
         Gather project = posted(64);
         WorkItem trip = tripOf(project, 0);
@@ -273,8 +273,47 @@ class GatherTest {
 
         assertEquals(0, project.inFlight());
         project.tick(40L);
-        assertEquals(1, project.open().size(),
-                "no cooldown in v1 — a quantity says nothing about where it failed");
+        assertTrue(project.itemFor(keyFor(roster.get(0))).isEmpty(),
+                "the same body just proved this trip impossible — re-offering it immediately is "
+                        + "the defect this pacing exists to close");
+
+        project.tick(Gather.FAIL_COOLDOWN + 1);
+
+        assertTrue(project.itemFor(keyFor(roster.get(0))).isPresent(),
+                "past the cooldown the member is exactly as free as anybody else");
+    }
+
+    @Test
+    void aDifferentMemberIsStillOfferedATripImmediately() {
+        party(2);
+        Gather project = posted(64);
+        AgentId flailing = roster.get(0);
+        AgentId fine = roster.get(1);
+        WorkItem hers = project.itemFor(keyFor(flailing)).orElseThrow();
+        project.claimed(hers);
+
+        project.failed(hers, new BoardBrainContext());
+        project.tick(40L);
+
+        assertTrue(project.itemFor(keyFor(flailing)).isEmpty(), "the failing member sits out");
+        assertTrue(project.itemFor(keyFor(fine)).isPresent(),
+                "\"no jungle in reach\" is a fact about the failing body's surroundings — a "
+                        + "settler who never touched that trip must not pay for it");
+    }
+
+    @Test
+    void aLapsedClaimDoesNotStartACooldown() {
+        party(1);
+        Gather project = posted(64);
+        WorkItem trip = tripOf(project, 0);
+        project.claimed(trip);
+
+        project.lapsed(trip);
+        project.tick(40L);
+
+        assertTrue(project.itemFor(keyFor(roster.get(0))).isPresent(),
+                "the worker was pulled away, not proven wrong — that says nothing about whether "
+                        + "the trip is doable");
     }
 
     @Test
@@ -570,7 +609,7 @@ class GatherTest {
     @Test
     void aGatherForSomethingThisBuildDoesNotKnowComesBackAsNothing() {
         Gather.State unknown = new Gather.State("dilithium", 64, YARD, 0.5, PARTY, "even",
-                List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of());
 
         // Never silently an empty project: the store's job is to refuse the world, and it can only
         // do that if this says so rather than handing back something plausible.
@@ -631,6 +670,32 @@ class GatherTest {
         assertEquals(64, tripSize(back.itemFor(keyFor(roster.get(0))).orElseThrow()));
         assertEquals(64, tripSize(back.itemFor(keyFor(roster.get(1))).orElseThrow()));
         assertEquals(128, back.inFlight());
+    }
+
+    @Test
+    void theCooldownSurvivesSnapshotAndRestore() {
+        party(2);
+        Gather project = posted(64);
+        AgentId flailing = roster.get(0);
+        AgentId fine = roster.get(1);
+        WorkItem hers = project.itemFor(keyFor(flailing)).orElseThrow();
+        project.claimed(hers);
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.advance(100L);
+        project.failed(hers, ctx);
+
+        Gather back = Gather.restore(project.snapshot(), 100L).orElseThrow();
+
+        assertTrue(back.itemFor(keyFor(flailing)).isEmpty(),
+                "the house rule is that a reboot is invisible — an agent must not be able to tell "
+                        + "one happened, and a cooldown that failed to round-trip would let this "
+                        + "member straight back in");
+        assertTrue(back.itemFor(keyFor(fine)).isPresent(), "the unaffected member reloads unaffected");
+
+        Gather further = Gather.restore(back.snapshot(), 100L + Gather.FAIL_COOLDOWN).orElseThrow();
+
+        assertTrue(further.itemFor(keyFor(flailing)).isPresent(),
+                "and it actually expires — a saved cooldown is not a permanent ban");
     }
 
     @Test

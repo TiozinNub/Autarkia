@@ -146,6 +146,16 @@ public final class PartyBoardCodecs {
     ).apply(trip, (who, size) -> new Gather.Trip(AgentId.of(who), size)));
 
     /**
+     * One member waiting out a failed trip — the same shape {@link #SLICE_COOLDOWN} gives a slice,
+     * keyed by member instead of place because that is what {@link Gather} can name a failure by.
+     */
+    public static final Codec<Gather.Cooldown> GATHER_COOLDOWN =
+            RecordCodecBuilder.create(cooldown -> cooldown.group(
+                    UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
+                    Codec.LONG.fieldOf("retry").forGetter(Gather.Cooldown::retryAfter)
+            ).apply(cooldown, (who, retry) -> new Gather.Cooldown(AgentId.of(who), retry)));
+
+    /**
      * The {@link ItemSpec} a gather is for, in the two shapes a spec can have — the fork
      * {@code AnimaTasks} writes plans with, and for the same reason. A mod-declared spec's matcher
      * is a lambda and cannot be written down, so its NAME is the handle and the bootstrap that
@@ -198,10 +208,14 @@ public final class PartyBoardCodecs {
                     READING.listOf().optionalFieldOf("readings", List.of())
                             .forGetter(Gather.State::readings),
                     TRIP.listOf().optionalFieldOf("trips", List.of())
-                            .forGetter(Gather.State::trips)
-            ).apply(project, (spec, target, yard, priority, party, split, chests, readings, trips) ->
-                    new Gather.State(spec, target, yard, priority, PartyId.of(party), split,
-                            chests, readings, trips)));
+                            .forGetter(Gather.State::trips),
+                    // A world saved before pacing existed carries none — read as nobody cooling,
+                    // never as a decode failure that costs the row.
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(Gather.State::cooldowns)
+            ).apply(project, (spec, target, yard, priority, party, split, chests, readings, trips,
+                    cooldowns) -> new Gather.State(spec, target, yard, priority, PartyId.of(party),
+                            split, chests, readings, trips, cooldowns)));
 
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this
