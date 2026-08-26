@@ -74,9 +74,14 @@ public final class TreeRule implements GrowthRule {
             for (Pos leaf : trunk.leaves()) {
                 cells.put(leaf, BlockKind.LEAVES);
             }
+            // One read, at the stump — a 2x2 giant's four base cells are one tree, so any of
+            // them answers for all. Per-block would land a registry lookup on the hottest path
+            // in the mod; per-tree is the hundreds-to-one trade this rule already makes elsewhere.
+            Pos stump = trunk.base().get(0);
+            String species = probe.idAt(stump.x(), stump.y(), stump.z());
             // The base layer is the approach: which foot is the asker's business, not the
             // wood's — Anchors picks the near one, so this is evaluated once for everybody.
-            trees.add(new Evaluation(trunk.base(), trunk.logCount(), cells));
+            trees.add(new Evaluation(trunk.base(), trunk.logCount(), cells, species));
         }
         return trees;
     }

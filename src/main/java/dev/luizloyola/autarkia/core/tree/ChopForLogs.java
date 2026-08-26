@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.List;
 import java.util.Optional;
@@ -18,8 +19,20 @@ import java.util.Optional;
  * tree and the nearest tree beats a far one. Claims-aware at selection — "selection is commitment"
  * is the task's rule, but not offering somebody else's tree is what keeps lumberjacks spread across
  * a forest instead of queued behind one trunk.
+ *
+ * <p>Species-aware at the same selection site: it only offers a tree matching the {@link ItemSpec}
+ * it was created for, so a gather posted for oak in a birch wood refuses rather than felling the
+ * wrong wood forever. "Any log" and "oak only" are the same mechanism — the spec decides.
  */
 public final class ChopForLogs implements Method {
+
+    /** The spec the goal actually wants — "any log" and "oak only" are the same class asking
+     *  a different question of {@link #nearestFreeTree}. */
+    private final ItemSpec wanted;
+
+    public ChopForLogs(ItemSpec wanted) {
+        this.wanted = wanted;
+    }
 
     @Override
     public boolean applicable(BrainContext ctx) {
@@ -47,10 +60,13 @@ public final class ChopForLogs implements Method {
     }
 
     /**
-     * The nearest remembered tree that is free, unavoided — and AFFORDABLE: a pillar is prepaid (one
-     * rise, one carried log), so a tree whose estimated bill exceeds the pack is not offered at all
-     * (Luiz's rule: cost is part of validity). Nothing else is filtered — quoting a pillar to plain
-     * trees, which climb themselves, left a Person with an empty pack unable to accept any tree.
+     * The nearest remembered tree that is {@code wanted}'s species, free, unavoided — and
+     * AFFORDABLE: a pillar is prepaid (one rise, one carried log), so a tree whose estimated bill
+     * exceeds the pack is not offered at all (Luiz's rule: cost is part of validity). The
+     * affordability budget stays species-BLIND — it counts {@link Stock#LOGS}, any log, because a
+     * birch log is a perfectly good rung in a pillar under an oak. Only the target is filtered;
+     * over-filtering the budget once quoted a pillar to plain trees, which climb themselves, and
+     * left a Person with an empty pack unable to accept any tree.
      */
     private Optional<PoiMemory> nearestFreeTree(BrainContext ctx) {
         Pos here = ctx.percepts().position();
@@ -62,6 +78,9 @@ public final class ChopForLogs implements Method {
             if (ctx.knowledge().isAvoided(Pois.TREE, tree.anchor(), now)
                     || !ctx.claims().availableTo(Pois.TREE, tree.anchor(), now)) {
                 continue;
+            }
+            if (!wanted.matches(tree.detail())) {
+                continue; // asked for oak; this is a birch, or something nobody named
             }
             if (bill(tree) > carried) {
                 continue; // a giant she cannot fund yet — plain trees pay for it first
