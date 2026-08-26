@@ -4,8 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.agent.TestSpecies;
+import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
+import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
+import dev.luizloyola.anima.core.brain.knowledge.GrownRegion;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.core.brain.knowledge.RegionGrowth;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.Method;
@@ -140,6 +145,45 @@ class ChopForLogsTest {
 
         assertFalse(new ChopForLogs(Stock.LOGS).applicable(ctx),
                 "an unknown species is not a licence to guess");
+    }
+
+    /**
+     * Every other test in this file hand-builds its {@link PoiMemory} through {@link #tree} and
+     * never touches a probe — so none of them would notice a break anywhere in scan ->
+     * {@code Evaluation.detail} -> {@code PoiMemory.detail} -> {@link #nearestFreeTree}. This one
+     * grows a real birch through {@link TreeRule} and {@link RegionGrowth}, notes it the way
+     * perception actually would, and only then asks the chop for it.
+     */
+    @Test
+    void aBirchGrownThroughTheRealMachineryStillWalksPastAnOakRequest() {
+        FakeProbe probe = new FakeProbe();
+        probe.placeOak(10, 10);
+        for (int y = 64; y <= 67; y++) {
+            probe.setId(10, y, 10, "minecraft:birch_log");
+        }
+        Pos seed = new Pos(10, 68, 10);
+        RegionGrowth growth =
+                new RegionGrowth(TreeRule.INSTANCE, seed, BlockKind.LEAVES, TestSpecies.PROFILE);
+        int guard = 0;
+        while (!growth.isDone()) {
+            growth.step(probe, 10_000);
+            assertTrue(++guard < 10_000, "growth never finished");
+        }
+        GrownRegion region = growth.result();
+        assertEquals(1, region.parts().size(), "one trunk, one tree");
+        GrownRegion.Part part = region.parts().get(0);
+
+        FakeContext ctx = new FakeContext();
+        // Funded so affordability is never what decides this — the same reason the two tests
+        // above fund 8 logs against an otherwise-empty pack.
+        ctx.percepts.inventory.add(
+                dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
+        ctx.knowledge().note(region.toMemory(part, seed, 0), 8);
+
+        assertTrue(new ChopForLogs(Stock.LOGS).applicable(ctx),
+                "any log accepts the birch the scan actually found");
+        assertFalse(new ChopForLogs(ItemSpec.anyOf(Set.of("minecraft:oak_log"))).applicable(ctx),
+                "asked for oak, a real birch must refuse forever, not get felled for it");
     }
 
     @Test
