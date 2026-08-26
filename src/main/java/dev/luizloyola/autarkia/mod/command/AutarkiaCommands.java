@@ -39,6 +39,7 @@ import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.EvenSplit;
 import dev.luizloyola.autarkia.core.board.Gather;
@@ -255,76 +256,94 @@ public final class AutarkiaCommands {
                                                                 ctx, "radius")))));
     }
 
-    /** Layer 3's ledger: the subject's own board and their party's. */
+    /**
+     * Layer 3's ledger. Bare, it reads both boards the subject can reach; every verb below hangs
+     * off the board it acts on. Scoped rather than merged because the two boards number their
+     * projects from one, so both readouts show a {@code #1} and a leaf that did not name its board
+     * could only guess — see {@link #boardCancel}.
+     */
     private static LiteralArgumentBuilder<CommandSourceStack> board(CommandBuildContext registryAccess) {
         return Commands.literal("board")
-                                .executes(ctx -> boardShow(ctx))
-                                // Two corners and nothing else — the box is the whole brief; who
-                                // goes in, in what order, and how they learn what is standing
-                                // there is the project's business, not the operator's.
-                                .then(Commands.literal("post")
-                                        .then(Commands.literal("clear")
-                                                .then(Commands.argument("from", BlockPosArgument.blockPos())
-                                                        .then(Commands.argument("to", BlockPosArgument.blockPos())
+                .executes(ctx -> boardShow(ctx))
+                .then(boardPersonalNode())
+                .then(boardPartyNode(registryAccess));
+    }
+
+    /**
+     * The subject's own board. Nothing posts here — its projects are the standing wants a settler
+     * grows for itself — so reading and dropping one are the whole surface.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> boardPersonalNode() {
+        return Commands.literal("personal")
+                .executes(ctx -> boardScope(ctx, false))
+                .then(Commands.literal("cancel")
+                        .then(Commands.argument("handle", IntegerArgumentType.integer(1))
+                                .executes(ctx -> boardCancel(ctx,
+                                        IntegerArgumentType.getInteger(ctx, "handle"), false))));
+    }
+
+    /** The board the subject's party shares — the only one an operator posts work to. */
+    private static LiteralArgumentBuilder<CommandSourceStack> boardPartyNode(CommandBuildContext registryAccess) {
+        return Commands.literal("party")
+                .executes(ctx -> boardScope(ctx, true))
+                // Two corners and nothing else — the box is the whole brief; who goes in, in what
+                // order, and how they learn what is standing there is the project's business, not
+                // the operator's.
+                .then(Commands.literal("post")
+                        .then(Commands.literal("clear")
+                                .then(Commands.argument("from", BlockPosArgument.blockPos())
+                                        .then(Commands.argument("to", BlockPosArgument.blockPos())
+                                                .executes(ctx -> boardPostClear(ctx,
+                                                        corner(ctx, "from"), corner(ctx, "to"),
+                                                        CLEAR_PRIORITY, null))
+                                                .then(Commands.argument("priority",
+                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
+                                                        .executes(ctx -> boardPostClear(ctx,
+                                                                corner(ctx, "from"), corner(ctx, "to"),
+                                                                DoubleArgumentType.getDouble(ctx, "priority"),
+                                                                null)))
+                                                // Where the wood goes. A HINT, not a cell to obey: the
+                                                // first hauler opens a chest on whatever ground near it
+                                                // will hold one, and the readout names where it went.
+                                                .then(Commands.literal("at")
+                                                        .then(Commands.argument("yard", BlockPosArgument.blockPos())
                                                                 .executes(ctx -> boardPostClear(ctx,
                                                                         corner(ctx, "from"), corner(ctx, "to"),
-                                                                        CLEAR_PRIORITY, null))
+                                                                        CLEAR_PRIORITY, corner(ctx, "yard")))
                                                                 .then(Commands.argument("priority",
                                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
                                                                         .executes(ctx -> boardPostClear(ctx,
                                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
-                                                                                null)))
-                                                                // Where the wood goes. A HINT, not a cell to obey: the
-                                                                // first hauler opens a chest on whatever ground near it
-                                                                // will hold one, and the readout names where it went.
-                                                                .then(Commands.literal("at")
-                                                                        .then(Commands.argument("yard", BlockPosArgument.blockPos())
-                                                                                .executes(ctx -> boardPostClear(ctx,
-                                                                                        corner(ctx, "from"), corner(ctx, "to"),
-                                                                                        CLEAR_PRIORITY, corner(ctx, "yard")))
-                                                                                .then(Commands.argument("priority",
-                                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                                        .executes(ctx -> boardPostClear(ctx,
-                                                                                                corner(ctx, "from"), corner(ctx, "to"),
-                                                                                                DoubleArgumentType.getDouble(ctx, "priority"),
-                                                                                                corner(ctx, "yard")))))))))
-                                        // Get this many of this item into that yard. `at` is
-                                        // MANDATORY here (unlike clear's) — a gather with nowhere
-                                        // to put the goods has no completion rule — so this is two
-                                        // leaves, not four.
-                                        .then(Commands.literal("gather")
-                                                .then(Commands.argument("item",
-                                                                ItemArgument.item(registryAccess))
-                                                        .then(Commands.argument("count",
-                                                                        IntegerArgumentType.integer(1))
-                                                                .then(Commands.literal("at")
-                                                                        .then(Commands.argument("pos",
-                                                                                        BlockPosArgument.blockPos())
-                                                                                .executes(ctx -> boardPostGather(ctx,
-                                                                                        ItemArgument.getItem(ctx, "item"),
-                                                                                        IntegerArgumentType.getInteger(ctx, "count"),
-                                                                                        corner(ctx, "pos"), GATHER_PRIORITY))
-                                                                                .then(Commands.argument("priority",
-                                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                                        .executes(ctx -> boardPostGather(ctx,
-                                                                                                ItemArgument.getItem(ctx, "item"),
-                                                                                                IntegerArgumentType.getInteger(ctx, "count"),
-                                                                                                corner(ctx, "pos"),
-                                                                                                DoubleArgumentType.getDouble(
-                                                                                                        ctx, "priority"))))))))))
-                                // Every row of the ledger, one line each — the only way to ask
-                                // "did that tree actually go?" of the world afterwards.
-                                .then(Commands.literal("targets")
-                                        .executes(ctx -> boardTargets(ctx)))
-                                .then(Commands.literal("cancel")
-                                        .then(Commands.argument("handle", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> boardCancel(ctx,
-                                                        IntegerArgumentType.getInteger(ctx, "handle"), false)))
-                                        .then(Commands.literal("party")
-                                                .then(Commands.argument("handle", IntegerArgumentType.integer(1))
-                                                        .executes(ctx -> boardCancel(ctx,
-                                                                IntegerArgumentType.getInteger(ctx, "handle"), true)))));
+                                                                                corner(ctx, "yard")))))))))
+                        // Get this many of this item into that yard. `at` is MANDATORY here (unlike
+                        // clear's) — a gather with nowhere to put the goods has no completion rule —
+                        // so this is two leaves, not four.
+                        .then(Commands.literal("gather")
+                                .then(Commands.argument("item", ItemArgument.item(registryAccess))
+                                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                                .then(Commands.literal("at")
+                                                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                                                .executes(ctx -> boardPostGather(ctx,
+                                                                        ItemArgument.getItem(ctx, "item"),
+                                                                        IntegerArgumentType.getInteger(ctx, "count"),
+                                                                        corner(ctx, "pos"), GATHER_PRIORITY))
+                                                                .then(Commands.argument("priority",
+                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
+                                                                        .executes(ctx -> boardPostGather(ctx,
+                                                                                ItemArgument.getItem(ctx, "item"),
+                                                                                IntegerArgumentType.getInteger(ctx, "count"),
+                                                                                corner(ctx, "pos"),
+                                                                                DoubleArgumentType.getDouble(
+                                                                                        ctx, "priority"))))))))))
+                // Every row of the ledger, one line each — the only way to ask "did that tree
+                // actually go?" of the world afterwards.
+                .then(Commands.literal("targets")
+                        .executes(ctx -> boardTargets(ctx)))
+                .then(Commands.literal("cancel")
+                        .then(Commands.argument("handle", IntegerArgumentType.integer(1))
+                                .executes(ctx -> boardCancel(ctx,
+                                        IntegerArgumentType.getInteger(ctx, "handle"), true))));
     }
 
     /**
@@ -369,6 +388,7 @@ public final class AutarkiaCommands {
      * project, with its handle, its state and how many of its items are claimed.
      *
      * <p>Both, because a summary could not tell a quiet personal board from an empty party one.
+     * {@link #boardScope} is the same readout narrowed to the board the caller named.
      */
     private static int boardShow(CommandContext<CommandSourceStack> ctx) {
         CommandSourceStack source = ctx.getSource();
@@ -379,6 +399,42 @@ public final class AutarkiaCommands {
         // The rows themselves are describeBoard()'s, which the journal and the debug feed read
         // too — one shape for all three rather than a second one only chat would see.
         for (String line : person.brain().describeBoard()) {
+            Replies.send(source, () -> indent(Component.literal(line)
+                    .withStyle(ChatFormatting.LIGHT_PURPLE)));
+        }
+        return 1;
+    }
+
+    /**
+     * One named board's rows — {@code board personal} or {@code board party}, the halves the bare
+     * readout stacks.
+     *
+     * <p>Reads the board's own {@code describeLines} against {@code getGameTime()}, which is the
+     * tick {@code Percepts.time()} reports: the holds it counts are measured against that clock and
+     * a readout on any other one would age them wrong.
+     */
+    private static int boardScope(CommandContext<CommandSourceStack> ctx, boolean party) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
+        if (person == null) return 0;
+        Board board;
+        if (party) {
+            Optional<PartyBoard> theirs = partyBoardOf(person);
+            if (theirs.isEmpty()) {
+                Replies.fail(source, Component.translatable(
+                        "autarkia.command.no_identity", person.getName()));
+                return 0;
+            }
+            board = theirs.get();
+        } else {
+            board = person.board();
+        }
+        Replies.send(source, () -> Component.translatable(party
+                                ? "autarkia.command.board.header_party"
+                                : "autarkia.command.board.header_personal",
+                        person.getName())
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
+        for (String line : board.describeLines(person.level().getGameTime())) {
             Replies.send(source, () -> indent(Component.literal(line)
                     .withStyle(ChatFormatting.LIGHT_PURPLE)));
         }
@@ -596,12 +652,13 @@ public final class AutarkiaCommands {
 
     /**
      * Cancels a project by the handle the readout shows, on the board the caller NAMED —
-     * {@code cancel <n>} is the personal board, {@code cancel party <n>} the party's.
+     * {@code board personal cancel <n>} or {@code board party cancel <n>}. There is no bare form:
+     * both boards number their own projects from one, so both readouts show a {@code #1} and a
+     * default would be a coin toss dressed as an answer.
      *
-     * <p>Scoped rather than searched: the two boards number their own projects from one, so both
-     * readouts show a {@code #1}. A cancel that tried one and fell back to the other, asked to
-     * drop a party's clearing, silently dropped the caller's own standing want instead and
-     * reported success (live, 2026-08-10).
+     * <p>A cancel that tried one board and fell back to the other, asked to drop a party's
+     * clearing, silently dropped the caller's own standing want instead and reported success
+     * (live, 2026-08-10).
      *
      * <p>Any member may cancel a shared project — the dev answer, until layer 4 has opinions about
      * who decides.
@@ -619,7 +676,7 @@ public final class AutarkiaCommands {
         if (cancelled.isEmpty()) {
             Replies.fail(source, Component.translatable(party
                             ? "autarkia.command.board.no_project_party"
-                            : "autarkia.command.board.no_project_own",
+                            : "autarkia.command.board.no_project_personal",
                     handle, person.getName()));
             return 0;
         }
@@ -630,7 +687,7 @@ public final class AutarkiaCommands {
         // Caught live, chasing a Person whose want had evaporated.
         Replies.send(source, () -> Component.translatable(party
                                 ? "autarkia.command.board.dropped_party"
-                                : "autarkia.command.board.dropped_own",
+                                : "autarkia.command.board.dropped_personal",
                         person.getName(), handle, what)
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
