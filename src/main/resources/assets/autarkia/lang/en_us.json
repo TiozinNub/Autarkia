@@ -25,12 +25,10 @@
   "autarkia.command.spawn.at": " (%s) at %s",
   "autarkia.command.spawn.brain_off": " — brain off (/autarkia brain auto true to enable)",
   "autarkia.command.spawn.wander_muted": " — wander muted (/autarkia brain wander true to enable)",
-  "autarkia.command.erase.no_match": "No identity matches '%s' — try a name or id from the list command.",
-  "autarkia.command.erase.ambiguous": "%s identities named '%s' — pick one by id: %s",
   "autarkia.command.erase.loaded": "%s is loaded — kill or remove the body first, or it will mint a fresh identity on its next tick.",
+  "autarkia.command.erase.not_a_person": "%s is not a Person — erase only removes settlers.",
   "autarkia.command.erase.erased": "Erased %s (%s) from %s.",
   "autarkia.command.erase.erased_nothing": "Erased %s (%s) from nothing — no store held anything.",
-  "autarkia.command.list.none": "No Persons are loaded.",
   "autarkia.command.whois.no_person": "No Person among the selected entities.",
   "autarkia.command.whois.spawning": "Person not yet identified (spawning).",
   "autarkia.command.whois.unknown": "%s  <unknown>"

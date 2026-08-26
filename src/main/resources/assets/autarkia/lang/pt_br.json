@@ -25,12 +25,10 @@
   "autarkia.command.spawn.at": " (%s) em %s",
   "autarkia.command.spawn.brain_off": " — cérebro desligado (/autarkia brain auto true para ligar)",
   "autarkia.command.spawn.wander_muted": " — perambular silenciado (/autarkia brain wander true para ligar)",
-  "autarkia.command.erase.no_match": "Nenhuma identidade corresponde a '%s' — tente um nome ou id do comando list.",
-  "autarkia.command.erase.ambiguous": "%s identidades chamadas '%s' — escolha uma pelo id: %s",
   "autarkia.command.erase.loaded": "%s está carregada — mate ou remova o corpo primeiro, ou ele cunhará uma identidade nova no próximo tick.",
+  "autarkia.command.erase.not_a_person": "%s não é uma Pessoa — erase só remove colonos.",
   "autarkia.command.erase.erased": "Apagada %s (%s) de %s.",
   "autarkia.command.erase.erased_nothing": "Apagada %s (%s) de nada — nenhum armazenamento guardava algo.",
-  "autarkia.command.list.none": "Nenhuma Pessoa está carregada.",
   "autarkia.command.whois.no_person": "Nenhuma Pessoa entre as entidades selecionadas.",
   "autarkia.command.whois.spawning": "Pessoa ainda não identificada (surgindo).",
   "autarkia.command.whois.unknown": "%s  <desconhecida>"

@@ -247,7 +247,7 @@ mc() {
 # in the save and is not even selectable, let alone ticking — the rehearsal for this reported
 # "Spawned CiProbe" and "No Persons are loaded" in the same breath. Stage inside the rectangle.
 mc "forceload add -64 -64 64 64"
-mc "autarkia person spawn CiProbe"
+mc "autarkia spawn CiProbe"
 
 # Spawning exercises entity registration, the identity directory, the appearance roll and the brain
 # driver's first tick; whois reads it back out through the command tree.
@@ -257,6 +257,10 @@ grep -q 'CiProbe' <<< "$MC_OUT" || die "the Person spawned but whois cannot find
 # `needs` reads food and saturation off the live body, so it can only answer once the Person is
 # actually TICKING — which half a boot on its own does not prove.
 mc 'execute as @e[type=autarkia:person,name="CiProbe",limit=1] run autarkia needs'
+
+# The same readout through the subject prefix. Both paths must work: `execute as` is what stamps
+# a reply per line, and `as` is what an operator types.
+mc 'autarkia as CiProbe needs'
 grep -q 'food' <<< "$MC_OUT" || die "the Person exists but is not ticking"
 
 # A server can reach "Done" and still have logged something that bites later — a failed datapack

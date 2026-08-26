@@ -30,6 +30,7 @@ import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.anima.core.brain.task.SatisfyHunger;
 import dev.luizloyola.anima.core.config.ConfigValues;
+import dev.luizloyola.anima.mod.command.CommandSurface;
 import dev.luizloyola.anima.mod.command.ConfigCommands;
 import dev.luizloyola.anima.mod.config.ConfigFile;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
@@ -74,6 +75,7 @@ import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.anima.mod.social.PartyData;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -154,50 +156,45 @@ public final class AutarkiaCommands {
      */
     public static void register(ConfigFile configFile) {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
-                dispatcher.register(Commands.literal("autarkia")
-                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
-                        // Select the Person that this source's later commands target. "clear"/"show"
-                        // are literals, so they win over a Person literally named clear/show — take
-                        // those by id.
-                        .then(AgentCommands.select())
-                        .then(Commands.literal("list")
-                                .executes(ctx -> listPersons(ctx.getSource())))
-                        // Who died, and everything that could be known about how. Anima's, because
-                        // a grave is a fact about a mind ending and nothing about being a settler.
-                        .then(AgentCommands.grave())
-                        .then(Commands.literal("whois")
-                                .executes(ctx -> whoisResolved(ctx))
-                                .then(Commands.argument("targets", EntityArgument.entities())
-                                        .executes(ctx -> whoisTargets(ctx.getSource(),
-                                                EntityArgument.getEntities(ctx, "targets")))))
-                        // Who knows whom. Until the encounter rung lands there is no in-world way
-                        // to be introduced, so "meet" is the scaffold that stands in for it.
-                        .then(AgentCommands.contacts())
-                        // Who belongs with whom — layer 3's scope. join/leave are the dev
-                        // stand-ins until the social era's group-up handshake exists.
-                        .then(AgentCommands.party())
-                        // What the resolved Person or their party OWNS — the claims tier, as
-                        // against knowledge's sightings. found/drop are dev stand-ins for acts
-                        // that do not exist yet, exactly as party join/leave are.
-                        .then(AgentCommands.places())
-                        .then(AgentCommands.nav())
-                        // The standing order beside the one-shot one: `follow` re-aims the same
-                        // legs at somebody who keeps moving, so a scene can be LED into place.
-                        .then(AgentCommands.follow())
-                        // nav (above) drives the legs directly — locomotion debug; brain runs
-                        // tasks through the executor, the machinery the arbiter feeds. Anima's
-                        // shared brain verbs, plus the one that is ours: obtain is a log quota,
-                        // not the library's business.
-                        .then(AgentCommands.brain()
-                                // Fell the nearest remembered tree by walking its compiled dance
-                                // card (ChopPlannedTree).
-                                .then(Commands.literal("chop")
+                dispatcher.register(CommandSurface.mount(
+                        Commands.literal("autarkia")
+                                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)),
+                        // hasSubject — mounted at the root AND under `as <person>`. Anima's shared
+                        // tree, plus the two brain leaves and the board that are ours: a log quota
+                        // and a work ledger are facts about being a settler, not about thinking.
+                        List.of(AgentCommands::select, AgentCommands::contacts, AgentCommands::party,
+                                AgentCommands::places, AgentCommands::nav, AgentCommands::follow,
+                                () -> AgentCommands.brain().then(chop()).then(obtain(registryAccess)),
+                                AgentCommands::think, AgentCommands::log, AgentCommands::knowledge,
+                                AgentCommands::horizon, AgentCommands::survey, AgentCommands::claims,
+                                AgentCommands::peers, AgentCommands::needs, AgentCommands::profile,
+                                AgentCommands::grave, AutarkiaCommands::whois,
+                                () -> board(registryAccess),
+                                () -> AgentCommands.inv(registryAccess)),
+                        // noSubject — the root alone. `tree` paints the live world, `spawn` makes a
+                        // body there is not one of yet, and `debug` and `board view` are per-player
+                        // switches that vary with nothing about a subject.
+                        List.of(AgentCommands::list, AgentCommands::debug,
+                                AutarkiaCommands::whoisTargets, AutarkiaCommands::tree,
+                                AutarkiaCommands::spawn, AutarkiaCommands::boardViewNode,
+                                () -> ConfigCommands.tree(AutarkiaConfig.store(), configFile)),
+                        // asOnly — must name its subject; see erase().
+                        List.of(AutarkiaCommands::erase))));
+    }
+
+    /** Fell the nearest remembered tree by walking its compiled dance card (ChopPlannedTree). */
+    private static LiteralArgumentBuilder<CommandSourceStack> chop() {
+        return Commands.literal("chop")
                                         .executes(ctx -> brainChop(ctx, null))
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                                 .executes(ctx -> brainChop(ctx,
                                                         BlockPosArgument.getBlockPos(
-                                                                ctx, "pos")))))
-                                .then(Commands.literal("obtain")
+                                                                ctx, "pos"))));
+    }
+
+    /** A log quota, and the craft verb. Anima has no idea what a settler wants. */
+    private static LiteralArgumentBuilder<CommandSourceStack> obtain(CommandBuildContext registryAccess) {
+        return Commands.literal("obtain")
                                         .then(Commands.literal("logs")
                                                 .executes(ctx -> brainObtain(ctx, 16))
                                                 .then(Commands.argument("count", IntegerArgumentType.integer(1))
@@ -214,29 +211,31 @@ public final class AutarkiaCommands {
                                                 .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                                         .executes(ctx -> brainObtainItem(ctx,
                                                                 ItemArgument.getItem(ctx, "item"),
-                                                                IntegerArgumentType.getInteger(ctx, "count")))))))
-                        // Thinking out loud: forwards the resolved Person's `think` journal lines
-                        // to chat (gray italics) until toggled off.
-                        .then(AgentCommands.think())
-                        // The per-person debug journal (see the log package). Top-level, not under a
-                        // subsystem group, because one Person's log interleaves brain + pathfind + body.
-                        .then(AgentCommands.log())
-                        // What the resolved Person REMEMBERS (the knowledge store) — beliefs, not
-                        // world state; "view" renders those beliefs as particles + discovery chat.
-                        .then(AgentCommands.knowledge())
-                        .then(AgentCommands.horizon())
-                        .then(AgentCommands.survey())
-                        // Who is holding what — site claims and item leases, one semantics, two
-                        // keyspaces. The readout contention never had.
-                        .then(AgentCommands.claims())
-                        // The in-world debug view: gizmo lines, boxes and floating text over the
-                        // SELECTED Person. Per-player, and the only way to raise several layers at
-                        // once (the wand's shift-click cycles them one at a time).
-                        .then(AgentCommands.debug())
-                        // How the ground around you would carve into individual trees —
-                        // TreeShape's split painted over the live world, no Person or perception
-                        // involved. Ours alone, like board: Anima has no idea what a tree is.
-                        .then(Commands.literal("tree")
+                                                                IntegerArgumentType.getInteger(ctx, "count")))));
+    }
+
+    /** Bare {@code whois} — what the SUBJECT looks like. */
+    private static LiteralArgumentBuilder<CommandSourceStack> whois() {
+        return Commands.literal("whois")
+                                .executes(ctx -> whoisResolved(ctx));
+    }
+
+    /**
+     * {@code whois <targets>} — a bulk readout over arbitrary entities, so it takes an OBJECT and
+     * has no subject. Two literal children of one name MERGE in Brigadier, so the root ends up with
+     * a single {@code whois} node carrying this and the bare form both, while the {@code as} seam
+     * carries only the bare one.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> whoisTargets(){
+        return Commands.literal("whois")
+                                .then(Commands.argument("targets", EntityArgument.entities())
+                                        .executes(ctx -> whoisTargets(ctx.getSource(),
+                                                EntityArgument.getEntities(ctx, "targets"))));
+    }
+
+    /** How the ground would carve into trees — no Person or perception involved. */
+    private static LiteralArgumentBuilder<CommandSourceStack> tree() {
+        return Commands.literal("tree")
                                 .then(Commands.literal("view")
                                         .executes(ctx -> treeView(ctx.getSource(), 0))
                                         .then(Commands.argument("radius",
@@ -253,14 +252,12 @@ public final class AutarkiaCommands {
                                                         IntegerArgumentType.integer(4, 32))
                                                 .executes(ctx -> treePlan(ctx.getSource(),
                                                         IntegerArgumentType.getInteger(
-                                                                ctx, "radius"))))))
-                        // What a PERSON is like, in our own file; /anima config holds the
-                        // server-wide limits, the journal and the flee weights. Same subcommand,
-                        // built for whichever set it is handed.
-                        .then(ConfigCommands.tree(AutarkiaConfig.store(), configFile))
-                        // Layer 3, both scopes at once: the personal board (what this body wants
-                        // for itself) and the party board (what the group has posted).
-                        .then(Commands.literal("board")
+                                                                ctx, "radius")))));
+    }
+
+    /** Layer 3's ledger: the subject's own board and their party's. */
+    private static LiteralArgumentBuilder<CommandSourceStack> board(CommandBuildContext registryAccess) {
+        return Commands.literal("board")
                                 .executes(ctx -> boardShow(ctx))
                                 // Two corners and nothing else — the box is the whole brief; who
                                 // goes in, in what order, and how they learn what is standing
@@ -297,81 +294,74 @@ public final class AutarkiaCommands {
                                         // to put the goods has no completion rule — so this is two
                                         // leaves, not four.
                                         .then(Commands.literal("gather")
-                                                .then(Commands.argument("spec",
+                                                .then(Commands.argument("item",
                                                                 ItemArgument.item(registryAccess))
-                                                        .then(Commands.argument("n",
+                                                        .then(Commands.argument("count",
                                                                         IntegerArgumentType.integer(1))
                                                                 .then(Commands.literal("at")
                                                                         .then(Commands.argument("pos",
                                                                                         BlockPosArgument.blockPos())
                                                                                 .executes(ctx -> boardPostGather(ctx,
-                                                                                        ItemArgument.getItem(ctx, "spec"),
-                                                                                        IntegerArgumentType.getInteger(ctx, "n"),
+                                                                                        ItemArgument.getItem(ctx, "item"),
+                                                                                        IntegerArgumentType.getInteger(ctx, "count"),
                                                                                         corner(ctx, "pos"), GATHER_PRIORITY))
                                                                                 .then(Commands.argument("priority",
                                                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
                                                                                         .executes(ctx -> boardPostGather(ctx,
-                                                                                                ItemArgument.getItem(ctx, "spec"),
-                                                                                                IntegerArgumentType.getInteger(ctx, "n"),
+                                                                                                ItemArgument.getItem(ctx, "item"),
+                                                                                                IntegerArgumentType.getInteger(ctx, "count"),
                                                                                                 corner(ctx, "pos"),
                                                                                                 DoubleArgumentType.getDouble(
                                                                                                         ctx, "priority"))))))))))
-                                // The ledger over the world it is about. Layer 3 is the one layer
-                                // with no body to look at, so this is its only visual.
-                                .then(Commands.literal("view")
-                                        .executes(ctx -> boardView(ctx.getSource(), null))
-                                        .then(Commands.argument("on", BoolArgumentType.bool())
-                                                .executes(ctx -> boardView(ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "on")))))
                                 // Every row of the ledger, one line each — the only way to ask
                                 // "did that tree actually go?" of the world afterwards.
                                 .then(Commands.literal("targets")
                                         .executes(ctx -> boardTargets(ctx)))
                                 .then(Commands.literal("cancel")
-                                        .then(Commands.argument("project", IntegerArgumentType.integer(1))
+                                        .then(Commands.argument("handle", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> boardCancel(ctx,
-                                                        IntegerArgumentType.getInteger(ctx, "project"), false)))
+                                                        IntegerArgumentType.getInteger(ctx, "handle"), false)))
                                         .then(Commands.literal("party")
-                                                .then(Commands.argument("project", IntegerArgumentType.integer(1))
+                                                .then(Commands.argument("handle", IntegerArgumentType.integer(1))
                                                         .executes(ctx -> boardCancel(ctx,
-                                                                IntegerArgumentType.getInteger(ctx, "project"), true))))))
-                        // Who they can currently SEE — the peers() sense: Persons and live
-                        // players, one seamless list, activity read off the visible body.
-                        .then(AgentCommands.peers())
-                        // Every gauge the body declared — hunger and company today.
-                        .then(AgentCommands.needs())
-                        // What this one is running: species -> modifiers -> effective.
-                        .then(AgentCommands.profile())
-                        .then(AgentCommands.inv(registryAccess))
-                        // "person", not "brain": these are body readouts (vitals live with the
-                        // entity); the brain group above holds the decision machinery.
-                        .then(Commands.literal("person")
-                                // "spawn" is autonomous, "nobrain" starts with autonomy off,
-                                // "nowander" thinks normally but never drifts. All three take the
-                                // same [<pos>] [name] leaves (see spawnLeaves); being literals, the
-                                // children win over a Person named "nobrain" — quote it to use
-                                // that as a name.
-                                .then(spawnLeaves(Commands.literal("spawn"), Mind.FULL)
-                                        .then(spawnLeaves(Commands.literal("nobrain"), Mind.NO_BRAIN))
-                                        .then(spawnLeaves(Commands.literal("nowander"), Mind.NO_WANDER)))
-                                // No `purge graveyard` here — REMOVED 2026-08-04. It called every
-                                // identity with no LOADED entity "dead" and destroyed its
-                                // directory entry, knowledge and journal, which deletes most of a
-                                // settlement on any world where settlers leave render distance.
-                                // Absence never meant death, and after the fact the two are
-                                // indistinguishable: burial is recorded at die() or not at all
-                                // (2026-08-03-persistence-design.md). `erase` replaces it, taking
-                                // an explicit id.
-                                .then(Commands.literal("erase")
-                                        .then(Commands.argument("who", StringArgumentType.word())
-                                                .suggests(ERASABLE_SUGGESTIONS)
-                                                .executes(ctx -> personErase(ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "who")))))
-                                // `person needs` and `person setfood` moved to `/anima needs` and
-                                // `/anima needs food`: hunger is a gauge on a BODY, not a fact
-                                // about being a settler (a wolf gets hungry too), so by the wolf
-                                // rule they are Anima's, mounted by both roots.
-                        )));
+                                                                IntegerArgumentType.getInteger(ctx, "handle"), true)))));
+    }
+
+    /**
+     * {@code board view} — a per-player overlay of every project in RANGE rather than one person's
+     * board, so nothing about it varies with a subject and it stays at the root.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> boardViewNode() {
+        return Commands.literal("board")
+                .then(Commands.literal("view")
+                        .executes(ctx -> boardView(ctx.getSource(), null))
+                        .then(Commands.argument("on", BoolArgumentType.bool())
+                                .executes(ctx -> boardView(ctx.getSource(),
+                                        BoolArgumentType.getBool(ctx, "on")))));
+    }
+
+    /**
+     * Spawning, flattened out of the old {@code person} group: {@code spawn} is autonomous,
+     * {@code spawn nobrain} starts with autonomy off, {@code spawn nowander} thinks normally but
+     * never drifts. All three take the same {@code [<pos>] [name]} leaves.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> spawn() {
+        return spawnLeaves(Commands.literal("spawn"), Mind.FULL)
+                                .then(spawnLeaves(Commands.literal("nobrain"), Mind.NO_BRAIN))
+                                .then(spawnLeaves(Commands.literal("nowander"), Mind.NO_WANDER));
+    }
+
+    /**
+     * {@code as <person> erase} — destroys an identity, its directory entry, knowledge and journal.
+     *
+     * <p>Mounted under {@code as} ALONE. A bare form would fall down the resolve ladder to whoever
+     * happens to be standing nearest, and this is the one verb in either tree that cannot be undone.
+     * It replaced {@code purge graveyard} (removed 2026-08-04), which called every identity with no
+     * LOADED entity dead and so deleted most of a settlement on any world where settlers leave
+     * render distance — absence never meant death (2026-08-03-persistence-design.md).
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> erase() {
+        return Commands.literal("erase").executes(AutarkiaCommands::personErase);
     }
 
     /**
@@ -851,16 +841,6 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /** Every identity the directory holds, by name and by short id — what {@code erase} accepts.
-     *  Directory-backed rather than body-backed on purpose: the whole point of erase is to reach a
-     *  record whose entity is not around, which is most of them. */
-    private static final SuggestionProvider<CommandSourceStack> ERASABLE_SUGGESTIONS = (ctx, builder) -> {
-        Stream<String> tokens = PersonDirectory.get(ctx.getSource().getServer()).all().stream()
-                .flatMap(identity -> Stream.of(
-                        identity.name().contains(" ") ? '"' + identity.name() + '"' : identity.name(),
-                        AgentCommands.shortId(identity.id())));
-        return SharedSuggestionProvider.suggest(tokens, builder);
-    };
 
     /**
      * Unmakes one Person by explicit name or id: every store registered with {@code AgentRecords}
@@ -873,35 +853,23 @@ public final class AutarkiaCommands {
      * <p><b>Refuses while the body is loaded</b>, which would otherwise mint a fresh anonymous
      * identity on its next tick.
      */
-    private static int personErase(CommandSourceStack source, String rawToken) {
+    /**
+     * Erases the SUBJECT. The token-matching this used to carry is {@code AgentLookup}'s now, in
+     * Anima, so this and {@code as} agree on what a name means — and being subject-scoped, it can
+     * only be reached by naming somebody.
+     */
+    private static int personErase(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
         MinecraftServer server = source.getServer();
-        PersonDirectory directory = PersonDirectory.get(server);
-        String token = rawToken.trim();
-        String lower = token.toLowerCase(Locale.ROOT);
-
-        // Id (or short-id prefix) first: it is unambiguous, and names are not unique.
-        List<PersonIdentity> matches = directory.all().stream()
-                .filter(i -> i.id().toString().toLowerCase(Locale.ROOT).startsWith(lower))
-                .toList();
-        if (matches.isEmpty()) {
-            matches = directory.all().stream()
-                    .filter(i -> i.name().equalsIgnoreCase(token))
-                    .toList();
-        }
-        if (matches.isEmpty()) {
-            Replies.fail(source, Component.translatable("autarkia.command.erase.no_match", token));
+        AgentId id = Subject.id(ctx);
+        if (id == null) return 0; // already reported
+        PersonIdentity identity = PersonDirectory.get(server).all().stream()
+                .filter(i -> i.id().equals(id)).findFirst().orElse(null);
+        if (identity == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.erase.not_a_person",
+                    AgentCommands.label(server, id)));
             return 0;
         }
-        if (matches.size() > 1) {
-            String ids = matches.stream().map(i -> AgentCommands.shortId(i.id()))
-                    .collect(Collectors.joining(", "));
-            Replies.fail(source, Component.translatable("autarkia.command.erase.ambiguous",
-                    matches.size(), token, ids));
-            return 0;
-        }
-
-        PersonIdentity identity = matches.get(0);
-        AgentId id = identity.id();
         if (findLoaded(server, id) != null) {
             Replies.fail(source, Component.translatable("autarkia.command.erase.loaded",
                     identity.name()));
@@ -952,34 +920,6 @@ public final class AutarkiaCommands {
         return null;
     }
 
-    /** Lists the loaded Persons, nearest first: a {@code ✓} on the selected one, then name, short id,
-     *  dimension, and distance. This is how you find out what to {@code select}. */
-    private static int listPersons(CommandSourceStack source) {
-        MinecraftServer server = source.getServer();
-        PersonDirectory directory = PersonDirectory.get(server);
-        Vec3 origin = source.getPosition();
-        List<Person> loaded = loadedPersons(server);
-        if (loaded.isEmpty()) {
-            Replies.send(source, () -> Component.translatable("autarkia.command.list.none")
-                    .withStyle(ChatFormatting.GRAY));
-            return 0;
-        }
-        Optional<AgentId> selection = AgentSelection.selected(source);
-        loaded.stream()
-                .sorted((a, b) -> Double.compare(a.distanceToSqr(origin), b.distanceToSqr(origin)))
-                .forEach(person -> {
-                    AgentId id = person.agentId();
-                    boolean isSelected = id != null && selection.map(id::equals).orElse(false);
-                    String name = id == null ? "<spawning>" : directory.nameOf(id).orElse("<unknown>");
-                    String dimension = person.level().dimension().identifier().getPath();
-                    double distance = Math.sqrt(person.entity().distanceToSqr(origin));
-                    String line = String.format(Locale.ROOT, "%s%s  %s  %s  %.1fm",
-                            isSelected ? "✓ " : "  ", name, id == null ? "-" : AgentCommands.shortId(id), dimension, distance);
-                    Replies.send(source, () -> Component.literal(line)
-                            .withStyle(isSelected ? ChatFormatting.AQUA : ChatFormatting.GRAY));
-                });
-        return loaded.size();
-    }
 
     /** Every live Person across every dimension. {@code getEntities} still hands back a Person killed
      *  moments ago (it lingers through its death animation before being swept), so {@code isAlive}
