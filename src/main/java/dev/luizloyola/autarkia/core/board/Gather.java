@@ -131,6 +131,13 @@ public final class Gather implements PartyProject {
     /** {@link #open} as the board sees it, rebuilt on change so an ask allocates nothing. */
     private List<WorkItem> offer = List.of();
 
+    /**
+     * The game time as of the last {@link #tick} — {@link #offerableTo} has no clock of its own
+     * (the board calls it per-asker, not per-beat), and a reading stale by one host cadence is
+     * nothing against a {@value #FAIL_COOLDOWN}-tick cooldown.
+     */
+    private long lastTick;
+
     public Gather(ItemSpec spec, int target, Pos yard, double priority, PartyId party, Split split) {
         this.spec = spec;
         this.target = target;
@@ -232,6 +239,7 @@ public final class Gather implements PartyProject {
      */
     @Override
     public void tick(long now) {
+        lastTick = now;
         List<AgentId> members = PartyMembers.of(party);
         for (WorkKey key : List.copyOf(open.keySet())) {
             if (key instanceof WorkKey.ForMember trip && !members.contains(trip.who())) {
@@ -296,6 +304,22 @@ public final class Gather implements PartyProject {
     @Override
     public void claimed(WorkItem item) {
         keyOf(item).ifPresent(claimed::add);
+    }
+
+    /**
+     * A trip belongs to the one member it was minted for, and never to a member this project is
+     * pacing after a failure — see {@link #FAIL_COOLDOWN}. Without the first check the board hands
+     * a cooling member somebody ELSE's trip instead of nothing, which fails that one too and
+     * benches them off the whole board (live, 2026-08-24, settler {@code Di}).
+     */
+    @Override
+    public boolean offerableTo(WorkItem item, AgentId asker) {
+        if (cooling(asker, lastTick)) {
+            return false;
+        }
+        return keyOf(item)
+                .filter(key -> key instanceof WorkKey.ForMember member && member.who().equals(asker))
+                .isPresent();
     }
 
     /**

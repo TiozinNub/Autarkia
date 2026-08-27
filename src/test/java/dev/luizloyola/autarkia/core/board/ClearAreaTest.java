@@ -106,6 +106,24 @@ class ClearAreaTest {
                 .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow();
     }
 
+    // ── who an item is offerable to ─────────────────────────────────────────────────────────
+
+    /**
+     * The regression that would hurt most: {@code ClearArea} never overrides
+     * {@link Project#offerableTo}, so a claim-board's items stay open to whoever gets there first —
+     * exactly what a claim-board is for.
+     */
+    @Test
+    void anItemIsOfferableToAnybodyByDefault() {
+        ClearArea project = posted(ABLE, oneSlice());
+        WorkItem item = surveyItem(project);
+
+        assertTrue(project.offerableTo(item, AgentId.random()));
+        assertTrue(project.offerableTo(item, AgentId.random()),
+                "a claim-board by design — Project's default hook says nothing about who an item "
+                        + "is for");
+    }
+
     // ── where the wood goes ──────────────────────────────────────────────────────────────────
 
     private static final Pos YARD = new Pos(6, 60, 6);

@@ -56,6 +56,40 @@ class BoardTest {
         assertSame(west, board.bestFor(bob, ctx, ctx.now()).orElseThrow());
     }
 
+    /**
+     * The hole this fix closes: the board itself never knew who an item was minted for, so a
+     * project's decline has to sit beside the lease and kit checks, not depend on either.
+     */
+    @Test
+    void theBoardHonoursAProjectsDeclineBesideTheLeaseAndKitFilters() {
+        FakeProject project = new FakeProject("errands");
+        WorkItem item = project.add(new FakeItem("hers", 0.5, 0.0));
+        project.allow = (offered, who) -> who.equals(alice);
+        board.post(project);
+
+        assertSame(item, board.bestFor(alice, ctx, ctx.now()).orElseThrow(),
+                "the project says this one is alice's to take");
+        assertTrue(board.bestFor(bob, ctx, ctx.now()).isEmpty(),
+                "and declines it for anybody else, exactly as a live lease would");
+    }
+
+    /**
+     * A project declining its own item is not the same fact as a body lacking the kit — the
+     * ordering comment in {@code Board.bestFor} exists to keep the two off the same journal line.
+     */
+    @Test
+    void aProjectsDeclineIsNeverJournalledAsAPassedOverItem() {
+        FakeProject project = new FakeProject("errands");
+        project.add(new FakeItem("hers", 0.5, 0.0));
+        project.allow = (offered, who) -> false;
+        board.post(project);
+
+        board.bestFor(bob, ctx, ctx.now());
+
+        assertTrue(ctx.journal().recent(10).isEmpty(),
+                "a project's own refusal is not a passed-over kit — nothing to log");
+    }
+
     @Test
     void anAgentWithNoIdentityYetIsOfferedNothing() {
         FakeProject project = new FakeProject("errands");
@@ -254,6 +288,8 @@ class BoardTest {
         private final List<WorkItem> items = new ArrayList<>();
         final List<String> events = new ArrayList<>();
         boolean finished;
+        /** What a test controls of {@link #offerableTo} — every item to everybody, by default. */
+        java.util.function.BiPredicate<WorkItem, AgentId> allow = (item, asker) -> true;
 
         FakeProject(String name) {
             this.name = name;
@@ -282,6 +318,11 @@ class BoardTest {
         @Override
         public void claimed(WorkItem item) {
             events.add("claimed:" + item.describe());
+        }
+
+        @Override
+        public boolean offerableTo(WorkItem item, AgentId asker) {
+            return allow.test(item, asker);
         }
 
         @Override

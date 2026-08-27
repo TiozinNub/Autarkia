@@ -301,6 +301,62 @@ class GatherTest {
                         + "settler who never touched that trip must not pay for it");
     }
 
+    // ── who a trip is offerable to ───────────────────────────────────────────────────────────
+
+    /**
+     * The hole this closes: {@code Board.bestFor} never asked who an item was minted for, so a
+     * cooling member was handed a DIFFERENT member's trip, failed that one too, and benched off the
+     * whole board (live, 2026-08-24, settler {@code Di}).
+     */
+    @Test
+    void aTripIsOfferableOnlyToTheMemberItWasMintedFor() {
+        party(2);
+        Gather project = posted(64);
+        AgentId hers = roster.get(0);
+        AgentId somebodyElse = roster.get(1);
+        WorkItem trip = tripOf(project, 0);
+
+        assertTrue(project.offerableTo(trip, hers));
+        assertFalse(project.offerableTo(trip, somebodyElse),
+                "a trip minted for one member must never go to another");
+    }
+
+    @Test
+    void aCoolingMemberIsOfferedNothingByThisProjectEvenWhileOthersTripsSitOpen() {
+        party(2);
+        Gather project = posted(64);
+        AgentId flailing = roster.get(0);
+        AgentId fine = roster.get(1);
+        WorkItem hers = project.itemFor(keyFor(flailing)).orElseThrow();
+        project.claimed(hers);
+
+        project.failed(hers, new BoardBrainContext());
+        project.tick(40L);
+
+        WorkItem his = project.itemFor(keyFor(fine)).orElseThrow();
+        assertFalse(project.offerableTo(his, flailing),
+                "cooling bars the whole project, not just the trip that already failed");
+        assertTrue(project.offerableTo(his, fine), "the untouched member is unaffected");
+    }
+
+    @Test
+    void theCoolingMemberIsOfferedTheirOwnTripAgainOnceTheCooldownExpires() {
+        party(1);
+        Gather project = posted(64);
+        AgentId who = roster.get(0);
+        WorkItem trip = tripOf(project, 0);
+        project.claimed(trip);
+
+        project.failed(trip, new BoardBrainContext());
+        project.tick(40L);
+        assertTrue(project.open().isEmpty(), "still cooling — nothing minted yet");
+
+        project.tick(Gather.FAIL_COOLDOWN + 1);
+        WorkItem fresh = tripOf(project, 0);
+        assertTrue(project.offerableTo(fresh, who),
+                "past the cooldown the member is exactly as free as anybody else");
+    }
+
     @Test
     void aLapsedClaimDoesNotStartACooldown() {
         party(1);

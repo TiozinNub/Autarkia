@@ -47,6 +47,16 @@ public interface Project {
     default void claimed(WorkItem item) {
     }
 
+    /**
+     * Whether this item may go to {@code asker} right now. The board holds the lease and the
+     * scoring; only the project knows whether THIS body is the one an item was meant for, or is
+     * being paced after a failure. True by default — a project whose items are interchangeable
+     * says nothing.
+     */
+    default boolean offerableTo(WorkItem item, AgentId asker) {
+        return true;
+    }
+
     /** An item's root SUCCEEDED, worked by the agent whose {@code ctx} this is. */
     void completed(WorkItem item, BrainContext ctx);
 

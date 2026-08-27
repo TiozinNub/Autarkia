@@ -134,7 +134,12 @@ public class Board {
             for (WorkItem item : entry.project().open()) {
                 Lease lease = leases.get(item);
                 if (lease != null && lease.liveAt(now)) {
-                    continue; 
+                    continue;
+                }
+                if (!entry.project().offerableTo(item, asker)) {
+                    // The project's own business — who it was minted for, or a body it is pacing
+                    // after a failure — never a missing kit, so this must not reach notePassedOver.
+                    continue;
                 }
                 List<ItemCall> unreachable = uncoverable(
                         item.kit().missingNeeds(ctx.percepts().inventory()), ctx);
