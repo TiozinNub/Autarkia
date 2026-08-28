@@ -111,6 +111,11 @@ class ComposedBoardsTest {
         work.claimed(item, ctx);
         work.bestAvailable(ctx); // the arbiter goes on asking around the claim it is holding
         work.bestAvailable(ctx);
+
+        assertTrue(work.stillMine(item, ctx),
+                "the question rides the same route the claim did — only the board that leased it "
+                        + "knows whose it is, and the personal side would answer no");
+        work.heartbeat(item, ctx);
         work.completed(item, ctx);
 
         assertEquals(List.of("claimed", "completed"), theirs.events,
