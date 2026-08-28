@@ -120,6 +120,9 @@ public class Board {
      * unclaimed, or empty when there is nothing for them. Greedy and per-asker (v1, decision: Luiz)
      * — no auction, no global matching. Ties go to the earlier project and, within one, the earlier
      * item, so the same board asked twice answers the same way.
+     *
+     * <p>What comes back is not necessarily the item that won the scan: {@link Project#realise} can
+     * hand the asker a substitute sized for them instead.
      */
     public Optional<WorkItem> bestFor(AgentId asker, BrainContext ctx, long now) {
         if (asker == null) {
@@ -163,7 +166,12 @@ public class Board {
         if (best == null) {
             return Optional.empty();
         }
-        return Optional.of(bestProject.realise(best, asker, ctx));
+        WorkItem realised = bestProject.realise(best, asker, ctx);
+        if (realised == null) {
+            throw new IllegalStateException(bestProject.describe() + " realised null for \""
+                    + best.describe() + "\" — realise() must never return null");
+        }
+        return Optional.of(realised);
     }
 
     /**

@@ -89,6 +89,11 @@ public interface Project {
      * A {@code realise} that recorded anything would mint state per body per tick and commit almost
      * none of it. Commitment belongs in {@link #claimed(WorkItem, AgentId)}, which the board calls
      * only when a claim actually lands.
+     *
+     * <p>An item returned that is not in {@link #open()} — this hook's whole reason to exist — must
+     * also be recognised by {@link #owns(WorkItem)}: the board finds an item's project only through
+     * {@code owns}, so a substitute it does not recognise leaves every later claim, completion,
+     * failure and expiry silently unrouted, never told to anybody.
      */
     default WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
         return offer;
