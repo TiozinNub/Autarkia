@@ -45,4 +45,15 @@ public interface PartyProject extends Project {
      * load, once per saved lease; an empty answer drops the hold.
      */
     Optional<WorkItem> itemFor(WorkKey key);
+
+    /**
+     * Every saved hold has been handed back — the first moment this project can tell a live
+     * commitment from one nobody came back for. Nothing by default.
+     *
+     * <p><b>It cannot be folded into {@link ProjectType#restore}.</b> That runs BEFORE the holds
+     * are reclaimed, when every restored commitment still looks unheld, so a sweep there would
+     * delete exactly the work about to be legitimately returned.
+     */
+    default void holdsRestored() {
+    }
 }

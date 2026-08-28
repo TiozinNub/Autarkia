@@ -563,6 +563,7 @@ public final class Gather implements PartyProject {
 
     // ── internals ────────────────────────────────────────────────────────────────────────────
 
+    /** Off offer goes everything nobody holds — a claimed trip is never a project's to withdraw. */
     private void withdrawAll() {
         open.keySet().removeIf(key -> !claimed.contains(key));
         rebuildOffer();
@@ -737,6 +738,7 @@ public final class Gather implements PartyProject {
             }
             // Rebuilds the offer around the trips just seeded. Nothing is minted: a trip exists
             // only where a claim did, so a reload cannot invent one for a member who never asked.
+            // The seeding is provisional — whatever no hold comes back for goes in holdsRestored().
             project.tick(now);
             return project;
         });
@@ -745,6 +747,18 @@ public final class Gather implements PartyProject {
     /** Puts one saved trip back, exactly as it was handed out. */
     private void seed(AgentId who, int size) {
         open.put(new WorkKey.ForMember(WorkKey.GATHER, who), new TripItem(size));
+    }
+
+    /**
+     * Drops every seeded trip nobody reclaimed. <b>No trip without a live lease</b> — the same
+     * invariant the pull model rests on, restated across a reload: a trip saved without its hold
+     * (the lease died between the save and the board's next sweep) has nothing for
+     * {@code Board.expire} to iterate, so it would hold its amount against a member who may be
+     * dead or gone for the life of the project. That is the 487/512 stall by another door.
+     */
+    @Override
+    public void holdsRestored() {
+        withdrawAll();
     }
 
     /**

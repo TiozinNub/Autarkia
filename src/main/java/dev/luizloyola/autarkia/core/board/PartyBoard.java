@@ -106,7 +106,11 @@ public final class PartyBoard extends Board {
      *
      * <p>Through {@link Board#reclaim}, never {@code claim}: re-<em>taking</em> puts an errand
      * through scoring and can hand it to somebody else. Ticks do not pass while a server is down, so
-     * a hold was never near expiring. A hold whose item is gone is dropped.
+     * a hold was never near expiring. A hold whose item is gone is dropped — and, through
+     * {@link PartyProject#holdsRestored}, so is the mirror case: an item whose hold is gone.
+     * {@link #snapshot} writes a hold only for a LIVE lease while a project writes every
+     * commitment it holds, so a save landing between a lease's death and the next {@link #tick}
+     * carries one without the other, and nothing later can sweep a commitment with no lease.
      *
      * @return how many saved projects could not be rebuilt — its {@link ProjectState#type()} names
      *         nothing {@link PartyProjects} has, or (an unknown {@link Clearing} id, today) that
@@ -137,6 +141,7 @@ public final class PartyBoard extends Board {
                     project.claimed(item, hold.who());
                 });
             }
+            project.holdsRestored();
         }
         return unknown;
     }

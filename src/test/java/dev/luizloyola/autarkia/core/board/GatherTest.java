@@ -791,6 +791,46 @@ class GatherTest {
         assertEquals(32, back.inFlight(), "and it is still what he is carrying for");
     }
 
+    /**
+     * A save landing between a hold's death and the board's next sweep writes the trip without it:
+     * {@code Gather.snapshot} writes every entry in {@code open}, {@code PartyBoard.snapshot} a
+     * hold only for a LIVE lease, and the party board beats every 40 ticks.
+     *
+     * <p>Seeded on load and reclaimed by nobody, that trip has no lease — and {@code Board.expire}
+     * iterates leases, not trips, so nothing can ever drop it. It counts against {@code inFlight()}
+     * forever, for a member who may have died or left. <b>That is the 487/512 stall arriving
+     * through the reload door</b>, which is why the sweep has to happen, and why it can only happen
+     * once the holds are back: before that pass, every restored trip looks unheld.
+     */
+    @Test
+    void aRestoredTripNobodyCameBackForIsDropped() {
+        long ttl = Board.ttlTicks();
+        PartyBoard board = new PartyBoard(PARTY);
+        Gather project = new Gather(Stock.LOGS, 512, YARD, 0.5, PARTY, CarrySplit.INSTANCE);
+        board.post(project);
+        board.tick(0L);
+        takes(board, project, SAM, new BoardBrainContext());
+        WorkItem hers = takes(board, project, KYLE, new BoardBrainContext());
+        assertEquals(128, project.inFlight());
+
+        // Sam goes quiet; Kyle is still saying he is on it. The world stops one tick after Sam's
+        // hold dies and before the board's next beat would have expired it.
+        board.heartbeat(hers, KYLE, ttl - 1);
+        long save = ttl + 1;
+        List<PartyBoard.Row> saved = board.snapshot(save);
+        assertEquals(1, saved.get(0).holds().size(), "only the live hold is written down");
+
+        PartyBoard reloaded = new PartyBoard(PARTY);
+        assertEquals(0, reloaded.restore(saved, save));
+        Gather back = (Gather) reloaded.projects().get(0);
+
+        assertTrue(reloaded.holds(back.itemFor(keyFor(KYLE)).orElseThrow(), KYLE, save),
+                "the live hold comes back exactly as it went in");
+        assertTrue(back.itemFor(keyFor(SAM)).isEmpty(), "and the orphan goes");
+        assertEquals(64, back.inFlight());
+        assertEquals(448, back.remainder(), "its amount is outstanding for anybody again");
+    }
+
     @Test
     void aTripComesBackTheSizeItWasHandedOutAt() {
         Gather project = posted(512);
