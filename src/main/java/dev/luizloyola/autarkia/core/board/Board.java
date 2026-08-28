@@ -129,6 +129,7 @@ public class Board {
             return Optional.empty(); // failing everything: let them do something else for a while
         }
         WorkItem best = null;
+        Project bestProject = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         for (Entry entry : entries) {
             for (WorkItem item : entry.project().open()) {
@@ -154,11 +155,15 @@ public class Board {
                 double score = item.priority() - item.estimatedCost(ctx);
                 if (score > bestScore) {
                     best = item;
+                    bestProject = entry.project();
                     bestScore = score;
                 }
             }
         }
-        return Optional.ofNullable(best);
+        if (best == null) {
+            return Optional.empty();
+        }
+        return Optional.of(bestProject.realise(best, asker, ctx));
     }
 
     /**

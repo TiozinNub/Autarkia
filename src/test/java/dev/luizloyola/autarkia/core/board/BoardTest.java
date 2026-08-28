@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.board;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -175,6 +176,59 @@ class BoardTest {
         assertTrue(board.claim(offstage, AgentId.random(), 0L), "the board should take the hold");
         assertSame(offstage, project.lastClaimed,
                 "a project that owns an item must be told when it is claimed");
+    }
+
+    @Test
+    void theBoardOffersWhatTheProjectRealises() {
+        WorkItem slice = new StubItem("slice 16", 0.5);
+        WorkItem trip = new StubItem("trip 48", 0.5);
+        RecordingProject project = new RecordingProject() {
+            @Override
+            public List<WorkItem> open() {
+                return List.of(slice);
+            }
+
+            @Override
+            public WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
+                return trip;
+            }
+
+            @Override
+            public boolean owns(WorkItem item) {
+                return item == trip || super.owns(item);
+            }
+        };
+        Board board = new Board();
+        board.post(project);
+
+        assertSame(trip, board.bestFor(AgentId.random(), new BoardBrainContext(), 0L).orElseThrow(),
+                "the asker should be handed the realised item, not the offer it scored");
+    }
+
+    @Test
+    void realisingDoesNotLeaseTheOfferItReplaced() {
+        // The arbiter asks every tick and often does not take what it is given. Nothing about the
+        // scored offer may change until a real claim lands, or an unclaimed offer accumulates state.
+        WorkItem slice = new StubItem("slice 16", 0.5);
+        WorkItem trip = new StubItem("trip 48", 0.5);
+        RecordingProject project = new RecordingProject() {
+            @Override
+            public List<WorkItem> open() {
+                return List.of(slice);
+            }
+
+            @Override
+            public WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
+                return trip;
+            }
+        };
+        Board board = new Board();
+        board.post(project);
+
+        board.bestFor(AgentId.random(), new BoardBrainContext(), 0L);
+        board.bestFor(AgentId.random(), new BoardBrainContext(), 0L);
+
+        assertNull(project.lastClaimed, "asking must never claim");
     }
 
     @Test

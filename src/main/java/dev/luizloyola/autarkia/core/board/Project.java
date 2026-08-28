@@ -80,6 +80,20 @@ public interface Project {
         return true;
     }
 
+    /**
+     * The item this asker actually takes, given the offer they won the scan with. The default is
+     * the offer itself — a project whose items are already concrete says nothing.
+     *
+     * <p><b>This MUST be pure.</b> {@code Arbiter} asks on every arbitration tick and frequently
+     * does not grant what it is handed: a drive can outbid the item, and the executor can be busy.
+     * A {@code realise} that recorded anything would mint state per body per tick and commit almost
+     * none of it. Commitment belongs in {@link #claimed(WorkItem, AgentId)}, which the board calls
+     * only when a claim actually lands.
+     */
+    default WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
+        return offer;
+    }
+
     /** An item's root SUCCEEDED, worked by the agent whose {@code ctx} this is. */
     void completed(WorkItem item, BrainContext ctx);
 
