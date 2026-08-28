@@ -40,8 +40,8 @@ import dev.luizloyola.anima.core.inv.ArmorType;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.Board;
+import dev.luizloyola.autarkia.core.board.CarrySplit;
 import dev.luizloyola.autarkia.core.board.ClearArea;
-import dev.luizloyola.autarkia.core.board.EvenSplit;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
@@ -639,7 +639,7 @@ public final class AutarkiaCommands {
         PartyId party = PartyData.get(server).partyOf(who);
         PartyBoard board = PartyBoards.of(server, party);
         Gather project = new Gather(ItemSpec.anyOf(Set.of(id)), count,
-                new Pos(yard.getX(), yard.getY(), yard.getZ()), priority, party, EvenSplit.INSTANCE);
+                new Pos(yard.getX(), yard.getY(), yard.getZ()), priority, party, CarrySplit.INSTANCE);
         int handle = board.post(project);
         PartyBoards.touch(server);
         // LOGGED: the same reason clear's post is — a posted project is durable, shared, persisted

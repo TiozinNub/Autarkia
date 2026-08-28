@@ -134,7 +134,7 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Gather.TYPE);
         dev.luizloyola.autarkia.core.board.Splits.register(
-                dev.luizloyola.autarkia.core.board.EvenSplit.INSTANCE);
+                dev.luizloyola.autarkia.core.board.CarrySplit.INSTANCE);
         // And that a party's work board is checked at boot like every other store: a project
         // outlives every worker who touches it, so a swallowed load would send a settlement to
         // re-walk ground it had already surveyed.

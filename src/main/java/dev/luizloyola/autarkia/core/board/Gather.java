@@ -125,10 +125,20 @@ public final class Gather implements PartyProject {
     /** Items somebody is holding, so a withdrawal can never pull one out from under a worker. */
     private final Set<WorkKey> claimed = new LinkedHashSet<>();
 
-    /** Member → the game time before which a fresh trip of THIS project is not minted for them. */
+    /** Member → the game time before which this project offers them nothing. */
     private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
 
-    /** {@link #open} as the board sees it, rebuilt on change so an ask allocates nothing. */
+    /** The outstanding work, cut into slices nobody owns. Derived from the remainder, never saved. */
+    private List<WorkItem> slate = List.of();
+
+    /**
+     * The remainder the slate was cut for. A beat that moved nothing re-uses the same slice
+     * objects: every map the board keeps about an item is identity-keyed, so re-cutting an
+     * unchanged slate would churn all of them for nothing.
+     */
+    private int slateFor = -1;
+
+    /** The slate and the claimed trips, as the board sees them — rebuilt on change, not per ask. */
     private List<WorkItem> offer = List.of();
 
     /**
@@ -190,13 +200,12 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * How much this project has already handed out, claimed or merely on offer.
+     * How much of this project is committed to a body right now.
      *
-     * <p><b>Every live item counts, not only the claimed ones.</b> An item on offer is a stack this
-     * project has already committed to fetching; counting only claimed trips would mint the same
-     * stack again on every beat until somebody took it, and would hand a party of eight eight trips
-     * for a job of four. It is also what makes the size fall out of the ratio within a single
-     * minting pass: each trip handed out shrinks the remainder the next member is sized against.
+     * <p><b>Only a claimed trip counts, because only a claimed trip exists.</b> The slate is
+     * unowned and costs the remainder nothing until somebody takes a slice of it — which is the
+     * whole of the 2026-08-27 stall, where an amount held against a member who never asked was
+     * never worked and never came back.
      */
     public int inFlight() {
         int total = 0;
@@ -229,51 +238,70 @@ public final class Gather implements PartyProject {
     // ── the beat ─────────────────────────────────────────────────────────────────────────────
 
     /**
-     * One host beat: members who left lose their trip, and whoever is free and still wanted is
-     * minted one. All bookkeeping over state and the roster, which is what lets a party board keep
-     * thinking with every member unloaded.
+     * One host beat: nothing is minted and nobody is named — the slate is re-cut around whatever
+     * the remainder has become, and that is all. Bookkeeping over this project's own state, which
+     * is what lets a party board keep thinking with every member unloaded.
      *
-     * <p><b>Minting happens here rather than in {@link #open()}</b>, whose contract is to return a
-     * view of state already held: rebuilding the offer per ask would hand out a different item
-     * object every time, and the board leases items from an {@code IdentityHashMap}.
+     * <p><b>Re-cutting happens here rather than in {@link #open()}</b>, whose contract is to return
+     * a view of state already held: rebuilding per ask would hand out a different item object every
+     * time, and the board leases items from an {@code IdentityHashMap}.
      */
     @Override
     public void tick(long now) {
         lastTick = now;
-        List<AgentId> members = PartyMembers.of(party);
-        for (WorkKey key : List.copyOf(open.keySet())) {
-            if (key instanceof WorkKey.ForMember trip && !members.contains(trip.who())) {
-                withdraw(key);
-            }
-        }
         if (finished()) {
             withdrawAll();
             return;
         }
-        mint(members, now);
         rebuildOffer();
     }
 
     /**
-     * One trip each, to everyone free, until nothing is left to hand out.
+     * Cuts what is outstanding into slices no smaller than {@link CarrySplit#MIN_TRIP}, the tail
+     * folded in rather than left as a runt: 65 is 16/16/16/17, never 16/16/16/16/1. A slice below
+     * MIN_TRIP is not worth a walk, which is what that constant has always meant — a remainder
+     * that is itself below it is one short slice, since the job still has to end.
      *
-     * <p>The free count is re-read on every member rather than taken once, so the share shrinks as
-     * the pass goes: a party of eight on a job of one stack gives four of them sixteen apiece and
-     * the other four nothing, which is the split table's second row. A zero share ends the pass —
-     * the remainder cannot grow again inside it.
+     * <p>Cut fine on purpose. A capable body merges slices back up in {@link #realise}; nothing can
+     * recover a cut that was too coarse.
      */
-    private void mint(List<AgentId> members, long now) {
-        for (AgentId member : members) {
-            WorkKey key = new WorkKey.ForMember(WorkKey.GATHER, member);
-            if (open.containsKey(key) || cooling(member, now)) {
-                continue;
-            }
-            int size = split.tripFor(remainder(), free(members, now));
-            if (size <= 0) {
-                return;
-            }
-            open.put(key, new TripItem(size));
+    private void rebuildSlate() {
+        int left = remainder();
+        if (left == slateFor) {
+            return;
         }
+        slateFor = left;
+        if (left <= 0) {
+            this.slate = List.of();
+            return;
+        }
+        int count = Math.max(1, left / CarrySplit.MIN_TRIP);
+        int base = left / count;
+        List<WorkItem> slices = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            slices.add(new SliceItem(i == count - 1 ? left - base * (count - 1) : base));
+        }
+        this.slate = List.copyOf(slices);
+    }
+
+    // ── what one body takes ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Coalesces as much of the slate as this body can carry into ONE trip. Pure — see
+     * {@link Project#realise}; the arbiter asks every tick and usually does not take what it gets.
+     */
+    @Override
+    public WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
+        if (!(offer instanceof SliceItem)) {
+            return offer; // a claimed trip resumes as itself
+        }
+        int size = tripFor(ctx);
+        return size <= 0 ? offer : new TripItem(size);
+    }
+
+    /** This project's own sizing question — one call, the split's whole answer. */
+    private int tripFor(BrainContext ctx) {
+        return split.tripFor(remainder(), spec, ctx);
     }
 
     /** Whether this member's last trip of this project failed too recently to try again. */
@@ -282,40 +310,48 @@ public final class Gather implements PartyProject {
         return until != null && until > now;
     }
 
-    /**
-     * How many members hold no live item of this project and are not waiting out a failure — the
-     * split's divisor. A cooling member is excluded rather than merely skipped when minting: they
-     * are not about to receive a trip this beat, so counting them would shrink everyone else's
-     * share against a member who is not actually there to take it.
-     */
-    private int free(List<AgentId> members, long now) {
-        int free = 0;
-        for (AgentId member : members) {
-            if (!open.containsKey(new WorkKey.ForMember(WorkKey.GATHER, member))
-                    && !cooling(member, now)) {
-                free++;
-            }
-        }
-        return free;
-    }
-
     // ── outcomes ─────────────────────────────────────────────────────────────────────────────
 
+    /** A claim is the moment a trip becomes real, and the only moment. */
     @Override
-    public void claimed(WorkItem item) {
+    public void claimed(WorkItem item, AgentId who) {
+        if (item instanceof TripItem && !open.containsValue(item)) {
+            open.put(new WorkKey.ForMember(WorkKey.GATHER, who), item);
+        }
         keyOf(item).ifPresent(claimed::add);
+        rebuildOffer();
     }
 
     /**
-     * A trip belongs to the one member it was minted for, and never to a member this project is
-     * pacing after a failure — see {@link #FAIL_COOLDOWN}. Without the first check the board hands
-     * a cooling member somebody ELSE's trip instead of nothing, which fails that one too and
-     * benches them off the whole board (live, 2026-08-24, settler {@code Di}).
+     * A trip is recognised BEFORE anything holds it: {@link #realise} hands the asker an item that
+     * is on offer to nobody, and {@code Board.ownerOf} routes every claim, completion, failure and
+     * expiry through here. An unrecognised item is not a refused claim — it is a claim nobody is
+     * ever told about.
+     *
+     * <p>Against the enclosing instance rather than the class: two gathers on one board mint the
+     * same inner types, and whichever was posted first would otherwise answer for the other's work.
+     */
+    @Override
+    public boolean owns(WorkItem item) {
+        return (item instanceof TripItem trip && trip.owner() == this)
+                || (item instanceof SliceItem slice && slice.owner() == this);
+    }
+
+    /**
+     * A slice goes to anybody not being paced and with room to carry one; a claimed trip goes back
+     * only to the body holding it, so a resume after a suspension finds its own work.
+     *
+     * <p>Without the second check the board hands a cooling member somebody ELSE's trip instead of
+     * nothing, which fails that one too and benches them off the whole board (live, 2026-08-24,
+     * settler {@code Di}).
      */
     @Override
     public boolean offerableTo(WorkItem item, AgentId asker, BrainContext ctx) {
         if (cooling(asker, lastTick)) {
             return false;
+        }
+        if (item instanceof SliceItem) {
+            return tripFor(ctx) > 0;
         }
         return keyOf(item)
                 .filter(key -> key instanceof WorkKey.ForMember member && member.who().equals(asker))
@@ -324,10 +360,10 @@ public final class Gather implements PartyProject {
 
     /**
      * A lapsed hold drops the trip outright, rather than merely un-claiming it as a clearing does.
-     * A trip is named for the member who was given it and carries a size nothing else knows, so
-     * putting it back on offer would leave one member's stack sitting under somebody else's name.
-     * Dropping it hands the amount back to {@link #remainder()}, and the next beat re-mints it for
-     * whoever is free — which is what stops the last trip stranding on one settler who died.
+     * A trip carries a size its claimer chose for their own pack and is filed under their name, so
+     * putting it back on offer would leave one body's armful sitting under another's. Dropping it
+     * hands the amount back to {@link #remainder()}, where the next cut of the slate offers it to
+     * anybody — which is what stops the last trip stranding on one settler who died.
      */
     @Override
     public void lapsed(WorkItem item) {
@@ -337,7 +373,7 @@ public final class Gather implements PartyProject {
     /**
      * A failed trip bars only the member who took it, for {@link #FAIL_COOLDOWN} — see that
      * constant for why a quantity project needs any pacing at all despite having no place to pace it
-     * against. Every other member is untouched, and the project keeps minting for them next beat.
+     * against. Every other member is untouched, and the slate stays on offer to them unchanged.
      */
     @Override
     public void failed(WorkItem item, BrainContext ctx) {
@@ -445,8 +481,8 @@ public final class Gather implements PartyProject {
      *
      * <p>Sized by the LARGEST live trip because {@code reserved()} has no asker to size it per
      * member — the board publishes one list to everybody. Over-reserving costs a member carrying a
-     * smaller trip nothing but a slightly later stow; under-reserving loses the load, so this errs
-     * upward and counts items merely on offer as well as claimed ones.
+     * smaller trip nothing but a slightly later stow; under-reserving loses the load. The slate is
+     * not counted: nobody is carrying it.
      */
     @Override
     public List<ItemCall> reserved() {
@@ -509,24 +545,57 @@ public final class Gather implements PartyProject {
 
     // ── internals ────────────────────────────────────────────────────────────────────────────
 
-    /** Drops an offer, unless somebody is out there acting on it. */
-    private void withdraw(WorkKey key) {
-        if (!claimed.contains(key)) {
-            open.remove(key);
-        }
-    }
-
     private void withdrawAll() {
         open.keySet().removeIf(key -> !claimed.contains(key));
         rebuildOffer();
     }
 
+    /** Slate first, then the claimed trips — so a trip stays findable by {@link #keyOf}. */
     private void rebuildOffer() {
-        this.offer = List.copyOf(open.values());
+        rebuildSlate();
+        List<WorkItem> all = new ArrayList<>(slate);
+        all.addAll(open.values());
+        this.offer = List.copyOf(all);
+    }
+
+    /** One unowned slice of the slate: what a claimer coalesces, and what a quest list will show. */
+    private final class SliceItem implements WorkItem {
+        private final int size;
+
+        private SliceItem(int size) {
+            this.size = size;
+        }
+
+        /** Which gather cut this — see {@link Gather#owns}. */
+        private Gather owner() {
+            return Gather.this;
+        }
+
+        @Override
+        public double priority() {
+            return priority;
+        }
+
+        @Override
+        public double estimatedCost(BrainContext ctx) {
+            double distance = Store.distance(yard, ctx.percepts().position());
+            return COST_AT_RANGE * Math.min(1.0, distance / COST_RANGE);
+        }
+
+        /** Never called: {@link Gather#realise} replaces a slice with a trip before it is leased. */
+        @Override
+        public Task root() {
+            throw new IllegalStateException("a slice is coalesced into a trip before it is run");
+        }
+
+        @Override
+        public String describe() {
+            return "fetch " + size + " " + spec.name() + " to " + at(yard);
+        }
     }
 
     /**
-     * One member's whole trip: go and get this much, then put it in the yard. It does not carry who
+     * One body's whole trip: go and get this much, then put it in the yard. It does not carry who
      * it is for — the {@link WorkKey.ForMember} it is filed under already says, and an item holding
      * its own name would be a second copy to keep in step.
      */
@@ -537,9 +606,14 @@ public final class Gather implements PartyProject {
             this.size = size;
         }
 
-        /** How much this trip was sized for, fixed at mint — see {@link Gather#inFlight()}. */
+        /** How much its claimer took on, fixed at the claim — see {@link Gather#inFlight()}. */
         private int size() {
             return size;
+        }
+
+        /** Which gather minted this — see {@link Gather#owns}. */
+        private Gather owner() {
+            return Gather.this;
         }
 
         @Override
@@ -626,13 +700,14 @@ public final class Gather implements PartyProject {
      *
      * <p>Empty when no build here registers that {@link ItemSpec} — a real failure for the store to
      * report, never a row to drop quietly, exactly as an unknown {@code Clearing} id is. An unknown
-     * {@link Split} id is NOT that: a policy is not identity, so it falls back to {@link EvenSplit}
-     * and the party goes on fetching rather than losing the job to a removed strategy.
+     * {@link Split} id is NOT that: a policy is not identity, so it falls back to
+     * {@link CarrySplit} and the party goes on fetching rather than losing the job to a removed
+     * strategy.
      */
     public static Optional<Gather> restore(State state, long now) {
         return ItemSpec.byName(state.spec()).map(spec -> {
             Gather project = new Gather(spec, state.target(), state.yard(), state.priority(),
-                    state.party(), Splits.byId(state.split()).orElse(EvenSplit.INSTANCE));
+                    state.party(), Splits.byId(state.split()).orElse(CarrySplit.INSTANCE));
             project.yardChests.addAll(state.yardChests());
             for (Reading reading : state.readings()) {
                 project.readings.put(reading.chest(), reading);
