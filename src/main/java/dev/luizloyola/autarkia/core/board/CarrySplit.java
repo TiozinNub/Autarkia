@@ -8,9 +8,10 @@ import dev.luizloyola.anima.core.inv.ItemStack;
 /**
  * One claim is what this body can carry, capped — the only {@link Split} in v1.
  *
- * <p>{@code trip = min(remainder, min(MAX_TRIP, room in the pack))}. There is no share and no
- * divisor: nobody is handed work, so there is never a count of idle members to divide against.
- * A body good enough to carry the whole job takes the whole job.
+ * <p>{@code trip = min(remainder, min(MAX_TRIP, room in the pack))}, floored at {@link #MIN_TRIP}.
+ * There is no share and no divisor: nobody is handed work, so there is never a count of idle
+ * members to divide against. A body good enough to carry the whole job takes the whole job, and a
+ * body with no room for a worthwhile armful is declined rather than sent.
  */
 public final class CarrySplit implements Split {
 
@@ -36,7 +37,16 @@ public final class CarrySplit implements Split {
         if (remainder <= 0) {
             return 0;
         }
-        return Math.min(remainder, roomFor(spec, asker.percepts().inventory()));
+        int room = roomFor(spec, asker.percepts().inventory());
+        if (room < MIN_TRIP && remainder >= MIN_TRIP) {
+            // Three of headroom is a stow, not an errand. Declining costs this body nothing: the
+            // standing personal projects put the surplus down and it comes back with room, whereas
+            // a walk for three is a whole trip's cost for a fraction of a trip's work.
+            return 0;
+        }
+        // The floor cannot outlast the job, though — the last nine of a gather still have to be
+        // fetched by somebody, and nobody will ever have MIN_TRIP of it left to claim.
+        return Math.min(remainder, room);
     }
 
     /**

@@ -51,15 +51,34 @@ class SplitTest {
 
     @Test
     void headroomInAMatchingStackCounts() {
-        // Every storage slot full, one of them holding 40 of 64 logs: 24 of headroom and no more.
-        ItemStack[] stacks = new ItemStack[Inventory.ARMOR_START];
-        Arrays.fill(stacks, ItemStack.of("minecraft:cobblestone", 64, 64));
-        stacks[0] = logs(40);
-        assertEquals(24, CarrySplit.INSTANCE.tripFor(512, Stock.LOGS, packHolding(stacks)));
+        assertEquals(24, CarrySplit.INSTANCE.tripFor(512, Stock.LOGS, packWithRoomFor(24)),
+                "every storage slot full, one of them holding 40 of 64 logs: 24 and no more");
     }
 
     @Test
     void nothingIsOutstandingSoNothingIsTaken() {
         assertEquals(0, CarrySplit.INSTANCE.tripFor(0, Stock.LOGS, packHolding()));
+    }
+
+    @Test
+    void anArmfulTooSmallToBeWorthAWalkIsDeclined() {
+        assertEquals(0, CarrySplit.INSTANCE.tripFor(512, Stock.LOGS, packWithRoomFor(3)),
+                "MIN_TRIP is the smallest payload worth a walk: three of headroom is a stow, not "
+                        + "an errand, and the standing stow projects give this body its room back");
+    }
+
+    @Test
+    void theFloorDoesNotOutlastTheJob() {
+        assertEquals(3, CarrySplit.INSTANCE.tripFor(3, Stock.LOGS, packWithRoomFor(3)),
+                "nobody will ever have MIN_TRIP of a three-log remainder to claim, so flooring "
+                        + "here would strand the last few forever");
+    }
+
+    /** Every storage slot full but one stack of logs with exactly {@code room} of headroom. */
+    private static BoardBrainContext packWithRoomFor(int room) {
+        ItemStack[] stacks = new ItemStack[Inventory.ARMOR_START];
+        Arrays.fill(stacks, ItemStack.of("minecraft:cobblestone", 64, 64));
+        stacks[0] = logs(64 - room);
+        return packHolding(stacks);
     }
 }

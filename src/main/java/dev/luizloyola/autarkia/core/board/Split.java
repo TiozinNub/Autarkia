@@ -24,6 +24,12 @@ public interface Split {
      * carry the lot takes the lot — the others are free to do something else (decision: Luiz,
      * 2026-08-28).
      *
+     * @param remainder how much of the project is still outstanding
+     * @param spec what the project wants. It travels WITH the question so that one call is the
+     *             whole answer: sizing by what a body can carry means knowing which stacks already
+     *             in its pack have headroom, and a caller left to re-clamp the result afterwards
+     *             would be second-guessing the policy it just asked
+     * @param asker the body doing the claiming, read live — nothing here is decided in advance
      * @return the size of one trip; never more than {@code remainder}, and {@code 0} for a body
      *         that should not be sent at all
      */

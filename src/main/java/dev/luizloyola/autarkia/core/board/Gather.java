@@ -338,8 +338,9 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * A slice goes to anybody not being paced and with room to carry one; a claimed trip goes back
-     * only to the body holding it, so a resume after a suspension finds its own work.
+     * A slice goes to anybody not being paced and with room for a trip worth walking; a claimed
+     * trip goes back only to the body holding it, so a resume after a suspension finds its own
+     * work.
      *
      * <p>Without the second check the board hands a cooling member somebody ELSE's trip instead of
      * nothing, which fails that one too and benches them off the whole board (live, 2026-08-24,
