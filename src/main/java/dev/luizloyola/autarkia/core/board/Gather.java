@@ -41,9 +41,10 @@ import java.util.Set;
  *
  * <h2>A slate anybody may claim</h2>
  *
- * <p>{@link #tick} mints nothing. The project publishes a SLATE — what is outstanding, cut into
- * {@link CarrySplit#MIN_TRIP}-sized slices nobody owns — and a body that asks is handed as much of
- * it as it can carry, coalesced into one trip, by {@link #realise}. A trip becomes real only in
+ * <p>{@link #tick} mints nothing. The project publishes a SLATE — a page of what is outstanding,
+ * cut into {@link CarrySplit#MIN_TRIP}-sized slices nobody owns — and a body that asks is handed
+ * ONE trip, sized by {@link #realise} at as much of the remainder as it can carry. The slate is a
+ * shop window, not a queue: a slice's size is shown and never worked. A trip becomes real only in
  * {@link #claimed}: <b>no trip without a live lease</b>, which is what stops work being held
  * against a member who never asks. Flown 2026-08-27, when a gather for 512 stalled at 487 because
  * the party's first member was a player and the trip minted for them could never be worked.
@@ -147,9 +148,8 @@ public final class Gather implements PartyProject {
 
     /**
      * How much the slate was cut for — the remainder, capped by {@link #SLATE_SLICES}. A beat that
-     * moved nothing re-uses the same slice
-     * objects: every map the board keeps about an item is identity-keyed, so re-cutting an
-     * unchanged slate would churn all of them for nothing.
+     * moved nothing re-uses the same slice objects: every map the board keeps about an item is
+     * identity-keyed, so re-cutting an unchanged slate would churn all of them for nothing.
      */
     private int slateFor = -1;
 
@@ -304,8 +304,16 @@ public final class Gather implements PartyProject {
     // ── what one body takes ──────────────────────────────────────────────────────────────────
 
     /**
-     * Coalesces as much of the slate as this body can carry into ONE trip. Pure — see
-     * {@link Project#realise}; the arbiter asks every tick and usually does not take what it gets.
+     * ONE trip, sized at as much of the remainder as this body can carry.
+     *
+     * <p><b>The offered slice is a token, and its size feeds nothing</b> — not here, not anywhere:
+     * the split is asked against {@link #remainder()} and the slice is dropped. That is what lets
+     * the slate be cut coarse, or published short (see {@link #SLATE_SLICES}), without a body
+     * being able to tell. It is also why 65 outstanding can come back as one trip of 64: no
+     * whole-slice arithmetic is involved.
+     *
+     * <p>Pure — see {@link Project#realise}; the arbiter asks every tick and usually does not take
+     * what it gets.
      */
     @Override
     public WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
@@ -577,7 +585,11 @@ public final class Gather implements PartyProject {
         this.offer = List.copyOf(all);
     }
 
-    /** One unowned slice of the slate: what a claimer coalesces, and what a quest list will show. */
+    /**
+     * One unowned slice of the slate: the token that carries this project's bid into the board's
+     * scan, and what a quest list will show. Its {@code size} is shown and nothing more — see
+     * {@link Gather#realise}, which throws the slice away and sizes the trip off the remainder.
+     */
     private final class SliceItem implements WorkItem {
         private final int size;
 
@@ -604,7 +616,7 @@ public final class Gather implements PartyProject {
         /** Never called: {@link Gather#realise} replaces a slice with a trip before it is leased. */
         @Override
         public Task root() {
-            throw new IllegalStateException("a slice is coalesced into a trip before it is run");
+            throw new IllegalStateException("a slice is replaced by a trip before it is run");
         }
 
         @Override

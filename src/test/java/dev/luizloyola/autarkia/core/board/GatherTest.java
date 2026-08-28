@@ -77,7 +77,7 @@ class GatherTest {
         return new WorkKey.ForMember(WorkKey.GATHER, who);
     }
 
-    /** What a body that asks actually takes: the first slice, coalesced and then claimed. */
+    /** What a body that asks actually takes: a slice realised into a trip, then claimed. */
     private static WorkItem claims(Gather project, AgentId who, BoardBrainContext ctx) {
         WorkItem trip = project.realise(project.open().get(0), who, ctx);
         project.claimed(trip, who);
@@ -250,11 +250,14 @@ class GatherTest {
     // ── how a claim is sized ─────────────────────────────────────────────────────────────────
 
     @Test
-    void aClaimCoalescesAdjacentSlices() {
+    void aTripIsSizedByTheBodyNotByTheSliceItWasOffered() {
         Gather project = posted(65);
-        WorkItem trip = project.realise(project.open().get(0), KYLE, new BoardBrainContext());
+        // The tail slice, whose 17 is the one size on this slate that is not MIN_TRIP: no
+        // arithmetic over whole slices can reach 64 from it, and none is done.
+        WorkItem trip = project.realise(project.open().get(3), KYLE, new BoardBrainContext());
         assertEquals(fetchLine(64), trip.describe(),
-                "an empty pack takes MAX_TRIP in one trip, not one slice");
+                "an empty pack takes MAX_TRIP off the REMAINDER; the slice is a token, and its "
+                        + "size reaches nothing but its own describe()");
     }
 
     @Test
