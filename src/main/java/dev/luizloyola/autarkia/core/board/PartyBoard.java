@@ -130,8 +130,11 @@ public final class PartyBoard extends Board {
                     reclaim(item, hold.who(), now);
                     // `reclaim` skips the bidding `claim` does, and that includes telling the
                     // project — which would otherwise think the errand free and withdraw it out
-                    // from under the member still walking to it.
-                    project.claimed(item);
+                    // from under the member still walking to it. WITH the holder: a project that
+                    // files a claim under its claimant (Gather) hears nothing from the one-arg
+                    // form, and the two-arg default delegates back to it for the projects that
+                    // only override that one.
+                    project.claimed(item, hold.who());
                 });
             }
         }

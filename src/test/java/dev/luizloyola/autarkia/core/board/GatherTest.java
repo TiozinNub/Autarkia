@@ -714,6 +714,38 @@ class GatherTest {
         assertEquals(0, back.remainder());
     }
 
+    /**
+     * The seam a reload hangs on. {@code PartyBoard.restore} hands a lease straight back without
+     * the bidding {@code claim} does, so it has to tell the project itself — and it must tell it
+     * WHO, because a project that files a claim under its claimant hears nothing from the one-arg
+     * form. Untold, the trip is not in {@code claimed}, so the moment the yard is satisfied
+     * {@code withdrawAll} drops it out from under the body still walking: their report then lands
+     * on an item {@code keyOf} cannot name, takes no yard reading, and their cargo stops being
+     * reserved against {@code Unburden} on the way.
+     */
+    @Test
+    void aReclaimedTripSurvivesTheFinishThatDropsTheSlate() {
+        PartyBoard board = new PartyBoard(PARTY);
+        Gather project = new Gather(Stock.LOGS, 64, YARD, 0.5, PARTY, CarrySplit.INSTANCE);
+        board.post(project);
+        board.tick(0L);
+        takes(board, project, KYLE, packWithRoomFor(32));
+        takes(board, project, SAM, packWithRoomFor(32));
+
+        PartyBoard reloaded = new PartyBoard(PARTY);
+        assertEquals(0, reloaded.restore(board.snapshot(0L), 0L));
+        Gather back = (Gather) reloaded.projects().get(0);
+
+        // Kyle gets back and the yard is satisfied. Sam is still mid-walk with his own thirty-two.
+        reloaded.completed(back.itemFor(keyFor(KYLE)).orElseThrow(), KYLE, depositor(CHEST, 64));
+
+        assertTrue(back.finished());
+        assertTrue(back.itemFor(keyFor(SAM)).isPresent(),
+                "a reclaimed hold is a hold — closing the project must not withdraw the trip its "
+                        + "holder is still walking");
+        assertEquals(32, back.inFlight(), "and it is still what he is carrying for");
+    }
+
     @Test
     void aTripComesBackTheSizeItWasHandedOutAt() {
         Gather project = posted(512);
