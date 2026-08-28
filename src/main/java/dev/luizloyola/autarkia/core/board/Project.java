@@ -63,12 +63,20 @@ public interface Project {
     }
 
     /**
-     * Whether this item may go to {@code asker} right now. The board holds the lease and the
-     * scoring; only the project knows whether THIS body is the one an item was meant for, or is
-     * being paced after a failure. True by default — a project whose items are interchangeable
-     * says nothing.
+     * The same claim, with the body that took it — for a project that mints an item at claim time
+     * and has to file it under its claimant. Delegates by default, exactly as {@code failed} does.
      */
-    default boolean offerableTo(WorkItem item, AgentId asker) {
+    default void claimed(WorkItem item, AgentId who) {
+        claimed(item);
+    }
+
+    /**
+     * Whether this item may go to {@code asker} right now. The board holds the lease and the
+     * scoring; only the project knows whether THIS body is the one an item was meant for, is being
+     * paced after a failure, or has no room to carry what the item is for. True by default — a
+     * project whose items are interchangeable says nothing.
+     */
+    default boolean offerableTo(WorkItem item, AgentId asker, BrainContext ctx) {
         return true;
     }
 

@@ -109,6 +109,55 @@ class BoardTest {
     }
 
     /**
+     * The hole this closes: a body with no pack room asks, and `bestFor` has no way to say no
+     * without a project able to read live facts about the asker.
+     */
+    @Test
+    void aProjectMayDeclineOnWhatTheAskerIsCarrying() {
+        WorkItem item = new StubItem("slice", 0.5);
+        RecordingProject project = new RecordingProject() {
+            @Override
+            public List<WorkItem> open() {
+                return List.of(item);
+            }
+
+            @Override
+            public boolean offerableTo(WorkItem offer, AgentId asker, BrainContext ctx) {
+                return !ctx.percepts().inventory().isEmpty();
+            }
+        };
+        Board board = new Board();
+        board.post(project);
+
+        assertTrue(board.bestFor(AgentId.random(), new BoardBrainContext(), 0L).isEmpty(),
+                "a project declining on live facts should offer nothing");
+    }
+
+    @Test
+    void aProjectIsToldWhoClaimed() {
+        WorkItem item = new StubItem("slice", 0.5);
+        RecordingProject project = new RecordingProject() {
+            @Override
+            public List<WorkItem> open() {
+                return List.of(item);
+            }
+
+            @Override
+            public void claimed(WorkItem claimedItem, AgentId who) {
+                this.lastClaimed = claimedItem;
+                this.lastClaimant = who;
+            }
+        };
+        Board board = new Board();
+        board.post(project);
+        AgentId kyle = AgentId.random();
+
+        board.claim(item, kyle, 0L);
+
+        assertEquals(kyle, project.lastClaimant, "the project must learn who took it");
+    }
+
+    /**
      * A project that recognises an item it never put on offer — exactly what Gather's
      * realised-but-uncommitted trip is. Without owns(), the board cannot find its owner.
      */
@@ -341,7 +390,7 @@ class BoardTest {
         }
 
         @Override
-        public boolean offerableTo(WorkItem item, AgentId asker) {
+        public boolean offerableTo(WorkItem item, AgentId asker, BrainContext ctx) {
             return allow.test(item, asker);
         }
 
@@ -421,6 +470,7 @@ class BoardTest {
     /** A project that records what the board told it, and offers nothing by default. */
     private static class RecordingProject implements Project {
         WorkItem lastClaimed;
+        AgentId lastClaimant;
 
         @Override
         public double priority() {

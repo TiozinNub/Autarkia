@@ -316,8 +316,8 @@ class GatherTest {
         AgentId somebodyElse = roster.get(1);
         WorkItem trip = tripOf(project, 0);
 
-        assertTrue(project.offerableTo(trip, hers));
-        assertFalse(project.offerableTo(trip, somebodyElse),
+        assertTrue(project.offerableTo(trip, hers, new BoardBrainContext()));
+        assertFalse(project.offerableTo(trip, somebodyElse, new BoardBrainContext()),
                 "a trip minted for one member must never go to another");
     }
 
@@ -334,9 +334,10 @@ class GatherTest {
         project.tick(40L);
 
         WorkItem his = project.itemFor(keyFor(fine)).orElseThrow();
-        assertFalse(project.offerableTo(his, flailing),
+        assertFalse(project.offerableTo(his, flailing, new BoardBrainContext()),
                 "cooling bars the whole project, not just the trip that already failed");
-        assertTrue(project.offerableTo(his, fine), "the untouched member is unaffected");
+        assertTrue(project.offerableTo(his, fine, new BoardBrainContext()),
+                "the untouched member is unaffected");
     }
 
     @Test
@@ -353,7 +354,7 @@ class GatherTest {
 
         project.tick(Gather.FAIL_COOLDOWN + 1);
         WorkItem fresh = tripOf(project, 0);
-        assertTrue(project.offerableTo(fresh, who),
+        assertTrue(project.offerableTo(fresh, who, new BoardBrainContext()),
                 "past the cooldown the member is exactly as free as anybody else");
     }
 

@@ -118,8 +118,8 @@ class ClearAreaTest {
         ClearArea project = posted(ABLE, oneSlice());
         WorkItem item = surveyItem(project);
 
-        assertTrue(project.offerableTo(item, AgentId.random()));
-        assertTrue(project.offerableTo(item, AgentId.random()),
+        assertTrue(project.offerableTo(item, AgentId.random(), new BoardBrainContext()));
+        assertTrue(project.offerableTo(item, AgentId.random(), new BoardBrainContext()),
                 "a claim-board by design — Project's default hook says nothing about who an item "
                         + "is for");
     }

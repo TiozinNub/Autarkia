@@ -313,7 +313,7 @@ public final class Gather implements PartyProject {
      * benches them off the whole board (live, 2026-08-24, settler {@code Di}).
      */
     @Override
-    public boolean offerableTo(WorkItem item, AgentId asker) {
+    public boolean offerableTo(WorkItem item, AgentId asker, BrainContext ctx) {
         if (cooling(asker, lastTick)) {
             return false;
         }

@@ -136,7 +136,7 @@ public class Board {
                 if (lease != null && lease.liveAt(now)) {
                     continue;
                 }
-                if (!entry.project().offerableTo(item, asker)) {
+                if (!entry.project().offerableTo(item, asker, ctx)) {
                     // The project's own business — who it was minted for, or a body it is pacing
                     // after a failure — never a missing kit, so this must not reach notePassedOver.
                     continue;
@@ -221,7 +221,7 @@ public class Board {
         if (fresh) {
             Project owner = ownerOf(item);
             if (owner != null) {
-                owner.claimed(item);
+                owner.claimed(item, who);
             }
         }
         return true;
