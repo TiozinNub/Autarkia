@@ -35,8 +35,26 @@ public final class ComposedBoards implements WorkSource {
      */
     private final Supplier<WorkSource> party;
 
-    /** Which side offered an item, so its outcome goes back where it came from. */
+    /**
+     * Which side offered an item, so its outcome goes back where it came from. <b>Only CLAIMED
+     * items are in here</b> — an offer waits in {@link #lastOffer} until a claim promotes it.
+     *
+     * <p>Remembering every offer instead was a leak with no ceiling. A project that mints a fresh
+     * item per ask ({@code Gather} realises a new trip each time) left one permanent entry per
+     * ask, and {@code Arbiter} asks whenever the body holds no claim — 20 Hz per Person, against a
+     * composite that is a final field of the entity.
+     */
     private final Map<WorkItem, WorkSource> offeredBy = new IdentityHashMap<>();
+
+    /**
+     * The last thing {@link #bestAvailable} handed out, and the side it came from. One slot is
+     * enough: the arbiter claims what it was just offered or nothing at all, so an offer that goes
+     * unclaimed has no successor worth keeping.
+     */
+    private Offered lastOffer;
+
+    private record Offered(WorkItem item, WorkSource from) {
+    }
 
     public ComposedBoards(WorkSource personal, Supplier<WorkSource> party) {
         this.personal = personal;
@@ -73,12 +91,21 @@ public final class ComposedBoards implements WorkSource {
         } else {
             return Optional.empty();
         }
-        offeredBy.put(best, from);
+        lastOffer = new Offered(best, from);
         return Optional.of(best);
     }
 
+    /**
+     * The moment an offer becomes a commitment — and so the only moment worth remembering a route
+     * for. {@code Arbiter.grantWork} calls this straight after {@link #bestAvailable} with the same
+     * item, which is what makes one slot enough.
+     */
     @Override
     public void claimed(WorkItem item, BrainContext ctx) {
+        if (lastOffer != null && lastOffer.item() == item) {
+            offeredBy.put(item, lastOffer.from());
+            lastOffer = null;
+        }
         sourceOf(item).claimed(item, ctx);
     }
 
@@ -162,12 +189,23 @@ public final class ComposedBoards implements WorkSource {
     }
 
     /**
-     * The board that offered this item. Falls back to the personal side for an item this
-     * composite never handed out — nothing legitimately reaches here that way, and a lost outcome
-     * is a worse failure than one delivered to a board that will shrug it off.
+     * The board that offered this item. Falls back to the personal side for an item this composite
+     * never handed out, which is not merely defensive: a reload puts the arbiter's errand back
+     * through {@code Arbiter.restoreGrant} without a claim, and the item it hands over came from
+     * the PERSONAL board — the party side restores its own holds on the party board instead. A
+     * lost outcome would be a worse failure than one delivered to a board that will shrug it off.
      */
     private WorkSource sourceOf(WorkItem item) {
         WorkSource from = offeredBy.get(item);
         return from != null ? from : personal;
+    }
+
+    /**
+     * How many items this composite is still holding a route for. Bounded by the claims in flight
+     * plus the one offer waiting — the assertion the retention test is made of, since a leak here
+     * is invisible in every behaviour.
+     */
+    int routesHeld() {
+        return offeredBy.size() + (lastOffer == null ? 0 : 1);
     }
 }

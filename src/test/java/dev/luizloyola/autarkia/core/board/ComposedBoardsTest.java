@@ -84,6 +84,41 @@ class ComposedBoardsTest {
     }
 
     /**
+     * A hundred asks and nothing taken must leave nothing behind. The route back to the offering
+     * board used to be recorded at the OFFER, which was harmless only while a project re-offered
+     * the same item object: once a project mints a fresh one per ask — which is exactly what
+     * {@code Gather.realise} does — every ask left a permanent entry, and the arbiter asks on every
+     * tick a body holds no claim.
+     */
+    @Test
+    void anOfferNobodyTakesIsNotRemembered() {
+        party.post(new Minting());
+
+        for (int i = 0; i < 100; i++) {
+            assertTrue(work.bestAvailable(ctx).isPresent());
+        }
+
+        assertEquals(1, work.routesHeld(), "only the one offer still waiting for an answer");
+    }
+
+    /** ...and the route a claim genuinely needs outlives every ask that comes after it. */
+    @Test
+    void aClaimKeepsItsRouteUntilTheOutcomeLands() {
+        Minting theirs = new Minting();
+        party.post(theirs);
+
+        WorkItem item = work.bestAvailable(ctx).orElseThrow();
+        work.claimed(item, ctx);
+        work.bestAvailable(ctx); // the arbiter goes on asking around the claim it is holding
+        work.bestAvailable(ctx);
+        work.completed(item, ctx);
+
+        assertEquals(List.of("claimed", "completed"), theirs.events,
+                "a fresh item per ask must not cost the claimed one its way home");
+        assertEquals(1, work.routesHeld(), "and the outcome frees the route it travelled by");
+    }
+
+    /**
      * Only the personal side has a cadence here. The party board thinks once per board in its
      * host, not once per member — ticking it from every member is the bug this asserts against.
      */
@@ -209,6 +244,79 @@ class ComposedBoardsTest {
         @Override
         public void failed(WorkItem item, BrainContext ctx) {
             events.add("failed");
+        }
+
+        @Override
+        public String describe() {
+            return name;
+        }
+    }
+
+    /**
+     * A project whose posted item is only a token: what a claimer actually gets is a FRESH item,
+     * minted on every ask, exactly as {@code Gather.realise} sizes a trip for the body in front of
+     * it. The shape the retention above is about.
+     */
+    private static final class Minting implements Project {
+        final List<String> events = new ArrayList<>();
+        private final Token token = new Token("token");
+
+        @Override
+        public double priority() {
+            return 0.8;
+        }
+
+        @Override
+        public List<WorkItem> open() {
+            return List.of(token);
+        }
+
+        @Override
+        public WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
+            return new Token("trip");
+        }
+
+        @Override
+        public boolean owns(WorkItem item) {
+            return item instanceof Token;
+        }
+
+        @Override
+        public boolean finished() {
+            return false;
+        }
+
+        @Override
+        public void claimed(WorkItem item, AgentId who) {
+            events.add("claimed");
+        }
+
+        @Override
+        public void completed(WorkItem item, BrainContext ctx) {
+            events.add("completed");
+        }
+
+        @Override
+        public void failed(WorkItem item, BrainContext ctx) {
+            events.add("failed");
+        }
+
+        @Override
+        public String describe() {
+            return "minting";
+        }
+    }
+
+    /** One offer object, with no state worth keeping — a stand-in for a slice or a trip. */
+    private record Token(String name) implements WorkItem {
+        @Override
+        public double priority() {
+            return 0.8;
+        }
+
+        @Override
+        public Task root() {
+            throw new UnsupportedOperationException("no test here runs the work");
         }
 
         @Override
