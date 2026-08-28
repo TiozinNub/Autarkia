@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.agent.AgentId;
@@ -229,6 +230,33 @@ class BoardTest {
         board.bestFor(AgentId.random(), new BoardBrainContext(), 0L);
 
         assertNull(project.lastClaimed, "asking must never claim");
+    }
+
+    /**
+     * The guard's whole job: a broken realise() turns into one loud, named failure instead of an
+     * NPE inside bestFor on every arbitration tick for every agent.
+     */
+    @Test
+    void aRealiseThatReturnsNullFailsLoudAndNamesTheProject() {
+        WorkItem offer = new StubItem("slice 16", 0.5);
+        RecordingProject project = new RecordingProject() {
+            @Override
+            public List<WorkItem> open() {
+                return List.of(offer);
+            }
+
+            @Override
+            public WorkItem realise(WorkItem realiseOffer, AgentId asker, BrainContext ctx) {
+                return null;
+            }
+        };
+        Board board = new Board();
+        board.post(project);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> board.bestFor(AgentId.random(), new BoardBrainContext(), 0L));
+        assertTrue(thrown.getMessage().contains("recording"), thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("slice 16"), thrown.getMessage());
     }
 
     @Test
