@@ -33,6 +33,21 @@ public interface Project {
     List<WorkItem> open();
 
     /**
+     * Whether this project is the one to tell about {@code item}. The default is what the board
+     * has always done — an identity scan of what is on offer — and it is not enough for a project
+     * that mints an item for one asker at claim time: such an item is not on offer to anybody, so
+     * the scan would find no owner and the claim would be lost in silence.
+     */
+    default boolean owns(WorkItem item) {
+        for (WorkItem offered : open()) {
+            if (offered == item) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Whether the goal has been met and this project should be closed and dropped by its board.
      * Context-free on purpose: a goal that cannot be judged without somebody's eyes was never the
      * group's. A <em>standing</em> project describes a condition and always answers {@code false}.

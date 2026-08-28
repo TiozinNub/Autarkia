@@ -108,6 +108,26 @@ class BoardTest {
         assertEquals(List.of("claimed:one"), project.events);
     }
 
+    /**
+     * A project that recognises an item it never put on offer — exactly what Gather's
+     * realised-but-uncommitted trip is. Without owns(), the board cannot find its owner.
+     */
+    @Test
+    void aProjectIsToldAboutAnItemItOwnsButHasNotOffered() {
+        WorkItem offstage = new StubItem("realised", 0.5);
+        RecordingProject project = new RecordingProject() {
+            @Override
+            public boolean owns(WorkItem item) {
+                return item == offstage || super.owns(item);
+            }
+        };
+        board.post(project);
+
+        assertTrue(board.claim(offstage, AgentId.random(), 0L), "the board should take the hold");
+        assertSame(offstage, project.lastClaimed,
+                "a project that owns an item must be told when it is claimed");
+    }
+
     @Test
     void outcomesReachTheProjectAndFreeTheItem() {
         FakeProject project = new FakeProject("errands");
@@ -382,6 +402,57 @@ class BoardTest {
         @Override
         public String describe() {
             return name;
+        }
+    }
+
+    /** A work item with nothing behind it — the board only ever scores and leases. */
+    private record StubItem(String label, double priority) implements WorkItem {
+        @Override
+        public Task root() {
+            throw new UnsupportedOperationException("never run in a board test");
+        }
+
+        @Override
+        public String describe() {
+            return label;
+        }
+    }
+
+    /** A project that records what the board told it, and offers nothing by default. */
+    private static class RecordingProject implements Project {
+        WorkItem lastClaimed;
+
+        @Override
+        public double priority() {
+            return 0.5;
+        }
+
+        @Override
+        public List<WorkItem> open() {
+            return List.of();
+        }
+
+        @Override
+        public boolean finished() {
+            return false;
+        }
+
+        @Override
+        public void claimed(WorkItem item) {
+            this.lastClaimed = item;
+        }
+
+        @Override
+        public void completed(WorkItem item, BrainContext ctx) {
+        }
+
+        @Override
+        public void failed(WorkItem item, BrainContext ctx) {
+        }
+
+        @Override
+        public String describe() {
+            return "recording";
         }
     }
 }

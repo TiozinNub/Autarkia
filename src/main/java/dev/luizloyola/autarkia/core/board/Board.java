@@ -451,10 +451,8 @@ public class Board {
     /** The project currently offering this item, or null if none does (cancelled mid-errand). */
     private Project ownerOf(WorkItem item) {
         for (Entry entry : entries) {
-            for (WorkItem offered : entry.project().open()) {
-                if (offered == item) {
-                    return entry.project();
-                }
+            if (entry.project().owns(item)) {
+                return entry.project();
             }
         }
         return null;
