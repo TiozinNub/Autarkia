@@ -74,6 +74,22 @@ public final class Gather implements PartyProject {
     public static final int FAIL_COOLDOWN = 600;
 
     /**
+     * The most slices the slate ever carries, so at most {@code SLATE_SLICES × MIN_TRIP} of the job
+     * is ever on the counter at once.
+     *
+     * <p><b>A partial slate is honest.</b> It is the next PAGE of the work, not the ledger —
+     * {@link #remainder()} stays the whole truth, and nothing a body does reads a slice's size
+     * ({@link #realise} throws the slice away and sizes off the remainder), so publishing 512 of a
+     * 512000 gather changes nothing anybody can observe.
+     *
+     * <p>Unbounded it was operator input straight into a per-tick loop: {@code board post gather}
+     * accepts any count, {@code gather logs 512000} cut 32000 slices, and {@code Board.bestFor}
+     * walks every one of them for every asker on every tick — reading the pack in
+     * {@link #offerableTo} each time.
+     */
+    public static final int SLATE_SLICES = 32;
+
+    /**
      * What one yard chest held the last time anybody looked, and when.
      *
      * @param at the game time of the look — carried so a restart cannot make a stale belief look
@@ -126,11 +142,12 @@ public final class Gather implements PartyProject {
     /** Member → the game time before which this project offers them nothing. */
     private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
 
-    /** The outstanding work, cut into slices nobody owns. Derived from the remainder, never saved. */
+    /** A page of the outstanding work, cut into slices nobody owns. Derived, never saved. */
     private List<WorkItem> slate = List.of();
 
     /**
-     * The remainder the slate was cut for. A beat that moved nothing re-uses the same slice
+     * How much the slate was cut for — the remainder, capped by {@link #SLATE_SLICES}. A beat that
+     * moved nothing re-uses the same slice
      * objects: every map the board keeps about an item is identity-keyed, so re-cutting an
      * unchanged slate would churn all of them for nothing.
      */
@@ -255,16 +272,18 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * Cuts what is outstanding into slices no smaller than {@link CarrySplit#MIN_TRIP}, the tail
-     * folded in rather than left as a runt: 65 is 16/16/16/17, never 16/16/16/16/1. A slice below
-     * MIN_TRIP is not worth a walk, which is what that constant has always meant — a remainder
-     * that is itself below it is one short slice, since the job still has to end.
+     * Cuts the next {@link #SLATE_SLICES} slices' worth of what is outstanding into pieces no
+     * smaller than {@link CarrySplit#MIN_TRIP}, the tail folded in rather than left as a runt: 65
+     * is 16/16/16/17, never 16/16/16/16/1. A slice below MIN_TRIP is not worth a walk, which is
+     * what that constant has always meant — a remainder that is itself below it is one short
+     * slice, since the job still has to end.
      *
-     * <p>Cut fine on purpose. A capable body merges slices back up in {@link #realise}; nothing can
-     * recover a cut that was too coarse.
+     * <p><b>The cut is presentation.</b> A slice's size reaches {@code describe()} and nothing
+     * else: {@link #realise} discards the slice and sizes the trip off {@link #remainder()}, so
+     * the shape here only has to read right to an operator and, later, to a quest list.
      */
     private void rebuildSlate() {
-        int left = remainder();
+        int left = Math.min(remainder(), SLATE_SLICES * CarrySplit.MIN_TRIP);
         if (left == slateFor) {
             return;
         }

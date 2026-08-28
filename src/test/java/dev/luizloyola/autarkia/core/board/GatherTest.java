@@ -186,6 +186,51 @@ class GatherTest {
                 "MIN_TRIP is the smallest slice worth cutting, not the smallest job worth doing");
     }
 
+    /**
+     * The cap is a ceiling on how much of the job stands on the counter, never a change to how the
+     * counter is laid out: at or under it, the cut is what it was before the cap existed.
+     */
+    @Test
+    void theSlateIsCutTheSameWayUpToTheCap() {
+        int most = Gather.SLATE_SLICES * CarrySplit.MIN_TRIP;
+        for (int target = 1; target <= most; target++) {
+            assertEquals(uncapped(target), sliceSizes(posted(target)), "target " + target);
+        }
+    }
+
+    /**
+     * Past it, the slate is the next PAGE of work rather than the ledger. {@code board post gather}
+     * takes any count an operator types, and {@code Board.bestFor} walks every open item for every
+     * asker on every tick, asking {@code offerableTo} — which reads the pack — of each.
+     */
+    @Test
+    void aHugeTargetStillPublishesOnlyAPageOfWork() {
+        Gather project = posted(512_000);
+        List<Integer> slices = sliceSizes(project);
+
+        assertEquals(Gather.SLATE_SLICES, slices.size(),
+                "32000 slices is 32000 pack reads per asker per tick, off a number nothing bounds");
+        assertEquals(Gather.SLATE_SLICES * CarrySplit.MIN_TRIP,
+                slices.stream().mapToInt(Integer::intValue).sum());
+        assertEquals(512_000, project.remainder(),
+                "and the truth is untouched — the slate is the shop window, not the ledger");
+        assertEquals(fetchLine(64),
+                project.realise(project.open().get(0), KYLE, new BoardBrainContext()).describe(),
+                "which is why a short slate costs nothing: a trip is sized off the remainder, and "
+                        + "the slice it was offered is thrown away");
+    }
+
+    /** The cut as it stood before the cap: all of the remainder, in {@code MIN_TRIP} slices. */
+    private static List<Integer> uncapped(int left) {
+        int count = Math.max(1, left / CarrySplit.MIN_TRIP);
+        int base = left / count;
+        List<Integer> slices = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            slices.add(i == count - 1 ? left - base * (count - 1) : base);
+        }
+        return slices;
+    }
+
     @Test
     void theOfferKeepsItsIdentityAcrossBeats() {
         Gather project = posted(512);
