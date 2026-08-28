@@ -39,13 +39,14 @@ import java.util.Set;
  * {@link AgentKnowledge.Seen#count} reads it off. The board never looks at the world itself — the
  * not-omniscient rule holding by construction rather than by discipline.
  *
- * <h2>One trip per member, sized at mint</h2>
+ * <h2>A slate anybody may claim</h2>
  *
- * <p>{@link #tick} mints one item per member with nothing live, sized by the {@link Split}. Fixing
- * the size at mint is what stops four settlers each fetching a full 64 for a gather of 64, and it
- * makes {@link #inFlight()} a plain sum rather than a guess. When the remainder reaches zero the
- * project simply stops minting: a member who asks is offered nothing <em>by this project</em> and
- * the composite hands them whatever scores next. There is no reserved-and-idle state anywhere.
+ * <p>{@link #tick} mints nothing. The project publishes a SLATE — what is outstanding, cut into
+ * {@link CarrySplit#MIN_TRIP}-sized slices nobody owns — and a body that asks is handed as much of
+ * it as it can carry, coalesced into one trip, by {@link #realise}. A trip becomes real only in
+ * {@link #claimed}: <b>no trip without a live lease</b>, which is what stops work being held
+ * against a member who never asks. Flown 2026-08-27, when a gather for 512 stalled at 487 because
+ * the party's first member was a player and the trip minted for them could never be worked.
  */
 public final class Gather implements PartyProject {
 
@@ -93,12 +94,9 @@ public final class Gather implements PartyProject {
      * One member's outstanding trip, as the store holds it.
      *
      * <p><b>The size has to be written down.</b> A trip's SIZE is not derivable from anything else
-     * the row carries — it was decided by the split against a remainder that has moved since — and
-     * a reload that re-derived it would mint in ROSTER order, before {@code PartyBoard.restore} has
-     * reclaimed a single hold. A party whose remainder no longer covers everybody would then hand
-     * the trips to the wrong members and drop the saved holds on the floor, while the members
-     * actually mid-walk carried on walking: an overshoot of several trips, past the one the
-     * per-trip cap is supposed to bound the error to.
+     * the row carries: it was the claimant's own choice, capped by their capability at the moment
+     * they asked, against a remainder that has since moved — nothing left after a reload can
+     * reconstruct it.
      */
     public record Trip(AgentId who, int size) {
     }
@@ -657,8 +655,8 @@ public final class Gather implements PartyProject {
      *
      * <p><b>The item objects are not here; who owes what IS.</b> An item is exhaust, regenerable
      * from state — and the outstanding trips are exactly that state, the same way a clearing's
-     * ledger is what re-mints its errands. Deriving them instead from the roster and the remainder
-     * would put the members back in a different order from the holds saved beside this row; see
+     * ledger is what re-mints its errands. A trip cannot be regenerated the same way: nothing else
+     * names who holds one or how much they took, so the row itself is the only record; see
      * {@link Trip}.
      *
      * @param spec the {@link ItemSpec} registry name — a mod-declared spec's matcher is a lambda
@@ -695,9 +693,8 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * Rebuilds a saved project, puts every outstanding trip back on the member it was minted for,
-     * and only then tops up whoever is free — so a lease can be handed straight back to the member
-     * who held it, and nobody new is sent for goods somebody is already carrying.
+     * Rebuilds a saved project and puts every outstanding trip back on the member who held it — the
+     * whole of what a reload assigns, since nothing here mints anything new.
      *
      * <p>Empty when no build here registers that {@link ItemSpec} — a real failure for the store to
      * report, never a row to drop quietly, exactly as an unknown {@code Clearing} id is. An unknown
@@ -719,8 +716,8 @@ public final class Gather implements PartyProject {
             for (Trip trip : state.trips()) {
                 project.seed(trip.who(), trip.size());
             }
-            // Sweeps a saved trip whose member has left, and mints for anyone the remainder still
-            // reaches — after the seeding above, so the two can never double-count.
+            // Rebuilds the offer around the trips just seeded. Nothing is minted: a trip exists
+            // only where a claim did, so a reload cannot invent one for a member who never asked.
             project.tick(now);
             return project;
         });

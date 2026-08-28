@@ -244,7 +244,7 @@ class PartyBoardCodecsTest {
     void aGatherRowComesBackWithItsLedgerAndItsHolds() {
         AgentId alice = AgentId.random();
         PartyId party = PartyId.of(java.util.UUID.randomUUID());
-        Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5, party, "even",
+        Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5, party, "carry",
                 List.of(new Pos(11, 64, 10), new Pos(12, 64, 10)),
                 List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L),
                         new Gather.Reading(new Pos(12, 64, 10), 8, 1_200L)),
@@ -270,7 +270,7 @@ class PartyBoardCodecsTest {
         // Without it a restart makes every belief look freshly taken, and a member arriving with
         // an hour-old memory overwrites a newer reading — the ledger is the chest as LAST read.
         Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5,
-                PartyId.of(java.util.UUID.randomUUID()), "even", List.of(new Pos(11, 64, 10)),
+                PartyId.of(java.util.UUID.randomUUID()), "carry", List.of(new Pos(11, 64, 10)),
                 List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L)), List.of(), List.of());
 
         Gather.State after = (Gather.State) roundTrip(new PartyBoard.Row(before, List.of()))
@@ -286,7 +286,7 @@ class PartyBoardCodecsTest {
         // just proved impossible — the whole defect this pacing exists to close.
         AgentId alice = AgentId.random();
         Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5,
-                PartyId.of(java.util.UUID.randomUUID()), "even", List.of(), List.of(), List.of(),
+                PartyId.of(java.util.UUID.randomUUID()), "carry", List.of(), List.of(), List.of(),
                 List.of(new Gather.Cooldown(alice, 12_345L)));
 
         Gather.State after = (Gather.State) roundTrip(new PartyBoard.Row(before, List.of()))
@@ -314,6 +314,9 @@ class PartyBoardCodecsTest {
         project.addProperty("priority", 0.5);
         project.add("party", UUIDUtil.CODEC.encodeStart(JsonOps.INSTANCE,
                 UUID.randomUUID()).getOrThrow());
+        // "even" was EvenSplit's id before the 2026-08-28 pool rewrite deleted it. Left as-is: it's
+        // what a pre-rewrite file would actually carry, so restoring this row exercises
+        // Gather.restore's real fallback to CarrySplit rather than a made-up unknown string.
         project.addProperty("split", "even");
         return project;
     }
@@ -326,7 +329,7 @@ class PartyBoardCodecsTest {
         // board counts the project unknown, and refuseUnknown will not start the world again.
         ItemSpec posted = ItemSpec.anyOf(Set.of("minecraft:oak_log"));
         Gather.State before = new Gather.State(posted.name(), 64, new Pos(10, 64, 10), 0.5,
-                PartyId.of(UUID.randomUUID()), "even", List.of(), List.of(), List.of(), List.of());
+                PartyId.of(UUID.randomUUID()), "carry", List.of(), List.of(), List.of(), List.of());
         PartyBoard.Row row = new PartyBoard.Row(before, List.of());
 
         JsonObject written = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row)
