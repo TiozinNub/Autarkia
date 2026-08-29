@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.person.speech;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.need.NeedKind;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.sense.Being;
@@ -7,6 +8,7 @@ import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
+import dev.luizloyola.anima.core.social.speech.Utterance;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -25,7 +27,8 @@ import org.jspecify.annotations.Nullable;
  *       {@link #stillLonely}), otherwise raise a new topic — any self line discharges the
  *       obligation, so small talk legitimately answers it.</li>
  *   <li>Say hello before anything else.</li>
- *   <li>A counterpart seen but never introduced: ask.</li>
+ *   <li>A counterpart seen but never introduced, and who has not already given a name in this
+ *       record: ask.</li>
  *   <li>Still wanting company: small talk, usually — a 1-in-4 roll varies the line.</li>
  *   <li>Nothing pressing: propose leaving.</li>
  * </ol>
@@ -53,7 +56,8 @@ public final class PersonChooser implements Chooser {
             return Line.of(SpeechActs.GREETING);
         }
 
-        if (applicable.contains(PersonActs.ASK_IDENTITY) && isUnintroducedCounterpart(ctx, turn)) {
+        if (applicable.contains(PersonActs.ASK_IDENTITY) && isUnintroducedCounterpart(ctx, turn)
+                && !counterpartAlreadySaidItsName(turn)) {
             return Line.of(PersonActs.ASK_IDENTITY);
         }
 
@@ -126,6 +130,26 @@ public final class PersonChooser implements Chooser {
                 .filter(being -> being.identified() == Being.Identified.INDIVIDUAL
                         && being.name().isEmpty())
                 .isPresent();
+    }
+
+    /**
+     * Whether the counterpart has already said its name in THIS encounter. The percept's name is
+     * filled from the contact book by the sensor, a few ticks behind the line that wrote it — long
+     * enough, now that every line waits a beat, for {@link #isUnintroducedCounterpart} to still
+     * read empty on the next turn. Asking somebody the name they just gave reads as deaf; the
+     * transcript is the record that never lags.
+     */
+    private static boolean counterpartAlreadySaidItsName(Turn turn) {
+        AgentId counterpart = turn.counterpart().orElse(null);
+        if (counterpart == null) {
+            return false;
+        }
+        for (Utterance line : turn.encounter().transcript()) {
+            if (counterpart.equals(line.author()) && line.act().equals(PersonActs.INFORM_NAME.key())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Optional<Being> findBeing(BrainContext ctx, BeingId id) {

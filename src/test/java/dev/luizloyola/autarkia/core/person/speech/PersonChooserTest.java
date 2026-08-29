@@ -152,11 +152,34 @@ class PersonChooserTest {
     @DisplayName("priority 4: counterpart perceived at INDIVIDUAL with an empty name — asks")
     void priority4AsksAnUnintroducedCounterpart() {
         ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
-        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
+        Encounter e = freshEncounter();
+        // Our own name given away is not theirs — the transcript guard is about what THEY said.
+        e.append(new Utterance(ctx.self, PersonActs.INFORM_NAME.key(), Map.of(), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
                 List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(PersonActs.ASK_IDENTITY), chooser.choose(ctx, turn));
+    }
+
+    @Test
+    @DisplayName("priority 4 is skipped once they have said their name here, however stale the percept")
+    void priority4SkipsWhenTheTranscriptAlreadyHoldsTheirName() {
+        ctx.percepts.company.setValue(0.5); // below content — falls to priority 5
+        // The percept still reads unnamed: the sensor fills a Being's name from the contact book
+        // a few ticks after the line that wrote it, and every line now waits a beat — a whole turn
+        // of asking again fits in that lag.
+        ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), PersonActs.INFORM_NAME.key(), Map.of(), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), true,
+                Optional.of(otherId.asPerson()));
+
+        Chooser.Line line = chooser.choose(ctx, turn);
+
+        assertEquals(PersonActs.SMALL_TALK, line.act(),
+                "they just told us — asking a second time reads as deaf");
     }
 
     @Test
@@ -317,34 +340,53 @@ class PersonChooserTest {
         Converse taskA = new Converse(BeingId.of(other.self), Speech.Opening.I_HAILED);
         Converse taskB = new Converse(BeingId.of(ctx.self), Speech.Opening.THEY_HAILED);
 
-        ctx.percepts.time = 0;
-        other.percepts.time = 0;
-        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A hails and greets in the same tick");
-        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B waits out the reply grace");
+        // Every line waits REPLY_GRACE_TICKS after the previous one, whoever said it and whatever
+        // is owed — so the record advances one line per beat. On a beat where BOTH sides may
+        // speak, the world's own tick order decides who takes it; the order below is the one that
+        // reads as a conversation, and the assertions name what each body was doing.
+        clockTo(ctx, other, 0);
+        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A hails — even her own greeting waits a beat");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B waits out the same beat");
 
-        ctx.percepts.time = 20;
-        other.percepts.time = 20;
+        clockTo(ctx, other, 20);
+        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A's beat has elapsed — she greets");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "that line restarted B's beat");
+
+        clockTo(ctx, other, 40);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A already spoke twice running — silent");
-        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's grace has elapsed — greets back");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B greets back");
 
-        ctx.percepts.time = 40;
-        other.percepts.time = 40;
-        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A's grace has elapsed — asks B's name");
-        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B owes a reply — shares its name");
+        clockTo(ctx, other, 60);
+        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A asks B's name");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext),
+                "B owes an answer, but an obligation buys no head start on the beat");
+
+        clockTo(ctx, other, 80);
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat elapsed — shares its name");
+        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "that line restarted A's beat");
 
         // Production fills a Being's name from the sensor watching INFORM_NAME land; the fake has
         // no live sensor, so the test plays that part: A now knows B is "Bramble".
         ctx.percepts.beings = List.of(FakePercepts.personAt(BeingId.of(other.self), here, 4.0, "Bramble"));
 
+        clockTo(ctx, other, 100);
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext),
                 "B is still under its own consecutive cap — asks A's name right back");
+        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A's beat restarted on B's ask");
+
+        clockTo(ctx, other, 120);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A owes a reply — shares its name");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on it");
 
         // Same, the other way: B now knows A is "Alder".
         other.percepts.beings = List.of(FakePercepts.personAt(BeingId.of(ctx.self), here, 4.0, "Alder"));
 
+        clockTo(ctx, other, 140);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx),
                 "both names known, company at the boundary — A proposes ending");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on the proposal");
+
+        clockTo(ctx, other, 160);
         assertEquals(TaskStatus.SUCCESS, taskB.tick(otherContext),
                 "B's pending is request_end_chat, not ask_identity — priority 2 decides: "
                         + "pressure 0.0 at the content boundary ends it");
@@ -369,6 +411,12 @@ class PersonChooserTest {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
+
+    /** Both bodies onto the same world tick — the two-party test moves one beat at a time. */
+    private static void clockTo(FakeContext a, FakeContext b, long tick) {
+        a.percepts.time = tick;
+        b.percepts.time = tick;
+    }
 
     /** A generator whose {@code nextInt} answers a fixed script, repeating its last value once
      *  exhausted — deterministic control over priority 5's roll without hand-deriving a seed. */
