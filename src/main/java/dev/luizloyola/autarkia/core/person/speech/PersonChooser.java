@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.person.speech;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.need.NeedKind;
+import dev.luizloyola.anima.core.agent.need.Ramp;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
@@ -105,10 +106,14 @@ public final class PersonChooser implements Chooser {
      * proposed leaving to each other one line per tick, for as long as the world ran, into a store
      * that persists every line — 24 KB of one conversation in four minutes, and no way out of it.
      * Found in world by this branch's smoke, 2026-08-28.
+     *
+     * <p>{@link Ramp#side} is the library's own answer to that exact trap, which is why this asks
+     * it rather than comparing against a level by hand.
      */
     private static boolean stillLonely(BrainContext ctx) {
-        return ctx.percepts().needs().pressure(NeedKind.COMPANY) > 0.0
-                && ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx);
+        Ramp ramp = NeedKind.COMPANY.ramp();
+        return ramp != null
+                && ramp.side(ctx.profile(), ctx.percepts().needs().value(NeedKind.COMPANY)) < 0;
     }
 
     /** The value at which company stops asking for more — {@code content}'s own anchor. */
@@ -145,6 +150,11 @@ public final class PersonChooser implements Chooser {
             return false;
         }
         for (Utterance line : turn.encounter().transcript()) {
+            if (line.system()) {
+                // What the world wrote about somebody is not that body speaking, and
+                // Speech.system takes ANY act — Picker's own scans skip these first too.
+                continue;
+            }
             if (counterpart.equals(line.author()) && line.act().equals(PersonActs.INFORM_NAME.key())) {
                 return true;
             }

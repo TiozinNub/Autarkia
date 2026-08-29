@@ -289,6 +289,11 @@ mc() {
 # in the save and is not even selectable, let alone ticking — the rehearsal for this reported
 # "Spawned CiProbe" and "No Persons are loaded" in the same breath. Stage inside the rectangle.
 mc "forceload add -64 -64 64 64"
+# And the strip the PAIR stands in. They are staged at z≈48, sixteen blocks off this rectangle's
+# far edge, and a body that wanders over it stops ticking mid-conversation — a flake that would
+# depend on which way the random walk went. Two commands rather than one wide one: forceload caps
+# at 256 chunks per call, and 64 each leaves that headroom obvious.
+mc "forceload add -64 64 64 192"
 mc "autarkia spawn CiProbe"
 
 # Spawning exercises entity registration, the identity directory, the appearance roll and the brain
