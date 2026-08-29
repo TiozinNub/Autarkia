@@ -28,7 +28,9 @@ import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.autarkia.compat.sense.PatchBlocks;
 import dev.luizloyola.autarkia.core.patch.PatchRule;
 import dev.luizloyola.autarkia.core.patch.Patches;
+import dev.luizloyola.anima.core.social.speech.Choosers;
 import dev.luizloyola.autarkia.core.person.speech.PersonActs;
+import dev.luizloyola.autarkia.core.person.speech.PersonChooser;
 import dev.luizloyola.autarkia.core.tree.ChopForLogs;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.List;
@@ -91,6 +93,9 @@ public class AutarkiaMod implements ModInitializer {
         // initializer only runs once something reads the class, so this touch is the whole
         // registration (NeedKind's idiom); Anima's registry throws if it ever ran twice.
         Objects.requireNonNull(PersonActs.ASK_IDENTITY);
+        // The part with the personality — must come after the touch above: a chooser that
+        // references PersonActs needs the vocabulary to already exist.
+        Choosers.provide(new PersonChooser());
         // Settlers craft: the vanilla recipe book becomes the library's RecipeSource. Anima
         // ships the mechanism unregistered — this call is the consumer saying recipes exist.
         dev.luizloyola.anima.mod.craft.VanillaRecipeSource.install();
