@@ -28,9 +28,11 @@ import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.autarkia.compat.sense.PatchBlocks;
 import dev.luizloyola.autarkia.core.patch.PatchRule;
 import dev.luizloyola.autarkia.core.patch.Patches;
+import dev.luizloyola.autarkia.core.person.speech.PersonActs;
 import dev.luizloyola.autarkia.core.tree.ChopForLogs;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.List;
+import java.util.Objects;
 import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.autarkia.core.tree.TreeClearing;
 import dev.luizloyola.autarkia.core.tree.TreeRule;
@@ -85,6 +87,10 @@ public class AutarkiaMod implements ModInitializer {
         PathfinderService.init();
         Journals.init();
         Claims.init();
+        // The person's own words — asking a name, giving it, small talk. A static field
+        // initializer only runs once something reads the class, so this touch is the whole
+        // registration (NeedKind's idiom); Anima's registry throws if it ever ran twice.
+        Objects.requireNonNull(PersonActs.ASK_IDENTITY);
         // Settlers craft: the vanilla recipe book becomes the library's RecipeSource. Anima
         // ships the mechanism unregistered — this call is the consumer saying recipes exist.
         dev.luizloyola.anima.mod.craft.VanillaRecipeSource.install();
