@@ -43,6 +43,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
 import dev.luizloyola.autarkia.mod.person.PersonAppearance;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
+import dev.luizloyola.autarkia.mod.person.PersonPortraits;
 import dev.luizloyola.anima.mod.net.DebugGlowSync;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
@@ -117,6 +118,9 @@ public class AutarkiaMod implements ModInitializer {
         // tier stays ours to sync. Providers chain, so a future pets mod answers for its own ids
         // beside this one.
         AgentDirectory.provide(PersonDirectory::get);
+        // And what one of them looks like, for the face beside a spoken line. Deleting this line is
+        // the whole disconnect: with no provider the choke point renders text-only.
+        PersonPortraits.install();
         // What to do when one of those Persons is let go. Registered here rather than inside
         // whatever command does the letting go: the store's author is the only one who reliably
         // remembers it exists. `survivesDeath = true` because identity outlives the body — only an
