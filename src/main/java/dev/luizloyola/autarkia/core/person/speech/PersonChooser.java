@@ -17,7 +17,10 @@ import org.jspecify.annotations.Nullable;
  * the act being in {@link Turn#applicable()}: the picker filters, this only wants.
  *
  * <ol>
- *   <li>Something is owed — v1 never deflects, it always shares its name.</li>
+ *   <li>Asked its identity — v1 never deflects, it always shares its name. Gated on the pending
+ *       act specifically being {@code ask_identity}, not just any obligation: {@code
+ *       request_end_chat} leaves {@code inform_name} technically applicable too (its responses
+ *       are unconstrained), and priority 2 needs the chance to actually answer it.</li>
  *   <li>Answering a proposal to end: leave once company stops pressing, otherwise raise a new
  *       topic — any self line discharges the obligation, so small talk legitimately answers it.</li>
  *   <li>Say hello before anything else.</li>
@@ -32,7 +35,7 @@ public final class PersonChooser implements Chooser {
     public @Nullable Line choose(BrainContext ctx, Turn turn) {
         List<SpeechAct> applicable = turn.applicable();
 
-        if (turn.pending().isPresent() && applicable.contains(PersonActs.INFORM_NAME)) {
+        if (pendingIsAskIdentity(turn) && applicable.contains(PersonActs.INFORM_NAME)) {
             return Line.of(PersonActs.INFORM_NAME);
         }
 
@@ -71,6 +74,17 @@ public final class PersonChooser implements Chooser {
             return Line.of(SpeechActs.REQUEST_END_CHAT);
         }
         return null;
+    }
+
+    /**
+     * Whether specifically an {@code ask_identity} is owed — not just any pending obligation.
+     * {@code request_end_chat} declares no constrained responses ("any reply discharges"), so
+     * {@code inform_name} reads as technically applicable there too; without this check, priority
+     * 1 would answer a proposal to end the chat by reintroducing itself instead of ever letting
+     * priority 2 decide.
+     */
+    private static boolean pendingIsAskIdentity(Turn turn) {
+        return turn.pending().map(u -> u.act().equals(PersonActs.ASK_IDENTITY.key())).orElse(false);
     }
 
     private static boolean pendingIsRequestEndChat(Turn turn) {

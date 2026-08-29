@@ -23,7 +23,6 @@ import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.Encounter;
 import dev.luizloyola.anima.core.social.speech.Speech;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
-import dev.luizloyola.anima.core.social.speech.SpeechEngine;
 import dev.luizloyola.anima.core.social.speech.Utterance;
 import java.util.List;
 import java.util.Map;
@@ -79,31 +78,40 @@ class PersonChooserTest {
     // ── priority 2: answering a proposal to end ──────────────────────────────────────────────
 
     @Test
-    @DisplayName("priority 2: pending request_end_chat with pressure 0.0 ends the chat")
+    @DisplayName("priority 2: pending request_end_chat with pressure 0.0 ends the chat, "
+            + "not a reflex inform_name")
     void priority2EndsWhenCompanyNoLongerPresses() {
         ctx.percepts.company.setValue(0.6); // between "alone" and "content" — pressure is flat at 0
         Utterance ask = new Utterance(otherId.asPerson(), SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
+        // inform_name is included deliberately: request_end_chat is unconstrained ("any reply
+        // discharges"), so Picker leaves it technically applicable too — priority 1 must not grab
+        // it here (that was the regression: see PersonChooser#pendingIsAskIdentity).
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT), Optional.of(ask), true,
-                Optional.of(otherId.asPerson()));
+                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.INFORM_NAME),
+                Optional.of(ask), true, Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
     }
 
     @Test
-    @DisplayName("priority 2: pending request_end_chat with pressure > 0.0 raises a new topic instead")
+    @DisplayName("priority 2: pending request_end_chat with pressure > 0.0 raises a new topic, "
+            + "not a reflex inform_name")
     void priority2ChangesTheSubjectWhenCompanyStillPresses() {
         ctx.percepts.company.setValue(0.0); // desolate — pressure 0.50
         Utterance ask = new Utterance(otherId.asPerson(), SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
+        // Same deliberate inclusion of inform_name as above — this is the exact regression the
+        // ask_identity-only gate on priority 1 exists to close.
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.SMALL_TALK),
+                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.SMALL_TALK,
+                        PersonActs.INFORM_NAME),
                 Optional.of(ask), true, Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
 
-        assertEquals(PersonActs.SMALL_TALK, line.act());
-        assertTrue(Topics.options(ctx).contains(line.payload().get("topic")),
-                "the discharge is any self line — small talk legitimately answers the proposal");
+        assertEquals(PersonActs.SMALL_TALK, line.act(),
+                "the discharge is any self line — small talk legitimately answers the proposal, "
+                        + "and must win over inform_name");
+        assertTrue(Topics.options(ctx).contains(line.payload().get("topic")));
     }
 
     // ── priority 3: greet first ──────────────────────────────────────────────────────────────
@@ -244,13 +252,9 @@ class PersonChooserTest {
         BrainContext otherContext = new SecondSpeaker(other, otherSpeech);
         ctx.speech.chooser = chooser;
         otherSpeech.chooser = chooser;
-        // Shrunk so the record is already AT the turn cap the instant REQUEST_END_CHAT lands:
-        // Picker.applicable() then narrows to just [request_end_chat, end_chat], so the answering
-        // side's priority 1 (inform_name) is correctly off the table and priority 2 gets to decide
-        // — with an unshrunk cap, inform_name would still technically be "applicable" (Picker does
-        // not track whether a name was already given) and priority 1 would win every time.
-        ctx.speech.caps = new SpeechEngine.Caps(8, 6_000, 1_200, 300);
-        otherSpeech.caps = new SpeechEngine.Caps(8, 6_000, 1_200, 300);
+        // Default caps throughout — no turn-cap trick needed: priority 1 only answers a pending
+        // ask_identity now, so the answering side's pending request_end_chat always reaches
+        // priority 2, whatever the transcript length.
 
         Pos here = new Pos(4, 64, 0);
         // Each side perceives the other, seen but never introduced — INDIVIDUAL tier, empty name.
@@ -294,7 +298,8 @@ class PersonChooserTest {
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx),
                 "both names known, company at the boundary — A proposes ending");
         assertEquals(TaskStatus.SUCCESS, taskB.tick(otherContext),
-                "the record is now at the turn cap — B answers with END_CHAT, not another name");
+                "B's pending is request_end_chat, not ask_identity — priority 2 decides: "
+                        + "pressure 0.0 at the content boundary ends it");
         assertEquals(TaskStatus.SUCCESS, taskA.tick(ctx), "the shared record now reads closed");
 
         Encounter e = ctx.speech.roster.closed().get(0);
@@ -305,8 +310,10 @@ class PersonChooserTest {
                 SpeechActs.REQUEST_END_CHAT.key(), SpeechActs.END_CHAT.key()), acts,
                 "GREETING and ASK_IDENTITY/INFORM_NAME both ways, then END_CHAT");
         assertTrue(e.closed());
-        assertTrue(ctx.speech.saidLines.size() < 8, "A's own line count stays under the turn cap");
-        assertTrue(otherSpeech.saidLines.size() < 8, "B's own line count stays under the turn cap");
+        // FakeSpeech's default turnCap is 60 — both sides settle the conversation in a handful
+        // of lines, nowhere near it.
+        assertTrue(ctx.speech.saidLines.size() < 60, "A's own line count stays under the turn cap");
+        assertTrue(otherSpeech.saidLines.size() < 60, "B's own line count stays under the turn cap");
         // Task 5's finding, still true here: closing on a shared roster notifies only the closer.
         assertTrue(ctx.speech.closedRecords.isEmpty(), "A never closed anything itself");
         assertEquals(1, otherSpeech.closedRecords.size(), "B's own engine did the closing");
