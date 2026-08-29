@@ -129,6 +129,12 @@ public class Board {
             return Optional.empty(); // an agent that does not yet know who it is cannot owe anything
         }
         if (isBenched(asker, now)) {
+            if (!REASON_BENCHED.equals(lastOffer.get(asker))) {
+                long remaining = benched.get(asker) - now;
+                ctx.journal().record(Category.PROJECT, EVENT_OFFER,
+                        "nothing on the board: benched, " + remaining + "t left");
+                lastOffer.put(asker, REASON_BENCHED);
+            }
             return Optional.empty(); // failing everything: let them do something else for a while
         }
         WorkItem best = null;
@@ -164,7 +170,15 @@ public class Board {
             }
         }
         if (best == null) {
+            if (!REASON_EMPTY.equals(lastOffer.get(asker))) {
+                ctx.journal().record(Category.PROJECT, EVENT_OFFER,
+                        "nothing on the board: no item on offer to them");
+                lastOffer.put(asker, REASON_EMPTY);
+            }
             return Optional.empty();
+        }
+        if (lastOffer.remove(asker) != null) {
+            ctx.journal().record(Category.PROJECT, EVENT_OFFER, "work again");
         }
         WorkItem realised = bestProject.realise(best, asker, ctx);
         if (realised == null) {
@@ -339,6 +353,24 @@ public class Board {
         Long until = benched.get(who);
         return until != null && until > now;
     }
+
+    /** The {@code bestFor} decline line — {@code project - offer - ...}, muted as a pair, not a category. */
+    private static final String EVENT_OFFER = "offer";
+
+    /**
+     * {@link #lastOffer} values: the KIND of empty answer, not its rendered text — the benched
+     * detail carries a tick countdown that changes every call and must not itself look like a
+     * change.
+     */
+    private static final String REASON_BENCHED = "benched";
+    private static final String REASON_EMPTY = "empty";
+
+    /**
+     * Last empty-answer reason told to each asker, absent once they have been told "work again".
+     * bestFor runs every arbitration tick for every body, so only a CHANGE of reason writes a
+     * line — the same dedupe {@code Arbiter.lastGranted} already applies to grants.
+     */
+    private final Map<AgentId, String> lastOffer = new java.util.HashMap<>();
 
     /**
      * Every live hold on this board, for the claims dump — flattened into Anima's reporting

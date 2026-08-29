@@ -13,6 +13,8 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.log.Entry;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -88,8 +90,10 @@ class BoardTest {
 
         board.bestFor(bob, ctx, ctx.now());
 
-        assertTrue(ctx.journal().recent(10).isEmpty(),
-                "a project's own refusal is not a passed-over kit — nothing to log");
+        // The empty answer now earns its own "offer" line (Task 6); what it must never earn is
+        // the item-specific "passed over: no way to get ..." kit-shortage line.
+        assertTrue(ctx.journal().recent(10).stream().noneMatch(e -> e.detail().startsWith("passed over")),
+                "a project's own refusal is not a passed-over kit");
     }
 
     @Test
@@ -319,6 +323,80 @@ class BoardTest {
         assertTrue(board.cancel(keepHandle).isPresent());
     }
 
+    // ---- offer: bestFor runs every tick, but a reason only speaks when it changes --------
+
+    /**
+     * bestFor runs on every arbitration tick, for every body. Logging each empty answer would
+     * out-spam the channel this exists to quieten, so only a CHANGE of reason writes a line —
+     * the same dedupe {@code Arbiter.lastGranted} already applies to grants.
+     */
+    @Test
+    void anEmptyOfferSaysWhyOnceAndThenHoldsItsPeace() {
+        Board board = new Board();
+        BoardBrainContext ctx = new BoardBrainContext();
+        bench(board, ctx, alice);
+
+        for (int i = 0; i < 50; i++) {
+            board.bestFor(alice, ctx, i);
+        }
+
+        List<Entry> offers = offersFrom(ctx);
+        assertEquals(1, offers.size(), "fifty empty answers, one line");
+        assertTrue(offers.get(0).detail().contains("benched"));
+    }
+
+    /** The scan-empty reason dedupes on its own, the same as the benched one. */
+    @Test
+    void aScanThatFindsNothingSaysSoOnce() {
+        Board board = new Board();
+        BoardBrainContext ctx = new BoardBrainContext();
+
+        for (int i = 0; i < 50; i++) {
+            assertTrue(board.bestFor(alice, ctx, i).isEmpty());
+        }
+
+        List<Entry> offers = offersFrom(ctx);
+        assertEquals(1, offers.size(), "fifty empty answers, one line");
+        assertTrue(offers.get(0).detail().contains("no item on offer"));
+    }
+
+    @Test
+    void workComingBackIsAlsoNews() {
+        Board board = new Board();
+        BoardBrainContext ctx = new BoardBrainContext();
+        bench(board, ctx, alice);
+        board.bestFor(alice, ctx, 0);
+
+        FakeProject project = new FakeProject("errands");
+        project.add(new FakeItem("thing", 0.5, 0.0));
+        board.post(project);
+        board.bestFor(alice, ctx, Board.BENCH_TICKS + 1);
+
+        List<Entry> offers = offersFrom(ctx);
+        assertEquals(2, offers.size());
+        assertEquals("work again", offers.get(1).detail());
+    }
+
+    /**
+     * The dedupe key is the REASON, not a single "already told them nothing" flag — swapping one
+     * empty reason for a different one is still news, exactly like the design's three-line
+     * example (benched, then no-room, then work again).
+     */
+    @Test
+    void aChangeBetweenTwoEmptyReasonsIsAlsoNews() {
+        Board board = new Board();
+        BoardBrainContext ctx = new BoardBrainContext();
+        bench(board, ctx, alice);
+        board.bestFor(alice, ctx, 0);
+
+        board.bestFor(alice, ctx, Board.BENCH_TICKS + 1); // bench lifted; nothing else posted
+
+        List<Entry> offers = offersFrom(ctx);
+        assertEquals(2, offers.size());
+        assertTrue(offers.get(0).detail().contains("benched"));
+        assertTrue(offers.get(1).detail().contains("no item on offer"));
+    }
+
     // ---- leases: a hold is a heartbeat, not a lock ---------------------------------------
 
     /**
@@ -429,6 +507,21 @@ class BoardTest {
         hers.claimed(item, ctx);
         assertTrue(board.holds(item, alice, ctx.now()));
         assertTrue(his.bestAvailable(ctx).isEmpty(), "one board, one pool: bob sees it is taken");
+    }
+
+    /** Drives {@code who}'s failure streak to the bench threshold — the only way in from outside. */
+    private static void bench(Board board, BrainContext ctx, AgentId who) {
+        WorkItem failing = new StubItem("failing", 0.5);
+        for (int i = 0; i < Board.BENCH_AFTER; i++) {
+            board.failed(failing, who, ctx);
+        }
+    }
+
+    /** This journal's {@code offer} lines, oldest first. */
+    private static List<Entry> offersFrom(BoardBrainContext ctx) {
+        return ctx.journal().recent(Integer.MAX_VALUE).stream()
+                .filter(e -> e.category() == Category.PROJECT && e.event().equals("offer"))
+                .toList();
     }
 
     // ---- doubles ------------------------------------------------------------------------
