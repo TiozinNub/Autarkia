@@ -97,6 +97,10 @@ public final class PersonSpecies {
             // Six new faces against thirty lines of chat: a new person is worth about five
             // conversations. A starting value, to be tuned in world.
             .set(ProfileAspect.SOCIAL_COMPANY_MEETINGS, 6)
+            // Chat is for someone already close — well inside sight, let alone the hail.
+            .set(ProfileAspect.SOCIAL_CHAT_RADIUS, 12)
+            // Fifteen seconds on an unanswered question before it reads as a snub.
+            .set(ProfileAspect.SOCIAL_PATIENCE_TICKS, 300)
             // --- body: a 1.8 hitbox, a vanilla jump, and vanilla's sprint-jump limit ----------
             .set(ProfileAspect.BODY_HEIGHT, 1.8)   // the real hitbox, not a cell count
             .set(ProfileAspect.BODY_JUMP_HEIGHT, 1)
