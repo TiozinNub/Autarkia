@@ -8,6 +8,7 @@ import dev.luizloyola.anima.mod.body.AgentBodies;
 import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.command.AgentCommands;
 import dev.luizloyola.anima.mod.command.AgentSelection;
+import dev.luizloyola.anima.mod.command.OpJournal;
 import dev.luizloyola.anima.mod.command.Replies;
 import dev.luizloyola.anima.mod.command.Subject;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -461,6 +462,16 @@ public final class AutarkiaCommands {
     /** Longest side one clearing project takes, in blocks. See the refusal for why. */
     private static final int CLEAR_MAX_SIDE = 512;
 
+    /** Everyone whose work a party-wide command reached — empty before they know who they are. */
+    private static List<AgentId> partyMembers(CommandSourceStack source, Person person) {
+        AgentId who = person.getAgentId();
+        if (who == null) {
+            return List.of();
+        }
+        MinecraftServer server = source.getServer();
+        return PartyData.get(server).members(PartyData.get(server).partyOf(who));
+    }
+
     /** The board of this person's party, or empty before they know who they are. */
     private static Optional<PartyBoard> partyBoardOf(Person person) {
         AgentId who = person.getAgentId();
@@ -590,6 +601,8 @@ public final class AutarkiaCommands {
                 yard == null ? null : new Pos(yard.getX(), yard.getY(), yard.getZ()));
         int handle = board.post(project);
         PartyBoards.touch(server);
+        OpJournal.record(source, PartyData.get(server).members(party),
+                "posted #" + handle + " " + project.describe());
         // LOGGED: this creates durable, shared, persisted state that outlives everyone who works
         // it — the same reason cancel below is logged.
         Replies.send(source, () -> Component.translatable("autarkia.command.clear.posted",
@@ -642,8 +655,10 @@ public final class AutarkiaCommands {
                 new Pos(yard.getX(), yard.getY(), yard.getZ()), priority, party, CarrySplit.INSTANCE);
         int handle = board.post(project);
         PartyBoards.touch(server);
-        // LOGGED: the same reason clear's post is — a posted project is durable, shared, persisted
-        // state that outlives everyone who works it, and nothing else narrates it.
+        OpJournal.record(source, PartyData.get(server).members(party),
+                "posted #" + handle + " " + project.describe());
+        // LOGGED: the same reason clear's post is — a posted project is durable, shared,
+        // persisted state that outlives everyone who works it.
         Replies.send(source, () -> Component.translatable("autarkia.command.gather.posted",
                         handle, person.getName(), project.describe())
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
@@ -681,10 +696,17 @@ public final class AutarkiaCommands {
             return 0;
         }
         String what = cancelled.get().describe();
-        // LOGGED: this destroys layer-3 state. No journal line records it — the journal belongs
-        // to the agent, and an agent does not narrate what was done TO it — so left unlogged a
-        // cancel is invisible everywhere, the board reading "nothing posted" afterwards.
-        // Caught live, chasing a Person whose want had evaporated.
+        // The board it acted on decides the reach: a shared project vanishing is every member's
+        // explanation for the work that stopped, a personal one is only its owner's.
+        String dropped = "cancelled #" + handle + " " + what;
+        if (party) {
+            OpJournal.record(source, partyMembers(source, person), dropped);
+        } else {
+            OpJournal.record(source, person.getAgentId(), dropped);
+        }
+        // LOGGED as well as journalled: this destroys layer-3 state, and the op lines above are
+        // per-agent files. Left invisible in both, a cancel reads as the board simply saying
+        // "nothing posted". Caught live, chasing a Person whose want had evaporated.
         Replies.send(source, () -> Component.translatable(party
                                 ? "autarkia.command.board.dropped_party"
                                 : "autarkia.command.board.dropped_personal",
@@ -720,6 +742,9 @@ public final class AutarkiaCommands {
         }
         boolean autoDisabled = person.brain().run(new ChopPlannedTree(anchor));
         Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
+        OpJournal.record(source, person.getAgentId(), "told to chop the tree at ("
+                + anchor.x() + ", " + anchor.y() + ", " + anchor.z() + ")"
+                + (autoDisabled ? ", autonomy off" : ""));
         Replies.send(source, () -> Component.translatable("anima.command.state",
                 person.getName(), person.brain().describe())
                 .append(suffix).withStyle(ChatFormatting.AQUA));
@@ -734,6 +759,8 @@ public final class AutarkiaCommands {
         if (person == null) return 0;
         boolean autoDisabled = person.brain().run(new ObtainItem(Stock.LOGS, count));
         Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
+        OpJournal.record(source, person.getAgentId(), "told to obtain " + count + " logs"
+                + (autoDisabled ? ", autonomy off" : ""));
         Replies.send(source, () -> Component.translatable("anima.command.state",
                 person.getName(), person.brain().describe())
                 .append(suffix).withStyle(ChatFormatting.AQUA));
@@ -764,6 +791,8 @@ public final class AutarkiaCommands {
         boolean autoDisabled = person.brain().run(new ObtainItem(
                 dev.luizloyola.anima.core.inv.ItemSpec.anyOf(java.util.Set.of(id)), count));
         Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
+        OpJournal.record(source, person.getAgentId(), "told to obtain " + count + " " + id
+                + (autoDisabled ? ", autonomy off" : ""));
         Replies.send(source, () -> Component.translatable("anima.command.state",
                 person.getName(), person.brain().describe())
                 .append(suffix).withStyle(ChatFormatting.AQUA));
@@ -884,6 +913,11 @@ public final class AutarkiaCommands {
         }
         Appearance appearance = identity.appearance();
         String where = String.format(Locale.ROOT, "%.1f %.1f %.1f", spawnPos.x, spawnPos.y, spawnPos.z);
+        OpJournal.record(source, identity.id(), "spawned at " + where + switch (mind) {
+            case FULL -> "";
+            case NO_BRAIN -> ", brain off";
+            case NO_WANDER -> ", wander muted";
+        });
         Component brainNote = switch (mind) {
             case FULL -> Component.empty();
             case NO_BRAIN -> Component.translatable("autarkia.command.spawn.brain_off");
@@ -933,6 +967,9 @@ public final class AutarkiaCommands {
             return 0;
         }
 
+        // Before the wipe, not after: erase drops the ring, but the file sink has already taken
+        // this line, so the durable journal ends saying why it stops rather than just stopping.
+        OpJournal.record(source, id, "erased");
         List<String> touched = AgentRecords.erase(server, id);
         // LOGGED, like the spawn it undoes, and for the same reason the old command was: erasing
         // destroys the record that would have said what happened to it.
