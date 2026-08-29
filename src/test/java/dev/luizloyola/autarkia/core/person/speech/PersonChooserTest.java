@@ -118,6 +118,22 @@ class PersonChooserTest {
         assertTrue(Topics.options(ctx).contains(line.payload().get("topic")));
     }
 
+    @Test
+    @DisplayName("priority 2: pending request_end_chat with company CROWDED still ends the chat")
+    void priority2EndsWhenCompanyIsAlreadyTooMuch() {
+        // The far side of the V, and the deadlock this test exists for: at 1.0 the gauge presses
+        // again — from the crowded end — so a chooser reading `pressure == 0.0` refused to leave.
+        // Two of these proposed leaving to each other one line per tick until the world stopped.
+        ctx.percepts.company.setValue(1.0);
+        Utterance ask = new Utterance(otherId.asPerson(), SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
+        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
+                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.SMALL_TALK),
+                Optional.of(ask), true, Optional.of(otherId.asPerson()));
+
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn),
+                "a settler who has had too much company is the last one who wants to keep talking");
+    }
+
     // ── priority 3: greet first ──────────────────────────────────────────────────────────────
 
     @Test

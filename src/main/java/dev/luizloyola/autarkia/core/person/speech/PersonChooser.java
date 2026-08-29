@@ -21,8 +21,9 @@ import org.jspecify.annotations.Nullable;
  *       act specifically being {@code ask_identity}, not just any obligation: {@code
  *       request_end_chat} leaves {@code inform_name} technically applicable too (its responses
  *       are unconstrained), and priority 2 needs the chance to actually answer it.</li>
- *   <li>Answering a proposal to end: leave once company stops pressing, otherwise raise a new
- *       topic — any self line discharges the obligation, so small talk legitimately answers it.</li>
+ *   <li>Answering a proposal to end: leave unless company is still asking for MORE (see
+ *       {@link #stillLonely}), otherwise raise a new topic — any self line discharges the
+ *       obligation, so small talk legitimately answers it.</li>
  *   <li>Say hello before anything else.</li>
  *   <li>A counterpart seen but never introduced: ask.</li>
  *   <li>Still wanting company: small talk, usually — a 1-in-4 roll varies the line.</li>
@@ -40,8 +41,7 @@ public final class PersonChooser implements Chooser {
         }
 
         if (pendingIsRequestEndChat(turn)) {
-            if (ctx.percepts().needs().pressure(NeedKind.COMPANY) == 0.0
-                    && applicable.contains(SpeechActs.END_CHAT)) {
+            if (!stillLonely(ctx) && applicable.contains(SpeechActs.END_CHAT)) {
                 return Line.of(SpeechActs.END_CHAT);
             }
             if (applicable.contains(PersonActs.SMALL_TALK)) {
@@ -57,8 +57,7 @@ public final class PersonChooser implements Chooser {
             return Line.of(PersonActs.ASK_IDENTITY);
         }
 
-        double boundary = NeedKind.COMPANY.level("content").orElseThrow().value(ctx.profile());
-        if (ctx.percepts().needs().value(NeedKind.COMPANY) < boundary
+        if (ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx)
                 && applicable.contains(PersonActs.SMALL_TALK)) {
             // 1-in-4: a settler that only ever says the same thing reads as scripted, not alive.
             if (ctx.random().nextInt(4) == 0) {
@@ -90,6 +89,27 @@ public final class PersonChooser implements Chooser {
     private static boolean pendingIsRequestEndChat(Turn turn) {
         return turn.pending().map(u -> u.act().equals(SpeechActs.REQUEST_END_CHAT.key()))
                 .orElse(false);
+    }
+
+    /**
+     * Whether company is pressing from its LONELY side — the only half of the gauge that is a
+     * reason to keep somebody talking.
+     *
+     * <p>Non-zero pressure alone is not that question, and asking it that way was a deadlock. The
+     * gauge is a V: a settler the conversation has just FILLED past {@code content} reads as
+     * pressed again, from the crowded end, and so refused every proposal to leave. Two of them
+     * proposed leaving to each other one line per tick, for as long as the world ran, into a store
+     * that persists every line — 24 KB of one conversation in four minutes, and no way out of it.
+     * Found in world by this branch's smoke, 2026-08-28.
+     */
+    private static boolean stillLonely(BrainContext ctx) {
+        return ctx.percepts().needs().pressure(NeedKind.COMPANY) > 0.0
+                && ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx);
+    }
+
+    /** The value at which company stops asking for more — {@code content}'s own anchor. */
+    private static double contentBoundary(BrainContext ctx) {
+        return NeedKind.COMPANY.level("content").orElseThrow().value(ctx.profile());
     }
 
     /**
