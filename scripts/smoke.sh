@@ -158,18 +158,66 @@ motd=Autarkia smoke test
 EOF
 
 # ── Boot ───────────────────────────────────────────────────────────────────────────────────────
-# A FRESH world every run. Without this the save accumulates one CiProbe per run, and a check that
-# names a Person rather than selecting one with `limit=1` goes ambiguous on the second run — which
-# is a broken smoke, not a broken command: `as <name>` refuses to guess between two of a name.
+# A FRESH world every run, and the teardown of the last one: without this the save accumulates a
+# CiProbe and a pair of strangers per run, and a check that names a Person rather than selecting one
+# with `limit=1` goes ambiguous on the second run — which is a broken smoke, not a broken command:
+# `as <name>` refuses to guess between two of a name. Removing it HERE rather than at the end leaves
+# a failed run's world on disk to be poked at, and still guarantees the next run starts clean.
 rm -rf "$SRV/world"
-rm -f "$FIFO"
-mkfifo "$FIFO"
-: > "$LOG"
-( cd "$SRV" && exec "$JAVA" -Xms2G -Xmx2G -jar "$(basename "$SERVER_JAR")" nogui ) < "$FIFO" > "$LOG" 2>&1 &
-SRVPID=$!
-# Hold the write end open for the whole run. Without this the server reads EOF the moment the first
-# command is delivered and shuts itself down mid-check.
-exec 3> "$FIFO"
+
+READY_TIMEOUT="${READY_TIMEOUT:-900}"
+SRVPID=
+AWAITED=0
+
+# Block until a line matching $1 is in the current log, or die after $2 seconds saying the server
+# never got round to $3. The wait is left in AWAITED rather than printed, because a caller reading
+# it out of a command substitution would run the whole loop in a subshell — where `die` does not
+# stop the script.
+await() {
+    AWAITED=0
+    until grep -qaE "$1" "$LOG"; do
+        kill -0 "$SRVPID" 2>/dev/null || die "the server exited before it could $3"
+        (( AWAITED < $2 )) || die "the server did not $3 within ${2}s"
+        sleep 2
+        AWAITED=$((AWAITED + 2))
+        (( AWAITED % 30 )) || echo "    still waiting for it to $3 (${AWAITED}s of ${2}s)"
+    done
+}
+
+# Start the server on a fresh pipe and wait for it to be usable. A FUNCTION because the persistence
+# proof at the end boots a SECOND time onto the same world — each boot writes its own log, so the
+# readiness grep and the failure scan can never match the previous boot's lines.
+boot() {
+    LOG="$1"
+    rm -f "$FIFO"
+    mkfifo "$FIFO"
+    : > "$LOG"
+    ( cd "$SRV" && exec "$JAVA" -Xms2G -Xmx2G -jar "$(basename "$SERVER_JAR")" nogui ) \
+        < "$FIFO" > "$LOG" 2>&1 &
+    SRVPID=$!
+    # Hold the write end open for as long as this server runs. Without it the server reads EOF the
+    # moment the first command is delivered and shuts itself down mid-check.
+    exec 3> "$FIFO"
+    echo "==> booting in $SRV on port $PORT (log: $(basename "$LOG")) — a cold run downloads Minecraft first"
+    await 'Done \(|For help, type' "$READY_TIMEOUT" 'report ready'
+    echo "==> ready after ${AWAITED}s"
+    # "Done" is vanilla's word, and it is not this pair's. StoreGuard checks every persisted store
+    # on SERVER_STARTED, which on a world with entities to load lands TEN SECONDS after it. Reading
+    # the guard's own line before then loses a race that does not look like one — which is exactly
+    # how the persistence proof below first failed, silently, on a world that had saved perfectly.
+    await 'stores checked' 120 'check its stores'
+}
+
+# Stop the server and WAIT for it to be gone — the world has to be fully written before anything
+# reboots onto it, or the persistence proof reads a save the last run was still flushing.
+halt() {
+    printf 'stop\n' >&3 2>/dev/null || true
+    exec 3>&- 2>/dev/null || true
+    local w=0
+    while kill -0 "$SRVPID" 2>/dev/null && (( w < 120 )); do sleep 1; w=$((w+1)); done
+    ! kill -0 "$SRVPID" 2>/dev/null || die "the server did not shut down within 120s"
+    SRVPID=
+}
 
 cleanup() {
     local rc=$?
@@ -178,7 +226,7 @@ cleanup() {
         echo "--- last 60 lines of $LOG ---"
         tail -n 60 "$LOG" 2>/dev/null || true
     fi
-    if [[ -z "${SMOKE_KEEP:-}" ]] && kill -0 "$SRVPID" 2>/dev/null; then
+    if [[ -z "${SMOKE_KEEP:-}" ]] && [[ -n "$SRVPID" ]] && kill -0 "$SRVPID" 2>/dev/null; then
         printf 'stop\n' >&3 2>/dev/null || true
         local w=0
         while kill -0 "$SRVPID" 2>/dev/null && (( w < 60 )); do sleep 1; w=$((w+1)); done
@@ -189,17 +237,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-READY_TIMEOUT="${READY_TIMEOUT:-900}"
-echo "==> booting in $SRV on port $PORT"
-waited=0
-until grep -qaE 'Done \(|For help, type' "$LOG"; do
-    kill -0 "$SRVPID" 2>/dev/null || die "the server exited before it reported ready"
-    (( waited < READY_TIMEOUT )) || die "the server did not report ready within ${READY_TIMEOUT}s"
-    sleep 2
-    waited=$((waited + 2))
-    (( waited % 30 )) || echo "    still booting (${waited}s of ${READY_TIMEOUT}s) — a cold run downloads Minecraft first"
-done
-echo "==> ready after ${waited}s"
+boot "$SRV/server.log"
 
 # ── Did the PAIR load, and was it the right library? ───────────────────────────────────────────
 # Loader lists every mod it accepted, with versions. A mismatch here means `smokeMods` staged
@@ -274,10 +312,142 @@ grep -q 'food' <<< "$MC_OUT" || die "the Person exists but is not ticking"
 # because Mixin PROBES for optional Starlight integration that is not installed. Without it this
 # arm fails every green run, which is how a check teaches people to ignore it. Scoped to the
 # probe's own wording, so a real missing class still fails.
-if grep -naE 'Mixin apply failed|ClassNotFoundException|NoSuchMethodError|Failed to load|refusing to run' "$LOG" \
-        | grep -vE 'Error loading class: (ca/spottedleaf|me/jellysquid)'; then
-    die "the server booted but logged the failure(s) above"
+#
+# A function because the persistence proof boots a second time, and a second boot is exactly where
+# a store that cannot read its own file throws.
+assert_clean_log() {
+    if grep -naE 'Mixin apply failed|ClassNotFoundException|NoSuchMethodError|Failed to load|refusing to run' "$LOG" \
+            | grep -vE 'Error loading class: (ca/spottedleaf|me/jellysquid)'; then
+        die "the server logged the failure(s) above"
+    fi
+}
+assert_clean_log
+
+# ── Two strangers meet ─────────────────────────────────────────────────────────────────────────
+# Everything above proves ONE body. This proves the thing two bodies do on their own: notice each
+# other, walk over, exchange names, and part — with the transcript still on disk afterwards.
+#
+# CiProbe is muted first. It stands 49 blocks off, past both sight (senses.radius 24) and earshot
+# (senses.hearing_radius 12), but its wander is a random walk rather than a leash and three minutes
+# of drift is enough to put a third minded body in the pair's percepts — which would make "who did
+# Alma go and talk to" a coin toss. `brain auto false` stops the arbiter without destroying it.
+echo
+echo "==> the scene: two strangers, twenty blocks apart"
+mc 'autarkia as CiProbe brain auto false'
+
+# Twenty blocks apart: inside sight, outside earshot, so the approach is a real HAIL rather than a
+# walk over to somebody already audible. Positioned RELATIVE to the console, which stands on the
+# world spawn — the same cell CiProbe spawned into — so the scene never has to guess at the ground.
+mc 'autarkia spawn ~-10 ~ ~48 Alma'
+mc 'autarkia spawn ~10 ~ ~48 Bram'
+
+# Turned to face each other, and NOT for the look of it: an idle head scans 100° off the SHOULDERS
+# inside a 150° cone, and the shoulders only move when the body walks. Two bodies spawned staring
+# the same way are two bodies that cannot see each other, and the first run of this scene spent 143
+# seconds of wandering before either happened to turn far enough — a coin toss this check would
+# rather not be deciding. What is proved below starts once they HAVE noticed each other.
+mc 'tp @e[type=autarkia:person,name="Alma",limit=1] ~-10 ~ ~48 facing entity @e[type=autarkia:person,name="Bram",limit=1]'
+mc 'tp @e[type=autarkia:person,name="Bram",limit=1] ~10 ~ ~48 facing entity @e[type=autarkia:person,name="Alma",limit=1]'
+
+# The loneliness is SET, not waited for. A settler's solitude drain crosses the whole gauge in
+# social.company_solitude_ticks (48,000 — two in-game days), so a smoke that waited for the mood it
+# is testing would take an hour. This is the one thing staged by hand; everything after it is the
+# brain's own decision.
+mc 'autarkia as Alma needs company 0'
+mc 'autarkia as Bram needs company 0'
+
+# Two finish lines, waited on together.
+#
+# The contact books are the strictest statement of the first: a name only lands in ContactData when
+# an `inform_name` is actually spoken into a live encounter, so BOTH books knowing the other body
+# is the whole chain — perceive, hail, walk, greet, ask, answer — in one assertion.
+#
+# `end_chat` is the second, and it is not decoration either. It is the ONLY act that closes a
+# record, so without it a conversation is a thing that starts and never stops: the pair went on
+# proposing to leave, one line each per tick, into a store that persists every line. That is what
+# this arm caught, and what it now keeps caught.
+#
+# Polled rather than slept on, because how long any of it takes is a tuning question.
+SCENE_TIMEOUT="${SCENE_TIMEOUT:-180}"
+echo "==> waiting for them to meet, introduce themselves and part (up to ${SCENE_TIMEOUT}s)"
+done_talking=
+waited=0
+while (( waited < SCENE_TIMEOUT )); do
+    sleep 5
+    waited=$((waited + 5))
+    mc 'autarkia as Alma contacts' > /dev/null
+    alma_knows="$MC_OUT"
+    mc 'autarkia as Bram contacts' > /dev/null
+    bram_knows="$MC_OUT"
+    mc 'autarkia as Alma log brain 80' > /dev/null
+    talk="$MC_OUT"
+    mc 'autarkia as Bram log brain 80' > /dev/null
+    talk="$talk"$'\n'"$MC_OUT"
+    if grep -qaF 'Bram' <<< "$alma_knows" && grep -qaF 'Alma' <<< "$bram_knows" \
+            && grep -qaF 'said end_chat' <<< "$talk"; then
+        done_talking=yes
+        break
+    fi
+    echo "    not yet (${waited}s of ${SCENE_TIMEOUT}s)"
+done
+if [[ -z "$done_talking" ]]; then
+    # The journals are the diagnosis: they say whether nobody was perceived, whether the walk never
+    # arrived, whether they stood in front of each other with nothing to say — or whether they are
+    # still going, which is its own bug and looks nothing like the others.
+    mc 'autarkia as Alma log brain 40'
+    mc 'autarkia as Bram log brain 40'
+    die "they did not meet, introduce themselves and part within ${SCENE_TIMEOUT}s"
 fi
+echo "==> they met, introduced themselves and parted after ${waited}s"
+
+# Knowing a name proves the introduction. These prove the CONVERSATION around it: a line this body
+# chose and said, and the contact book gaining a row it did not have. Both sides, because one body
+# doing all the talking is a different bug from neither doing any.
+for who in Alma Bram; do
+    mc "autarkia as $who log brain 60"
+    grep -qaE ' - converse - said ' <<< "$MC_OUT" \
+        || die "$who's journal records no line SAID — they met without conversing"
+    grep -qaF 'learned their name' <<< "$MC_OUT" \
+        || die "$who's journal never records learning a name"
+done
+
+# Company is what the whole errand was for, and the one number that says the machinery PAID. Both
+# were set to a hard 0 above and solitude only ever drains, so anything above the floor came from
+# the meeting and the lines exchanged.
+for who in Alma Bram; do
+    mc "autarkia as $who needs"
+    company="$(awk '{for (i = 1; i < NF; i++) if ($i == "company" && $(i + 1) ~ /^[0-9.]+$/) {
+                        print $(i + 1); exit } }' <<< "$MC_OUT")"
+    [[ -n "$company" ]] || die "could not read $who's company gauge out of \`needs\`"
+    awk -v v="$company" 'BEGIN { exit !(v > 0.0) }' \
+        || die "$who's company is still on the floor ($company) — nothing paid the gauge"
+    echo "==> $who: company $company"
+done
+
+# ── The transcript outlives the server ─────────────────────────────────────────────────────────
+# An encounter is world state, and the only proof of that is a world that has been closed and
+# reopened. StoreGuard runs on SERVER_STARTED and THROWS when a store's file is on disk and comes
+# back empty or short, so simply reaching "ready" a second time is the clean-boot half; the row
+# count is the part that says the conversation itself is what survived.
+echo
+echo "==> restarting onto the same world"
+mc 'save-all flush'
+halt
+boot "$SRV/server-restart.log"
+assert_clean_log
+
+guard="$(grep -a 'stores checked' "$LOG" | tail -n 1)"
+[[ "$guard" =~ encounters\ on\ disk\ v([0-9]+)\ ([0-9]+)\ row ]] \
+    || die "the boot guard did not report the encounters store as loaded from disk: $guard"
+(( BASH_REMATCH[2] > 0 )) \
+    || die "the encounters store came back with no rows — the transcript did not persist"
+echo "==> encounters store: v${BASH_REMATCH[1]}, ${BASH_REMATCH[2]} row(s) read back off disk"
+
+# And the acquaintance with it — a different store, written by the same conversation.
+mc 'autarkia as Alma contacts'
+grep -qaF 'Bram' <<< "$MC_OUT" || die "Alma forgot Bram across the restart"
 
 echo
-echo "SMOKE OK — autarkia $NODE on Minecraft $MC with anima $LOADED_ANIMA: a Person spawned, ticked and answered."
+echo "SMOKE OK — autarkia $NODE on Minecraft $MC with anima $LOADED_ANIMA: a Person spawned, ticked"
+echo "and answered; two strangers met, introduced themselves, parted, and their conversation was still"
+echo "on disk when the world was reopened."
