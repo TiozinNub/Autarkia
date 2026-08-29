@@ -520,7 +520,8 @@ class BoardTest {
     /** This journal's {@code offer} lines, oldest first. */
     private static List<Entry> offersFrom(BoardBrainContext ctx) {
         return ctx.journal().recent(Integer.MAX_VALUE).stream()
-                .filter(e -> e.category() == Category.PROJECT && e.event().equals("offer"))
+                .filter(e -> e.category() == Category.PROJECT
+                        && e.event().equals(WorkSource.EVENT_OFFER))
                 .toList();
     }
 

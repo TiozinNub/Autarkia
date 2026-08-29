@@ -131,7 +131,7 @@ public class Board {
         if (isBenched(asker, now)) {
             if (!REASON_BENCHED.equals(lastOffer.get(asker))) {
                 long remaining = benched.get(asker) - now;
-                ctx.journal().record(Category.PROJECT, EVENT_OFFER,
+                ctx.journal().record(Category.PROJECT, WorkSource.EVENT_OFFER,
                         "nothing on the board: benched, " + remaining + "t left");
                 lastOffer.put(asker, REASON_BENCHED);
             }
@@ -171,14 +171,14 @@ public class Board {
         }
         if (best == null) {
             if (!REASON_EMPTY.equals(lastOffer.get(asker))) {
-                ctx.journal().record(Category.PROJECT, EVENT_OFFER,
+                ctx.journal().record(Category.PROJECT, WorkSource.EVENT_OFFER,
                         "nothing on the board: no item on offer to them");
                 lastOffer.put(asker, REASON_EMPTY);
             }
             return Optional.empty();
         }
         if (lastOffer.remove(asker) != null) {
-            ctx.journal().record(Category.PROJECT, EVENT_OFFER, "work again");
+            ctx.journal().record(Category.PROJECT, WorkSource.EVENT_OFFER, "work again");
         }
         WorkItem realised = bestProject.realise(best, asker, ctx);
         if (realised == null) {
@@ -353,9 +353,6 @@ public class Board {
         Long until = benched.get(who);
         return until != null && until > now;
     }
-
-    /** The {@code bestFor} decline line — {@code project - offer - ...}, muted as a pair, not a category. */
-    private static final String EVENT_OFFER = "offer";
 
     /**
      * {@link #lastOffer} values: the KIND of empty answer, not its rendered text — the benched
