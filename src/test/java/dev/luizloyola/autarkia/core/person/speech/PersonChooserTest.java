@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.person.speech;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,11 +23,14 @@ import dev.luizloyola.anima.core.log.AgentJournal;
 import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.Encounter;
 import dev.luizloyola.anima.core.social.speech.Speech;
+import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.random.RandomGenerator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -208,6 +212,34 @@ class PersonChooserTest {
     }
 
     @Test
+    @DisplayName("priority 5's roll never reaches for the door or deflects nothing pending")
+    void priority5RollNeverPicksRequestEndChatOrDeflect() {
+        ctx.percepts.company.setValue(0.5); // below the boundary — priority 5 governs
+        // A realistic mid-conversation applicable set: greeted, no pending, nothing constrained.
+        List<SpeechAct> applicable = List.of(SpeechActs.GREETING, SpeechActs.DEFLECT,
+                SpeechActs.REQUEST_END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME,
+                PersonActs.SMALL_TALK);
+        Set<SpeechAct> picked = new HashSet<>();
+        // Force the 1-in-4 hit and sweep every position the variety pick could land on.
+        for (int index = 0; index < 3; index++) {
+            ctx.seed(scripted(0, index));
+            Chooser.Turn turn = new Chooser.Turn(freshEncounter(), applicable, Optional.empty(),
+                    true, Optional.of(otherId.asPerson()));
+
+            SpeechAct act = chooser.choose(ctx, turn).act();
+
+            assertNotEquals(SpeechActs.REQUEST_END_CHAT, act,
+                    "the roll only varies small talk — it must never propose leaving");
+            assertNotEquals(SpeechActs.DEFLECT, act,
+                    "nothing is pending — there is nothing to deflect");
+            picked.add(act);
+        }
+        assertEquals(Set.of(SpeechActs.GREETING, PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME),
+                picked, "exactly the genuine substitutes — small talk, request_end_chat and "
+                        + "deflect are excluded from the pool");
+    }
+
+    @Test
     @DisplayName("priority 5 does not fire at or above the content boundary — falls to priority 6")
     void priority5DoesNotFireAtOrAboveTheBoundary() {
         ctx.percepts.company.setValue(0.85); // exactly the boundary — not below it
@@ -310,10 +342,11 @@ class PersonChooserTest {
                 SpeechActs.REQUEST_END_CHAT.key(), SpeechActs.END_CHAT.key()), acts,
                 "GREETING and ASK_IDENTITY/INFORM_NAME both ways, then END_CHAT");
         assertTrue(e.closed());
-        // FakeSpeech's default turnCap is 60 — both sides settle the conversation in a handful
-        // of lines, nowhere near it.
-        assertTrue(ctx.speech.saidLines.size() < 60, "A's own line count stays under the turn cap");
-        assertTrue(otherSpeech.saidLines.size() < 60, "B's own line count stays under the turn cap");
+        // Both sides settle the conversation in a handful of lines, nowhere near their own cap.
+        assertTrue(ctx.speech.saidLines.size() < ctx.speech.caps.turnCap(),
+                "A's own line count stays under the turn cap");
+        assertTrue(otherSpeech.saidLines.size() < otherSpeech.caps.turnCap(),
+                "B's own line count stays under the turn cap");
         // Task 5's finding, still true here: closing on a shared roster notifies only the closer.
         assertTrue(ctx.speech.closedRecords.isEmpty(), "A never closed anything itself");
         assertEquals(1, otherSpeech.closedRecords.size(), "B's own engine did the closing");

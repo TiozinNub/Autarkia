@@ -117,11 +117,19 @@ public final class PersonChooser implements Chooser {
         return Optional.empty();
     }
 
-    /** Every applicable act that could stand in for small talk — never one that ends the chat. */
+    /**
+     * Every applicable act that could stand in for small talk on a turn where company still wants
+     * more of it — never small talk itself, and never a line that reaches for the door: not
+     * {@code request_end_chat} (it only *proposes* leaving, so {@code ends()} alone misses it),
+     * not any act that actually {@code ends()}, and not a bare {@code deflect} (it answers
+     * something asked, and nothing is pending here). {@code ASK_IDENTITY}/{@code INFORM_NAME} stay
+     * eligible — those are the genuine substitutes rung 5 wants variety from.
+     */
     private static List<SpeechAct> varietyOf(List<SpeechAct> applicable) {
         List<SpeechAct> options = new ArrayList<>();
         for (SpeechAct act : applicable) {
-            if (act != PersonActs.SMALL_TALK && !act.ends()) {
+            if (act != PersonActs.SMALL_TALK && act != SpeechActs.REQUEST_END_CHAT
+                    && act != SpeechActs.DEFLECT && !act.ends()) {
                 options.add(act);
             }
         }

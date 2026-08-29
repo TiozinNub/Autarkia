@@ -93,8 +93,9 @@ public class AutarkiaMod implements ModInitializer {
         // initializer only runs once something reads the class, so this touch is the whole
         // registration (NeedKind's idiom); Anima's registry throws if it ever ran twice.
         Objects.requireNonNull(PersonActs.ASK_IDENTITY);
-        // The part with the personality — must come after the touch above: a chooser that
-        // references PersonActs needs the vocabulary to already exist.
+        // The part with the personality — must come after the touch above: Picker.applicable()
+        // walks SpeechActs.all() on every turn, so registration has to be finished before a
+        // chooser can be handed a conversation to decide on.
         Choosers.provide(new PersonChooser());
         // Settlers craft: the vanilla recipe book becomes the library's RecipeSource. Anima
         // ships the mechanism unregistered — this call is the consumer saying recipes exist.
