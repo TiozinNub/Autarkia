@@ -374,7 +374,7 @@ class BoardTest {
 
         List<Entry> offers = offersFrom(ctx);
         assertEquals(2, offers.size());
-        assertEquals("work again", offers.get(1).detail());
+        assertEquals("board: work again", offers.get(1).detail());
     }
 
     /**

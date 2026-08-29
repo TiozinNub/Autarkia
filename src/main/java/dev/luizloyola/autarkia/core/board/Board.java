@@ -123,6 +123,11 @@ public class Board {
      *
      * <p>What comes back is not necessarily the item that won the scan: {@link Project#realise} can
      * hand the asker a substitute sized for them instead.
+     *
+     * <p><b>Every decline names its own {@link #label() scope}.</b> A body reaches its boards
+     * through {@code ComposedBoards}, which asks BOTH on every call, so both write a line on the
+     * same tick; unlabelled, a settler working a party gather carried "nothing on the board" as the
+     * last word of its offer channel — the exact conclusion this line exists to prevent.
      */
     public Optional<WorkItem> bestFor(AgentId asker, BrainContext ctx, long now) {
         if (asker == null) {
@@ -132,7 +137,7 @@ public class Board {
             if (!REASON_BENCHED.equals(lastOffer.get(asker))) {
                 long remaining = benched.get(asker) - now;
                 ctx.journal().record(Category.PROJECT, WorkSource.EVENT_OFFER,
-                        "nothing on the board: benched, " + remaining + "t left");
+                        label() + ": benched, " + remaining + "t left");
                 lastOffer.put(asker, REASON_BENCHED);
             }
             return Optional.empty(); // failing everything: let them do something else for a while
@@ -172,13 +177,14 @@ public class Board {
         if (best == null) {
             if (!REASON_EMPTY.equals(lastOffer.get(asker))) {
                 ctx.journal().record(Category.PROJECT, WorkSource.EVENT_OFFER,
-                        "nothing on the board: no item on offer to them");
+                        label() + ": no item on offer to them");
                 lastOffer.put(asker, REASON_EMPTY);
             }
             return Optional.empty();
         }
         if (lastOffer.remove(asker) != null) {
-            ctx.journal().record(Category.PROJECT, WorkSource.EVENT_OFFER, "work again");
+            ctx.journal().record(Category.PROJECT, WorkSource.EVENT_OFFER,
+                    label() + ": work again");
         }
         WorkItem realised = bestProject.realise(best, asker, ctx);
         if (realised == null) {

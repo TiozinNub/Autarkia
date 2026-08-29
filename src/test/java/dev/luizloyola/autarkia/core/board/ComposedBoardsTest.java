@@ -10,6 +10,8 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.brain.instinct.Instinct;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.log.Entry;
 import dev.luizloyola.anima.core.social.PartyId;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +51,43 @@ class ComposedBoardsTest {
         personal.post(new Offering("mine", 0.5));
         party.post(new Offering("theirs", 0.5));
         assertEquals("mine", work.bestAvailable(ctx).orElseThrow().describe());
+    }
+
+    // ---- offer: two boards are asked, so two voices must be told apart -------------------
+
+    /**
+     * The ordinary steady state of a settler: a personal board holding only standing wants and a
+     * stow item that opens and closes on a cadence, and a party board feeding them all day. Both
+     * sides are asked on every call, so the empty one writes a decline while the body is working —
+     * and unlabelled, "nothing on the board" was the last word of the offer channel for somebody
+     * who was never idle.
+     */
+    @Test
+    void aDeclineNamesItsOwnBoardEvenWhileTheOtherIsFeedingThem() {
+        party.post(new Offering("theirs", 0.8));
+
+        assertEquals("theirs", work.bestAvailable(ctx).orElseThrow().describe());
+
+        assertEquals(List.of("personal: no item on offer to them"), offers(),
+                "the decline is the PERSONAL board's, and says so");
+    }
+
+    /** Both silent: two lines, and an operator can tell which scope each came from. */
+    @Test
+    void twoEmptyBoardsDeclineInTheirOwnVoices() {
+        assertTrue(work.bestAvailable(ctx).isEmpty());
+
+        assertEquals(List.of("personal: no item on offer to them",
+                "party: no item on offer to them"), offers());
+    }
+
+    /** The offer channel of this context, oldest first. */
+    private List<String> offers() {
+        return ctx.journal().recent(Integer.MAX_VALUE).stream()
+                .filter(e -> e.category() == Category.PROJECT
+                        && e.event().equals(WorkSource.EVENT_OFFER))
+                .map(Entry::detail)
+                .toList();
     }
 
     @Test
