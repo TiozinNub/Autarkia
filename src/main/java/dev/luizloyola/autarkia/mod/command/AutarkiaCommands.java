@@ -170,7 +170,7 @@ public final class AutarkiaCommands {
                                 AgentCommands::think, AgentCommands::log, AgentCommands::knowledge,
                                 AgentCommands::horizon, AgentCommands::survey, AgentCommands::claims,
                                 AgentCommands::peers, AgentCommands::needs, AgentCommands::profile,
-                                AgentCommands::grave, AutarkiaCommands::whois,
+                                AgentCommands::grave, AgentCommands::chat, AutarkiaCommands::whois,
                                 () -> board(registryAccess),
                                 () -> AgentCommands.inv(registryAccess)),
                         // noSubject — the root alone. `tree` paints the live world, `spawn` makes a

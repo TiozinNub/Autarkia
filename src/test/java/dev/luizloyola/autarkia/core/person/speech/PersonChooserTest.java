@@ -22,6 +22,7 @@ import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.log.AgentJournal;
 import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.Encounter;
+import dev.luizloyola.anima.core.social.speech.Picker;
 import dev.luizloyola.anima.core.social.speech.Speech;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
@@ -311,6 +312,37 @@ class PersonChooserTest {
         assertNull(chooser.choose(ctx, turn));
     }
 
+    // ── explain(): the ladder read aloud ─────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("explain names the rung that fired, and it is the rung choose() actually took")
+    void explainNamesTheRungChooseTook() {
+        // Mid-conversation: greeted, nothing owed, company still wanting more — so rung 5 is live
+        // too, and rung 4 has to be seen outranking it rather than winning by default.
+        ctx.percepts.company.setValue(0.5);
+        ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
+        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
+                List.of(SpeechActs.GREETING, SpeechActs.REQUEST_END_CHAT, PersonActs.ASK_IDENTITY,
+                        PersonActs.SMALL_TALK),
+                Optional.empty(), true, Optional.of(otherId.asPerson()));
+
+        List<String> lines = chooser.explain(ctx, turn);
+
+        assertEquals(6, lines.size(), "one line per rung, whatever happens");
+        List<String> fired = lines.stream().filter(line -> line.startsWith("fired")).toList();
+        assertEquals(1, fired.size(), "first match wins — exactly one rung takes the turn");
+        assertTrue(fired.get(0).contains("4 ask their name"), fired.get(0));
+        assertEquals(PersonActs.ASK_IDENTITY, chooser.choose(ctx, turn).act(),
+                "the rung explain() marks fired is the one choose() actually took");
+
+        // Live facts, not canned text: the pending act, rung 4's percept, rung 5's two numbers.
+        assertTrue(lines.get(1).contains("pending none"), lines.get(1));
+        assertTrue(lines.get(3).contains("seen at INDIVIDUAL"), lines.get(3));
+        assertTrue(lines.get(4).contains("company 0.50 < content 0.85"), lines.get(4));
+        // Rung 6 would have fired on its own — it still reads skipped, because rung 4 spoke.
+        assertTrue(lines.get(5).startsWith("skipped"), lines.get(5));
+    }
+
     // ── the full two-party conversation ──────────────────────────────────────────────────────
 
     @Test
@@ -341,27 +373,30 @@ class PersonChooserTest {
         Converse taskB = new Converse(BeingId.of(ctx.self), Speech.Opening.THEY_HAILED);
 
         // Every line waits REPLY_GRACE_TICKS after the previous one, whoever said it and whatever
-        // is owed — so the record advances one line per beat. On a beat where BOTH sides may
-        // speak, the world's own tick order decides who takes it; the order below is the one that
-        // reads as a conversation, and the assertions name what each body was doing.
+        // is owed, PLUS a jitter each side rolls for itself (Converse.JITTER_TICKS) — so a beat
+        // here is the widest of those, the only step at which both bodies are eligible whatever
+        // they rolled. On a beat where BOTH sides may speak, the world's own tick order decides who
+        // takes it; the order below is the one that reads as a conversation, and the assertions
+        // name what each body was doing.
+        long beat = Picker.REPLY_GRACE_TICKS + Converse.JITTER_TICKS;
         clockTo(ctx, other, 0);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A hails — even her own greeting waits a beat");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B waits out the same beat");
 
-        clockTo(ctx, other, 20);
+        clockTo(ctx, other, beat);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A's beat has elapsed — she greets");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "that line restarted B's beat");
 
-        clockTo(ctx, other, 40);
+        clockTo(ctx, other, 2 * beat);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A already spoke twice running — silent");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B greets back");
 
-        clockTo(ctx, other, 60);
+        clockTo(ctx, other, 3 * beat);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A asks B's name");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext),
                 "B owes an answer, but an obligation buys no head start on the beat");
 
-        clockTo(ctx, other, 80);
+        clockTo(ctx, other, 4 * beat);
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat elapsed — shares its name");
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "that line restarted A's beat");
 
@@ -369,24 +404,24 @@ class PersonChooserTest {
         // no live sensor, so the test plays that part: A now knows B is "Bramble".
         ctx.percepts.beings = List.of(FakePercepts.personAt(BeingId.of(other.self), here, 4.0, "Bramble"));
 
-        clockTo(ctx, other, 100);
+        clockTo(ctx, other, 5 * beat);
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext),
                 "B is still under its own consecutive cap — asks A's name right back");
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A's beat restarted on B's ask");
 
-        clockTo(ctx, other, 120);
+        clockTo(ctx, other, 6 * beat);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "A owes a reply — shares its name");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on it");
 
         // Same, the other way: B now knows A is "Alder".
         other.percepts.beings = List.of(FakePercepts.personAt(BeingId.of(ctx.self), here, 4.0, "Alder"));
 
-        clockTo(ctx, other, 140);
+        clockTo(ctx, other, 7 * beat);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx),
                 "both names known, company at the boundary — A proposes ending");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on the proposal");
 
-        clockTo(ctx, other, 160);
+        clockTo(ctx, other, 8 * beat);
         assertEquals(TaskStatus.SUCCESS, taskB.tick(otherContext),
                 "B's pending is request_end_chat, not ask_identity — priority 2 decides: "
                         + "pressure 0.0 at the content boundary ends it");

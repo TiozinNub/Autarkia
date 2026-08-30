@@ -12,6 +12,7 @@ import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -38,35 +39,30 @@ public final class PersonChooser implements Chooser {
 
     @Override
     public @Nullable Line choose(BrainContext ctx, Turn turn) {
-        List<SpeechAct> applicable = turn.applicable();
-
-        if (pendingIsAskIdentity(turn) && applicable.contains(PersonActs.INFORM_NAME)) {
+        if (answersIdentity(turn)) {
             return Line.of(PersonActs.INFORM_NAME);
         }
 
-        if (pendingIsRequestEndChat(turn)) {
-            if (!stillLonely(ctx) && applicable.contains(SpeechActs.END_CHAT)) {
-                return Line.of(SpeechActs.END_CHAT);
-            }
-            if (applicable.contains(PersonActs.SMALL_TALK)) {
-                return new Line(PersonActs.SMALL_TALK, Topics.pick(ctx));
-            }
+        SpeechAct answer = endChatAnswer(ctx, turn);
+        if (answer == PersonActs.SMALL_TALK) {
+            return new Line(PersonActs.SMALL_TALK, Topics.pick(ctx));
+        }
+        if (answer != null) {
+            return Line.of(answer);
         }
 
-        if (!turn.greeted() && applicable.contains(SpeechActs.GREETING)) {
+        if (greets(turn)) {
             return Line.of(SpeechActs.GREETING);
         }
 
-        if (applicable.contains(PersonActs.ASK_IDENTITY) && isUnintroducedCounterpart(ctx, turn)
-                && !counterpartAlreadySaidItsName(turn)) {
+        if (asksTheirName(ctx, turn)) {
             return Line.of(PersonActs.ASK_IDENTITY);
         }
 
-        if (ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx)
-                && applicable.contains(PersonActs.SMALL_TALK)) {
+        if (makesSmallTalk(ctx, turn)) {
             // 1-in-4: a settler that only ever says the same thing reads as scripted, not alive.
             if (ctx.random().nextInt(4) == 0) {
-                List<SpeechAct> variety = varietyOf(applicable);
+                List<SpeechAct> variety = varietyOf(turn.applicable());
                 if (!variety.isEmpty()) {
                     return Line.of(variety.get(ctx.random().nextInt(variety.size())));
                 }
@@ -74,10 +70,135 @@ public final class PersonChooser implements Chooser {
             return new Line(PersonActs.SMALL_TALK, Topics.pick(ctx));
         }
 
-        if (applicable.contains(SpeechActs.REQUEST_END_CHAT)) {
+        if (proposesLeaving(turn)) {
             return Line.of(SpeechActs.REQUEST_END_CHAT);
         }
         return null;
+    }
+
+    /**
+     * The ladder read aloud — one line per rung, in order, each saying whether it would fire and
+     * on what. First match wins, so at most one line reads {@code fired}; a later rung whose own
+     * condition also holds still reads {@code skipped}, and its reason says why it would have.
+     *
+     * <p>Every verdict comes from the same predicate {@link #choose} branches on, so the account
+     * cannot describe a turn this chooser would have played differently. The reasons around them
+     * are the live numbers and percepts those predicates read.
+     *
+     * <p><b>Draws nothing.</b> Rung 5's 1-in-4 is not rolled here — a readout that spent the body's
+     * random stream would change the very line it claims to be explaining.
+     */
+    @Override
+    public List<String> explain(BrainContext ctx, Turn turn) {
+        double company = ctx.percepts().needs().value(NeedKind.COMPANY);
+        double boundary = contentBoundary(ctx);
+        SpeechAct answer = endChatAnswer(ctx, turn);
+        List<Rung> ladder = List.of(
+                new Rung(answersIdentity(turn), "1 answer an ask_identity",
+                        "pending " + pendingKey(turn) + ", inform_name "
+                                + offer(turn, PersonActs.INFORM_NAME)),
+                new Rung(answer != null, "2 answer a request_end_chat",
+                        "pending " + pendingKey(turn) + (pendingIsRequestEndChat(turn)
+                                ? ", company " + number(company)
+                                        + (stillLonely(ctx) ? " still on the lonely side"
+                                                : " past lonely")
+                                        + " → " + (answer == null ? "neither line on offer"
+                                                : answer.key())
+                                : "")),
+                new Rung(greets(turn), "3 greet",
+                        (turn.greeted() ? "already greeted here" : "not greeted yet")
+                                + ", greeting " + offer(turn, SpeechActs.GREETING)),
+                new Rung(asksTheirName(ctx, turn), "4 ask their name", nameFacts(ctx, turn)
+                        + ", ask_identity " + offer(turn, PersonActs.ASK_IDENTITY)),
+                new Rung(makesSmallTalk(ctx, turn), "5 small talk", "company " + number(company)
+                        + (company < boundary ? " < " : " ≥ ") + "content " + number(boundary)
+                        + ", small_talk " + offer(turn, PersonActs.SMALL_TALK)),
+                new Rung(proposesLeaving(turn), "6 propose leaving",
+                        "request_end_chat " + offer(turn, SpeechActs.REQUEST_END_CHAT)));
+
+        List<String> out = new ArrayList<>();
+        boolean spoken = false;
+        for (Rung rung : ladder) {
+            out.add((rung.fires() && !spoken ? "fired:   " : "skipped: ")
+                    + rung.rule() + " — " + rung.why());
+            spoken |= rung.fires();
+        }
+        return out;
+    }
+
+    /** One rung as the readout sees it: whether it would take the turn, and on what. */
+    private record Rung(boolean fires, String rule, String why) {
+    }
+
+    // ── the rungs, as predicates both choose() and explain() ask ─────────────────────────────
+
+    private static boolean answersIdentity(Turn turn) {
+        return pendingIsAskIdentity(turn) && turn.applicable().contains(PersonActs.INFORM_NAME);
+    }
+
+    /**
+     * Rung 2's answer to a proposal to end — {@code null} when nothing is pending, or when neither
+     * line it would reach for is on offer and the ladder must fall through.
+     */
+    private static @Nullable SpeechAct endChatAnswer(BrainContext ctx, Turn turn) {
+        if (!pendingIsRequestEndChat(turn)) {
+            return null;
+        }
+        if (!stillLonely(ctx) && turn.applicable().contains(SpeechActs.END_CHAT)) {
+            return SpeechActs.END_CHAT;
+        }
+        return turn.applicable().contains(PersonActs.SMALL_TALK) ? PersonActs.SMALL_TALK : null;
+    }
+
+    private static boolean greets(Turn turn) {
+        return !turn.greeted() && turn.applicable().contains(SpeechActs.GREETING);
+    }
+
+    private static boolean asksTheirName(BrainContext ctx, Turn turn) {
+        return turn.applicable().contains(PersonActs.ASK_IDENTITY)
+                && isUnintroducedCounterpart(ctx, turn)
+                && !counterpartAlreadySaidItsName(turn);
+    }
+
+    private static boolean makesSmallTalk(BrainContext ctx, Turn turn) {
+        return ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx)
+                && turn.applicable().contains(PersonActs.SMALL_TALK);
+    }
+
+    private static boolean proposesLeaving(Turn turn) {
+        return turn.applicable().contains(SpeechActs.REQUEST_END_CHAT);
+    }
+
+    // ── what the readout says about them ─────────────────────────────────────────────────────
+
+    /** The act owed by this body, or {@code none} — the fact rungs 1 and 2 both turn on. */
+    private static String pendingKey(Turn turn) {
+        return turn.pending().map(Utterance::act).orElse("none");
+    }
+
+    private static String offer(Turn turn, SpeechAct act) {
+        return turn.applicable().contains(act) ? "on offer" : "not on offer";
+    }
+
+    private static String number(double value) {
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    /**
+     * The three facts {@link #isUnintroducedCounterpart} and {@link #counterpartAlreadySaidItsName}
+     * read, spelled out — which of them refused rung 4 is the whole question when a settler will
+     * not ask a stranger's name.
+     */
+    private static String nameFacts(BrainContext ctx, Turn turn) {
+        Optional<Being> seen = turn.counterpart().map(BeingId::of).flatMap(id -> findBeing(ctx, id));
+        if (seen.isEmpty()) {
+            return "counterpart not perceived";
+        }
+        Being being = seen.get();
+        return "seen at " + being.identified()
+                + (being.name().isEmpty() ? ", unnamed" : ", named " + being.name())
+                + (counterpartAlreadySaidItsName(turn) ? ", already given in this record"
+                        : ", not given here");
     }
 
     /**
