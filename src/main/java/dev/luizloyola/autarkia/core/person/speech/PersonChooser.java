@@ -35,7 +35,8 @@ import org.jspecify.annotations.Nullable;
  *   <li>Say hello before anything else.</li>
  *   <li>A counterpart seen but never introduced, and who has not already given a name in this
  *       record: ask.</li>
- *   <li>Still wanting company: small talk, usually — a 1-in-4 roll varies the line.</li>
+ *   <li>Still wanting company: small talk — the topic varies (see {@link Topics}), the act
+ *       never does; see {@link #choose}'s own rung 6 for why.</li>
  *   <li>Nothing pressing: propose leaving.</li>
  * </ol>
  */
@@ -68,15 +69,9 @@ public final class PersonChooser implements Chooser {
         }
 
         if (makesSmallTalk(ctx, turn)) {
-            // 1-in-4: a settler that only ever says the same thing reads as scripted, not alive.
-            // The pool is rung-guarded (see varietyOf) — the roll may only deal a card the ladder
-            // itself would still play this turn, never one an earlier rung has already retired.
-            if (ctx.random().nextInt(4) == 0) {
-                List<SpeechAct> variety = varietyOf(ctx, turn);
-                if (!variety.isEmpty()) {
-                    return Line.of(variety.get(ctx.random().nextInt(variety.size())));
-                }
-            }
+            // No act-level variety roll here: rungs 4 and 5 already claim any card such a roll
+            // could legally deal, so act variety is structurally impossible at this rung —
+            // conversational variety comes from the topic draw below and the reply beat's jitter.
             return new Line(PersonActs.SMALL_TALK, Topics.pick(ctx));
         }
 
@@ -94,9 +89,6 @@ public final class PersonChooser implements Chooser {
      * <p>Every verdict comes from the same predicate {@link #choose} branches on, so the account
      * cannot describe a turn this chooser would have played differently. The reasons around them
      * are the live numbers and percepts those predicates read.
-     *
-     * <p><b>Draws nothing.</b> Rung 6's 1-in-4 is not rolled here — a readout that spent the body's
-     * random stream would change the very line it claims to be explaining.
      */
     @Override
     public List<String> explain(BrainContext ctx, Turn turn) {
@@ -313,46 +305,5 @@ public final class PersonChooser implements Chooser {
             }
         }
         return Optional.empty();
-    }
-
-    /**
-     * Every applicable act that could stand in for small talk on a turn where company still wants
-     * more of it — never small talk itself, and never a line that reaches for the door: not
-     * {@code request_end_chat} (it only *proposes* leaving, so {@code ends()} alone misses it),
-     * not any act that actually {@code ends()}, and not a bare {@code deflect} (it answers
-     * something asked, and nothing is pending here).
-     *
-     * <p>{@code GREETING} and {@code ASK_IDENTITY} stay eligible only while the SAME predicate
-     * their own rung gates on ({@link #greets}, {@link #asksTheirName}) still holds — reused
-     * rather than re-derived, so the pool can never drift from the ladder. Without this, the roll
-     * could re-deal a greeting or an ask_identity a beat after its own rung had already retired
-     * it: found in world dealing {@code ask_identity} a beat after the counterpart's own
-     * {@code inform_name}, the percept still lagging the transcript.
-     *
-     * <p>{@code INFORM_NAME} is never in the pool, full stop — giving your own name is an answer
-     * to being asked (rung 1 owns it), not filler a turn can reach for on its own.
-     *
-     * <p>Package-visible, not {@code private}: {@link #greets}/{@link #asksTheirName} are also
-     * rungs 4 and 5, checked before rung 6 ever runs, so a live {@link #choose} call can never
-     * actually observe this pool holding either of them — whichever guard would admit one, that
-     * same condition already sent the ladder home two rungs earlier. The visibility lets the test
-     * pin the pool's own correctness directly rather than through a path the ladder forecloses.
-     */
-    static List<SpeechAct> varietyOf(BrainContext ctx, Turn turn) {
-        List<SpeechAct> options = new ArrayList<>();
-        for (SpeechAct act : turn.applicable()) {
-            if (act == PersonActs.SMALL_TALK || act == SpeechActs.REQUEST_END_CHAT
-                    || act == SpeechActs.DEFLECT || act == PersonActs.INFORM_NAME || act.ends()) {
-                continue;
-            }
-            if (act == SpeechActs.GREETING && !greets(turn)) {
-                continue;
-            }
-            if (act == PersonActs.ASK_IDENTITY && !asksTheirName(ctx, turn)) {
-                continue;
-            }
-            options.add(act);
-        }
-        return options;
     }
 }
