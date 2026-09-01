@@ -17,7 +17,7 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The part with the personality — v1's six-rung ladder, first match wins, every rung gated on
+ * The part with the personality — v1's seven-rung ladder, first match wins, every rung gated on
  * the act being in {@link Turn#applicable()}: the picker filters, this only wants.
  *
  * <ol>
@@ -28,6 +28,10 @@ import org.jspecify.annotations.Nullable;
  *   <li>Answering a proposal to end: leave unless company is still asking for MORE (see
  *       {@link #stillLonely}), otherwise raise a new topic — any self line discharges the
  *       obligation, so small talk legitimately answers it.</li>
+ *   <li>Already asked something of the counterpart that nothing of theirs has answered yet
+ *       ({@link Turn#awaiting()}): hold — silence, not a second ask. Patience and the IGNORED
+ *       snub already cover a counterpart who never replies; any discharging reply restores
+ *       initiative on the very next turn.</li>
  *   <li>Say hello before anything else.</li>
  *   <li>A counterpart seen but never introduced, and who has not already given a name in this
  *       record: ask.</li>
@@ -49,6 +53,10 @@ public final class PersonChooser implements Chooser {
         }
         if (answer != null) {
             return Line.of(answer);
+        }
+
+        if (isWaiting(turn)) {
+            return null;    // already asked something — wait for the counterpart to answer it
         }
 
         if (greets(turn)) {
@@ -85,7 +93,7 @@ public final class PersonChooser implements Chooser {
      * cannot describe a turn this chooser would have played differently. The reasons around them
      * are the live numbers and percepts those predicates read.
      *
-     * <p><b>Draws nothing.</b> Rung 5's 1-in-4 is not rolled here — a readout that spent the body's
+     * <p><b>Draws nothing.</b> Rung 6's 1-in-4 is not rolled here — a readout that spent the body's
      * random stream would change the very line it claims to be explaining.
      */
     @Override
@@ -105,15 +113,16 @@ public final class PersonChooser implements Chooser {
                                         + " → " + (answer == null ? "neither line on offer"
                                                 : answer.key())
                                 : "")),
-                new Rung(greets(turn), "3 greet",
+                new Rung(isWaiting(turn), "3 hold while awaiting an answer", waitingFacts(turn)),
+                new Rung(greets(turn), "4 greet",
                         (turn.greeted() ? "already greeted here" : "not greeted yet")
                                 + ", greeting " + offer(turn, SpeechActs.GREETING)),
-                new Rung(asksTheirName(ctx, turn), "4 ask their name", nameFacts(ctx, turn)
+                new Rung(asksTheirName(ctx, turn), "5 ask their name", nameFacts(ctx, turn)
                         + ", ask_identity " + offer(turn, PersonActs.ASK_IDENTITY)),
-                new Rung(makesSmallTalk(ctx, turn), "5 small talk", "company " + number(company)
+                new Rung(makesSmallTalk(ctx, turn), "6 small talk", "company " + number(company)
                         + (company < boundary ? " < " : " ≥ ") + "content " + number(boundary)
                         + ", small_talk " + offer(turn, PersonActs.SMALL_TALK)),
-                new Rung(proposesLeaving(turn), "6 propose leaving",
+                new Rung(proposesLeaving(turn), "7 propose leaving",
                         "request_end_chat " + offer(turn, SpeechActs.REQUEST_END_CHAT)));
 
         List<String> out = new ArrayList<>();
@@ -150,6 +159,11 @@ public final class PersonChooser implements Chooser {
         return turn.applicable().contains(PersonActs.SMALL_TALK) ? PersonActs.SMALL_TALK : null;
     }
 
+    /** Whether SELF has already asked the counterpart something nothing of theirs has answered. */
+    private static boolean isWaiting(Turn turn) {
+        return turn.awaiting().isPresent();
+    }
+
     private static boolean greets(Turn turn) {
         return !turn.greeted() && turn.applicable().contains(SpeechActs.GREETING);
     }
@@ -174,6 +188,13 @@ public final class PersonChooser implements Chooser {
     /** The act owed by this body, or {@code none} — the fact rungs 1 and 2 both turn on. */
     private static String pendingKey(Turn turn) {
         return turn.pending().map(Utterance::act).orElse("none");
+    }
+
+    /** What rung 3 tells the readout — the act SELF is still owed no answer to, if any. */
+    private static String waitingFacts(Turn turn) {
+        return turn.awaiting()
+                .map(asked -> "waiting: " + asked.act() + ", ball is theirs")
+                .orElse("nothing outstanding");
     }
 
     private static String offer(Turn turn, SpeechAct act) {
@@ -298,7 +319,7 @@ public final class PersonChooser implements Chooser {
      * {@code request_end_chat} (it only *proposes* leaving, so {@code ends()} alone misses it),
      * not any act that actually {@code ends()}, and not a bare {@code deflect} (it answers
      * something asked, and nothing is pending here). {@code ASK_IDENTITY}/{@code INFORM_NAME} stay
-     * eligible — those are the genuine substitutes rung 5 wants variety from.
+     * eligible — those are the genuine substitutes rung 6 wants variety from.
      */
     private static List<SpeechAct> varietyOf(List<SpeechAct> applicable) {
         List<SpeechAct> options = new ArrayList<>();

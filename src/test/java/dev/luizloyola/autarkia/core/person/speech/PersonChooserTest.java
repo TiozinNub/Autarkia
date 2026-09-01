@@ -37,7 +37,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The six-priority ladder, one test per rung, plus a full two-party conversation driven by real
+ * The seven-priority ladder, one test per rung, plus a full two-party conversation driven by real
  * {@link Converse} tasks. Most rungs are exercised against a hand-built {@link Chooser.Turn} over
  * a real (otherwise unused) {@link Encounter} — the chooser reads only the turn's pre-computed
  * facts, never the encounter itself, so this pins each rung's own branching without fighting
@@ -60,7 +60,7 @@ class PersonChooserTest {
     void priority1SharesTheNameWhenAsked() {
         Utterance ask = new Utterance(otherId.asPerson(), PersonActs.ASK_IDENTITY.key(), Map.of(), 0);
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.DEFLECT, PersonActs.INFORM_NAME), Optional.of(ask), true,
+                List.of(SpeechActs.DEFLECT, PersonActs.INFORM_NAME), Optional.of(ask), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(PersonActs.INFORM_NAME), chooser.choose(ctx, turn));
@@ -69,10 +69,10 @@ class PersonChooserTest {
     @Test
     @DisplayName("priority 1 is gated: pending with inform_name NOT applicable falls through")
     void priority1FallsThroughWhenInformNameIsNotOnOffer() {
-        ctx.percepts.company.setValue(0.5); // below the content boundary — priority 5 will catch it
+        ctx.percepts.company.setValue(0.5); // below the content boundary — priority 6 will catch it
         Utterance ask = new Utterance(otherId.asPerson(), PersonActs.ASK_IDENTITY.key(), Map.of(), 0);
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.DEFLECT, PersonActs.SMALL_TALK), Optional.of(ask), true,
+                List.of(SpeechActs.DEFLECT, PersonActs.SMALL_TALK), Optional.of(ask), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
@@ -93,7 +93,7 @@ class PersonChooserTest {
         // it here (that was the regression: see PersonChooser#pendingIsAskIdentity).
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
                 List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.INFORM_NAME),
-                Optional.of(ask), true, Optional.of(otherId.asPerson()));
+                Optional.of(ask), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
     }
@@ -109,7 +109,7 @@ class PersonChooserTest {
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
                 List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.SMALL_TALK,
                         PersonActs.INFORM_NAME),
-                Optional.of(ask), true, Optional.of(otherId.asPerson()));
+                Optional.of(ask), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
 
@@ -129,44 +129,44 @@ class PersonChooserTest {
         Utterance ask = new Utterance(otherId.asPerson(), SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
                 List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.SMALL_TALK),
-                Optional.of(ask), true, Optional.of(otherId.asPerson()));
+                Optional.of(ask), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn),
                 "a settler who has had too much company is the last one who wants to keep talking");
     }
 
-    // ── priority 3: greet first ──────────────────────────────────────────────────────────────
+    // ── priority 4: greet first ──────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("priority 3: not yet greeted — greets before anything else")
-    void priority3GreetsFirst() {
+    @DisplayName("priority 4: not yet greeted — greets before anything else")
+    void priority4GreetsFirst() {
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.GREETING, PersonActs.SMALL_TALK), Optional.empty(), false,
+                List.of(SpeechActs.GREETING, PersonActs.SMALL_TALK), Optional.empty(), Optional.empty(), false,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(SpeechActs.GREETING), chooser.choose(ctx, turn));
     }
 
-    // ── priority 4: ask an unintroduced counterpart's name ───────────────────────────────────
+    // ── priority 5: ask an unintroduced counterpart's name ───────────────────────────────────
 
     @Test
-    @DisplayName("priority 4: counterpart perceived at INDIVIDUAL with an empty name — asks")
-    void priority4AsksAnUnintroducedCounterpart() {
+    @DisplayName("priority 5: counterpart perceived at INDIVIDUAL with an empty name — asks")
+    void priority5AsksAnUnintroducedCounterpart() {
         ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
         Encounter e = freshEncounter();
         // Our own name given away is not theirs — the transcript guard is about what THEY said.
         e.append(new Utterance(ctx.self, PersonActs.INFORM_NAME.key(), Map.of(), 0));
         Chooser.Turn turn = new Chooser.Turn(e,
-                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), true,
+                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(PersonActs.ASK_IDENTITY), chooser.choose(ctx, turn));
     }
 
     @Test
-    @DisplayName("priority 4 is skipped once they have said their name here, however stale the percept")
-    void priority4SkipsWhenTheTranscriptAlreadyHoldsTheirName() {
-        ctx.percepts.company.setValue(0.5); // below content — falls to priority 5
+    @DisplayName("priority 5 is skipped once they have said their name here, however stale the percept")
+    void priority5SkipsWhenTheTranscriptAlreadyHoldsTheirName() {
+        ctx.percepts.company.setValue(0.5); // below content — falls to priority 6
         // The percept still reads unnamed: the sensor fills a Being's name from the contact book
         // a few ticks after the line that wrote it, and every line now waits a beat — a whole turn
         // of asking again fits in that lag.
@@ -174,7 +174,7 @@ class PersonChooserTest {
         Encounter e = freshEncounter();
         e.append(new Utterance(otherId.asPerson(), PersonActs.INFORM_NAME.key(), Map.of(), 0));
         Chooser.Turn turn = new Chooser.Turn(e,
-                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), true,
+                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
@@ -184,12 +184,12 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 4 is skipped once the counterpart is already named")
-    void priority4SkipsWhenTheCounterpartIsAlreadyNamed() {
-        ctx.percepts.company.setValue(0.5); // below content — falls to priority 5
+    @DisplayName("priority 5 is skipped once the counterpart is already named")
+    void priority5SkipsWhenTheCounterpartIsAlreadyNamed() {
+        ctx.percepts.company.setValue(0.5); // below content — falls to priority 6
         ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, "Bramble"));
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), true,
+                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
@@ -198,11 +198,11 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 4 is skipped when the counterpart is not currently perceived")
-    void priority4SkipsWhenTheCounterpartIsNotPerceived() {
+    @DisplayName("priority 5 is skipped when the counterpart is not currently perceived")
+    void priority5SkipsWhenTheCounterpartIsNotPerceived() {
         ctx.percepts.company.setValue(0.5); // ctx.percepts.beings stays empty — nobody in sight
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), true,
+                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
@@ -210,16 +210,16 @@ class PersonChooserTest {
         assertEquals(PersonActs.SMALL_TALK, line.act(), "can't ask a name of someone you can't see");
     }
 
-    // ── priority 5: still wanting company ────────────────────────────────────────────────────
+    // ── priority 6: still wanting company ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("priority 5: company value below the content boundary — makes small talk")
-    void priority5MakesSmallTalkWhenCompanyWantsMore() {
+    @DisplayName("priority 6: company value below the content boundary — makes small talk")
+    void priority6MakesSmallTalkWhenCompanyWantsMore() {
         ctx.percepts.company.setValue(0.5); // below 0.85
         // Only SMALL_TALK on offer, so the 1-in-4 roll can never find a substitute — this test
         // pins the base branch regardless of which way the roll falls.
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(), List.of(PersonActs.SMALL_TALK),
-                Optional.empty(), true, Optional.of(otherId.asPerson()));
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
 
@@ -228,33 +228,33 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 5's 1-in-4 roll substitutes a different applicable non-end act on a hit")
-    void priority5RollSubstitutesVarietyOnAHit() {
+    @DisplayName("priority 6's 1-in-4 roll substitutes a different applicable non-end act on a hit")
+    void priority6RollSubstitutesVarietyOnAHit() {
         ctx.percepts.company.setValue(0.5);
         ctx.seed(scripted(0, 0)); // hits the 1-in-4, then picks index 0 of the one alternative
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(PersonActs.SMALL_TALK, PersonActs.ASK_IDENTITY), Optional.empty(), true,
+                List.of(PersonActs.SMALL_TALK, PersonActs.ASK_IDENTITY), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(PersonActs.ASK_IDENTITY), chooser.choose(ctx, turn));
     }
 
     @Test
-    @DisplayName("priority 5's roll leaves small talk alone on a miss")
-    void priority5RollMissKeepsSmallTalk() {
+    @DisplayName("priority 6's roll leaves small talk alone on a miss")
+    void priority6RollMissKeepsSmallTalk() {
         ctx.percepts.company.setValue(0.5);
         ctx.seed(scripted(1)); // misses the 1-in-4
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(PersonActs.SMALL_TALK, PersonActs.ASK_IDENTITY), Optional.empty(), true,
+                List.of(PersonActs.SMALL_TALK, PersonActs.ASK_IDENTITY), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(PersonActs.SMALL_TALK, chooser.choose(ctx, turn).act());
     }
 
     @Test
-    @DisplayName("priority 5's roll never reaches for the door or deflects nothing pending")
-    void priority5RollNeverPicksRequestEndChatOrDeflect() {
-        ctx.percepts.company.setValue(0.5); // below the boundary — priority 5 governs
+    @DisplayName("priority 6's roll never reaches for the door or deflects nothing pending")
+    void priority6RollNeverPicksRequestEndChatOrDeflect() {
+        ctx.percepts.company.setValue(0.5); // below the boundary — priority 6 governs
         // A realistic mid-conversation applicable set: greeted, no pending, nothing constrained.
         List<SpeechAct> applicable = List.of(SpeechActs.GREETING, SpeechActs.DEFLECT,
                 SpeechActs.REQUEST_END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME,
@@ -264,7 +264,7 @@ class PersonChooserTest {
         for (int index = 0; index < 3; index++) {
             ctx.seed(scripted(0, index));
             Chooser.Turn turn = new Chooser.Turn(freshEncounter(), applicable, Optional.empty(),
-                    true, Optional.of(otherId.asPerson()));
+                    Optional.empty(), true, Optional.of(otherId.asPerson()));
 
             SpeechAct act = chooser.choose(ctx, turn).act();
 
@@ -280,24 +280,24 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 5 does not fire at or above the content boundary — falls to priority 6")
-    void priority5DoesNotFireAtOrAboveTheBoundary() {
+    @DisplayName("priority 6 does not fire at or above the content boundary — falls to priority 7")
+    void priority6DoesNotFireAtOrAboveTheBoundary() {
         ctx.percepts.company.setValue(0.85); // exactly the boundary — not below it
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(PersonActs.SMALL_TALK, SpeechActs.REQUEST_END_CHAT), Optional.empty(), true,
+                List.of(PersonActs.SMALL_TALK, SpeechActs.REQUEST_END_CHAT), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(SpeechActs.REQUEST_END_CHAT), chooser.choose(ctx, turn));
     }
 
-    // ── priority 6: nothing pressing ─────────────────────────────────────────────────────────
+    // ── priority 7: nothing pressing ─────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("priority 6: greeted, known, company more than enough — proposes leaving")
-    void priority6ProposesEndingWhenCompanyIsMoreThanEnough() {
+    @DisplayName("priority 7: greeted, known, company more than enough — proposes leaving")
+    void priority7ProposesEndingWhenCompanyIsMoreThanEnough() {
         ctx.percepts.company.setValue(1.0); // crowded
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.REQUEST_END_CHAT), Optional.empty(), true,
+                List.of(SpeechActs.REQUEST_END_CHAT), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(SpeechActs.REQUEST_END_CHAT), chooser.choose(ctx, turn));
@@ -306,10 +306,51 @@ class PersonChooserTest {
     @Test
     @DisplayName("silence when nothing is applicable at all")
     void returnsNullWhenNothingIsApplicable() {
-        Chooser.Turn turn = new Chooser.Turn(freshEncounter(), List.of(), Optional.empty(), true,
-                Optional.of(otherId.asPerson()));
+        Chooser.Turn turn = new Chooser.Turn(freshEncounter(), List.of(), Optional.empty(),
+                Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         assertNull(chooser.choose(ctx, turn));
+    }
+
+    // ── priority 3: hold while awaiting an answer (the regression this task fixes) ──────────────
+
+    @Test
+    @DisplayName("regression: self's own undischarged request_end_chat holds the ladder silent")
+    void priority3HoldsSilentWhileSelfsOwnAskIsUnanswered() {
+        // Crowded, so absent the gate rung 7 would fire and re-propose leaving — the exact bug
+        // observed in-world: a body proposing the same goodbye every beat.
+        ctx.percepts.company.setValue(1.0);
+        Encounter e = freshEncounter();
+        Utterance selfAsk = new Utterance(ctx.self, SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
+        e.append(selfAsk);
+        // Everything a livelier turn could offer, all at once — a null here can only be the
+        // awaiting gate, not some narrower rung missing by coincidence.
+        List<SpeechAct> everything = List.of(SpeechActs.GREETING, SpeechActs.REQUEST_END_CHAT,
+                SpeechActs.END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK);
+        Chooser.Turn stillWaiting = new Chooser.Turn(e, everything, Optional.empty(),
+                Optional.of(selfAsk), true, Optional.of(otherId.asPerson()));
+
+        assertNull(chooser.choose(ctx, stillWaiting),
+                "self already asked to end the chat — the ladder must not ask it again");
+    }
+
+    @Test
+    @DisplayName("regression: the counterpart's discharging reply restores initiative")
+    void priority3DischargedByTheCounterpartsReplyRestoresProposing() {
+        ctx.percepts.company.setValue(1.0);
+        Encounter e = freshEncounter();
+        e.append(new Utterance(ctx.self, SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0));
+        // Any line of theirs discharges it — small talk legitimately answers request_end_chat,
+        // same rule Picker.pendingOn already applies from the other direction.
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Map.of("topic", "weather"), 20));
+        List<SpeechAct> everything = List.of(SpeechActs.GREETING, SpeechActs.REQUEST_END_CHAT,
+                SpeechActs.END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK);
+        Chooser.Turn discharged = new Chooser.Turn(e, everything, Optional.empty(),
+                Optional.empty(), true, Optional.of(otherId.asPerson()));
+
+        assertEquals(Chooser.Line.of(SpeechActs.REQUEST_END_CHAT), chooser.choose(ctx, discharged),
+                "the other party's reply discharged what self was owed — initiative is self's again");
     }
 
     // ── explain(): the ladder read aloud ─────────────────────────────────────────────────────
@@ -317,30 +358,30 @@ class PersonChooserTest {
     @Test
     @DisplayName("explain names the rung that fired, and it is the rung choose() actually took")
     void explainNamesTheRungChooseTook() {
-        // Mid-conversation: greeted, nothing owed, company still wanting more — so rung 5 is live
-        // too, and rung 4 has to be seen outranking it rather than winning by default.
+        // Mid-conversation: greeted, nothing owed, company still wanting more — so rung 6 is live
+        // too, and rung 5 has to be seen outranking it rather than winning by default.
         ctx.percepts.company.setValue(0.5);
         ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
                 List.of(SpeechActs.GREETING, SpeechActs.REQUEST_END_CHAT, PersonActs.ASK_IDENTITY,
                         PersonActs.SMALL_TALK),
-                Optional.empty(), true, Optional.of(otherId.asPerson()));
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         List<String> lines = chooser.explain(ctx, turn);
 
-        assertEquals(6, lines.size(), "one line per rung, whatever happens");
+        assertEquals(7, lines.size(), "one line per rung, whatever happens");
         List<String> fired = lines.stream().filter(line -> line.startsWith("fired")).toList();
         assertEquals(1, fired.size(), "first match wins — exactly one rung takes the turn");
-        assertTrue(fired.get(0).contains("4 ask their name"), fired.get(0));
+        assertTrue(fired.get(0).contains("5 ask their name"), fired.get(0));
         assertEquals(PersonActs.ASK_IDENTITY, chooser.choose(ctx, turn).act(),
                 "the rung explain() marks fired is the one choose() actually took");
 
-        // Live facts, not canned text: the pending act, rung 4's percept, rung 5's two numbers.
+        // Live facts, not canned text: the pending act, rung 5's percept, rung 6's two numbers.
         assertTrue(lines.get(1).contains("pending none"), lines.get(1));
-        assertTrue(lines.get(3).contains("seen at INDIVIDUAL"), lines.get(3));
-        assertTrue(lines.get(4).contains("company 0.50 < content 0.85"), lines.get(4));
-        // Rung 6 would have fired on its own — it still reads skipped, because rung 4 spoke.
-        assertTrue(lines.get(5).startsWith("skipped"), lines.get(5));
+        assertTrue(lines.get(4).contains("seen at INDIVIDUAL"), lines.get(4));
+        assertTrue(lines.get(5).contains("company 0.50 < content 0.85"), lines.get(5));
+        // Rung 7 would have fired on its own — it still reads skipped, because rung 5 spoke.
+        assertTrue(lines.get(6).startsWith("skipped"), lines.get(6));
     }
 
     // ── the full two-party conversation ──────────────────────────────────────────────────────
@@ -454,7 +495,7 @@ class PersonChooserTest {
     }
 
     /** A generator whose {@code nextInt} answers a fixed script, repeating its last value once
-     *  exhausted — deterministic control over priority 5's roll without hand-deriving a seed. */
+     *  exhausted — deterministic control over priority 6's roll without hand-deriving a seed. */
     private static RandomGenerator scripted(int... values) {
         return new RandomGenerator() {
             private int index = 0;
