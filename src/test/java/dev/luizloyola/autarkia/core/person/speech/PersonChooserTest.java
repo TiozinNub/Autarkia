@@ -1,7 +1,6 @@
 package dev.luizloyola.autarkia.core.person.speech;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,7 +26,6 @@ import dev.luizloyola.anima.core.social.speech.Speech;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -228,18 +226,6 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 6's 1-in-4 roll substitutes a different applicable non-end act on a hit")
-    void priority6RollSubstitutesVarietyOnAHit() {
-        ctx.percepts.company.setValue(0.5);
-        ctx.seed(scripted(0, 0)); // hits the 1-in-4, then picks index 0 of the one alternative
-        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(PersonActs.SMALL_TALK, PersonActs.ASK_IDENTITY), Optional.empty(), Optional.empty(), true,
-                Optional.of(otherId.asPerson()));
-
-        assertEquals(Chooser.Line.of(PersonActs.ASK_IDENTITY), chooser.choose(ctx, turn));
-    }
-
-    @Test
     @DisplayName("priority 6's roll leaves small talk alone on a miss")
     void priority6RollMissKeepsSmallTalk() {
         ctx.percepts.company.setValue(0.5);
@@ -252,31 +238,60 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 6's roll never reaches for the door or deflects nothing pending")
-    void priority6RollNeverPicksRequestEndChatOrDeflect() {
-        ctx.percepts.company.setValue(0.5); // below the boundary — priority 6 governs
-        // A realistic mid-conversation applicable set: greeted, no pending, nothing constrained.
+    @DisplayName("priority 6's pool: early conversation still offers GREETING and ASK_IDENTITY, "
+            + "never small_talk, request_end_chat, deflect or a reflex inform_name")
+    void varietyPoolOffersGreetingAndAskIdentityEarlyInTheConversation() {
+        // Early conversation: NOT yet greeted, counterpart seen but never introduced — the exact
+        // facts rung 4's greets() and rung 5's asksTheirName() themselves read. Tested against
+        // varietyOf directly, not choose(): those are ALSO rungs 4 and 5, checked before rung 6
+        // ever runs, so a live choose() call can never actually observe the pool holding either
+        // of them — whichever guard would admit one, that same condition already sent the ladder
+        // home two rungs earlier (see the pool's own doc comment). This pins the pool's own
+        // correctness independent of the ladder ordering that forecloses it in practice.
+        ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
         List<SpeechAct> applicable = List.of(SpeechActs.GREETING, SpeechActs.DEFLECT,
                 SpeechActs.REQUEST_END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME,
                 PersonActs.SMALL_TALK);
-        Set<SpeechAct> picked = new HashSet<>();
-        // Force the 1-in-4 hit and sweep every position the variety pick could land on.
+        Chooser.Turn turn = new Chooser.Turn(freshEncounter(), applicable, Optional.empty(),
+                Optional.empty(), false, Optional.of(otherId.asPerson()));
+
+        List<SpeechAct> pool = PersonChooser.varietyOf(ctx, turn);
+
+        // Sweep every position a hit's index draw could land on — both are genuine substitutes.
+        assertEquals(2, pool.size(), pool.toString());
+        assertTrue(pool.contains(SpeechActs.GREETING), "not yet greeted — a genuine substitute");
+        assertTrue(pool.contains(PersonActs.ASK_IDENTITY), "unintroduced — a genuine substitute");
+        assertEquals(Set.of(SpeechActs.GREETING, PersonActs.ASK_IDENTITY), Set.copyOf(pool),
+                "exactly the genuine substitutes this turn — small_talk, request_end_chat, "
+                        + "deflect and inform_name stay excluded from the pool");
+    }
+
+    @Test
+    @DisplayName("regression: mid-conversation the roll never re-deals a greeting, a redundant "
+            + "ask_identity or a reflex inform_name — it falls through to small talk")
+    void priority6RollNeverRedealsACardTheLadderHasAlreadyRetired() {
+        ctx.percepts.company.setValue(0.5); // below the boundary — priority 6 governs
+        // Greeted already, AND the counterpart's own inform_name is already in the transcript —
+        // the percept still reads unnamed (the sensor's usual lag), which is exactly the window
+        // the world bug fired in: ask_identity ×2, inform_name ×4, and a greeting after hello.
+        ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), PersonActs.INFORM_NAME.key(), Map.of(), 0));
+        List<SpeechAct> applicable = List.of(SpeechActs.GREETING, SpeechActs.DEFLECT,
+                SpeechActs.REQUEST_END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME,
+                PersonActs.SMALL_TALK);
+        // Force the 1-in-4 hit and sweep every position pre-fix code could have handed the pool
+        // (pre-fix: {GREETING, ASK_IDENTITY, INFORM_NAME}, in applicable order — three positions).
         for (int index = 0; index < 3; index++) {
             ctx.seed(scripted(0, index));
-            Chooser.Turn turn = new Chooser.Turn(freshEncounter(), applicable, Optional.empty(),
-                    Optional.empty(), true, Optional.of(otherId.asPerson()));
+            Chooser.Turn turn = new Chooser.Turn(e, applicable, Optional.empty(), Optional.empty(),
+                    true, Optional.of(otherId.asPerson()));
 
-            SpeechAct act = chooser.choose(ctx, turn).act();
-
-            assertNotEquals(SpeechActs.REQUEST_END_CHAT, act,
-                    "the roll only varies small talk — it must never propose leaving");
-            assertNotEquals(SpeechActs.DEFLECT, act,
-                    "nothing is pending — there is nothing to deflect");
-            picked.add(act);
+            assertEquals(PersonActs.SMALL_TALK, chooser.choose(ctx, turn).act(),
+                    "already greeted and already named here — the ladder itself would never "
+                            + "play GREETING, ASK_IDENTITY or INFORM_NAME this turn, so neither "
+                            + "may the roll, whichever position it lands on");
         }
-        assertEquals(Set.of(SpeechActs.GREETING, PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME),
-                picked, "exactly the genuine substitutes — small talk, request_end_chat and "
-                        + "deflect are excluded from the pool");
     }
 
     @Test

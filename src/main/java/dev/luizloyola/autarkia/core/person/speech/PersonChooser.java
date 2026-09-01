@@ -69,8 +69,10 @@ public final class PersonChooser implements Chooser {
 
         if (makesSmallTalk(ctx, turn)) {
             // 1-in-4: a settler that only ever says the same thing reads as scripted, not alive.
+            // The pool is rung-guarded (see varietyOf) — the roll may only deal a card the ladder
+            // itself would still play this turn, never one an earlier rung has already retired.
             if (ctx.random().nextInt(4) == 0) {
-                List<SpeechAct> variety = varietyOf(turn.applicable());
+                List<SpeechAct> variety = varietyOf(ctx, turn);
                 if (!variety.isEmpty()) {
                     return Line.of(variety.get(ctx.random().nextInt(variety.size())));
                 }
@@ -318,16 +320,38 @@ public final class PersonChooser implements Chooser {
      * more of it — never small talk itself, and never a line that reaches for the door: not
      * {@code request_end_chat} (it only *proposes* leaving, so {@code ends()} alone misses it),
      * not any act that actually {@code ends()}, and not a bare {@code deflect} (it answers
-     * something asked, and nothing is pending here). {@code ASK_IDENTITY}/{@code INFORM_NAME} stay
-     * eligible — those are the genuine substitutes rung 6 wants variety from.
+     * something asked, and nothing is pending here).
+     *
+     * <p>{@code GREETING} and {@code ASK_IDENTITY} stay eligible only while the SAME predicate
+     * their own rung gates on ({@link #greets}, {@link #asksTheirName}) still holds — reused
+     * rather than re-derived, so the pool can never drift from the ladder. Without this, the roll
+     * could re-deal a greeting or an ask_identity a beat after its own rung had already retired
+     * it: found in world dealing {@code ask_identity} a beat after the counterpart's own
+     * {@code inform_name}, the percept still lagging the transcript.
+     *
+     * <p>{@code INFORM_NAME} is never in the pool, full stop — giving your own name is an answer
+     * to being asked (rung 1 owns it), not filler a turn can reach for on its own.
+     *
+     * <p>Package-visible, not {@code private}: {@link #greets}/{@link #asksTheirName} are also
+     * rungs 4 and 5, checked before rung 6 ever runs, so a live {@link #choose} call can never
+     * actually observe this pool holding either of them — whichever guard would admit one, that
+     * same condition already sent the ladder home two rungs earlier. The visibility lets the test
+     * pin the pool's own correctness directly rather than through a path the ladder forecloses.
      */
-    private static List<SpeechAct> varietyOf(List<SpeechAct> applicable) {
+    static List<SpeechAct> varietyOf(BrainContext ctx, Turn turn) {
         List<SpeechAct> options = new ArrayList<>();
-        for (SpeechAct act : applicable) {
-            if (act != PersonActs.SMALL_TALK && act != SpeechActs.REQUEST_END_CHAT
-                    && act != SpeechActs.DEFLECT && !act.ends()) {
-                options.add(act);
+        for (SpeechAct act : turn.applicable()) {
+            if (act == PersonActs.SMALL_TALK || act == SpeechActs.REQUEST_END_CHAT
+                    || act == SpeechActs.DEFLECT || act == PersonActs.INFORM_NAME || act.ends()) {
+                continue;
             }
+            if (act == SpeechActs.GREETING && !greets(turn)) {
+                continue;
+            }
+            if (act == PersonActs.ASK_IDENTITY && !asksTheirName(ctx, turn)) {
+                continue;
+            }
+            options.add(act);
         }
         return options;
     }
