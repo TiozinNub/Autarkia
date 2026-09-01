@@ -50,7 +50,7 @@ class PersonChooserTest {
     private final BeingId otherId = BeingId.of(AgentId.random());
 
     private Encounter freshEncounter() {
-        return ctx.speech.join(otherId, Speech.Opening.QUIET);
+        return ctx.speech.join(otherId, Speech.Opening.QUIET).orElseThrow();
     }
 
     // ── priority 1: something is owed ────────────────────────────────────────────────────────
