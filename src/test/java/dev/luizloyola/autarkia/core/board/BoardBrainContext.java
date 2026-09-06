@@ -173,9 +173,9 @@ final class BoardBrainContext implements BrainContext {
     }
 
     /**
-     * Drops a remembered place — what felling one actually does. {@code ChopPlannedTree} forgets
-     * the anchor on both the success and the ghost path, so a test that fells without forgetting
-     * is modelling a body that cannot learn.
+     * Drops a remembered place — what felling one actually does. A fell forgets the anchor on
+     * both the success and the ghost path, so a test that fells without forgetting is modelling a
+     * body that cannot learn.
      */
     void forget(PoiKind kind, Pos anchor) {
         knowledge.forget(kind, anchor);

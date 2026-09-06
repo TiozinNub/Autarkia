@@ -25,8 +25,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * {@link ChopForLogs} is where logs come from: applicable exactly when a free remembered tree of
- * the wanted species exists, priced by distance so ground wood wins, decomposing to the dance-card
- * executor.
+ * the wanted species exists, priced by distance so ground wood wins.
  */
 class ChopForLogsTest {
 
@@ -41,7 +40,6 @@ class ChopForLogsTest {
     @Test
     void applicableExactlyWhenAFreeTreeIsRemembered() {
         FakeContext ctx = new FakeContext();
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 8, 64));
         ChopForLogs chop = new ChopForLogs(Stock.LOGS);
         assertFalse(chop.applicable(ctx), "no memory, no method");
 
@@ -50,13 +48,12 @@ class ChopForLogsTest {
         assertTrue(chop.applicable(ctx));
         List<Task> plan = chop.decompose(ctx);
         assertEquals(1, plan.size());
-        assertTrue(plan.get(0) instanceof ChopPlannedTree);
+        assertTrue(plan.get(0) instanceof FellTree);
     }
 
     @Test
     void theNearestFreeTreePricesTheMethod() {
         FakeContext ctx = new FakeContext();
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 8, 64));
         ctx.knowledge().note(tree(30, 64, 0, "minecraft:oak_log", 0), 8);
         ctx.knowledge().note(tree(6, 64, 0, "minecraft:oak_log", 0), 8);
         ChopForLogs chop = new ChopForLogs(Stock.LOGS);
@@ -66,44 +63,8 @@ class ChopForLogsTest {
     }
 
     @Test
-    void aPlainTreeIsOfferedToAnEmptyPack() {
-        // Wood buys the pillar, so a Person with nothing must still accept a plain tree — those
-        // climb their own trunk and cost nothing to begin. Thirteen logs inside a box thirteen
-        // tall can only be one straight column. The species is real oak; what varies here is the
-        // shape, carried by units and bounds, not by the detail string.
-        FakeContext ctx = new FakeContext();
-        Pos anchor = new Pos(10, 64, 0);
-        ctx.knowledge().note(new PoiMemory(Pois.TREE, "minecraft:oak_log", null, anchor,
-                new Region(anchor, new Pos(12, 64 + 13, 2)), 13, false, 0), 8);
-        ChopForLogs chop = new ChopForLogs(Stock.LOGS);
-
-        assertTrue(chop.applicable(ctx),
-                "a plain trunk pays for its own ladder, however tall it stands");
-        assertTrue(chop.decompose(ctx).get(0) instanceof ChopPlannedTree);
-    }
-
-    @Test
-    void aTreeThePackCannotFundIsNotOffered() {
-        // The pillar is prepaid, and cost is part of validity (Luiz): a giant is off the menu
-        // until smaller work fills the pack — never a walk-there-and-bail discovery. Real oak
-        // again; "giant" was only ever the shape, which units and bounds already say.
-        FakeContext ctx = new FakeContext();
-        Pos anchor = new Pos(10, 64, 0);
-        ctx.knowledge().note(new PoiMemory(Pois.TREE, "minecraft:oak_log", null, anchor,
-                new Region(anchor, new Pos(12, 64 + 14, 2)), 30, false, 0), 8);
-        ChopForLogs chop = new ChopForLogs(Stock.LOGS);
-
-        assertFalse(chop.applicable(ctx), "fourteen tall on an empty pack: unaffordable");
-
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 12, 64));
-        assertTrue(chop.applicable(ctx), "funded, the same giant is back on the menu");
-    }
-
-    @Test
     void anAvoidedTreeIsNobodysProducer() {
-        // Funded so the avoid clause is what refuses this, not an unrelated empty pack.
         FakeContext ctx = new FakeContext();
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 8, 64));
         ctx.knowledge().note(tree(10, 64, 0, "minecraft:oak_log", 0), 0);
         ctx.knowledge().avoid(Pois.TREE, new Pos(10, 64, 0), 1000);
 
@@ -113,10 +74,7 @@ class ChopForLogsTest {
 
     @Test
     void aRequestForOakWalksPastABirch() {
-        // Funded so the species clause is the ONLY reason this refuses — an empty pack would
-        // refuse this same tree on affordability alone and hide the thing under test.
         FakeContext ctx = new FakeContext();
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
         ctx.knowledge().note(tree(4, 64, 0, "minecraft:birch_log", 0), 64);
         ChopForLogs chop = new ChopForLogs(ItemSpec.anyOf(Set.of("minecraft:oak_log")));
 
@@ -127,7 +85,6 @@ class ChopForLogsTest {
     @Test
     void aRequestForAnyLogTakesWhateverIsThere() {
         FakeContext ctx = new FakeContext();
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
         ctx.knowledge().note(tree(4, 64, 0, "minecraft:birch_log", 0), 64);
 
         assertTrue(new ChopForLogs(Stock.LOGS).applicable(ctx),
@@ -136,11 +93,7 @@ class ChopForLogsTest {
 
     @Test
     void aTreeNobodyNamedSatisfiesNothing() {
-        // Funded like its two siblings above, so the species clause is the ONLY reason this
-        // refuses — an unfunded pack would refuse on affordability alone and the species clause
-        // could vanish without this test ever noticing.
         FakeContext ctx = new FakeContext();
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
         ctx.knowledge().note(tree(4, 64, 0, "", 0), 64);
 
         assertFalse(new ChopForLogs(Stock.LOGS).applicable(ctx),
@@ -174,30 +127,12 @@ class ChopForLogsTest {
         GrownRegion.Part part = region.parts().get(0);
 
         FakeContext ctx = new FakeContext();
-        // Funded so affordability is never what decides this — the same reason the two tests
-        // above fund 8 logs against an otherwise-empty pack.
-        ctx.percepts.inventory.add(
-                dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
         ctx.knowledge().note(region.toMemory(part, seed, 0), 8);
 
         assertTrue(new ChopForLogs(Stock.LOGS).applicable(ctx),
                 "any log accepts the birch the scan actually found");
         assertFalse(new ChopForLogs(ItemSpec.anyOf(Set.of("minecraft:oak_log"))).applicable(ctx),
                 "asked for oak, a real birch must refuse forever, not get felled for it");
-    }
-
-    @Test
-    void aBirchLogFundsAPillarUnderAnOak() {
-        // The affordability budget is species-BLIND on purpose: a birch log is a fine rung in a
-        // pillar under an oak. Funded with birch only, asked for oak only — this pins that
-        // `carried` stays keyed to Stock.LOGS and never narrows to `wanted`; narrowing it once
-        // left a Person with an empty pack unable to accept any tree at all.
-        FakeContext ctx = new FakeContext();
-        ctx.percepts.inventory.add(dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:birch_log", 8, 64));
-        ctx.knowledge().note(tree(4, 64, 0, "minecraft:oak_log", 0), 64);
-
-        assertTrue(new ChopForLogs(ItemSpec.anyOf(Set.of("minecraft:oak_log"))).applicable(ctx),
-                "a birch log is a perfectly good rung in a pillar under an oak");
     }
 
     @Test

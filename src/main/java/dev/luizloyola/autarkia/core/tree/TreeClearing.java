@@ -16,9 +16,9 @@ import dev.luizloyola.autarkia.core.board.Stock;
 /**
  * Clearing a box of its trees — the first {@link Clearing}.
  *
- * <p>Removing is {@link ChopPlannedTree}, which takes its own site claim at the anchor, so an
- * item lease and a site claim on a clear-area target coincide without either keyspace knowing
- * about the other.
+ * <p>Removing is {@link FellTree}: whatever fells a tree takes its own site claim at the anchor,
+ * so an item lease and a site claim on a clear-area target coincide without either keyspace
+ * knowing about the other.
  *
  * <p>Looking is {@link SurveyArea}, which WALKS its slice: a standing {@code Survey} reports
  * only coarse-grid glimpses, while the per-tree anchors a ledger needs are grown by the near
@@ -63,7 +63,7 @@ public final class TreeClearing implements Clearing {
 
     @Override
     public Task clear(Pos anchor) {
-        return new ChopPlannedTree(anchor);
+        return new FellTree(anchor);
     }
 
     /**
@@ -76,8 +76,8 @@ public final class TreeClearing implements Clearing {
      * found, felled and ledgered by the ordinary path.
      *
      * <p>The anchor is the lowest log of the column, matching {@link TreeRule}'s own "lowest base
-     * cell" so a stub and a tree name the same kind of place. {@link ChopPlannedTree} fells one
-     * without changes — proven in-world before this was written.
+     * cell" so a stub and a tree name the same kind of place: whatever fells a tree fells a stub
+     * with no special case.
      */
     @Override
     public java.util.List<Pos> residue(Region area, BlockProbe probe) {

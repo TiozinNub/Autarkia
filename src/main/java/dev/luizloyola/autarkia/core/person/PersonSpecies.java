@@ -129,7 +129,9 @@ public final class PersonSpecies {
             .set(ProfileAspect.HANDLING_CRAFT_TICKS, 10)
             // --- stores: how far a settler trusts an old look inside a container -------------
             .set(ProfileAspect.STORES_STALENESS_WEIGHT, 0.5)
-            // Matches ChopPlannedTree.AVOID_TICKS, the one existing avoid-mark in the codebase.
+            // 2400 ticks, inherited from the chop's avoid-mark — the codebase's only precedent
+            // when this was written. That chop went on 2026-09-06; nothing about a full chest
+            // argued for a different number.
             .set(ProfileAspect.STORES_FULL_AVOID_TICKS, 2400)
             // Three chunks: far enough to reach the bench a settler already walks to, short
             // enough that a camp two valleys over is a different settlement and gets its own

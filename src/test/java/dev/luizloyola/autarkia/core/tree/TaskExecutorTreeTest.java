@@ -418,13 +418,13 @@ class TaskExecutorTreeTest {
     }
 
     /**
-     * The chop is the operation the flag exists for: it rides a one-block mast for the whole fell,
-     * which the navigation grid reads as a one-cell region with no way out — true, and not the
-     * same fact as being trapped.
+     * Felling a tree is the operation the flag exists for, and the declaration outlived the
+     * seventh choreography on purpose: whatever the eighth does, it puts a body somewhere the
+     * navigation grid reads as trapped, and the escape drive must not preempt it.
      */
     @Test
     void theChopDeclaresItself() {
-        assertTrue(new ChopPlannedTree(new dev.luizloyola.anima.core.brain.sense.Pos(0, -60, 0))
+        assertTrue(new FellTree(new dev.luizloyola.anima.core.brain.sense.Pos(0, -60, 0))
                 .reshapesGround());
     }
 }

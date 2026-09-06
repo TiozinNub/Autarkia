@@ -47,8 +47,8 @@ class AutarkiaTaskCodecsTest {
      * The guard Autarkia never had, and the reason a server died on 2026-08-20.
      *
      * <p>Anima has carried {@code everyTaskAnimaDeclaresCanWriteItselfDown} since the social rungs;
-     * this side had nothing, so {@code ChopPlannedTree} was registered by hand and stayed the only
-     * one anybody remembered. A task written without a codec is invisible until a world autosaves a
+     * this side had nothing, so the chop was registered by hand and stayed the only one anybody
+     * remembered. A task written without a codec is invisible until a world autosaves a
      * body holding one — and then it is not a failed save, it is a dead server.
      */
     @Test

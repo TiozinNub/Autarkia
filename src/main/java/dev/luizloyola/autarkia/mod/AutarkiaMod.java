@@ -110,8 +110,6 @@ public class AutarkiaMod implements ModInitializer {
         KnowledgeViewer.init();
         // The tree-split survey — needs the cell overlay channel initialized above.
         dev.luizloyola.autarkia.mod.debug.TreeSplitViewer.init();
-        // The same trees, drawn with their chop dance cards.
-        dev.luizloyola.autarkia.mod.debug.TreeChopPlanViewer.init();
         // Layer 3's own: a party's clearing project drawn over the ground it covers.
         dev.luizloyola.autarkia.mod.debug.BoardViewer.init();
         // Teach Anima who Persons are. It asks only for the private tier (the name); the public
@@ -132,9 +130,8 @@ public class AutarkiaMod implements ModInitializer {
         StoreGuard.guard("identity", PersonDirectory.ID, PersonDirectory::get);
         // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
         // this world, not about having a mind, so it belongs here rather than in the library.
-        // Since the seventh choreography (2026-08-02), obtain orders the dance card itself.
         Producers.register(Stock.LOGS, ChopForLogs::new);
-        // And how the dance card writes itself down, so a chop survives a reload mid-tree.
+        // And how Autarkia's own tasks write themselves down.
         dev.luizloyola.autarkia.mod.brain.AutarkiaTasks.install();
         // What "clear this area" means when the things in it are trees. The project knows only
         // phases, slices and a ledger; the kind, the looking and the felling all arrive through

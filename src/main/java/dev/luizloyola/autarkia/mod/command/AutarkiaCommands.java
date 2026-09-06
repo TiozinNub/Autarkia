@@ -48,7 +48,7 @@ import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.tree.TreeClearing;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
-import dev.luizloyola.autarkia.core.tree.ChopPlannedTree;
+import dev.luizloyola.autarkia.core.tree.FellTree;
 import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -64,7 +64,6 @@ import dev.luizloyola.anima.mod.brain.BeingViewer;
 import dev.luizloyola.anima.mod.debug.DebugLayer;
 import dev.luizloyola.anima.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.debug.BoardViewer;
-import dev.luizloyola.autarkia.mod.debug.TreeChopPlanViewer;
 import dev.luizloyola.autarkia.mod.debug.TreeSplitViewer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Persons;
@@ -184,7 +183,7 @@ public final class AutarkiaCommands {
                         List.of(AutarkiaCommands::erase))));
     }
 
-    /** Fell the nearest remembered tree by walking its compiled dance card (ChopPlannedTree). */
+    /** Point the subject at the nearest remembered tree, or at a named one. */
     private static LiteralArgumentBuilder<CommandSourceStack> chop() {
         return Commands.literal("chop")
                                         .executes(ctx -> brainChop(ctx, null))
@@ -243,16 +242,6 @@ public final class AutarkiaCommands {
                                         .then(Commands.argument("radius",
                                                         IntegerArgumentType.integer(4, 32))
                                                 .executes(ctx -> treeView(ctx.getSource(),
-                                                        IntegerArgumentType.getInteger(
-                                                                ctx, "radius")))))
-                                // The same trees with their ChopPlan dance cards — mast, dig
-                                // tunnels, chop order, refusals — read by eye before any Person
-                                // swings an axe.
-                                .then(Commands.literal("plan")
-                                        .executes(ctx -> treePlan(ctx.getSource(), 0))
-                                        .then(Commands.argument("radius",
-                                                        IntegerArgumentType.integer(4, 32))
-                                                .executes(ctx -> treePlan(ctx.getSource(),
                                                         IntegerArgumentType.getInteger(
                                                                 ctx, "radius")))));
     }
@@ -715,10 +704,8 @@ public final class AutarkiaCommands {
         return 1;
     }
 
-    /**
-     * Runs {@link ChopPlannedTree} on the resolved Person's nearest remembered tree — the
-     * dance-card executor, ordered directly for staging.
-     */
+    /** Runs {@link FellTree} on the resolved Person's nearest remembered tree — the staging
+     *  path, and the operator's shortcut past perception. */
     private static int brainChop(CommandContext<CommandSourceStack> ctx, @Nullable BlockPos at) {
         CommandSourceStack source = ctx.getSource();
         Person person = resolve(ctx);
@@ -740,7 +727,7 @@ public final class AutarkiaCommands {
             }
             anchor = memory.get().anchor();
         }
-        boolean autoDisabled = person.brain().run(new ChopPlannedTree(anchor));
+        boolean autoDisabled = person.brain().run(new FellTree(anchor));
         Component suffix = AgentCommands.autoDisabledNote(autoDisabled);
         OpJournal.record(source, person.getAgentId(), "told to chop the tree at ("
                 + anchor.x() + ", " + anchor.y() + ", " + anchor.z() + ")"
@@ -810,22 +797,6 @@ public final class AutarkiaCommands {
         Replies.send(source, () -> Component.literal(active > 0
                 ? "Surveying the trees within " + active + " blocks — every tree its own colour."
                 : "The tree survey is off.").withStyle(ChatFormatting.GRAY));
-        return 1;
-    }
-
-    /**
-     * Toggles the {@link TreeChopPlanViewer} around the calling player, or retunes its radius
-     * while it is on — the same lifecycle as {@link #treeView}, painting dance cards instead of
-     * ownership.
-     */
-    private static int treePlan(CommandSourceStack source, int radius)
-            throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        int active = TreeChopPlanViewer.toggle(source.getServer(), player, radius);
-        Replies.send(source, () -> Component.literal(active > 0
-                ? "Planning the chop of every tree within " + active
-                        + " blocks — green swings first, red last, refusals loud."
-                : "The chop plan view is off.").withStyle(ChatFormatting.GRAY));
         return 1;
     }
 
