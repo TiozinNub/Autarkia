@@ -52,7 +52,7 @@ public final class FellTree implements PrimitiveTask {
     @Override
     public TaskStatus tick(BrainContext ctx) {
         if (approach == null || ticks % RESURVEY_TICKS == 0) {
-            approach = Approach.survey(anchor, ctx.percepts().blocks(),
+            approach = Approach.survey(anchor, ctx.percepts().position(), ctx.percepts().blocks(),
                     MoveCapabilities.of(ctx.profile()).clearCells());
             String now = approach.summary();
             if (!now.equals(told)) {

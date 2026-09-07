@@ -27,8 +27,17 @@ class ApproachTest {
         }
     }
 
+    /**
+     * Surveyed from the trunk's own column, so every side is as far as every other and distance
+     * adds nothing: the ladder is asserted bare. The distance tests stand the body elsewhere.
+     */
     private Approach survey() {
-        return Approach.survey(ANCHOR, probe, BODY);
+        return Approach.survey(ANCHOR, ANCHOR, probe, BODY);
+    }
+
+    /** From ten blocks due south: S nearest, N farthest, E and W between. */
+    private Approach surveyFromTheSouth() {
+        return Approach.survey(ANCHOR, new Pos(0, BASE, 10), probe, BODY);
     }
 
     private static Approach.Side side(Approach approach, String bearing) {
@@ -59,29 +68,29 @@ class ApproachTest {
     @Test
     void aClearLevelSideCostsNothingAndEveryStepCostsMore() {
         trunk(0, 0);
-        assertEquals(0, side(survey(), "E").score());
+        assertEquals(0.0, side(survey(), "E").score());
 
         probe.set(1, BASE, 0, BlockKind.OTHER);
-        assertEquals(Approach.STEP_UP, side(survey(), "E").score(), "one up: a hop");
+        assertEquals((double) Approach.STEP_UP, side(survey(), "E").score(), "one up: a hop");
         probe.set(1, BASE + 1, 0, BlockKind.OTHER);
-        assertEquals(Approach.STEP_UP + Approach.MORE_UP, side(survey(), "E").score());
+        assertEquals((double) (Approach.STEP_UP + Approach.MORE_UP), side(survey(), "E").score());
         for (int y = BASE + 2; y < BASE + Approach.REACH; y++) {
             probe.set(1, y, 0, BlockKind.OTHER);
         }
-        assertEquals(Approach.STEP_UP + 4 * Approach.MORE_UP, side(survey(), "E").score(),
+        assertEquals((double) (Approach.STEP_UP + 4 * Approach.MORE_UP), side(survey(), "E").score(),
                 "five up, still a step, dearly");
 
         probe.set(0, BASE - 1, -1, BlockKind.AIR);
-        assertEquals(Approach.STEP_DOWN, side(survey(), "N").score(), "one down: a step");
+        assertEquals((double) Approach.STEP_DOWN, side(survey(), "N").score(), "one down: a step");
         probe.set(0, BASE - 2, -1, BlockKind.AIR);
-        assertEquals(Approach.STEP_DOWN + Approach.MORE_DOWN, side(survey(), "N").score(),
+        assertEquals((double) (Approach.STEP_DOWN + Approach.MORE_DOWN), side(survey(), "N").score(),
                 "two down already means pillaring back up to the trunk");
         for (int y = BASE - Approach.REACH; y < BASE - 2; y++) {
             probe.set(0, y, -1, BlockKind.AIR);
         }
-        assertEquals(Approach.STEP_DOWN + 4 * Approach.MORE_DOWN, side(survey(), "N").score());
+        assertEquals((double) (Approach.STEP_DOWN + 4 * Approach.MORE_DOWN), side(survey(), "N").score());
         probe.set(0, BASE - Approach.REACH - 1, -1, BlockKind.AIR);
-        assertEquals(Approach.IMPASSABLE, side(survey(), "N").score(), "past reach: a drop");
+        assertEquals((double) Approach.IMPASSABLE, side(survey(), "N").score(), "past reach: a drop");
     }
 
     @Test
@@ -89,11 +98,11 @@ class ApproachTest {
         trunk(0, 0);
         probe.set(0, BASE, 1, BlockKind.LEAVES);
         probe.set(0, BASE + 1, 1, BlockKind.LEAVES);
-        assertEquals(2 * Approach.LEAF_COST, side(survey(), "S").score());
+        assertEquals((double) (2 * Approach.LEAF_COST), side(survey(), "S").score());
 
         probe.set(0, BASE, -1, BlockKind.LEAVES);
         probe.set(0, BASE - 1, -1, BlockKind.AIR);
-        assertEquals(Approach.STEP_DOWN + Approach.LEAF_COST, side(survey(), "N").score(),
+        assertEquals((double) (Approach.STEP_DOWN + Approach.LEAF_COST), side(survey(), "N").score(),
                 "a leaf over a one-deep dip: the step, plus the leaf");
     }
 
@@ -108,7 +117,7 @@ class ApproachTest {
 
         Approach approach = survey();
         for (Approach.Side side : approach.sides()) {
-            assertEquals(Approach.IMPASSABLE, side.score(), side.describe());
+            assertEquals((double) Approach.IMPASSABLE, side.score(), side.describe());
         }
         assertTrue(approach.best().isEmpty(), "no way in");
     }
@@ -126,6 +135,48 @@ class ApproachTest {
                 approach.summary());
         assertEquals("E", approach.bearing(approach.best().orElseThrow().cell()),
                 "a hop and one leaf tie; the hop comes first on the compass");
+    }
+
+    @Test
+    void theNearestSideCostsNothingExtraAndTheFarthestOneLeaf() {
+        trunk(0, 0);
+        Approach approach = surveyFromTheSouth();
+
+        assertEquals(0.0, side(approach, "S").score(), "nearest: nothing on top of clear");
+        assertEquals(Approach.FAR_COST, side(approach, "N").score(), "farthest: the whole spread");
+        assertTrue(side(approach, "E").score() > 0 && side(approach, "E").score() < Approach.FAR_COST,
+                "between, in proportion");
+        assertEquals(side(approach, "E").score(), side(approach, "W").score(), "symmetric");
+        assertEquals("N open (1) · E open (0.5) · S open (0) · W open (0.5)", approach.summary());
+        assertEquals("S", approach.bearing(approach.best().orElseThrow().cell()),
+                "otherwise equal, the near side wins");
+    }
+
+    @Test
+    void aClearFarSideBeatsANearSideWithALeafInTheWay() {
+        trunk(0, 0);
+        probe.set(0, BASE, 1, BlockKind.LEAVES);
+
+        Approach approach = surveyFromTheSouth();
+        assertEquals("N open (1) · E open (0.5) · S leaves (2) · W open (0.5)", approach.summary());
+        assertEquals("E", approach.bearing(approach.best().orElseThrow().cell()),
+                "not the near side with the leaf, and among the clear ones the nearer");
+
+        probe.set(1, BASE, 0, BlockKind.LEAVES);
+        probe.set(-1, BASE, 0, BlockKind.LEAVES);
+        assertEquals("N", approach.bearing(surveyFromTheSouth().best().orElseThrow().cell()),
+                "the far clear side beats every nearer side with a leaf on it");
+    }
+
+    @Test
+    void distanceNeverOutweighsTheGround() {
+        trunk(0, 0);
+        probe.set(0, BASE, 1, BlockKind.OTHER);   // S up 1, the near side
+        probe.set(1, BASE, 0, BlockKind.WATER);   // E and W out, so N is the only clear side
+        probe.set(-1, BASE, 0, BlockKind.WATER);
+        Approach approach = surveyFromTheSouth();
+        assertEquals("N", approach.bearing(approach.best().orElseThrow().cell()),
+                "a hop near costs more than the farthest clear side");
     }
 
     @Test
@@ -258,8 +309,14 @@ class ApproachTest {
         assertEquals(4, approach.base().size(), "a 2×2 stump is one base");
         assertEquals(8, approach.sides().size());
         assertEquals(8, approach.approachable());
-        assertEquals("N open (0) · N open (0) · E open (0) · E open (0) · S open (0) · S open (0)"
-                + " · W open (0) · W open (0)", approach.summary());
+        // Bearings come in compass order, two a side; the scores vary, since no one cell of a
+        // 2×2 is as far from every ring cell as from every other.
+        StringBuilder bearings = new StringBuilder();
+        for (Approach.Side side : approach.sides()) {
+            assertEquals(Approach.Verdict.OPEN, side.verdict());
+            bearings.append(approach.bearing(side.cell()));
+        }
+        assertEquals("NNEESSWW", bearings.toString());
     }
 
     @Test

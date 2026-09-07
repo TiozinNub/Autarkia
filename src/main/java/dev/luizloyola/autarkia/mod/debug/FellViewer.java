@@ -130,13 +130,14 @@ public final class FellViewer {
             }
             labels.add(new CellOverlayPayload.Label(
                     (side == best ? "▶ " : "") + approach.bearing(side.cell()) + " "
-                            + side.describe() + " (" + side.score() + ")", stroke,
+                            + side.describe() + " (" + Approach.fmt(side.score()) + ")", stroke,
                     new BlockPos(side.cell().x(), side.cell().y() + 2, side.cell().z())));
         }
         Pos anchor = approach.anchor();
         labels.add(new CellOverlayPayload.Label(
                 feller + ": " + (best == null ? "no way in"
-                        : "take " + approach.bearing(best.cell()) + " (" + best.score() + ")"),
+                        : "take " + approach.bearing(best.cell()) + " ("
+                                + Approach.fmt(best.score()) + ")"),
                 WHITE, new BlockPos(anchor.x(), anchor.y() + 3, anchor.z())));
     }
 

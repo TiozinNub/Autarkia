@@ -25,6 +25,11 @@ import org.jspecify.annotations.Nullable;
  * side is 0; leaves in the way and one step either way cost little; each further block up costs
  * more, each further block down costs a lot — below the base a body has to pillar to reach the
  * trunk at all — and a drop past reach, or any side nobody could stand on, is {@link #IMPASSABLE}.
+ * On top of that, <b>farther costs more, relative to one another</b>: the side nearest the body
+ * pays nothing, the farthest pays {@link #FAR_COST}, the rest in proportion — under one leaf, so a
+ * clear far side still beats a near one with a leaf in the way, and otherwise the near side wins.
+ * Bearings are compass directions from the trunk: a body arriving from the south reaches the
+ * {@code S} cell first.
  *
  * <p>Read through {@link BlockKind} alone, so a fence and a lava pool both pass for solid ground
  * here. The terrain grid's finer answer is the next rung, not this one.
@@ -46,6 +51,11 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
     public static final int MORE_DOWN = 10;
     /** A drop past {@link #REACH}, or a side no body could stand on. */
     public static final int IMPASSABLE = 100;
+    /**
+     * What the farthest side costs over the nearest, the others in proportion. Strictly under
+     * {@link #LEAF_COST}: distance only ever breaks ties between sides that are otherwise as good.
+     */
+    public static final double FAR_COST = 1.0;
 
     public enum Verdict {
         /** Air at ground level over something solid: walk straight up. */
@@ -83,11 +93,17 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
 
     /**
      * One side of the stump: the ring {@code cell} at base height, its verdict, where the feet
-     * would go ({@code null} when nowhere), and the leaves standing in the body's way there.
+     * would go ({@code null} when nowhere), the leaves standing in the body's way there, and how
+     * much {@code farther} from the body it is than the nearest side — 0 for the nearest, 1 for
+     * the farthest, in proportion between, 0 for all when every side is as far.
      */
-    public record Side(Pos cell, Verdict verdict, @Nullable Pos feet, List<Pos> leaves) {
+    public record Side(Pos cell, Verdict verdict, @Nullable Pos feet, List<Pos> leaves,
+                       double farther) {
         public Side {
             leaves = List.copyOf(leaves);
+            if (farther < 0 || farther > 1) {
+                throw new IllegalArgumentException("farther is a proportion: " + farther);
+            }
         }
 
         /** Feet height above base height: {@code +1} for one step up, {@code -2} for two down. */
@@ -96,7 +112,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
         }
 
         /** Lower is better — the ladder on the class. {@link Approach#IMPASSABLE} for a refusal. */
-        public int score() {
+        public double score() {
             if (!verdict.approachable()) {
                 return IMPASSABLE;
             }
@@ -104,7 +120,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             int climb = rise > 0 ? STEP_UP + (rise - 1) * MORE_UP
                     : rise < 0 ? STEP_DOWN + (-rise - 1) * MORE_DOWN
                     : 0;
-            return climb + leaves.size() * LEAF_COST;
+            return climb + leaves.size() * LEAF_COST + farther * FAR_COST;
         }
 
         /** {@code "up 1"}, {@code "down 2"}, {@code "leaves"}, {@code "open"} — the journal's word. */
@@ -125,16 +141,29 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
     }
 
     /**
-     * Reads the ground around {@code anchor}. {@code bodyCells} is how many cells of clear
-     * column a standing body needs — two for a settler — so a roof over a step is refused here
-     * rather than by the legs on arrival.
+     * Reads the ground around {@code anchor} for a body standing at {@code from}. {@code bodyCells}
+     * is how many cells of clear column a standing body needs — two for a settler — so a roof over
+     * a step is refused here rather than by the legs on arrival.
      */
-    public static Approach survey(Pos anchor, BlockProbe probe, int bodyCells) {
+    public static Approach survey(Pos anchor, Pos from, BlockProbe probe, int bodyCells) {
         boolean standing = probe.at(anchor.x(), anchor.y(), anchor.z()) == BlockKind.LOG;
         List<Pos> base = baseOf(anchor, probe);
+        List<Pos> ring = ringOf(base);
+        // Horizontal, like every "which end do I walk to" in the tree code: height never decides
+        // which side of a trunk is near.
+        double[] distance = new double[ring.size()];
+        double nearest = Double.MAX_VALUE;
+        double farthest = 0;
+        for (int i = 0; i < ring.size(); i++) {
+            distance[i] = Math.hypot(ring.get(i).x() - from.x(), ring.get(i).z() - from.z());
+            nearest = Math.min(nearest, distance[i]);
+            farthest = Math.max(farthest, distance[i]);
+        }
+        double span = farthest - nearest;
         List<Side> sides = new ArrayList<>();
-        for (Pos cell : ringOf(base)) {
-            sides.add(look(cell, probe, bodyCells));
+        for (int i = 0; i < ring.size(); i++) {
+            double farther = span == 0 ? 0 : (distance[i] - nearest) / span;
+            sides.add(look(ring.get(i), probe, bodyCells, farther));
         }
         return new Approach(anchor, standing, base, sides);
     }
@@ -164,7 +193,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
         return Optional.ofNullable(best);
     }
 
-    /** {@code "N open (0) · E up 1 (2) · S down 2 (13) · W leaves (2)"} — one line for a journal or a readout. */
+    /** {@code "N open (1) · E up 1 (2.5) · S down 2 (13) · W leaves (2.5)"} — one line for a journal or a readout. */
     public String summary() {
         StringBuilder out = new StringBuilder();
         for (Side side : sides) {
@@ -172,9 +201,15 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
                 out.append(" · ");
             }
             out.append(bearing(side.cell())).append(' ').append(side.describe())
-                    .append(" (").append(side.score()).append(')');
+                    .append(" (").append(fmt(side.score())).append(')');
         }
         return standing ? out.toString() : "no log at the anchor; " + out;
+    }
+
+    /** A score as text: whole numbers bare, the rest to one decimal — {@code 2}, {@code 2.5}. */
+    public static String fmt(double score) {
+        return score == Math.rint(score) ? Integer.toString((int) score)
+                : String.format(java.util.Locale.ROOT, "%.1f", score);
     }
 
     /**
@@ -248,13 +283,13 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
     }
 
     /** One side's verdict: the vertical look described on the class. */
-    static Side look(Pos cell, BlockProbe probe, int bodyCells) {
+    static Side look(Pos cell, BlockProbe probe, int bodyCells, double farther) {
         int x = cell.x();
         int z = cell.z();
         int ground = cell.y();
         BlockKind here = probe.at(x, ground, z);
         if (here == BlockKind.UNKNOWN || here == BlockKind.LOG || here == BlockKind.WATER) {
-            return refused(cell, here);
+            return refused(cell, here, farther);
         }
         int feetY;
         if (here == BlockKind.OTHER) {
@@ -263,12 +298,12 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             BlockKind top;
             while ((top = probe.at(x, y, z)) == BlockKind.OTHER) {
                 if (y - ground >= REACH) {
-                    return new Side(cell, Verdict.TOO_HIGH, null, List.of());
+                    return new Side(cell, Verdict.TOO_HIGH, null, List.of(), farther);
                 }
                 y++;
             }
             if (top == BlockKind.UNKNOWN || top == BlockKind.LOG || top == BlockKind.WATER) {
-                return refused(cell, top);
+                return refused(cell, top, farther);
             }
             feetY = y;
         } else {
@@ -277,10 +312,10 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             BlockKind below;
             while (!holds(below = probe.at(x, y - 1, z))) {
                 if (below == BlockKind.UNKNOWN || below == BlockKind.WATER) {
-                    return refused(cell, below);
+                    return refused(cell, below, farther);
                 }
                 if (ground - y >= REACH) {
-                    return new Side(cell, Verdict.TOO_DEEP, null, List.of());
+                    return new Side(cell, Verdict.TOO_DEEP, null, List.of(), farther);
                 }
                 y--;
             }
@@ -296,7 +331,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
                 leaves.add(new Pos(x, y, z));
             } else if (kind != BlockKind.AIR) {
                 return new Side(cell, kind == BlockKind.UNKNOWN ? Verdict.UNSEEN : Verdict.NO_ROOM,
-                        null, leaves);
+                        null, leaves, farther);
             }
         }
         Pos feet = new Pos(x, feetY, z);
@@ -304,13 +339,13 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
                 : feetY > ground ? Verdict.RAISED
                 : feetY < ground ? Verdict.SUNKEN
                 : Verdict.OPEN;
-        return new Side(cell, verdict, feet, leaves);
+        return new Side(cell, verdict, feet, leaves, farther);
     }
 
-    private static Side refused(Pos cell, BlockKind what) {
+    private static Side refused(Pos cell, BlockKind what, double farther) {
         Verdict verdict = what == BlockKind.LOG ? Verdict.WOOD
                 : what == BlockKind.WATER ? Verdict.WATER
                 : Verdict.UNSEEN;
-        return new Side(cell, verdict, null, List.of());
+        return new Side(cell, verdict, null, List.of(), farther);
     }
 }
