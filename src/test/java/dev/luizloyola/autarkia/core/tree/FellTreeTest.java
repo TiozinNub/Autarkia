@@ -322,6 +322,59 @@ class FellTreeTest {
         assertTrue(said("cleared").isEmpty(), "nothing came down");
     }
 
+    // ── coming back ──────────────────────────────────────────────────────────────────────────
+
+    /** The trunk as a body leaves it after opening: the base, two cells of air, four logs. */
+    private void openedTrunk() {
+        ctx.percepts.blocks.set(0, BASE, 0, BlockKind.LOG);
+        for (int y = BASE + 3; y < BASE + 7; y++) {
+            ctx.percepts.blocks.set(0, y, 0, BlockKind.LOG);
+        }
+    }
+
+    @Test
+    void aRestoredTaskCarriesOnFromItsStage() {
+        openedTrunk();
+        Pos stand = new Pos(0, BASE + 1, 0);
+        Climb climb = Climb.plan(Climb.Arm.of(ctx.percepts), ANCHOR,
+                Climb.column(ANCHOR, ctx.percepts.blocks, 2), SOUTH, 2);
+        FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.ENTER,
+                java.util.Optional.of(new Pos(0, BASE, 1)), java.util.Optional.of(climb));
+        ctx.percepts.position = SOUTH;
+
+        back.tick(ctx);
+        assertEquals("stepping in", back.phase());
+        assertEquals(stand, new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ),
+                "straight back to stepping in — no survey walk, no re-plan");
+        assertTrue(said("plan").isEmpty());
+
+        ctx.mover.setState(MoveState.ARRIVED);
+        ctx.percepts.position = stand;
+        back.tick(ctx);
+        assertEquals(FellTree.Stage.PLANNED, back.stage());
+        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise", back.phase(),
+                "the plan it was saved with, made from the trunk as it stood");
+    }
+
+    @Test
+    void aRestoredStageWithoutAPlanStartsOver() {
+        FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.PLANNED,
+                java.util.Optional.empty(), java.util.Optional.empty());
+        assertEquals(FellTree.Stage.APPROACH, back.stage());
+    }
+
+    @Test
+    void aFreshTaskAlreadyOnTheBaseLogPlansFromThere() {
+        openedTrunk();
+        ctx.percepts.position = new Pos(0, BASE + 1, 0);
+
+        task.tick(ctx);
+        assertEquals(0, ctx.mover.moveToCalls, "no walking out to walk back in");
+        assertEquals(List.of("plan — open 0 · step in · 4 to break · no rise"), said("plan"));
+        assertEquals(FellTree.Stage.PLANNED, task.stage());
+        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise", task.phase());
+    }
+
     // ── cancel ───────────────────────────────────────────────────────────────────────────────
 
     @Test

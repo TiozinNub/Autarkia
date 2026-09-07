@@ -25,11 +25,15 @@ import org.jspecify.annotations.Nullable;
  * ends: RUNNING for as long as it is left in the slot, so each step can be watched in-world
  * ({@code /autarkia tree approach}) and the ground changed under it.
  *
- * <p><b>The world holds the progress.</b> The survey is re-read every second, the walk is
- * re-ordered when the legs give up, and a leaf is only ever begun on because the probe still says
- * it is there — so a reload, a shove or a preemption costs at most a second of looking, and the
- * codec carries the anchor alone. The one thing kept is the side taken: selection is commitment,
- * or a body walking past a symmetric pair of sides would flip between them as it went.
+ * <p><b>The world holds the progress, the save holds the stage.</b> The survey is re-read every
+ * second, the walk is re-ordered when the legs give up, and a block is only ever begun on because
+ * the probe still says it is there — so a shove costs at most a second of looking. What the world
+ * cannot give back is written down (decision: Luiz, 2026-09-07): the stage, the side taken and the
+ * plan, because once the trunk is opened the plan can no longer be read off the tree. A fresh task
+ * that finds the body already standing on the base log plans from there rather than walking out
+ * to walk back in, which is what a preemption's re-derived plan meets. The side taken is kept
+ * because selection is commitment: a body walking past a symmetric pair of sides would otherwise
+ * flip between them as it went.
  *
  * <p><b>A walk onto leaves is ordered anyway</b> (decision: Luiz): the legs walk a partial route to
  * the nearest cell they can reach and fail there, which is inside the arm's reach of the leaves,
@@ -55,8 +59,11 @@ public final class FellTree implements PrimitiveTask {
      */
     public static final int WALK_RETRY_TICKS = 40;
 
-    /** The stages so far, in order. Kept in memory only: a reload starts over from the approach. */
-    private enum Stage { APPROACH, OPEN, ENTER, PLANNED }
+    /**
+     * The stages so far, in order. Written into the save by NAME, so add at the end and never
+     * rename: a saved body mid-stage reads its stage back by it.
+     */
+    public enum Stage { APPROACH, OPEN, ENTER, PLANNED }
 
     private final Pos anchor;
     private Stage stage = Stage.APPROACH;
@@ -81,6 +88,24 @@ public final class FellTree implements PrimitiveTask {
 
     public FellTree(Pos anchor) {
         this.anchor = anchor;
+    }
+
+    /**
+     * A task put back from a save: the stage it was at, the side it took and the plan it made. A
+     * stage past the approach with no plan to work cannot be resumed, and starts over from the
+     * look — the body's position then decides how much of the way back it really is.
+     */
+    public static FellTree restored(Pos anchor, Stage stage, Optional<Pos> chosen,
+                                    Optional<Climb> climb) {
+        FellTree task = new FellTree(anchor);
+        task.chosen = chosen.orElse(null);
+        task.climb = climb.orElse(null);
+        task.stage = task.climb == null ? Stage.APPROACH : stage;
+        return task;
+    }
+
+    public Stage stage() {
+        return stage;
     }
 
     public Pos anchor() {
@@ -144,7 +169,7 @@ public final class FellTree implements PrimitiveTask {
 
     /** Stand with the plan; carrying it out is the next step. */
     private void planned() {
-        phase = (climb.stepIn().isEmpty() ? "at the tree — " : "in the trunk — ") + climb.describe();
+        phase = (climb.stepsIn() ? "in the trunk — " : "at the tree — ") + climb.describe();
     }
 
     /** The first stage: take a side, walk to it clearing its leaves, then plan the climb. */
@@ -154,6 +179,16 @@ public final class FellTree implements PrimitiveTask {
             phase = "no way in";
             ctx.actuators().mover().stop();
             return; // and keep looking: the ground may change
+        }
+        // Already on the base log, of a trunk still standing: a fresh task after a preemption, or
+        // a reload that lost its plan. Plan from here; walking out to walk back in is not a step.
+        Pos onTheBase = new Pos(anchor.x(), anchor.y() + 1, anchor.z());
+        if (approach.standing() && ctx.percepts().position().equals(onTheBase)) {
+            plan(ctx, side);
+            if (stage == Stage.OPEN) {
+                open(ctx);
+            }
+            return;
         }
         boolean cleared = breakNext(ctx, side.leaves(), BlockKind.LEAVES, "leaf");
         boolean there = walk(ctx, side.feet());
@@ -166,12 +201,17 @@ public final class FellTree implements PrimitiveTask {
             phase = "clearing leaves at " + label;
             return;
         }
-        climb = Climb.plan(Climb.Arm.of(ctx.percepts()), anchor,
-                Climb.column(anchor, ctx.percepts().blocks()), side.feet(),
-                MoveCapabilities.of(ctx.profile()).clearCells());
-        say(ctx, "plan — " + climb.describe());
-        stage = climb.stepIn().isEmpty() ? Stage.PLANNED : Stage.OPEN;
+        plan(ctx, side);
         phase = "at the tree, " + label + " side";
+    }
+
+    /** Work out the climb from beside the stump, and which stage it starts. */
+    private void plan(BrainContext ctx, Approach.Side side) {
+        int bodyCells = MoveCapabilities.of(ctx.profile()).clearCells();
+        climb = Climb.plan(Climb.Arm.of(ctx.percepts()), anchor,
+                Climb.column(anchor, ctx.percepts().blocks(), bodyCells), side.feet(), bodyCells);
+        say(ctx, "plan — " + climb.describe());
+        stage = climb.stepsIn() ? Stage.OPEN : Stage.PLANNED;
     }
 
     private void look(BrainContext ctx) {
@@ -216,12 +256,14 @@ public final class FellTree implements PrimitiveTask {
      */
     private boolean walk(BrainContext ctx, Pos feet) {
         Mover mover = ctx.actuators().mover();
+        if (ctx.percepts().position().equals(feet)) {
+            walkingTo = feet; // standing there already is arriving: no order for the legs
+            arrived = true;
+            return true;
+        }
         if (!feet.equals(walkingTo)) {
             order(mover, feet);
             return false;
-        }
-        if (ctx.percepts().position().equals(feet)) {
-            return true;
         }
         if (ticks == walkOrderedAt) {
             return false; // issue, don't read: the port promises progress from the next tick on

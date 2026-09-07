@@ -25,13 +25,15 @@ import java.util.OptionalInt;
  * @param stand    where the body works from: the base log's cell one up (in the trunk), or the
  *                 cell beside the stump it already stands in
  * @param needFeetY the feet height the tallest demand works out to
- * @param stepIn   the logs to break before stepping in — empty when nobody steps in
+ * @param stepsIn  whether the body works from inside the trunk at all
+ * @param stepIn   the logs to break before stepping in — empty when nobody steps in, and empty
+ *                 too for a trunk already opened, which still steps in
  * @param levels   the work from each standing height, in order
  * @param complete whether every log above the base is accounted for; false when one is out of
  *                 reach from anywhere the plan can put the body
  */
-public record Climb(Pos stand, int needFeetY, List<Pos> stepIn, List<Level> levels,
-                    boolean complete) {
+public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
+                    List<Level> levels, boolean complete) {
 
     /**
      * The body doing the reaching: its eyes above its feet and how far its arm reaches from
@@ -59,14 +61,21 @@ public record Climb(Pos stand, int needFeetY, List<Pos> stepIn, List<Level> leve
         levels = List.copyOf(levels);
     }
 
-    /** The logs standing straight above {@code base}, base included, up to the first non-log. */
-    public static List<Pos> column(Pos base, BlockProbe probe) {
+    /**
+     * The logs standing above {@code base} in its own column, base included, read across gaps of
+     * up to {@code gap} cells: a trunk a body opened and stepped into is a base, two cells of air,
+     * then the rest, and it is still one trunk. Past a wider gap it is somebody else's wood.
+     */
+    public static List<Pos> column(Pos base, BlockProbe probe, int gap) {
         List<Pos> logs = new ArrayList<>();
-        for (int y = base.y(); y < base.y() + MAX_LEVELS; y++) {
-            if (probe.at(base.x(), y, base.z()) != BlockKind.LOG) {
-                break;
+        int misses = 0;
+        for (int y = base.y(); y < base.y() + MAX_LEVELS && misses <= gap; y++) {
+            if (probe.at(base.x(), y, base.z()) == BlockKind.LOG) {
+                logs.add(new Pos(base.x(), y, base.z()));
+                misses = 0;
+            } else {
+                misses++;
             }
-            logs.add(new Pos(base.x(), y, base.z()));
         }
         return logs;
     }
@@ -139,7 +148,7 @@ public record Climb(Pos stand, int needFeetY, List<Pos> stepIn, List<Level> leve
                 feet++;
             }
         }
-        return new Climb(stand, need, stepIn, levels, remaining.isEmpty());
+        return new Climb(stand, need, true, stepIn, levels, remaining.isEmpty());
     }
 
     /** Everything the arm reaches from where the body already stands, lowest first. */
@@ -150,8 +159,8 @@ public record Climb(Pos stand, int needFeetY, List<Pos> stepIn, List<Level> leve
                 breaks.add(log);
             }
         }
-        return new Climb(beside, need, List.of(), List.of(new Level(beside.y(), breaks, false)),
-                breaks.size() == logs.size());
+        return new Climb(beside, need, false, List.of(),
+                List.of(new Level(beside.y(), breaks, false)), breaks.size() == logs.size());
     }
 
     private static List<Pos> sortedByHeight(List<Pos> logs) {
@@ -185,7 +194,7 @@ public record Climb(Pos stand, int needFeetY, List<Pos> stepIn, List<Level> leve
     /** {@code "open 2 · step in · 9 to break · 5 rises"} or {@code "4 to break from beside"}. */
     public String describe() {
         String tail = complete ? "" : " · some out of reach";
-        if (stepIn.isEmpty()) {
+        if (!stepsIn) {
             return toBreak() + " to break from beside" + tail;
         }
         int rises = rises();

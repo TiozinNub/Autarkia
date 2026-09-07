@@ -10,6 +10,7 @@ import dev.luizloyola.anima.mod.brain.TaskCodecs;
 import dev.luizloyola.autarkia.core.board.GatheringErrand;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
+import dev.luizloyola.autarkia.core.tree.Climb;
 import dev.luizloyola.autarkia.core.tree.FellTree;
 import java.util.HashSet;
 import java.util.List;
@@ -18,9 +19,9 @@ import java.util.TreeSet;
 /**
  * How Autarkia's own tasks write themselves down.
  *
- * <p>The chop's own codecs — the dance card and every field of the executor that walked it — went
- * with the seventh choreography on 2026-09-06. What resumability a felling needs is a question for
- * the eighth; {@link FellTree} persists its anchor and nothing else until there is one.
+ * <p>The chop writes its stage, the side it took and its {@link Climb}: the world holds every
+ * other kind of progress, but a plan cannot be re-read off a trunk once the trunk is opened, and
+ * a body mid-climb put back at the approach would walk out of the tree to walk back in.
  */
 public final class AutarkiaTasks {
 
@@ -33,15 +34,43 @@ public final class AutarkiaTasks {
             Codec.INT.fieldOf("z").forGetter(Pos::z)
     ).apply(p, Pos::new));
 
+    private static final Codec<Climb.Level> LEVEL = RecordCodecBuilder.create(l -> l.group(
+            Codec.INT.fieldOf("feet_y").forGetter(Climb.Level::feetY),
+            POS.listOf().fieldOf("breaks").forGetter(Climb.Level::breaks),
+            Codec.BOOL.fieldOf("rise").forGetter(Climb.Level::rise)
+    ).apply(l, Climb.Level::new));
+
+    private static final Codec<Climb> CLIMB = RecordCodecBuilder.create(c -> c.group(
+            POS.fieldOf("stand").forGetter(Climb::stand),
+            Codec.INT.fieldOf("need_feet_y").forGetter(Climb::needFeetY),
+            Codec.BOOL.fieldOf("steps_in").forGetter(Climb::stepsIn),
+            POS.listOf().fieldOf("step_in").forGetter(Climb::stepIn),
+            LEVEL.listOf().fieldOf("levels").forGetter(Climb::levels),
+            Codec.BOOL.fieldOf("complete").forGetter(Climb::complete)
+    ).apply(c, Climb::new));
+
+    /** By name, guarded into a DataResult — never trusted raw off a hand-edited save. */
+    private static final Codec<FellTree.Stage> STAGE = Codec.STRING.comapFlatMap(name -> {
+        try {
+            return DataResult.success(FellTree.Stage.valueOf(name));
+        } catch (IllegalArgumentException unknown) {
+            return DataResult.error(() -> "no chop stage is named \"" + name + "\"");
+        }
+    }, FellTree.Stage::name);
+
     /** Call once from mod init, before anything can load a plan. */
     public static void install() {
-        // Registered even though it fails on its first tick: a task with no codec does not fail
-        // loudly on save, it NPEs out of a JSON primitive and takes the server down. The guard
-        // below in AutarkiaTaskCodecsTest catches the omission; this is what satisfies it.
+        // A task with no codec does not fail loudly on save, it NPEs out of a JSON primitive and
+        // takes the server down. The guard in AutarkiaTaskCodecsTest catches the omission.
+        // The stage, side and plan are optional so a save from before they existed still reads.
         TaskCodecs.register("autarkia:fell_tree", FellTree.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
-                        POS.fieldOf("anchor").forGetter(FellTree::anchor)
-                ).apply(t, FellTree::new)));
+                        POS.fieldOf("anchor").forGetter(FellTree::anchor),
+                        STAGE.optionalFieldOf("stage", FellTree.Stage.APPROACH)
+                                .forGetter(FellTree::stage),
+                        POS.optionalFieldOf("chosen").forGetter(FellTree::chosen),
+                        CLIMB.optionalFieldOf("climb").forGetter(FellTree::climb)
+                ).apply(t, FellTree::restored)));
         // A wrapper carries a TASK, so it leans on the dispatch codec the same way anima:try does;
         // the per-key lookup happens at parse time, which is what makes the recursion legal.
         //

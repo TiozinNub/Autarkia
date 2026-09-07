@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.autarkia.core.tree.FellTree;
+
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Idle;
@@ -135,5 +137,36 @@ class AutarkiaTaskCodecsTest {
 
         GatheringErrand after = assertInstanceOf(GatheringErrand.class, roundTrip(before));
         assertTrue(after.spec().matches("minecraft:oak_log"));
+    }
+
+    /** The chop mid-climb: its stage, the side it took and its plan come back exactly. */
+    @Test
+    void aFellTreeMidClimbComesBackWhereItWas() {
+        var anchor = new dev.luizloyola.anima.core.brain.sense.Pos(208, -60, 0);
+        var stand = new dev.luizloyola.anima.core.brain.sense.Pos(208, -59, 0);
+        var climb = new dev.luizloyola.autarkia.core.tree.Climb(stand, -59, true,
+                java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(208, -59, 0)),
+                java.util.List.of(new dev.luizloyola.autarkia.core.tree.Climb.Level(-59,
+                        java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(208, -57, 0)),
+                        true)),
+                false);
+        var chosen = new dev.luizloyola.anima.core.brain.sense.Pos(207, -60, 0);
+        var task = FellTree.restored(anchor, FellTree.Stage.OPEN,
+                java.util.Optional.of(chosen), java.util.Optional.of(climb));
+
+        var back = (FellTree) roundTrip(task);
+        assertEquals(anchor, back.anchor());
+        assertEquals(FellTree.Stage.OPEN, back.stage());
+        assertEquals(chosen, back.chosen().orElseThrow());
+        assertEquals(climb, back.climb().orElseThrow());
+    }
+
+    /** A save from before the chop had stages reads as a fresh approach, not a dead server. */
+    @Test
+    void anAnchorOnlyFellTreeStillReads() {
+        var back = (FellTree) roundTrip(new FellTree(
+                new dev.luizloyola.anima.core.brain.sense.Pos(1, 2, 3)));
+        assertEquals(FellTree.Stage.APPROACH, back.stage());
+        assertTrue(back.climb().isEmpty());
     }
 }

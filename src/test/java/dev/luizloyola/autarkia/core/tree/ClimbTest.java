@@ -45,15 +45,47 @@ class ClimbTest {
     }
 
     @Test
-    void theColumnIsReadUpToTheFirstNonLog() {
+    void theColumnReadsThroughALeafAndStopsAtAWiderGap() {
         FakeProbe probe = new FakeProbe();
         for (int y = BASE; y < BASE + 7; y++) {
             probe.set(0, y, 0, BlockKind.LOG);
         }
         probe.set(0, BASE + 7, 0, BlockKind.LEAVES);
-        probe.set(0, BASE + 8, 0, BlockKind.LOG); // a log past the crown is not this column
+        probe.set(0, BASE + 8, 0, BlockKind.LOG);   // a log over one leaf is still this trunk
+        probe.set(0, BASE + 12, 0, BlockKind.LOG);  // one past three cells of air is not
 
-        assertEquals(column(7), Climb.column(STUMP, probe));
+        List<Pos> expected = new ArrayList<>(column(7));
+        expected.add(new Pos(0, BASE + 8, 0));
+        assertEquals(expected, Climb.column(STUMP, probe, BODY));
+    }
+
+    @Test
+    void theColumnReadsAcrossTheGapABodyOpened() {
+        FakeProbe probe = new FakeProbe();
+        probe.set(0, BASE, 0, BlockKind.LOG);
+        for (int y = BASE + 3; y < BASE + 7; y++) {
+            probe.set(0, y, 0, BlockKind.LOG);
+        }
+
+        assertEquals(5, Climb.column(STUMP, probe, BODY).size(),
+                "the base, two cells of air, four logs: one trunk");
+        assertEquals(List.of(STUMP), Climb.column(STUMP, probe, 1),
+                "a gap wider than the body opened is not this trunk");
+    }
+
+    @Test
+    void aTrunkAlreadyOpenedStillStepsIn() {
+        List<Pos> logs = new ArrayList<>();
+        logs.add(STUMP);
+        for (int y = BASE + 3; y < BASE + 7; y++) {
+            logs.add(new Pos(0, y, 0));
+        }
+
+        Climb climb = Climb.plan(ARM, STUMP, logs, BESIDE, BODY);
+        assertTrue(climb.stepsIn());
+        assertTrue(climb.stepIn().isEmpty(), "nothing left to open");
+        assertEquals(new Pos(0, BASE + 1, 0), climb.stand());
+        assertEquals("open 0 · step in · 4 to break · no rise", climb.describe());
     }
 
     @Test
