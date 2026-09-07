@@ -5,23 +5,36 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.nav.MoveCapabilities;
+import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
- * The hole where the eighth chop goes: it fells nothing, and says so on its first tick.
+ * The eighth chop, being built one step at a time (decision: Luiz, 2026-09-07). <b>Step one</b>:
+ * stand where you are, read which sides of the stump could be walked up to ({@link Approach}),
+ * say so, and keep reading. It moves nothing, breaks nothing, and never ends — RUNNING for as long
+ * as it is left in the slot, so what it reads can be watched in-world ({@code /autarkia tree
+ * approach}) and changed under it.
  *
  * <p>The seventh choreography — a compiled dance card and the 1600-line executor that walked it —
- * was deleted whole on 2026-09-06 for a from-scratch redesign (decision: Luiz), the way the six
- * before it went on 2026-08-02. <b>Detection was not touched</b>: {@link TreeShape} still answers
- * whose wood is whose, and {@code /autarkia tree view} still paints it.
- *
- * <p>Failing immediately is the point. The four callers that used to hand a tree to the axe —
- * {@link ChopForLogs}, {@link TreeClearing}, the chop wand and {@code /autarkia brain chop} —
- * keep their shape and their tests, so the redesign replaces a body instead of re-wiring them,
- * and nothing in between pretends to work.
+ * was deleted whole on 2026-09-06 for this redesign, the way the six before it went on
+ * 2026-08-02. <b>Detection was not touched</b>: {@link TreeShape} still answers whose wood is whose.
+ * The four callers that hand a tree to the axe — {@link ChopForLogs}, {@link TreeClearing}, the
+ * chop wand and {@code /autarkia brain chop} — keep their shape and their tests.
  */
 public final class FellTree implements PrimitiveTask {
 
+    /**
+     * How often the ground around the stump is re-read while the body stands and looks: every
+     * second, so a block placed beside the tree shows up in the next readout, not the next order.
+     */
+    public static final int RESURVEY_TICKS = 20;
+
     private final Pos anchor;
+    private @Nullable Approach approach;
+    private int ticks;
+    /** The last summary journalled — a re-read that says the same thing says nothing. */
+    private String told = "";
 
     public FellTree(Pos anchor) {
         this.anchor = anchor;
@@ -31,20 +44,35 @@ public final class FellTree implements PrimitiveTask {
         return anchor;
     }
 
+    /** What the last look found, once there has been one — the debug view's whole input. */
+    public Optional<Approach> approach() {
+        return Optional.ofNullable(approach);
+    }
+
     @Override
     public TaskStatus tick(BrainContext ctx) {
-        ctx.journal().record(Category.BRAIN, "chop", "no choreography — " + where());
-        return TaskStatus.FAILED;
+        if (approach == null || ticks % RESURVEY_TICKS == 0) {
+            approach = Approach.survey(anchor, ctx.percepts().blocks(),
+                    MoveCapabilities.of(ctx.profile()).clearCells());
+            String now = approach.summary();
+            if (!now.equals(told)) {
+                ctx.journal().record(Category.BRAIN, "chop", "approach — " + now);
+                told = now;
+            }
+        }
+        ticks++;
+        return TaskStatus.RUNNING; // step one looks and keeps looking; nothing here ends it
     }
 
     @Override
     public void cancel(BrainContext ctx) {
-        // Nothing was ever ordered: no claim taken, no actuator held, no ground disturbed.
+        // Nothing ordered: no claim taken, no actuator held, no ground disturbed.
     }
 
     @Override
     public String describe() {
-        return "fell the tree at " + where();
+        return "fell the tree at " + where()
+                + (approach == null ? "" : " — " + approach.summary());
     }
 
     @Override

@@ -64,6 +64,7 @@ import dev.luizloyola.anima.mod.brain.BeingViewer;
 import dev.luizloyola.anima.mod.debug.DebugLayer;
 import dev.luizloyola.anima.mod.debug.DebugView;
 import dev.luizloyola.autarkia.mod.debug.BoardViewer;
+import dev.luizloyola.autarkia.mod.debug.FellViewer;
 import dev.luizloyola.autarkia.mod.debug.TreeSplitViewer;
 import dev.luizloyola.autarkia.mod.entity.ModEntities;
 import dev.luizloyola.autarkia.mod.entity.Persons;
@@ -243,7 +244,9 @@ public final class AutarkiaCommands {
                                                         IntegerArgumentType.integer(4, 32))
                                                 .executes(ctx -> treeView(ctx.getSource(),
                                                         IntegerArgumentType.getInteger(
-                                                                ctx, "radius")))));
+                                                                ctx, "radius")))))
+                                .then(Commands.literal("approach")
+                                        .executes(ctx -> treeApproach(ctx.getSource())));
     }
 
     /**
@@ -783,6 +786,16 @@ public final class AutarkiaCommands {
         Replies.send(source, () -> Component.translatable("anima.command.state",
                 person.getName(), person.brain().describe())
                 .append(suffix).withStyle(ChatFormatting.AQUA));
+        return 1;
+    }
+
+    /** Toggles the {@link FellViewer}: how the fellers near the calling player read the ground. */
+    private static int treeApproach(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        boolean on = FellViewer.toggle(source.getServer(), player);
+        Replies.send(source, () -> Component.literal(on
+                ? "Watching how the fellers around you read the ground beside their trees."
+                : "The approach view is off.").withStyle(ChatFormatting.GRAY));
         return 1;
     }
 

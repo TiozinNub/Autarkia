@@ -1,0 +1,165 @@
+package dev.luizloyola.autarkia.mod.debug;
+
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.mod.debug.CellOverlays;
+import dev.luizloyola.anima.mod.net.CellOverlayPayload;
+import dev.luizloyola.autarkia.core.tree.Approach;
+import dev.luizloyola.autarkia.core.tree.FellTree;
+import dev.luizloyola.autarkia.mod.entity.Person;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+
+/**
+ * How the fellers around the watching player read the ground beside their trees — every running
+ * {@link FellTree}'s {@link Approach}, drawn as gizmo boxes: the base white-rimmed, each ring cell
+ * in its verdict's colour, the feet cell filled where there is one, and the leaves in the way
+ * outlined. A label per side says the verdict; one over the stump tallies the sides.
+ *
+ * <p>Transport is Anima's cell overlay ({@link CellOverlays}). Same shape as {@link BoardViewer}:
+ * a watcher set per server, a redraw cadence, gone on stop.
+ */
+public final class FellViewer {
+    private FellViewer() {}
+
+    private static final String SOURCE = "autarkia:fell";
+
+    /** Half the task's own re-read cadence, so a change shows the frame after it is read. */
+    private static final int REDRAW_INTERVAL_TICKS = 10;
+
+    /** The client keeps drawing this long past the last frame — outlives one missed redraw. */
+    private static final int TTL_TICKS = REDRAW_INTERVAL_TICKS * 3;
+
+    /** How far from the player a feller is still drawn. */
+    private static final int RANGE = 64;
+
+    private static final float BASE_WIDTH = 2.5F;
+    private static final float WIDTH = 1.5F;
+    private static final float THIN = 1.0F;
+
+    private static final int WHITE = 0xFFFFFFFF;
+    private static final int BASE_FILL = 0x40FFFFFF;
+    private static final int LEAF_STROKE = 0xC0E0E040;
+
+    private static final Map<MinecraftServer, Set<UUID>> WATCHERS = new HashMap<>();
+
+    /** Call once from mod init. */
+    public static void init() {
+        ServerLifecycleEvents.SERVER_STOPPING.register(WATCHERS::remove);
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (server.getTickCount() % REDRAW_INTERVAL_TICKS != 0) {
+                return;
+            }
+            Set<UUID> watching = WATCHERS.get(server);
+            if (watching == null || watching.isEmpty()) {
+                return;
+            }
+            Iterator<UUID> each = watching.iterator();
+            while (each.hasNext()) {
+                ServerPlayer player = server.getPlayerList().getPlayer(each.next());
+                if (player == null) {
+                    each.remove(); // logged off: the TTL fades what they were watching
+                } else {
+                    render(player);
+                }
+            }
+        });
+    }
+
+    /** Flips the view for this player; returns whether it is now on. */
+    public static boolean toggle(MinecraftServer server, ServerPlayer player) {
+        Set<UUID> watching = WATCHERS.computeIfAbsent(server, s -> new HashSet<>());
+        if (watching.remove(player.getUUID())) {
+            CellOverlays.clear(player, SOURCE);
+            return false;
+        }
+        watching.add(player.getUUID());
+        render(player); // the first frame lands with the reply, not a cadence later
+        return true;
+    }
+
+    /** One frame: every feller in range that has looked, painted. */
+    private static void render(ServerPlayer player) {
+        List<CellOverlayPayload.Group> groups = new ArrayList<>();
+        List<CellOverlayPayload.Label> labels = new ArrayList<>();
+        for (Person person : player.level().getEntitiesOfClass(Person.class,
+                player.getBoundingBox().inflate(RANGE), Person::isAlive)) {
+            person.brain().executor().currentPrimitive()
+                    .filter(FellTree.class::isInstance)
+                    .flatMap(task -> ((FellTree) task).approach())
+                    .ifPresent(approach -> paint(person.getName().getString(), approach,
+                            groups, labels));
+        }
+        if (groups.isEmpty()) {
+            CellOverlays.clear(player, SOURCE); // nobody felling should show nothing, not linger
+            return;
+        }
+        CellOverlays.show(player,
+                new CellOverlayPayload(SOURCE, TTL_TICKS, groups, List.of(), List.of(), labels));
+    }
+
+    private static void paint(String feller, Approach approach,
+                              List<CellOverlayPayload.Group> groups,
+                              List<CellOverlayPayload.Label> labels) {
+        groups.add(new CellOverlayPayload.Group(WHITE, BASE_WIDTH, BASE_FILL, true,
+                cells(approach.base())));
+        for (Approach.Side side : approach.sides()) {
+            int stroke = colour(side.verdict());
+            int fill = (stroke & 0x00FFFFFF) | 0x30000000;
+            groups.add(new CellOverlayPayload.Group(stroke, WIDTH, fill, true,
+                    List.of(at(side.cell()))));
+            if (side.feet() != null && !side.feet().equals(side.cell())) {
+                groups.add(new CellOverlayPayload.Group(stroke, WIDTH,
+                        (stroke & 0x00FFFFFF) | 0x70000000, true, List.of(at(side.feet()))));
+            }
+            if (!side.leaves().isEmpty()) {
+                groups.add(new CellOverlayPayload.Group(LEAF_STROKE, THIN, 0, true,
+                        cells(side.leaves())));
+            }
+            labels.add(new CellOverlayPayload.Label(
+                    approach.bearing(side.cell()) + " " + side.describe(), stroke,
+                    new BlockPos(side.cell().x(), side.cell().y() + 2, side.cell().z())));
+        }
+        Pos anchor = approach.anchor();
+        labels.add(new CellOverlayPayload.Label(
+                feller + ": " + approach.approachable() + "/" + approach.sides().size() + " sides",
+                WHITE, new BlockPos(anchor.x(), anchor.y() + 3, anchor.z())));
+    }
+
+    /** Verdict → paint. Green is walkable now, blue and cyan are walkable at another height,
+     *  yellow wants clearing, red is refused for shape, grey was never seen. */
+    private static int colour(Approach.Verdict verdict) {
+        return switch (verdict) {
+            case OPEN -> 0xFF40E060;
+            case RAISED -> 0xFF4090FF;
+            case SUNKEN -> 0xFF40E0E0;
+            case LEAVES -> 0xFFE0E040;
+            case WATER -> 0xFF2060C0;
+            case WOOD -> 0xFFFF3FD4;
+            case TOO_HIGH, TOO_DEEP, NO_ROOM -> 0xFFFF4040;
+            case UNSEEN -> 0xFFB4B4B4;
+        };
+    }
+
+    private static BlockPos at(Pos cell) {
+        return new BlockPos(cell.x(), cell.y(), cell.z());
+    }
+
+    private static List<BlockPos> cells(Iterable<Pos> cells) {
+        List<BlockPos> out = new ArrayList<>();
+        for (Pos cell : cells) {
+            out.add(at(cell));
+        }
+        return out;
+    }
+}
