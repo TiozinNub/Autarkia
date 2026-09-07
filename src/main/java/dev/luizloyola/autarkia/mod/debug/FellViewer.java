@@ -24,7 +24,8 @@ import net.minecraft.server.level.ServerPlayer;
  * How the fellers around the watching player read the ground beside their trees — every running
  * {@link FellTree}'s {@link Approach}, drawn as gizmo boxes: the base white-rimmed, each ring cell
  * in its verdict's colour, the feet cell filled where there is one, and the leaves in the way
- * outlined. A label per side says the verdict; one over the stump tallies the sides.
+ * outlined. A label per side says the verdict and its score, the best side marked; one over the
+ * stump names the side the body would take.
  *
  * <p>Transport is Anima's cell overlay ({@link CellOverlays}). Same shape as {@link BoardViewer}:
  * a watcher set per server, a redraw cadence, gone on stop.
@@ -113,6 +114,7 @@ public final class FellViewer {
                               List<CellOverlayPayload.Label> labels) {
         groups.add(new CellOverlayPayload.Group(WHITE, BASE_WIDTH, BASE_FILL, true,
                 cells(approach.base())));
+        Approach.Side best = approach.best().orElse(null);
         for (Approach.Side side : approach.sides()) {
             int stroke = colour(side.verdict());
             int fill = (stroke & 0x00FFFFFF) | 0x30000000;
@@ -127,12 +129,14 @@ public final class FellViewer {
                         cells(side.leaves())));
             }
             labels.add(new CellOverlayPayload.Label(
-                    approach.bearing(side.cell()) + " " + side.describe(), stroke,
+                    (side == best ? "▶ " : "") + approach.bearing(side.cell()) + " "
+                            + side.describe() + " (" + side.score() + ")", stroke,
                     new BlockPos(side.cell().x(), side.cell().y() + 2, side.cell().z())));
         }
         Pos anchor = approach.anchor();
         labels.add(new CellOverlayPayload.Label(
-                feller + ": " + approach.approachable() + "/" + approach.sides().size() + " sides",
+                feller + ": " + (best == null ? "no way in"
+                        : "take " + approach.bearing(best.cell()) + " (" + best.score() + ")"),
                 WHITE, new BlockPos(anchor.x(), anchor.y() + 3, anchor.z())));
     }
 

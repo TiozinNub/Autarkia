@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
@@ -20,6 +21,11 @@ import org.jspecify.annotations.Nullable;
  * opens; air or leaves are followed down until something holds; both stop at {@link #REACH}, so a
  * cliff reads as a wall and a shaft as a drop rather than as somewhere to stand.
  *
+ * <p>Every side is then <b>scored, lower better</b> (decision: Luiz, 2026-09-07): a clear, level
+ * side is 0; leaves in the way and one step either way cost little; each further block up costs
+ * more, each further block down costs a lot — below the base a body has to pillar to reach the
+ * trunk at all — and a drop past reach, or any side nobody could stand on, is {@link #IMPASSABLE}.
+ *
  * <p>Read through {@link BlockKind} alone, so a fence and a lava pool both pass for solid ground
  * here. The terrain grid's finer answer is the next rung, not this one.
  */
@@ -27,6 +33,19 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
 
     /** How far up or down a side is followed before it stops being an approach. */
     public static final int REACH = 5;
+
+    /** One leaf in the body's way: a swing, a fraction of a second. */
+    public static final int LEAF_COST = 2;
+    /** The first block up: a hop. */
+    public static final int STEP_UP = 2;
+    /** Every further block up: something to climb onto, and a base log further below the hands. */
+    public static final int MORE_UP = 3;
+    /** The first block down: a step, with the base log at eye height. */
+    public static final int STEP_DOWN = 3;
+    /** Every further block down: a pillar to build before the trunk is in reach at all. */
+    public static final int MORE_DOWN = 10;
+    /** A drop past {@link #REACH}, or a side no body could stand on. */
+    public static final int IMPASSABLE = 100;
 
     public enum Verdict {
         /** Air at ground level over something solid: walk straight up. */
@@ -76,6 +95,18 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             return feet == null ? 0 : feet.y() - cell.y();
         }
 
+        /** Lower is better — the ladder on the class. {@link Approach#IMPASSABLE} for a refusal. */
+        public int score() {
+            if (!verdict.approachable()) {
+                return IMPASSABLE;
+            }
+            int rise = rise();
+            int climb = rise > 0 ? STEP_UP + (rise - 1) * MORE_UP
+                    : rise < 0 ? STEP_DOWN + (-rise - 1) * MORE_DOWN
+                    : 0;
+            return climb + leaves.size() * LEAF_COST;
+        }
+
         /** {@code "up 1"}, {@code "down 2"}, {@code "leaves"}, {@code "open"} — the journal's word. */
         public String describe() {
             return switch (verdict) {
@@ -119,14 +150,29 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
         return count;
     }
 
-    /** {@code "N open · E up 1 · S down 2 · W leaves"} — one line for a journal or a readout. */
+    /**
+     * The side to take: the lowest {@link Side#score}, ties to compass order. Empty when no side
+     * could be stood on at all.
+     */
+    public Optional<Side> best() {
+        Side best = null;
+        for (Side side : sides) {
+            if (side.verdict().approachable() && (best == null || side.score() < best.score())) {
+                best = side;
+            }
+        }
+        return Optional.ofNullable(best);
+    }
+
+    /** {@code "N open (0) · E up 1 (2) · S down 2 (13) · W leaves (2)"} — one line for a journal or a readout. */
     public String summary() {
         StringBuilder out = new StringBuilder();
         for (Side side : sides) {
             if (out.length() > 0) {
                 out.append(" · ");
             }
-            out.append(bearing(side.cell())).append(' ').append(side.describe());
+            out.append(bearing(side.cell())).append(' ').append(side.describe())
+                    .append(" (").append(side.score()).append(')');
         }
         return standing ? out.toString() : "no log at the anchor; " + out;
     }

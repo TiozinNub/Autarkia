@@ -45,7 +45,7 @@ class FellTreeTest {
         for (int i = 0; i < 3 * FellTree.RESURVEY_TICKS; i++) {
             assertEquals(TaskStatus.RUNNING, task.tick(ctx), "step one never ends on its own");
         }
-        assertTrue(task.describe().endsWith("N open · E open · S open · W open"),
+        assertTrue(task.describe().endsWith("N open (0) · E open (0) · S open (0) · W open (0)"),
                 "the readout carries the verdicts: " + task.describe());
     }
 
@@ -55,7 +55,7 @@ class FellTreeTest {
         for (int i = 0; i < FellTree.RESURVEY_TICKS + 1; i++) {
             task.tick(ctx);
         }
-        assertEquals(List.of("approach — N open · E open · S open · W open"), said(),
+        assertEquals(List.of("approach — N open (0) · E open (0) · S open (0) · W open (0)"), said(),
                 "a re-read that says the same thing says nothing");
 
         ctx.percepts.blocks.set(1, BASE, 0, BlockKind.OTHER);
@@ -63,7 +63,7 @@ class FellTreeTest {
             task.tick(ctx);
         }
         assertEquals(2, said().size());
-        assertEquals("approach — N open · E up 1 · S open · W open", said().get(1));
+        assertEquals("approach — N open (0) · E up 1 (2) · S open (0) · W open (0)", said().get(1));
     }
 
     @Test

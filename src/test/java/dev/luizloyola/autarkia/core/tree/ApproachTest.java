@@ -50,8 +50,82 @@ class ApproachTest {
             assertEquals(Approach.Verdict.OPEN, side.verdict());
             assertEquals(side.cell(), side.feet(), "an open side is stood on where it is");
         }
-        assertEquals("N open · E open · S open · W open", approach.summary(),
+        assertEquals("N open (0) · E open (0) · S open (0) · W open (0)", approach.summary(),
                 "compass order, north first, so two readouts of one tree read the same");
+        assertEquals("N", approach.bearing(approach.best().orElseThrow().cell()),
+                "all equal, the first in compass order is taken");
+    }
+
+    @Test
+    void aClearLevelSideCostsNothingAndEveryStepCostsMore() {
+        trunk(0, 0);
+        assertEquals(0, side(survey(), "E").score());
+
+        probe.set(1, BASE, 0, BlockKind.OTHER);
+        assertEquals(Approach.STEP_UP, side(survey(), "E").score(), "one up: a hop");
+        probe.set(1, BASE + 1, 0, BlockKind.OTHER);
+        assertEquals(Approach.STEP_UP + Approach.MORE_UP, side(survey(), "E").score());
+        for (int y = BASE + 2; y < BASE + Approach.REACH; y++) {
+            probe.set(1, y, 0, BlockKind.OTHER);
+        }
+        assertEquals(Approach.STEP_UP + 4 * Approach.MORE_UP, side(survey(), "E").score(),
+                "five up, still a step, dearly");
+
+        probe.set(0, BASE - 1, -1, BlockKind.AIR);
+        assertEquals(Approach.STEP_DOWN, side(survey(), "N").score(), "one down: a step");
+        probe.set(0, BASE - 2, -1, BlockKind.AIR);
+        assertEquals(Approach.STEP_DOWN + Approach.MORE_DOWN, side(survey(), "N").score(),
+                "two down already means pillaring back up to the trunk");
+        for (int y = BASE - Approach.REACH; y < BASE - 2; y++) {
+            probe.set(0, y, -1, BlockKind.AIR);
+        }
+        assertEquals(Approach.STEP_DOWN + 4 * Approach.MORE_DOWN, side(survey(), "N").score());
+        probe.set(0, BASE - Approach.REACH - 1, -1, BlockKind.AIR);
+        assertEquals(Approach.IMPASSABLE, side(survey(), "N").score(), "past reach: a drop");
+    }
+
+    @Test
+    void leavesCostALittleOnTopOfTheClimb() {
+        trunk(0, 0);
+        probe.set(0, BASE, 1, BlockKind.LEAVES);
+        probe.set(0, BASE + 1, 1, BlockKind.LEAVES);
+        assertEquals(2 * Approach.LEAF_COST, side(survey(), "S").score());
+
+        probe.set(0, BASE, -1, BlockKind.LEAVES);
+        probe.set(0, BASE - 1, -1, BlockKind.AIR);
+        assertEquals(Approach.STEP_DOWN + Approach.LEAF_COST, side(survey(), "N").score(),
+                "a leaf over a one-deep dip: the step, plus the leaf");
+    }
+
+    @Test
+    void aSideNobodyCouldStandOnIsImpassableAndNeverBest() {
+        trunk(0, 0);
+        probe.set(1, BASE, 0, BlockKind.WATER);
+        probe.set(0, BASE - 1, 1, BlockKind.WATER);
+        probe.markUnloaded(-1, 0);
+        probe.set(0, BASE, -1, BlockKind.OTHER);
+        probe.set(0, BASE + 2, -1, BlockKind.OTHER);
+
+        Approach approach = survey();
+        for (Approach.Side side : approach.sides()) {
+            assertEquals(Approach.IMPASSABLE, side.score(), side.describe());
+        }
+        assertTrue(approach.best().isEmpty(), "no way in");
+    }
+
+    @Test
+    void theBestSideIsTheCheapest() {
+        trunk(0, 0);
+        probe.set(0, BASE - 1, -1, BlockKind.AIR);   // N down 1
+        probe.set(1, BASE, 0, BlockKind.OTHER);      // E up 1
+        probe.set(0, BASE, 1, BlockKind.LEAVES);     // S one leaf
+        probe.set(-1, BASE, 0, BlockKind.WATER);     // W water
+
+        Approach approach = survey();
+        assertEquals("N down 1 (3) · E up 1 (2) · S leaves (2) · W water (100)",
+                approach.summary());
+        assertEquals("E", approach.bearing(approach.best().orElseThrow().cell()),
+                "a hop and one leaf tie; the hop comes first on the compass");
     }
 
     @Test
@@ -184,8 +258,8 @@ class ApproachTest {
         assertEquals(4, approach.base().size(), "a 2×2 stump is one base");
         assertEquals(8, approach.sides().size());
         assertEquals(8, approach.approachable());
-        assertEquals("N open · N open · E open · E open · S open · S open · W open · W open",
-                approach.summary());
+        assertEquals("N open (0) · N open (0) · E open (0) · E open (0) · S open (0) · S open (0)"
+                + " · W open (0) · W open (0)", approach.summary());
     }
 
     @Test
