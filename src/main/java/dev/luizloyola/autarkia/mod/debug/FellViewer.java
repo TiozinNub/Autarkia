@@ -24,8 +24,8 @@ import net.minecraft.server.level.ServerPlayer;
  * How the fellers around the watching player read the ground beside their trees — every running
  * {@link FellTree}'s {@link Approach}, drawn as gizmo boxes: the base white-rimmed, each ring cell
  * in its verdict's colour, the feet cell filled where there is one, and the leaves in the way
- * outlined. A label per side says the verdict and its score, the best side marked; one over the
- * stump names the side the body would take.
+ * outlined. A label per side says the verdict and its score, the side being taken marked and its
+ * feet cell white-rimmed; one over the stump says what the body is doing about it.
  *
  * <p>Transport is Anima's cell overlay ({@link CellOverlays}). Same shape as {@link BoardViewer}:
  * a watcher set per server, a redraw cadence, gone on stop.
@@ -97,9 +97,9 @@ public final class FellViewer {
                 player.getBoundingBox().inflate(RANGE), Person::isAlive)) {
             person.brain().executor().currentPrimitive()
                     .filter(FellTree.class::isInstance)
-                    .flatMap(task -> ((FellTree) task).approach())
-                    .ifPresent(approach -> paint(person.getName().getString(), approach,
-                            groups, labels));
+                    .map(FellTree.class::cast)
+                    .filter(fell -> fell.approach().isPresent())
+                    .ifPresent(fell -> paint(person.getName().getString(), fell, groups, labels));
         }
         if (groups.isEmpty()) {
             CellOverlays.clear(player, SOURCE); // nobody felling should show nothing, not linger
@@ -109,19 +109,21 @@ public final class FellViewer {
                 new CellOverlayPayload(SOURCE, TTL_TICKS, groups, List.of(), List.of(), labels));
     }
 
-    private static void paint(String feller, Approach approach,
+    private static void paint(String feller, FellTree fell,
                               List<CellOverlayPayload.Group> groups,
                               List<CellOverlayPayload.Label> labels) {
+        Approach approach = fell.approach().orElseThrow();
         groups.add(new CellOverlayPayload.Group(WHITE, BASE_WIDTH, BASE_FILL, true,
                 cells(approach.base())));
-        Approach.Side best = approach.best().orElse(null);
+        Pos chosen = fell.chosen().orElse(null);
         for (Approach.Side side : approach.sides()) {
+            boolean taken = side.cell().equals(chosen);
             int stroke = colour(side.verdict());
             int fill = (stroke & 0x00FFFFFF) | 0x30000000;
             groups.add(new CellOverlayPayload.Group(stroke, WIDTH, fill, true,
                     List.of(at(side.cell()))));
-            if (side.feet() != null && !side.feet().equals(side.cell())) {
-                groups.add(new CellOverlayPayload.Group(stroke, WIDTH,
+            if (side.feet() != null && (taken || !side.feet().equals(side.cell()))) {
+                groups.add(new CellOverlayPayload.Group(taken ? WHITE : stroke, WIDTH,
                         (stroke & 0x00FFFFFF) | 0x70000000, true, List.of(at(side.feet()))));
             }
             if (!side.leaves().isEmpty()) {
@@ -129,15 +131,12 @@ public final class FellViewer {
                         cells(side.leaves())));
             }
             labels.add(new CellOverlayPayload.Label(
-                    (side == best ? "▶ " : "") + approach.bearing(side.cell()) + " "
+                    (taken ? "▶ " : "") + approach.bearing(side.cell()) + " "
                             + side.describe() + " (" + Approach.fmt(side.score()) + ")", stroke,
                     new BlockPos(side.cell().x(), side.cell().y() + 2, side.cell().z())));
         }
         Pos anchor = approach.anchor();
-        labels.add(new CellOverlayPayload.Label(
-                feller + ": " + (best == null ? "no way in"
-                        : "take " + approach.bearing(best.cell()) + " ("
-                                + Approach.fmt(best.score()) + ")"),
+        labels.add(new CellOverlayPayload.Label(feller + ": " + fell.phase(),
                 WHITE, new BlockPos(anchor.x(), anchor.y() + 3, anchor.z())));
     }
 
