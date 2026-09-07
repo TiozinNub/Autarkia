@@ -18,7 +18,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The eighth chop so far: look at the ground beside the stump, take the cheapest side, walk to
- * it, clear that side's leaves as soon as the arm reaches them, stand there. Never ends.
+ * it, clear that side's leaves as soon as the arm reaches them, plan the climb, open the trunk
+ * and step in when the top is out of reach from the ground. Never ends.
  */
 class FellTreeTest {
 
@@ -30,8 +31,13 @@ class FellTreeTest {
     private final FakeContext ctx = new FakeContext();
     private final FellTree task = new FellTree(ANCHOR);
 
+    /** A seven-log trunk: its top is out of reach from the ground beside it. */
     private void trunk() {
-        for (int y = BASE; y < BASE + 6; y++) {
+        trunk(7);
+    }
+
+    private void trunk(int logs) {
+        for (int y = BASE; y < BASE + logs; y++) {
             ctx.percepts.blocks.set(0, y, 0, BlockKind.LOG);
         }
     }
@@ -125,13 +131,69 @@ class FellTreeTest {
         ctx.percepts.position = SOUTH;
         assertEquals(TaskStatus.RUNNING, task.tick(ctx));
         assertEquals("at the tree, S side", task.phase());
+        assertEquals(List.of("plan — open 2 · step in · 4 to break · no rise"), said("plan"));
 
         ctx.mover.setState(MoveState.IDLE); // the legs rest after arriving, as they do
+        task.tick(ctx);
+        assertEquals("opening the trunk", task.phase());
+        assertEquals(1, ctx.mover.moveToCalls, "arrived is arrived; no shuffling");
+    }
+
+    @Test
+    void opensTheTrunkAndStepsInWhenTheTopIsOutOfReach() {
+        trunk();
+        standSouth();
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.ARRIVED);
+        ctx.percepts.position = SOUTH;
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.IDLE);
+
+        Pos second = new Pos(0, BASE + 1, 0);
+        Pos third = new Pos(0, BASE + 2, 0);
+        task.tick(ctx);
+        assertEquals(List.of(second), ctx.breaker.targets, "the log above the base first");
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(second.x(), second.y(), second.z());
+        task.tick(ctx);
+        assertEquals(List.of(second, third), ctx.breaker.targets);
+        assertEquals(List.of("broke a log at (0, 65, 0)"), said("broke"));
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(third.x(), third.y(), third.z());
+        task.tick(ctx);
+        assertEquals("stepping in", task.phase());
+        assertEquals(2, ctx.mover.moveToCalls);
+        assertEquals(second, new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ),
+                "onto the base log: feet one up, in the trunk's column");
+
+        ctx.mover.setState(MoveState.ARRIVED);
+        ctx.percepts.position = second;
+        task.tick(ctx);
+        assertEquals("in the trunk — open 2 · step in · 4 to break · no rise", task.phase());
+        assertEquals(List.of("in the trunk — open 2 · step in · 4 to break · no rise"), said("in the"));
+
+        ctx.mover.setState(MoveState.IDLE);
         for (int i = 0; i < 3 * FellTree.RESURVEY_TICKS; i++) {
             assertEquals(TaskStatus.RUNNING, task.tick(ctx));
         }
-        assertEquals(1, ctx.mover.moveToCalls, "arrived is arrived; no shuffling");
-        assertEquals("at the tree, S side", task.phase());
+        assertEquals(2, ctx.breaker.targets.size(), "the plan is planned, not carried out");
+        assertEquals(2, ctx.mover.moveToCalls);
+    }
+
+    @Test
+    void aShortTreeIsPlannedFromBesideAndNobodyStepsIn() {
+        trunk(4);
+        standSouth();
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.ARRIVED);
+        ctx.percepts.position = SOUTH;
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.IDLE);
+        task.tick(ctx);
+
+        assertEquals("at the tree — 4 to break from beside", task.phase());
+        assertTrue(ctx.breaker.targets.isEmpty(), "nothing broken yet");
+        assertEquals(1, ctx.mover.moveToCalls);
     }
 
     @Test
@@ -221,6 +283,7 @@ class FellTreeTest {
         ctx.percepts.position = feetLeaf;
         task.tick(ctx);
         assertEquals("at the tree, S side", task.phase());
+        assertEquals(2, ctx.breaker.targets.size(), "the plan comes first; the trunk waits a tick");
     }
 
     @Test

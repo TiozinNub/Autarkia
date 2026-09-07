@@ -4,6 +4,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.mod.debug.CellOverlays;
 import dev.luizloyola.anima.mod.net.CellOverlayPayload;
 import dev.luizloyola.autarkia.core.tree.Approach;
+import dev.luizloyola.autarkia.core.tree.Climb;
 import dev.luizloyola.autarkia.core.tree.FellTree;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayList;
@@ -25,7 +26,9 @@ import net.minecraft.server.level.ServerPlayer;
  * {@link FellTree}'s {@link Approach}, drawn as gizmo boxes: the base white-rimmed, each ring cell
  * in its verdict's colour, the feet cell filled where there is one, and the leaves in the way
  * outlined. A label per side says the verdict and its score, the side being taken marked and its
- * feet cell white-rimmed; one over the stump says what the body is doing about it.
+ * feet cell white-rimmed; one over the stump says what the body is doing about it. Once there is
+ * a {@link Climb}, the logs it opens are orange, the cell it stands in white, the logs it breaks
+ * from each level amber, and the blocks it places on the way up blue.
  *
  * <p>Transport is Anima's cell overlay ({@link CellOverlays}). Same shape as {@link BoardViewer}:
  * a watcher set per server, a redraw cadence, gone on stop.
@@ -51,6 +54,12 @@ public final class FellViewer {
     private static final int WHITE = 0xFFFFFFFF;
     private static final int BASE_FILL = 0x40FFFFFF;
     private static final int LEAF_STROKE = 0xC0E0E040;
+    private static final int OPEN_STROKE = 0xFFFF8C00;
+    private static final int OPEN_FILL = 0x70FF8C00;
+    private static final int BREAK_STROKE = 0xC0FFC040;
+    private static final int BREAK_FILL = 0x30FFC040;
+    private static final int RISE_STROKE = 0xFF4090FF;
+    private static final int RISE_FILL = 0x604090FF;
 
     private static final Map<MinecraftServer, Set<UUID>> WATCHERS = new HashMap<>();
 
@@ -135,9 +144,42 @@ public final class FellViewer {
                             + side.describe() + " (" + Approach.fmt(side.score()) + ")", stroke,
                     new BlockPos(side.cell().x(), side.cell().y() + 2, side.cell().z())));
         }
+        fell.climb().ifPresent(climb -> paint(climb, groups, labels));
         Pos anchor = approach.anchor();
         labels.add(new CellOverlayPayload.Label(feller + ": " + fell.phase(),
                 WHITE, new BlockPos(anchor.x(), anchor.y() + 3, anchor.z())));
+    }
+
+    private static void paint(Climb climb, List<CellOverlayPayload.Group> groups,
+                              List<CellOverlayPayload.Label> labels) {
+        if (!climb.stepIn().isEmpty()) {
+            groups.add(new CellOverlayPayload.Group(OPEN_STROKE, WIDTH, OPEN_FILL, true,
+                    cells(climb.stepIn())));
+        }
+        groups.add(new CellOverlayPayload.Group(WHITE, WIDTH, BASE_FILL, true,
+                List.of(at(climb.stand()))));
+        List<BlockPos> breaks = new ArrayList<>();
+        List<BlockPos> rises = new ArrayList<>();
+        for (Climb.Level level : climb.levels()) {
+            breaks.addAll(cells(level.breaks()));
+            if (level.rise()) {
+                rises.add(new BlockPos(climb.stand().x(), level.feetY(), climb.stand().z()));
+            }
+        }
+        if (!breaks.isEmpty()) {
+            groups.add(new CellOverlayPayload.Group(BREAK_STROKE, THIN, BREAK_FILL, true, breaks));
+        }
+        if (!rises.isEmpty()) {
+            groups.add(new CellOverlayPayload.Group(RISE_STROKE, WIDTH, RISE_FILL, true, rises));
+        }
+        int top = climb.stand().y();
+        for (Climb.Level level : climb.levels()) {
+            for (Pos log : level.breaks()) {
+                top = Math.max(top, log.y());
+            }
+        }
+        labels.add(new CellOverlayPayload.Label("plan: " + climb.describe(), OPEN_STROKE,
+                new BlockPos(climb.stand().x(), top + 2, climb.stand().z())));
     }
 
     /** Verdict → paint. Green is walkable now, blue and cyan are walkable at another height,
