@@ -31,6 +31,12 @@ import org.jspecify.annotations.Nullable;
  * Bearings are compass directions from the trunk: a body arriving from the south reaches the
  * {@code S} cell first.
  *
+ * <p>Each side also says whether a body could <b>hop up</b> from it — one more clear cell over
+ * its head. A roof at head height plus one leaves room for a body but not for a hop, and the
+ * side reads {@code low}: still a way in, but the trunk is dug open at the body's own level and
+ * walked into rather than climbed onto (decision: Luiz, 2026-09-09). A leaf there is listed with
+ * the rest, since clearing it is what makes the hop possible.
+ *
  * <p>Read through {@link BlockKind} alone, so a fence and a lava pool both pass for solid ground
  * here. The terrain grid's finer answer is the next rung, not this one.
  */
@@ -93,12 +99,14 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
 
     /**
      * One side of the stump: the ring {@code cell} at base height, its verdict, where the feet
-     * would go ({@code null} when nowhere), the leaves standing in the body's way there, and how
-     * much {@code farther} from the body it is than the nearest side — 0 for the nearest, 1 for
-     * the farthest, in proportion between, 0 for all when every side is as far.
+     * would go ({@code null} when nowhere), the leaves standing in the body's way there (the one
+     * over its head included), whether there is {@code jumpRoom} — a clear cell over the head
+     * once the leaves are gone, which a hop up needs — and how much {@code farther} from the body
+     * it is than the nearest side — 0 for the nearest, 1 for the farthest, in proportion between,
+     * 0 for all when every side is as far.
      */
     public record Side(Pos cell, Verdict verdict, @Nullable Pos feet, List<Pos> leaves,
-                       double farther) {
+                       boolean jumpRoom, double farther) {
         public Side {
             leaves = List.copyOf(leaves);
             if (farther < 0 || farther > 1) {
@@ -123,15 +131,19 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             return climb + leaves.size() * LEAF_COST + farther * FAR_COST;
         }
 
-        /** {@code "up 1"}, {@code "down 2"}, {@code "leaves"}, {@code "open"} — the journal's word. */
+        /**
+         * {@code "up 1"}, {@code "down 2"}, {@code "leaves"}, {@code "open"} — the journal's word;
+         * {@code "open, low"} where a body fits but a hop does not.
+         */
         public String describe() {
-            return switch (verdict) {
+            String word = switch (verdict) {
                 case RAISED -> "up " + rise();
                 case SUNKEN -> "down " + -rise();
                 case LEAVES -> rise() == 0 ? "leaves"
                         : "leaves " + (rise() > 0 ? "up " + rise() : "down " + -rise());
                 default -> verdict.word;
             };
+            return verdict.approachable() && !jumpRoom ? word + ", low" : word;
         }
     }
 
@@ -303,7 +315,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             BlockKind top;
             while ((top = probe.at(x, y, z)) == BlockKind.OTHER) {
                 if (y - ground >= REACH) {
-                    return new Side(cell, Verdict.TOO_HIGH, null, List.of(), farther);
+                    return new Side(cell, Verdict.TOO_HIGH, null, List.of(), false, farther);
                 }
                 y++;
             }
@@ -320,7 +332,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
                     return refused(cell, below, farther);
                 }
                 if (ground - y >= REACH) {
-                    return new Side(cell, Verdict.TOO_DEEP, null, List.of(), farther);
+                    return new Side(cell, Verdict.TOO_DEEP, null, List.of(), false, farther);
                 }
                 y--;
             }
@@ -336,7 +348,18 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
                 leaves.add(new Pos(x, y, z));
             } else if (kind != BlockKind.AIR) {
                 return new Side(cell, kind == BlockKind.UNKNOWN ? Verdict.UNSEEN : Verdict.NO_ROOM,
-                        null, leaves, farther);
+                        null, leaves, false, farther);
+            }
+        }
+        // One more cell over the head, which a hop up needs: a leaf there is listed with the
+        // rest, anything else solid leaves room for the body but not for the hop.
+        int over = feetY + bodyCells;
+        boolean jumpRoom = true;
+        if (over > top) {
+            BlockKind overhead = probe.at(x, over, z);
+            jumpRoom = overhead == BlockKind.AIR || overhead == BlockKind.LEAVES;
+            if (overhead == BlockKind.LEAVES) {
+                leaves.add(new Pos(x, over, z));
             }
         }
         Pos feet = new Pos(x, feetY, z);
@@ -344,13 +367,13 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
                 : feetY > ground ? Verdict.RAISED
                 : feetY < ground ? Verdict.SUNKEN
                 : Verdict.OPEN;
-        return new Side(cell, verdict, feet, leaves, farther);
+        return new Side(cell, verdict, feet, leaves, jumpRoom, farther);
     }
 
     private static Side refused(Pos cell, BlockKind what, double farther) {
         Verdict verdict = what == BlockKind.LOG ? Verdict.WOOD
                 : what == BlockKind.WATER ? Verdict.WATER
                 : Verdict.UNSEEN;
-        return new Side(cell, verdict, null, List.of(), farther);
+        return new Side(cell, verdict, null, List.of(), false, farther);
     }
 }

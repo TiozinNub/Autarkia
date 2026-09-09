@@ -290,6 +290,32 @@ class ApproachTest {
     }
 
     @Test
+    void aRoofOverTheHeadLeavesRoomForABodyButNotAHop() {
+        trunk(0, 0);
+        probe.set(1, BASE + 2, 0, BlockKind.OTHER);
+
+        Approach approach = survey();
+        Approach.Side east = side(approach, "E");
+        assertEquals(Approach.Verdict.OPEN, east.verdict(), "still a way in");
+        assertFalse(east.jumpRoom());
+        assertEquals("open, low", east.describe());
+        assertTrue(side(approach, "W").jumpRoom());
+        assertEquals(east.score(), side(approach, "W").score(), "no dearer for it");
+    }
+
+    @Test
+    void aLeafOverTheHeadIsListedSoTheHopCanHappen() {
+        trunk(0, 0);
+        probe.set(1, BASE + 2, 0, BlockKind.LEAVES);
+
+        Approach.Side east = side(survey(), "E");
+        assertEquals(Approach.Verdict.LEAVES, east.verdict());
+        assertEquals(List.of(new Pos(1, BASE + 2, 0)), east.leaves());
+        assertTrue(east.jumpRoom(), "once it is gone");
+        assertEquals("leaves", east.describe());
+    }
+
+    @Test
     void woodOnTopOfTheStepIsNotAPlaceToStand() {
         trunk(0, 0);
         probe.set(1, BASE, 0, BlockKind.OTHER);

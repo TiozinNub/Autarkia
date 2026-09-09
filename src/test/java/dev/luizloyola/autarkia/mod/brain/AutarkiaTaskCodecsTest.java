@@ -144,7 +144,7 @@ class AutarkiaTaskCodecsTest {
     void aFellTreeMidClimbComesBackWhereItWas() {
         var anchor = new dev.luizloyola.anima.core.brain.sense.Pos(208, -60, 0);
         var stand = new dev.luizloyola.anima.core.brain.sense.Pos(208, -59, 0);
-        var climb = new dev.luizloyola.autarkia.core.tree.Climb(stand, -59, true,
+        var climb = new dev.luizloyola.autarkia.core.tree.Climb(stand, -59, true, false,
                 java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(208, -59, 0)),
                 java.util.List.of(new dev.luizloyola.autarkia.core.tree.Climb.Level(-59,
                         java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(208, -57, 0)),

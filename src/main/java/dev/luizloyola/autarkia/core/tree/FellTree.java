@@ -23,11 +23,12 @@ import org.jspecify.annotations.Nullable;
  * its feet cell, and clear the leaves that side lists — only those — beginning on any of them the
  * moment the arm can reach it, mid-walk included. Then work out where the arm has to be to reach
  * every log ({@link Climb}), counting the trunk from the cell it stands in: if the top is out of
- * reach from there, open the body's height of trunk above that cell and step in onto whatever is
+ * reach from there, open the body's height of trunk above that cell and hop up onto whatever is
  * at its own height in the column — the base log, the log above it where the ground is raised,
- * the dirt under the base where it is sunken. Then stand there with the plan. It fells nothing
- * yet and never ends: RUNNING for as long as it is left in the slot, so each step can be watched
- * in-world ({@code /autarkia tree approach}) and the ground changed under it.
+ * the dirt under the base where it is sunken — or, where a roof over the head leaves no room to
+ * hop, open the trunk at its own level and walk in flat. Then stand there with the plan. It fells
+ * nothing yet and never ends: RUNNING for as long as it is left in the slot, so each step can be
+ * watched in-world ({@code /autarkia tree approach}) and the ground changed under it.
  *
  * <p><b>The world holds the progress, the save holds the stage.</b> The survey is re-read every
  * second, the walk is re-ordered when the legs give up, and a block is only ever begun on because
@@ -198,12 +199,14 @@ public final class FellTree implements PrimitiveTask {
             ctx.actuators().mover().stop();
             return; // and keep looking: the ground may change
         }
-        // Already standing where the plan would put it — in the trunk's column, on the step up —
-        // after a preemption, or a reload that lost its plan. Plan from here; walking out to walk
-        // back in is not a step. Anywhere else in the column (on top of the tree, say) is a walk.
+        // Already standing where the plan would put it — in the trunk's column, on the step up or
+        // dug in level with it — after a preemption, or a reload that lost its plan. Plan from
+        // here, the way it got in; walking out to walk back in is not a step. Anywhere else in the
+        // column (on top of the tree, say) is a walk.
         Pos at = ctx.percepts().position();
-        if (at.x() == anchor.x() && at.z() == anchor.z() && at.y() == side.feet().y() + 1) {
-            plan(ctx, side);
+        int rise = at.y() - side.feet().y();
+        if (at.x() == anchor.x() && at.z() == anchor.z() && (rise == 0 || rise == 1)) {
+            plan(ctx, side, rise == 1);
             if (stage == Stage.OPEN) {
                 open(ctx);
             }
@@ -220,16 +223,16 @@ public final class FellTree implements PrimitiveTask {
             phase = "clearing leaves at " + label;
             return;
         }
-        plan(ctx, side);
+        plan(ctx, side, side.jumpRoom());
         phase = "at the tree, " + label + " side";
     }
 
     /** Work out the climb from beside the stump, and which stage it starts. */
-    private void plan(BrainContext ctx, Approach.Side side) {
+    private void plan(BrainContext ctx, Approach.Side side, boolean jumpRoom) {
         int bodyCells = MoveCapabilities.of(ctx.profile()).clearCells();
         BlockProbe blocks = ctx.percepts().blocks();
         climb = Climb.plan(Climb.Arm.of(ctx.percepts()), anchor,
-                Climb.column(anchor, blocks, bodyCells), blocks, side.feet(), bodyCells);
+                Climb.column(anchor, blocks, bodyCells), blocks, side.feet(), jumpRoom, bodyCells);
         say(ctx, "plan — " + climb.describe());
         stage = climb.stepsIn() ? Stage.OPEN : Stage.PLANNED;
     }

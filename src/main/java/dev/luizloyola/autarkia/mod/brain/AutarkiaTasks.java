@@ -44,6 +44,7 @@ public final class AutarkiaTasks {
             POS.fieldOf("stand").forGetter(Climb::stand),
             Codec.INT.fieldOf("need_feet_y").forGetter(Climb::needFeetY),
             Codec.BOOL.fieldOf("steps_in").forGetter(Climb::stepsIn),
+            Codec.BOOL.optionalFieldOf("digs_in", false).forGetter(Climb::digsIn),
             POS.listOf().fieldOf("step_in").forGetter(Climb::stepIn),
             LEVEL.listOf().fieldOf("levels").forGetter(Climb::levels),
             POS.listOf().optionalFieldOf("last", List.of()).forGetter(Climb::last),

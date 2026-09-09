@@ -366,7 +366,7 @@ class FellTreeTest {
         openedTrunk();
         Pos stand = new Pos(0, BASE + 1, 0);
         Climb climb = Climb.plan(Climb.Arm.of(ctx.percepts), ANCHOR,
-                Climb.column(ANCHOR, ctx.percepts.blocks, 2), ctx.percepts.blocks, SOUTH, 2);
+                Climb.column(ANCHOR, ctx.percepts.blocks, 2), ctx.percepts.blocks, SOUTH, true, 2);
         FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.ENTER,
                 java.util.Optional.of(new Pos(0, BASE, 1)), java.util.Optional.of(climb));
         ctx.percepts.position = SOUTH;
@@ -487,6 +487,48 @@ class FellTreeTest {
         task.tick(ctx);
         assertEquals(List.of("cleared a leaf at " + at(leaf)), said("cleared"));
         assertEquals("stepping in", task.phase());
+    }
+
+    // ── no room to hop ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aRoofTwoOverTheFeetMeansDiggingInRatherThanHoppingUp() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        ctx.percepts.blocks.set(0, BASE + 2, 1, BlockKind.OTHER); // room for a body, not a hop
+        task.tick(ctx);
+        assertEquals(List.of("going S — open, low (0)"), said("going"));
+        arriveAt(SOUTH);
+
+        Pos second = new Pos(0, BASE + 1, 0);
+        task.tick(ctx);
+        assertEquals(List.of(ANCHOR), ctx.breaker.targets, "the stump, at its own feet height, first");
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(ANCHOR.x(), ANCHOR.y(), ANCHOR.z());
+        task.tick(ctx);
+        assertEquals(List.of(ANCHOR, second), ctx.breaker.targets);
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(second.x(), second.y(), second.z());
+        task.tick(ctx);
+        assertEquals("stepping in", task.phase());
+        assertEquals(ANCHOR, lastOrder(), "flat, into the cell the stump stood in");
+
+        arriveAt(ANCHOR);
+        assertEquals("in the trunk — open 2 · dig in · 5 to break · 1 rise", task.phase());
+    }
+
+    @Test
+    void aBodyDugInPlansFromItsOwnLevel() {
+        for (int y = BASE + 2; y < BASE + 7; y++) {
+            ctx.percepts.blocks.set(0, y, 0, BlockKind.LOG); // the stump and the log over it dug
+        }
+        ctx.percepts.position = ANCHOR; // feet where the stump stood
+
+        task.tick(ctx);
+        assertEquals(0, ctx.mover.moveToCalls, "no walking out to walk back in");
+        assertEquals(List.of("plan — open 0 · dig in · 5 to break · 1 rise"), said("plan"));
+        assertEquals(FellTree.Stage.PLANNED, task.stage());
     }
 
     // ── what the arm cannot do ───────────────────────────────────────────────────────────────

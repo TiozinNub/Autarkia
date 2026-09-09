@@ -50,7 +50,11 @@ class ClimbTest {
     }
 
     private static Climb plan(List<Pos> logs, Pos beside) {
-        return Climb.plan(ARM, STUMP, logs, world(logs), beside, BODY);
+        return plan(logs, beside, true);
+    }
+
+    private static Climb plan(List<Pos> logs, Pos beside, boolean jumpRoom) {
+        return Climb.plan(ARM, STUMP, logs, world(logs), beside, jumpRoom, BODY);
     }
 
     @Test
@@ -183,7 +187,7 @@ class ClimbTest {
         FakeProbe world = world(logs);
         world.set(0, BASE + 2, 0, BlockKind.LEAVES);
 
-        Climb climb = Climb.plan(ARM, STUMP, logs, world, BESIDE, BODY);
+        Climb climb = Climb.plan(ARM, STUMP, logs, world, BESIDE, true, BODY);
         assertEquals(List.of(new Pos(0, BASE + 1, 0), new Pos(0, BASE + 2, 0)), climb.stepIn());
         assertEquals("open 2 · step in · 4 to break · no rise · then 1 from the ground",
                 climb.describe());
@@ -232,6 +236,42 @@ class ClimbTest {
         assertTrue(climb.last().isEmpty(), "the dirt was never part of the tree");
         assertTrue(climb.complete());
         assertEquals("open 2 · step in · 5 to break · 1 rise", climb.describe());
+    }
+
+    // ── no room to hop ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aLowSideDigsInAtItsOwnLevel() {
+        Climb climb = plan(column(7), BESIDE, false);
+
+        assertTrue(climb.stepsIn());
+        assertTrue(climb.digsIn());
+        assertEquals(List.of(STUMP, new Pos(0, BASE + 1, 0)), climb.stepIn(),
+                "the trunk is dug open at the body's own height, stump included");
+        assertEquals(STUMP, climb.stand(), "and it walks in flat, onto the dirt under the stump");
+        assertTrue(climb.last().isEmpty(), "nothing of the tree is left underfoot");
+        assertTrue(climb.complete());
+        assertEquals("open 2 · dig in · 5 to break · 1 rise", climb.describe());
+    }
+
+    @Test
+    void aLowSideOnRaisedGroundDigsThroughTheSecondLogAndKeepsTheStumpForLast() {
+        Climb climb = plan(column(9), RAISED, false);
+
+        assertTrue(climb.digsIn());
+        assertEquals(List.of(new Pos(0, BASE + 1, 0), new Pos(0, BASE + 2, 0)), climb.stepIn());
+        assertEquals(new Pos(0, BASE + 1, 0), climb.stand(), "level with the ground beside");
+        assertEquals(List.of(STUMP), climb.last());
+        assertEquals("open 2 · dig in · 6 to break · 2 rises · then 1 from the ground",
+                climb.describe());
+    }
+
+    @Test
+    void aLowSideOnSunkenGroundHasNothingToDigInto() {
+        Climb climb = plan(column(7), SUNKEN, false);
+
+        assertFalse(climb.stepsIn(), "the cell at its own level is dirt, and the axe does not dig");
+        assertTrue(climb.describe().endsWith("no footing to step in"), climb.describe());
     }
 
     @Test

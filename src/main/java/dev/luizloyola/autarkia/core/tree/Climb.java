@@ -17,31 +17,37 @@ import java.util.OptionalInt;
  * feet height in the column from which the arm reaches it with nothing in the way.
  *
  * <p>If any of those logs is out of the arm's reach from beside, the trunk is <b>opened</b> — the
- * body's height of cells above the step up comes out — and the body <b>steps in</b> onto it. From
- * there the plan goes up a level at a time: break every log the arm reaches, and if any remain,
- * rise one (a carried block placed underfoot) and look again. If everything is in reach from
- * beside, it is all broken from there and nobody steps anywhere.
+ * body's height of cells above the step up comes out — and the body <b>hops up</b> onto it. Where
+ * the side has no room for a hop (a roof at head height plus one; {@link Approach.Side#jumpRoom})
+ * the body <b>digs in</b> instead (decision: Luiz, 2026-09-09): the trunk is opened at its own
+ * level, step up included, it walks in flat, and goes up from there. From inside, either way, the
+ * plan goes up a level at a time: break every log the arm reaches, and if any remain, rise one (a
+ * carried block placed underfoot) and look again. If everything is in reach from beside, it is
+ * all broken from there and nobody steps anywhere.
  *
- * <p>Whatever wood is at or below the step up — the stump, and the base too where the ground is
- * raised — is never in the levels: it is the floor while the body is in the trunk and comes out
- * <b>last</b>, from the ground, highest first. A step up that is ground rather than wood is left
- * alone; it was never part of the tree. Ground more than a block below the base gives the body
- * nothing to step up onto without placing blocks, and the plan says so rather than pretending.
+ * <p>Whatever wood is below the height the body works from — the stump, and the base too where
+ * the ground is raised — is never in the levels: it is the floor while the body is in the trunk
+ * and comes out <b>last</b>, from the ground, highest first. A step up that is ground rather than
+ * wood is left alone; it was never part of the tree. Ground more than a block below the base
+ * gives the body nothing to step up onto without placing blocks, and the plan says so rather than
+ * pretending.
  *
- * @param stand    where the body works from: the cell above the step up, in the trunk's column,
- *                 or the cell beside the stump it already stands in
+ * @param stand    where the body works from: on the step up or, dug in, level with it, in the
+ *                 trunk's column; else the cell beside the stump it already stands in
  * @param needFeetY the feet height in the column the tallest demand works out to
  * @param stepsIn  whether the body works from inside the trunk at all
- * @param stepIn   what to break before stepping in — the logs, and any leaves, in the body's way
- *                 above the step up; empty when nobody steps in, and empty too for a trunk already
- *                 opened, which still steps in
+ * @param digsIn   whether it gets in at its own level, the trunk dug open ahead of it, rather than
+ *                 by hopping up onto the step up
+ * @param stepIn   what to break before stepping in — the logs, and any leaves, in the body's way;
+ *                 empty when nobody steps in, and empty too for a trunk already opened, which
+ *                 still steps in
  * @param levels   the work from each standing height, in order
  * @param last     the wood at and below the step up, broken from the ground after everything
  *                 else, highest first
  * @param complete whether every log is accounted for; false when one is out of reach from
  *                 anywhere the plan can put the body, or there is no footing to step in on
  */
-public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
+public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, List<Pos> stepIn,
                     List<Level> levels, List<Pos> last, boolean complete) {
 
     /**
@@ -116,18 +122,19 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
 
     /**
      * The plan for {@code logs} from a body with {@code arm} standing at {@code beside}, needing
-     * {@code bodyCells} of clear column. {@code probe} is read only for the trunk's own column at
-     * the body's height and just above it: the step up, and what stands in the way of stepping in.
+     * {@code bodyCells} of clear column, with or without {@code jumpRoom} to hop up from there.
+     * {@code probe} is read only for the trunk's own column around the body's height: the step
+     * up, and what stands in the way of getting in.
      */
     public static Climb plan(Arm arm, Pos base, List<Pos> logs, BlockProbe probe, Pos beside,
-                             int bodyCells) {
+                             boolean jumpRoom, int bodyCells) {
         int floor = beside.y();
         List<Pos> above = new ArrayList<>();
-        List<Pos> last = new ArrayList<>();
+        List<Pos> low = new ArrayList<>();
         for (Pos log : sortedByHeight(logs)) {
-            (log.y() > floor ? above : last).add(log);
+            (log.y() > floor ? above : low).add(log);
         }
-        Collections.reverse(last); // highest first: the step up, then whatever it stood on
+        Collections.reverse(low); // highest first: the step up, then whatever it stood on
         int need = Integer.MIN_VALUE;
         boolean fromBeside = true;
         for (Pos log : above) {
@@ -138,24 +145,34 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
             fromBeside &= reaches(arm, beside.x(), floor, beside.z(), log);
         }
         if (fromBeside) {
-            return fromBeside(arm, above, last, beside, need);
+            return fromBeside(arm, above, low, beside, need);
         }
-        // Stepping in needs something to stand on, and nothing but wood or leaves in the way.
-        if (!Approach.holds(probe.at(base.x(), floor, base.z()))) {
-            return fromBeside(arm, above, last, beside, need);
+        // The height the body works from inside: on the step up after a hop, or its own where
+        // there is no room to hop. Getting in needs something under that and nothing but wood or
+        // leaves in the body's way.
+        int feetIn = jumpRoom ? floor + 1 : floor;
+        if (!Approach.holds(probe.at(base.x(), feetIn - 1, base.z()))) {
+            return fromBeside(arm, above, low, beside, need);
         }
         List<Pos> stepIn = new ArrayList<>();
-        for (int y = floor + 1; y <= floor + bodyCells; y++) {
+        for (int y = feetIn; y < feetIn + bodyCells; y++) {
             BlockKind kind = probe.at(base.x(), y, base.z());
             if (kind == BlockKind.LOG || kind == BlockKind.LEAVES) {
                 stepIn.add(new Pos(base.x(), y, base.z()));
             } else if (kind != BlockKind.AIR) {
-                return fromBeside(arm, above, last, beside, need);
+                return fromBeside(arm, above, low, beside, need);
             }
         }
-        Pos stand = new Pos(base.x(), floor + 1, base.z());
-        List<Pos> remaining = new ArrayList<>(above);
-        remaining.removeAll(stepIn);
+        Pos stand = new Pos(base.x(), feetIn, base.z());
+        List<Pos> last = new ArrayList<>();
+        List<Pos> remaining = new ArrayList<>();
+        for (Pos log : sortedByHeight(logs)) {
+            if (log.y() < feetIn) {
+                last.add(0, log); // highest first
+            } else if (!stepIn.contains(log)) {
+                remaining.add(log);
+            }
+        }
         List<Level> levels = new ArrayList<>();
         int feet = stand.y();
         while (!remaining.isEmpty() && levels.size() < MAX_LEVELS) {
@@ -172,7 +189,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
                 feet++;
             }
         }
-        return new Climb(stand, need, true, stepIn, levels, last, remaining.isEmpty());
+        return new Climb(stand, need, true, !jumpRoom, stepIn, levels, last, remaining.isEmpty());
     }
 
     /**
@@ -194,7 +211,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
         for (Pos log : last) {
             complete &= reaches(arm, beside.x(), beside.y(), beside.z(), log);
         }
-        return new Climb(beside, need, false, List.of(),
+        return new Climb(beside, need, false, false, List.of(),
                 List.of(new Level(beside.y(), breaks, false)), last, complete);
     }
 
@@ -227,8 +244,8 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
     }
 
     /**
-     * {@code "open 2 · step in · 9 to break · 5 rises · then 1 from the ground"} or
-     * {@code "4 to break from beside"}.
+     * {@code "open 2 · step in · 9 to break · 5 rises · then 1 from the ground"},
+     * {@code "open 2 · dig in · 5 to break · 1 rise"} or {@code "4 to break from beside"}.
      */
     public String describe() {
         String tail = complete ? ""
@@ -238,7 +255,8 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, List<Pos> stepIn,
             return (toBreak() + last.size()) + " to break from beside" + tail;
         }
         int rises = rises();
-        return "open " + stepIn.size() + " · step in · " + toBreak() + " to break · "
+        return "open " + stepIn.size() + (digsIn ? " · dig in · " : " · step in · ") + toBreak()
+                + " to break · "
                 + (rises == 0 ? "no rise" : rises == 1 ? "1 rise" : rises + " rises")
                 + (last.isEmpty() ? "" : " · then " + last.size() + " from the ground") + tail;
     }
