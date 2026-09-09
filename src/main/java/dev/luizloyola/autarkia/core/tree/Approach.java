@@ -278,7 +278,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
     }
 
     /** Whether a body's feet can rest on this — leaves deliberately not: they are cleared, not stood on. */
-    private static boolean holds(BlockKind kind) {
+    static boolean holds(BlockKind kind) {
         return kind == BlockKind.OTHER || kind == BlockKind.LOG;
     }
 

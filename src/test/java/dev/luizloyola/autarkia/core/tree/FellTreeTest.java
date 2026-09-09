@@ -18,8 +18,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The eighth chop so far: look at the ground beside the stump, take the cheapest side, walk to
- * it, clear that side's leaves as soon as the arm reaches them, plan the climb, open the trunk
- * and step in when the top is out of reach from the ground. Never ends.
+ * it, clear that side's leaves as soon as the arm reaches them, plan the climb from the cell it
+ * stands in, open the trunk and step in when the top is out of reach from there. Never ends.
  */
 class FellTreeTest {
 
@@ -52,6 +52,34 @@ class FellTreeTest {
         ctx.percepts.blocks.set(0, BASE - 1, -1, BlockKind.WATER);
         ctx.percepts.blocks.set(1, BASE, 0, BlockKind.WATER);
         ctx.percepts.blocks.set(-1, BASE, 0, BlockKind.WATER);
+    }
+
+    /** A block of ground on every side of the stump, so each side reads "up 1". */
+    private void raisedGround() {
+        for (Pos cell : List.of(new Pos(0, BASE, -1), new Pos(1, BASE, 0), new Pos(0, BASE, 1),
+                new Pos(-1, BASE, 0))) {
+            ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.OTHER);
+        }
+    }
+
+    /** The ground a block lower on every side of the stump, so each side reads "down 1". */
+    private void sunkenGround() {
+        for (Pos cell : List.of(new Pos(0, BASE - 1, -1), new Pos(1, BASE - 1, 0),
+                new Pos(0, BASE - 1, 1), new Pos(-1, BASE - 1, 0))) {
+            ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.AIR);
+        }
+    }
+
+    /** The legs report the walk done with the body at {@code feet}. */
+    private void arriveAt(Pos feet) {
+        ctx.mover.setState(MoveState.ARRIVED);
+        ctx.percepts.position = feet;
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.IDLE);
+    }
+
+    private Pos lastOrder() {
+        return new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
     }
 
     private List<String> said(String prefix) {
@@ -131,7 +159,8 @@ class FellTreeTest {
         ctx.percepts.position = SOUTH;
         assertEquals(TaskStatus.RUNNING, task.tick(ctx));
         assertEquals("at the tree, S side", task.phase());
-        assertEquals(List.of("plan — open 2 · step in · 4 to break · no rise"), said("plan"));
+        assertEquals(List.of("plan — open 2 · step in · 4 to break · no rise · then 1 from the ground"),
+                said("plan"));
 
         ctx.mover.setState(MoveState.IDLE); // the legs rest after arriving, as they do
         task.tick(ctx);
@@ -169,8 +198,8 @@ class FellTreeTest {
         ctx.mover.setState(MoveState.ARRIVED);
         ctx.percepts.position = second;
         task.tick(ctx);
-        assertEquals("in the trunk — open 2 · step in · 4 to break · no rise", task.phase());
-        assertEquals(List.of("in the trunk — open 2 · step in · 4 to break · no rise"), said("in the"));
+        assertEquals("in the trunk — open 2 · step in · 4 to break · no rise · then 1 from the ground", task.phase());
+        assertEquals(List.of("in the trunk — open 2 · step in · 4 to break · no rise · then 1 from the ground"), said("in the"));
 
         ctx.mover.setState(MoveState.IDLE);
         for (int i = 0; i < 3 * FellTree.RESURVEY_TICKS; i++) {
@@ -337,7 +366,7 @@ class FellTreeTest {
         openedTrunk();
         Pos stand = new Pos(0, BASE + 1, 0);
         Climb climb = Climb.plan(Climb.Arm.of(ctx.percepts), ANCHOR,
-                Climb.column(ANCHOR, ctx.percepts.blocks, 2), SOUTH, 2);
+                Climb.column(ANCHOR, ctx.percepts.blocks, 2), ctx.percepts.blocks, SOUTH, 2);
         FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.ENTER,
                 java.util.Optional.of(new Pos(0, BASE, 1)), java.util.Optional.of(climb));
         ctx.percepts.position = SOUTH;
@@ -352,7 +381,7 @@ class FellTreeTest {
         ctx.percepts.position = stand;
         back.tick(ctx);
         assertEquals(FellTree.Stage.PLANNED, back.stage());
-        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise", back.phase(),
+        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise · then 1 from the ground", back.phase(),
                 "the plan it was saved with, made from the trunk as it stood");
     }
 
@@ -370,9 +399,94 @@ class FellTreeTest {
 
         task.tick(ctx);
         assertEquals(0, ctx.mover.moveToCalls, "no walking out to walk back in");
-        assertEquals(List.of("plan — open 0 · step in · 4 to break · no rise"), said("plan"));
+        assertEquals(List.of("plan — open 0 · step in · 4 to break · no rise · then 1 from the ground"), said("plan"));
         assertEquals(FellTree.Stage.PLANNED, task.stage());
-        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise", task.phase());
+        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise · then 1 from the ground", task.phase());
+    }
+
+    // ── the ground beside the stump ──────────────────────────────────────────────────────────
+
+    @Test
+    void onRaisedGroundItStandsOnTheSecondLogAndKeepsTheLowWoodForLast() {
+        trunk(9);
+        raisedGround();
+        standSouth();
+        task.tick(ctx);
+        Pos feet = new Pos(0, BASE + 1, 1);
+        assertEquals(feet, lastOrder(), "up onto the ground beside the stump");
+        arriveAt(feet);
+
+        Pos third = new Pos(0, BASE + 2, 0);
+        Pos fourth = new Pos(0, BASE + 3, 0);
+        task.tick(ctx);
+        assertEquals(List.of(third), ctx.breaker.targets,
+                "the trunk opens above the log at the body's own height, not above the stump");
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(third.x(), third.y(), third.z());
+        task.tick(ctx);
+        assertEquals(List.of(third, fourth), ctx.breaker.targets);
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(fourth.x(), fourth.y(), fourth.z());
+        task.tick(ctx);
+        assertEquals("stepping in", task.phase());
+        assertEquals(third, lastOrder(), "onto the second log, never into it");
+
+        arriveAt(third);
+        assertEquals("in the trunk — open 2 · step in · 5 to break · 1 rise · then 2 from the ground",
+                task.phase());
+        assertEquals(List.of(new Pos(0, BASE + 1, 0), ANCHOR), task.climb().orElseThrow().last(),
+                "the log underfoot and the stump under it wait for the ground");
+    }
+
+    @Test
+    void onSunkenGroundItStepsUpOntoTheDirtAndOpensTheStumpItself() {
+        trunk();
+        sunkenGround();
+        standSouth();
+        task.tick(ctx);
+        Pos feet = new Pos(0, BASE - 1, 1);
+        assertEquals(feet, lastOrder(), "down onto the ground beside the stump");
+        arriveAt(feet);
+
+        Pos second = new Pos(0, BASE + 1, 0);
+        task.tick(ctx);
+        assertEquals(List.of(ANCHOR), ctx.breaker.targets, "the stump is in the body's way now");
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(ANCHOR.x(), ANCHOR.y(), ANCHOR.z());
+        task.tick(ctx);
+        assertEquals(List.of(ANCHOR, second), ctx.breaker.targets);
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(second.x(), second.y(), second.z());
+        task.tick(ctx);
+        assertEquals("stepping in", task.phase());
+        assertEquals(ANCHOR, lastOrder(), "feet where the stump was, on the dirt that held it");
+
+        arriveAt(ANCHOR);
+        assertEquals("in the trunk — open 2 · step in · 5 to break · 1 rise", task.phase(),
+                "the dirt is not the tree's: nothing waits for the end");
+    }
+
+    @Test
+    void aLeafInTheTrunksWayIsClearedOnTheWayIn() {
+        trunk();
+        Pos leaf = new Pos(0, BASE + 2, 0);
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        standSouth();
+        task.tick(ctx);
+        arriveAt(SOUTH);
+
+        Pos second = new Pos(0, BASE + 1, 0);
+        task.tick(ctx);
+        assertEquals(List.of(second), ctx.breaker.targets);
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(second.x(), second.y(), second.z());
+        task.tick(ctx);
+        assertEquals(List.of(second, leaf), ctx.breaker.targets, "the leaf is in the way too");
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(leaf.x(), leaf.y(), leaf.z());
+        task.tick(ctx);
+        assertEquals(List.of("cleared a leaf at " + at(leaf)), said("cleared"));
+        assertEquals("stepping in", task.phase());
     }
 
     // ── cancel ───────────────────────────────────────────────────────────────────────────────

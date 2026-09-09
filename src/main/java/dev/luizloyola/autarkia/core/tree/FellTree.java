@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.act.BreakState;
 import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.Mover;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
+import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
@@ -13,6 +14,7 @@ import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.MoveCapabilities;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -20,17 +22,19 @@ import org.jspecify.annotations.Nullable;
  * which sides of the stump a body could walk up to ({@link Approach}), take the cheapest, walk to
  * its feet cell, and clear the leaves that side lists — only those — beginning on any of them the
  * moment the arm can reach it, mid-walk included. Then work out where the arm has to be to reach
- * every log ({@link Climb}); if that is higher than the ground beside the stump, open the trunk
- * and step in onto the base log. Then stand there with the plan. It fells nothing yet and never
- * ends: RUNNING for as long as it is left in the slot, so each step can be watched in-world
- * ({@code /autarkia tree approach}) and the ground changed under it.
+ * every log ({@link Climb}), counting the trunk from the cell it stands in: if the top is out of
+ * reach from there, open the body's height of trunk above that cell and step in onto whatever is
+ * at its own height in the column — the base log, the log above it where the ground is raised,
+ * the dirt under the base where it is sunken. Then stand there with the plan. It fells nothing
+ * yet and never ends: RUNNING for as long as it is left in the slot, so each step can be watched
+ * in-world ({@code /autarkia tree approach}) and the ground changed under it.
  *
  * <p><b>The world holds the progress, the save holds the stage.</b> The survey is re-read every
  * second, the walk is re-ordered when the legs give up, and a block is only ever begun on because
  * the probe still says it is there — so a shove costs at most a second of looking. What the world
  * cannot give back is written down (decision: Luiz, 2026-09-07): the stage, the side taken and the
  * plan, because once the trunk is opened the plan can no longer be read off the tree. A fresh task
- * that finds the body already standing on the base log plans from there rather than walking out
+ * that finds the body already standing in the trunk plans from there rather than walking out
  * to walk back in, which is what a preemption's re-derived plan meets. The side taken is kept
  * because selection is commitment: a body walking past a symmetric pair of sides would otherwise
  * flip between them as it went.
@@ -65,6 +69,10 @@ public final class FellTree implements PrimitiveTask {
      */
     public enum Stage { APPROACH, OPEN, ENTER, PLANNED }
 
+    /** What the arm takes on the way in: a side's leaves; whatever the trunk is opened through. */
+    private static final Set<BlockKind> LEAVES_ONLY = Set.of(BlockKind.LEAVES);
+    private static final Set<BlockKind> WOOD_OR_LEAVES = Set.of(BlockKind.LOG, BlockKind.LEAVES);
+
     private final Pos anchor;
     private Stage stage = Stage.APPROACH;
     private @Nullable Approach approach;
@@ -79,8 +87,9 @@ public final class FellTree implements PrimitiveTask {
     private boolean arrived;
     /** The tick a failed walk may be ordered again. */
     private int walkRetryAt;
-    /** The leaf under the arm, or null. */
+    /** The block under the arm, or null, and what it was when the swing began. */
     private @Nullable Pos breaking;
+    private @Nullable BlockKind breakingKind;
     private int ticks;
     /** The last summary journalled — a re-read that says the same thing says nothing. */
     private String told = "";
@@ -148,16 +157,16 @@ public final class FellTree implements PrimitiveTask {
         return TaskStatus.RUNNING; // nothing here ends it yet
     }
 
-    /** Take out the logs a body's height above the base, lowest first. */
+    /** Take out what stands a body's height above the step up, lowest first. */
     private void open(BrainContext ctx) {
         phase = "opening the trunk";
-        if (breakNext(ctx, climb.stepIn(), BlockKind.LOG, "log")) {
+        if (breakNext(ctx, climb.stepIn(), WOOD_OR_LEAVES)) {
             stage = Stage.ENTER;
             enter(ctx);
         }
     }
 
-    /** Onto the base log, in the trunk's own column. */
+    /** Onto the step up, in the trunk's own column. */
     private void enter(BrainContext ctx) {
         phase = "stepping in";
         if (walk(ctx, climb.stand())) {
@@ -180,17 +189,17 @@ public final class FellTree implements PrimitiveTask {
             ctx.actuators().mover().stop();
             return; // and keep looking: the ground may change
         }
-        // Already on the base log, of a trunk still standing: a fresh task after a preemption, or
+        // Already in the trunk's column, at or above the base: a fresh task after a preemption, or
         // a reload that lost its plan. Plan from here; walking out to walk back in is not a step.
-        Pos onTheBase = new Pos(anchor.x(), anchor.y() + 1, anchor.z());
-        if (approach.standing() && ctx.percepts().position().equals(onTheBase)) {
+        Pos at = ctx.percepts().position();
+        if (at.x() == anchor.x() && at.z() == anchor.z() && at.y() >= anchor.y()) {
             plan(ctx, side);
             if (stage == Stage.OPEN) {
                 open(ctx);
             }
             return;
         }
-        boolean cleared = breakNext(ctx, side.leaves(), BlockKind.LEAVES, "leaf");
+        boolean cleared = breakNext(ctx, side.leaves(), LEAVES_ONLY);
         boolean there = walk(ctx, side.feet());
         String label = approach.bearing(side.cell());
         if (!there) {
@@ -208,8 +217,9 @@ public final class FellTree implements PrimitiveTask {
     /** Work out the climb from beside the stump, and which stage it starts. */
     private void plan(BrainContext ctx, Approach.Side side) {
         int bodyCells = MoveCapabilities.of(ctx.profile()).clearCells();
+        BlockProbe blocks = ctx.percepts().blocks();
         climb = Climb.plan(Climb.Arm.of(ctx.percepts()), anchor,
-                Climb.column(anchor, ctx.percepts().blocks(), bodyCells), side.feet(), bodyCells);
+                Climb.column(anchor, blocks, bodyCells), blocks, side.feet(), bodyCells);
         say(ctx, "plan — " + climb.describe());
         stage = climb.stepsIn() ? Stage.OPEN : Stage.PLANNED;
     }
@@ -302,11 +312,11 @@ public final class FellTree implements PrimitiveTask {
     }
 
     /**
-     * The arm: begin on the first of {@code cells} the probe still shows as {@code kind} and the
-     * arm will take, one at a time, whether or not the legs are still walking. Returns whether
-     * none of them stands any more.
+     * The arm: begin on the first of {@code cells} the probe still shows as one of {@code kinds}
+     * and the arm will take, one at a time, whether or not the legs are still walking. Returns
+     * whether none of them stands any more.
      */
-    private boolean breakNext(BrainContext ctx, List<Pos> cells, BlockKind kind, String noun) {
+    private boolean breakNext(BrainContext ctx, List<Pos> cells, Set<BlockKind> kinds) {
         BlockBreaker breaker = ctx.actuators().breaker();
         if (breaking != null) {
             BreakState state = breaker.state();
@@ -314,20 +324,22 @@ public final class FellTree implements PrimitiveTask {
                 return false;
             }
             if (state == BreakState.FINISHED) {
-                say(ctx, (kind == BlockKind.LEAVES ? "cleared a " : "broke a ") + noun + " at "
-                        + where(breaking));
+                say(ctx, (breakingKind == BlockKind.LEAVES ? "cleared a leaf" : "broke a log")
+                        + " at " + where(breaking));
             }
             breaking = null; // FAILED or stopped under us: re-tried below if it still stands
         }
         boolean left = false;
         for (Pos cell : cells) {
-            if (ctx.percepts().blocks().at(cell.x(), cell.y(), cell.z()) != kind) {
+            BlockKind kind = ctx.percepts().blocks().at(cell.x(), cell.y(), cell.z());
+            if (!kinds.contains(kind)) {
                 continue; // already gone
             }
             left = true;
             // A refusal is out of reach or a blocked swing — the walk cures both; ask again next tick.
             if (breaker.begin(cell)) {
                 breaking = cell;
+                breakingKind = kind;
                 return false;
             }
         }

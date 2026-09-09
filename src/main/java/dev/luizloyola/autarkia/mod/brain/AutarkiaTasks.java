@@ -46,6 +46,7 @@ public final class AutarkiaTasks {
             Codec.BOOL.fieldOf("steps_in").forGetter(Climb::stepsIn),
             POS.listOf().fieldOf("step_in").forGetter(Climb::stepIn),
             LEVEL.listOf().fieldOf("levels").forGetter(Climb::levels),
+            POS.listOf().optionalFieldOf("last", List.of()).forGetter(Climb::last),
             Codec.BOOL.fieldOf("complete").forGetter(Climb::complete)
     ).apply(c, Climb::new));
 

@@ -28,7 +28,8 @@ import net.minecraft.server.level.ServerPlayer;
  * outlined. A label per side says the verdict and its score, the side being taken marked and its
  * feet cell white-rimmed; one over the stump says what the body is doing about it. Once there is
  * a {@link Climb}, the logs it opens are orange, the cell it stands in white, the logs it breaks
- * from each level amber, and the blocks it places on the way up blue.
+ * from each level amber, the blocks it places on the way up blue, and the wood it takes last from
+ * the ground a paler orange.
  *
  * <p>Transport is Anima's cell overlay ({@link CellOverlays}). Same shape as {@link BoardViewer}:
  * a watcher set per server, a redraw cadence, gone on stop.
@@ -60,6 +61,8 @@ public final class FellViewer {
     private static final int BREAK_FILL = 0x30FFC040;
     private static final int RISE_STROKE = 0xFF4090FF;
     private static final int RISE_FILL = 0x604090FF;
+    private static final int LAST_STROKE = 0xC0FF8C00;
+    private static final int LAST_FILL = 0x30FF8C00;
 
     private static final Map<MinecraftServer, Set<UUID>> WATCHERS = new HashMap<>();
 
@@ -171,6 +174,10 @@ public final class FellViewer {
         }
         if (!rises.isEmpty()) {
             groups.add(new CellOverlayPayload.Group(RISE_STROKE, WIDTH, RISE_FILL, true, rises));
+        }
+        if (!climb.last().isEmpty()) {
+            groups.add(new CellOverlayPayload.Group(LAST_STROKE, THIN, LAST_FILL, true,
+                    cells(climb.last())));
         }
         int top = climb.stand().y();
         for (Climb.Level level : climb.levels()) {
