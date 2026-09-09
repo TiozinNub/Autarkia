@@ -498,7 +498,7 @@ class FellTreeTest {
         onlyTheSouth();
         ctx.percepts.blocks.set(0, BASE + 2, 1, BlockKind.OTHER); // room for a body, not a hop
         task.tick(ctx);
-        assertEquals(List.of("going S — open, low (0)"), said("going"));
+        assertEquals(List.of("going S — open, low (3)"), said("going"));
         arriveAt(SOUTH);
 
         Pos second = new Pos(0, BASE + 1, 0);

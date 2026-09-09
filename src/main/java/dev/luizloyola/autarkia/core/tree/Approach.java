@@ -34,8 +34,9 @@ import org.jspecify.annotations.Nullable;
  * <p>Each side also says whether a body could <b>hop up</b> from it — one more clear cell over
  * its head. A roof at head height plus one leaves room for a body but not for a hop, and the
  * side reads {@code low}: still a way in, but the trunk is dug open at the body's own level and
- * walked into rather than climbed onto (decision: Luiz, 2026-09-09). A leaf there is listed with
- * the rest, since clearing it is what makes the hop possible.
+ * walked into rather than climbed onto, and it costs {@link #LOW_COST} for it (decision: Luiz,
+ * 2026-09-09). A leaf there is listed with the rest, since clearing it is what makes the hop
+ * possible.
  *
  * <p>Read through {@link BlockKind} alone, so a fence and a lava pool both pass for solid ground
  * here. The terrain grid's finer answer is the next rung, not this one.
@@ -55,6 +56,13 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
     public static final int STEP_DOWN = 3;
     /** Every further block down: a pillar to build before the trunk is in reach at all. */
     public static final int MORE_DOWN = 10;
+    /**
+     * No room to hop: the trunk is dug into at the body's own level instead — the stump comes out
+     * on the way in rather than last, and there is one more rise to build and to take back down.
+     * As dear as one step down, so an open side with room wins from anywhere, and among low sides
+     * the nearest does.
+     */
+    public static final int LOW_COST = 3;
     /** A drop past {@link #REACH}, or a side no body could stand on. */
     public static final int IMPASSABLE = 100;
     /**
@@ -128,7 +136,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             int climb = rise > 0 ? STEP_UP + (rise - 1) * MORE_UP
                     : rise < 0 ? STEP_DOWN + (-rise - 1) * MORE_DOWN
                     : 0;
-            return climb + leaves.size() * LEAF_COST + farther * FAR_COST;
+            return climb + leaves.size() * LEAF_COST + (jumpRoom ? 0 : LOW_COST) + farther * FAR_COST;
         }
 
         /**

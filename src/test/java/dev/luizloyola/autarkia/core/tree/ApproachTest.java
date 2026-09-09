@@ -300,7 +300,24 @@ class ApproachTest {
         assertFalse(east.jumpRoom());
         assertEquals("open, low", east.describe());
         assertTrue(side(approach, "W").jumpRoom());
-        assertEquals(east.score(), side(approach, "W").score(), "no dearer for it");
+        assertEquals(side(approach, "W").score() + Approach.LOW_COST, east.score(),
+                "dearer for it: a dig in, and a rise more");
+        assertEquals("N", approach.bearing(approach.best().orElseThrow().cell()),
+                "the first side with room in compass order — the low east is passed over");
+    }
+
+    @Test
+    void aLowSideStillBeatsNoSideAndTheNearestLowSideWins() {
+        trunk(0, 0);
+        for (Pos over : List.of(new Pos(0, BASE + 2, -1), new Pos(1, BASE + 2, 0),
+                new Pos(0, BASE + 2, 1), new Pos(-1, BASE + 2, 0))) {
+            probe.set(over.x(), over.y(), over.z(), BlockKind.OTHER);
+        }
+
+        Approach approach = surveyFromTheSouth();
+        assertEquals(4, approach.approachable());
+        assertEquals("S", approach.bearing(approach.best().orElseThrow().cell()));
+        assertEquals((double) Approach.LOW_COST, side(approach, "S").score());
     }
 
     @Test
