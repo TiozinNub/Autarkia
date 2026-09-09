@@ -17,6 +17,7 @@ import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.MoveCapabilities;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -122,6 +123,12 @@ public final class FellTree implements PrimitiveTask {
     private @Nullable Climb climb;
     /** The ring cell of the side being taken — held while it stays approachable. */
     private @Nullable Pos chosen;
+    /**
+     * Sides given up on for this tree: the walk or the swing would not come off there. Written
+     * down so the next choice is a different one — the seventh's lesson, which re-derived the
+     * same plan off the same knowledge and ran it again.
+     */
+    private final Set<Pos> refusedSides = new HashSet<>();
     /** The feet cell the last move order was for; a different one is a new order. */
     private @Nullable Pos walkingTo;
     /** The tick the last move order went out — its state is readable only from the next one. */
@@ -234,7 +241,8 @@ public final class FellTree implements PrimitiveTask {
             if (noWayInSince < 0) {
                 noWayInSince = ticks;
             } else if (ticks - noWayInSince >= NO_WAY_IN_TICKS) {
-                return fail(ctx, "no way in — " + approach.summary());
+                return fail(ctx, "no way in — " + approach.summary() + (refusedSides.isEmpty() ? ""
+                        : " — " + refusedSides.size() + " side(s) given up on"));
             }
             return TaskStatus.RUNNING; // and keep looking: the ground may change
         }
@@ -252,7 +260,7 @@ public final class FellTree implements PrimitiveTask {
         boolean cleared = breakNext(ctx, side.leaves(), LEAVES_ONLY);
         boolean there = walk(ctx, side.feet());
         if (stuck != null) {
-            return fail(ctx, stuck);
+            return refuse(ctx, side);
         }
         String label = approach.bearing(side.cell());
         if (!there) {
@@ -265,6 +273,26 @@ public final class FellTree implements PrimitiveTask {
         }
         phase = "at the tree, " + label + " side";
         plan(ctx, side, side.jumpRoom());
+        return TaskStatus.RUNNING;
+    }
+
+    /**
+     * This side is no good: cross it off and let the next look choose another. The legs and the
+     * arm start over; the tree is given up only once no side is left.
+     */
+    private TaskStatus refuse(BrainContext ctx, Approach.Side side) {
+        refusedSides.add(side.cell());
+        say(ctx, "the " + approach.bearing(side.cell()) + " side is no good — " + stuck
+                + "; trying another");
+        stuck = null;
+        chosen = null;
+        walkingTo = null;
+        arrived = false;
+        walkFailures = 0;
+        refused = null;
+        ctx.actuators().mover().stop();
+        ctx.actuators().breaker().abort();
+        breaking = null;
         return TaskStatus.RUNNING;
     }
 
@@ -458,7 +486,7 @@ public final class FellTree implements PrimitiveTask {
     private Approach.@Nullable Side take(BrainContext ctx) {
         Approach.Side side = side();
         if (side == null) {
-            side = approach.best().orElse(null);
+            side = best();
             if (side != null && !side.cell().equals(chosen)) {
                 say(ctx, "going " + approach.bearing(side.cell()) + " — " + side.describe()
                         + " (" + Approach.fmt(side.score()) + ")");
@@ -468,6 +496,18 @@ public final class FellTree implements PrimitiveTask {
             chosen = side == null ? null : side.cell();
         }
         return side;
+    }
+
+    /** The cheapest side not given up on, ties to compass order; null when there is none. */
+    private Approach.@Nullable Side best() {
+        Approach.Side best = null;
+        for (Approach.Side side : approach.sides()) {
+            if (side.verdict().approachable() && !refusedSides.contains(side.cell())
+                    && (best == null || side.score() < best.score())) {
+                best = side;
+            }
+        }
+        return best;
     }
 
     /** The side taken, as the last look saw it, while it is still a way in. */

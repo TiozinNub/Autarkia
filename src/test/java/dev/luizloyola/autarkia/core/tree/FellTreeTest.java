@@ -692,6 +692,36 @@ class FellTreeTest {
     }
 
     @Test
+    void aSideWhoseWalkKeepsFailingIsCrossedOffAndTheNextTaken() {
+        trunk();
+        standSouth();
+        task.tick(ctx);
+        assertEquals(SOUTH, task.chosen().orElseThrow());
+        ctx.mover.setState(MoveState.FAILED);
+        ctx.mover.setFailure(MoveFailure.STRANDED);
+
+        TaskStatus status = TaskStatus.RUNNING;
+        int budget = FellTree.WALK_GIVE_UP * FellTree.WALK_RETRY_TICKS + 5;
+        for (int i = 0; i < budget && task.chosen().orElse(SOUTH).equals(SOUTH); i++) {
+            status = task.tick(ctx);
+        }
+        assertEquals(TaskStatus.RUNNING, status, "the tree is not given up, the side is");
+        assertEquals(new Pos(1, BASE, 0), task.chosen().orElseThrow(),
+                "the next cheapest: east and west tie, east first in compass order");
+        assertEquals(1, said("the S side is no good").size());
+        assertTrue(said("the S side is no good").get(0).contains("stranded"));
+
+        // And so on round the tree, until no side is left and the tree is given up.
+        int patience = 4 * budget + FellTree.NO_WAY_IN_TICKS + 5;
+        for (int i = 0; i < patience && status == TaskStatus.RUNNING; i++) {
+            status = task.tick(ctx);
+        }
+        assertEquals(TaskStatus.FAILED, status);
+        assertTrue(task.failureDetail().contains("4 side(s) given up on"), task.failureDetail());
+        assertEquals(4, said("the ").stream().filter(l -> l.contains("side is no good")).count());
+    }
+
+    @Test
     void aRefusalWhileStillWalkingIsNotWorthALine() {
         trunk();
         standSouth();
