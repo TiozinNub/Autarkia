@@ -206,10 +206,15 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
         return standing ? out.toString() : "no log at the anchor; " + out;
     }
 
-    /** A score as text: whole numbers bare, the rest to one decimal — {@code 2}, {@code 2.5}. */
+    /**
+     * A score as text: whole numbers bare, the rest to one decimal — {@code 2}, {@code 2.5}.
+     * Rounded first, so a proportion that lands a hair off a whole reads as the whole, not as
+     * {@code 1.0}.
+     */
     public static String fmt(double score) {
-        return score == Math.rint(score) ? Integer.toString((int) score)
-                : String.format(java.util.Locale.ROOT, "%.1f", score);
+        double rounded = Math.round(score * 10) / 10.0;
+        return rounded == Math.rint(rounded) ? Integer.toString((int) rounded)
+                : String.format(java.util.Locale.ROOT, "%.1f", rounded);
     }
 
     /**
