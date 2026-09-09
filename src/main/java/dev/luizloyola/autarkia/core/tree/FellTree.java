@@ -89,6 +89,13 @@ public final class FellTree implements PrimitiveTask {
     public static final int NO_GAIN_LIMIT = 3;
 
     /**
+     * How many leaves in a row the arm chews through to reach the block it was refused. A crown
+     * hides its own trunk from the side, and the leaf the breaker blames is as often as not in
+     * front of another; past this many the swing is not worth the path.
+     */
+    public static final int CHEW_HOPS = 3;
+
+    /**
      * The stages, in order. Written into the save by NAME, so add at the end and never rename: a
      * saved body mid-stage reads its stage back by it. PLANNED is the moment of standing in the
      * trunk with the plan, and hands straight on.
@@ -571,26 +578,41 @@ public final class FellTree implements PrimitiveTask {
                 if (breakingKind == BlockKind.LOG) {
                     logsBroken++;
                 }
+                walkFailures = 0; // the arm is getting somewhere, so the legs are not stuck yet
                 say(ctx, (breakingKind == BlockKind.LEAVES ? "cleared a leaf" : "broke a log")
                         + " at " + where(breaking));
             }
             breaking = null; // FAILED or stopped under us: re-tried below if it still stands
         }
+        BlockProbe blocks = ctx.percepts().blocks();
         Pos first = null;
         for (Pos cell : cells) {
-            BlockKind kind = ctx.percepts().blocks().at(cell.x(), cell.y(), cell.z());
+            BlockKind kind = blocks.at(cell.x(), cell.y(), cell.z());
             if (!kinds.contains(kind)) {
                 continue; // already gone
             }
             if (first == null) {
                 first = cell;
             }
-            // A refusal is out of reach or a blocked swing — the walk cures both; ask again next tick.
-            if (breaker.begin(cell)) {
-                breaking = cell;
-                breakingKind = kind;
-                refused = null;
-                return false;
+            // A refusal is out of reach or a blocked swing. The walk cures the first. A leaf in the
+            // way is cured here: chewed through, a hop at a time, before the block it hides — the
+            // crown's own leaves stand between a body and its trunk, and none of them is listed.
+            Pos target = cell;
+            BlockKind targetKind = kind;
+            for (int hop = 0; hop <= CHEW_HOPS; hop++) {
+                if (breaker.begin(target)) {
+                    breaking = target;
+                    breakingKind = targetKind;
+                    refused = null;
+                    return false;
+                }
+                Pos block = breaker.obstruction(target);
+                if (block == null
+                        || blocks.at(block.x(), block.y(), block.z()) != BlockKind.LEAVES) {
+                    break; // out of reach, or something the axe is not for: the walk's problem
+                }
+                target = block;
+                targetKind = BlockKind.LEAVES;
             }
         }
         if (first != null && (arrived || walkingTo == null)) {

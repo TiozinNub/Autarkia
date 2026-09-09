@@ -589,6 +589,68 @@ class FellTreeTest {
         assertEquals(FellTree.Stage.PLANNED, task.stage());
     }
 
+    // ── a crown in the way ───────────────────────────────────────────────────────────────────
+
+    @Test
+    void aLeafInTheWayOfAListedLeafIsChewedThroughFirst() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        Pos listed = new Pos(0, BASE + 1, 1);
+        Pos inTheWay = new Pos(0, BASE + 1, 2);
+        ctx.percepts.blocks.set(listed.x(), listed.y(), listed.z(), BlockKind.LEAVES);
+        ctx.percepts.blocks.set(inTheWay.x(), inTheWay.y(), inTheWay.z(), BlockKind.LEAVES);
+        ctx.breaker.refuse.add(listed);
+        ctx.breaker.obstructions.put(listed, inTheWay);
+
+        task.tick(ctx);
+        assertEquals(List.of(inTheWay), ctx.breaker.targets, "the leaf the breaker blames, first");
+        ctx.breaker.state = BreakState.FINISHED;
+        ctx.percepts.blocks.clear(inTheWay.x(), inTheWay.y(), inTheWay.z());
+        ctx.breaker.refuse.clear();
+        task.tick(ctx);
+        assertEquals(List.of(inTheWay, listed), ctx.breaker.targets, "then the one it was after");
+        assertEquals(List.of("cleared a leaf at " + at(inTheWay)), said("cleared"));
+    }
+
+    @Test
+    void aBlockerThatIsNotALeafIsLeftToTheWalk() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        Pos listed = new Pos(0, BASE + 1, 1);
+        Pos stone = new Pos(0, BASE + 1, 2);
+        ctx.percepts.blocks.set(listed.x(), listed.y(), listed.z(), BlockKind.LEAVES);
+        ctx.percepts.blocks.set(stone.x(), stone.y(), stone.z(), BlockKind.OTHER);
+        ctx.breaker.refuse.add(listed);
+        ctx.breaker.obstructions.put(listed, stone);
+
+        task.tick(ctx);
+        assertTrue(ctx.breaker.targets.isEmpty(), "nothing the axe is for");
+    }
+
+    @Test
+    void aWalkThatKeepsFailingWhileTheArmClearsIsNotStuck() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        Pos leaf = new Pos(0, BASE, 1);
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.FAILED);
+        ctx.mover.setFailure(MoveFailure.STRANDED);
+
+        TaskStatus status = TaskStatus.RUNNING;
+        int patience = FellTree.WALK_GIVE_UP * FellTree.WALK_RETRY_TICKS + 5;
+        for (int i = 0; i < patience && status == TaskStatus.RUNNING; i++) {
+            if (i % FellTree.WALK_RETRY_TICKS == 10) {
+                ctx.breaker.state = BreakState.FINISHED; // the arm lands a leaf every couple of seconds
+            }
+            status = task.tick(ctx);
+        }
+        assertEquals(TaskStatus.RUNNING, status, "a failed walk is only stuck when the arm is idle too");
+    }
+
     // ── what the arm cannot do ───────────────────────────────────────────────────────────────
 
     @Test
