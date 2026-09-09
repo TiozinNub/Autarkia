@@ -7,11 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.anima.core.brain.act.BreakState;
 import dev.luizloyola.anima.core.brain.act.MoveFailure;
 import dev.luizloyola.anima.core.brain.act.MoveState;
+import dev.luizloyola.anima.core.brain.act.RiseState;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
+import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.Entry;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,9 @@ import org.junit.jupiter.api.Test;
 /**
  * The eighth chop so far: look at the ground beside the stump, take the cheapest side, walk to
  * it, clear that side's leaves as soon as the arm reaches them, plan the climb from the cell it
- * stands in, open the trunk and step in when the top is out of reach from there. Never ends.
+ * stands in, open the trunk and get in when the top is out of reach from there, rise to the
+ * height the top demands, clear everything above, come down breaking underfoot, and take the last
+ * log from outside. Ends with the count, or with the one reason it could not.
  */
 class FellTreeTest {
 
@@ -39,6 +43,57 @@ class FellTreeTest {
     private void trunk(int logs) {
         for (int y = BASE; y < BASE + logs; y++) {
             ctx.percepts.blocks.set(0, y, 0, BlockKind.LOG);
+            ctx.percepts.blocks.setId(0, y, 0, "minecraft:birch_log");
+        }
+    }
+
+    /** The pack: this tree's own logs, to rise on. */
+    private void pack(int logs) {
+        ctx.percepts.inventory.add(new ItemStack("minecraft:birch_log", logs, 64, ""));
+    }
+
+    /**
+     * A little world that answers the fakes the way the real one would, one tick behind: a swing
+     * begun lands and the block is gone, a walk ordered arrives, a rise ordered lands one higher
+     * on a log from the pack, and nothing under the feet drops the body one.
+     */
+    private TaskStatus drive(FellTree task, int maxTicks) {
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < maxTicks && status == TaskStatus.RUNNING; i++) {
+            int walks = ctx.mover.moveToCalls;
+            status = task.tick(ctx);
+            if (ctx.breaker.state == BreakState.BREAKING) {
+                Pos t = ctx.breaker.target;
+                ctx.percepts.blocks.clear(t.x(), t.y(), t.z());
+                ctx.breaker.state = BreakState.FINISHED;
+            }
+            if (ctx.mover.moveToCalls > walks) {
+                ctx.percepts.position = new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
+                ctx.mover.setState(MoveState.ARRIVED);
+            }
+            if (ctx.riser.state == RiseState.RISING) {
+                Pos p = ctx.percepts.position;
+                ctx.percepts.blocks.set(p.x(), p.y(), p.z(), BlockKind.LOG);
+                ctx.percepts.inventory.remove(ctx.riser.lastItem, 1);
+                ctx.percepts.position = new Pos(p.x(), p.y() + 1, p.z());
+                ctx.riser.state = RiseState.RISEN;
+            }
+            Pos p = ctx.percepts.position;
+            while (ctx.percepts.blocks.at(p.x(), p.y() - 1, p.z()) == BlockKind.AIR) {
+                p = new Pos(p.x(), p.y() - 1, p.z());
+                ctx.percepts.position = p;
+            }
+        }
+        return status;
+    }
+
+    private TaskStatus drive(int maxTicks) {
+        return drive(task, maxTicks);
+    }
+
+    private void assertColumnGone(int logs) {
+        for (int y = BASE; y < BASE + logs; y++) {
+            assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(0, y, 0), "at y " + y);
         }
     }
 
@@ -159,7 +214,7 @@ class FellTreeTest {
         ctx.percepts.position = SOUTH;
         assertEquals(TaskStatus.RUNNING, task.tick(ctx));
         assertEquals("at the tree, S side", task.phase());
-        assertEquals(List.of("plan — open 2 · step in · 4 to break · no rise · then 1 from the ground"),
+        assertEquals(List.of("plan — open 2 · step in · no rise · 4 above · 1 underfoot"),
                 said("plan"));
 
         ctx.mover.setState(MoveState.IDLE); // the legs rest after arriving, as they do
@@ -198,14 +253,14 @@ class FellTreeTest {
         ctx.mover.setState(MoveState.ARRIVED);
         ctx.percepts.position = second;
         task.tick(ctx);
-        assertEquals("in the trunk — open 2 · step in · 4 to break · no rise · then 1 from the ground", task.phase());
-        assertEquals(List.of("in the trunk — open 2 · step in · 4 to break · no rise · then 1 from the ground"), said("in the"));
+        assertEquals("in the trunk — open 2 · step in · no rise · 4 above · 1 underfoot", task.phase());
+        assertEquals(List.of("in the trunk — open 2 · step in · no rise · 4 above · 1 underfoot"),
+                said("in the"));
 
         ctx.mover.setState(MoveState.IDLE);
-        for (int i = 0; i < 3 * FellTree.RESURVEY_TICKS; i++) {
-            assertEquals(TaskStatus.RUNNING, task.tick(ctx));
-        }
-        assertEquals(2, ctx.breaker.targets.size(), "the plan is planned, not carried out");
+        task.tick(ctx);
+        assertEquals("clearing above (4 left)", task.phase(), "no rise to make: straight to the top");
+        assertEquals(new Pos(0, BASE + 3, 0), ctx.breaker.target, "the lowest log over the head");
         assertEquals(2, ctx.mover.moveToCalls);
     }
 
@@ -217,11 +272,13 @@ class FellTreeTest {
         ctx.mover.setState(MoveState.ARRIVED);
         ctx.percepts.position = SOUTH;
         task.tick(ctx);
+        assertEquals(List.of("plan — 4 to break from beside"), said("plan"));
+        assertEquals("at the tree, S side", task.phase());
+
         ctx.mover.setState(MoveState.IDLE);
         task.tick(ctx);
-
-        assertEquals("at the tree — 4 to break from beside", task.phase());
-        assertTrue(ctx.breaker.targets.isEmpty(), "nothing broken yet");
+        assertEquals("clearing above (3 left)", task.phase(), "from where it stands: no opening");
+        assertEquals(new Pos(0, BASE + 1, 0), ctx.breaker.target);
         assertEquals(1, ctx.mover.moveToCalls);
     }
 
@@ -381,7 +438,7 @@ class FellTreeTest {
         ctx.percepts.position = stand;
         back.tick(ctx);
         assertEquals(FellTree.Stage.PLANNED, back.stage());
-        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise · then 1 from the ground", back.phase(),
+        assertEquals("in the trunk — open 0 · step in · no rise · 4 above · 1 underfoot", back.phase(),
                 "the plan it was saved with, made from the trunk as it stood");
     }
 
@@ -399,9 +456,9 @@ class FellTreeTest {
 
         task.tick(ctx);
         assertEquals(0, ctx.mover.moveToCalls, "no walking out to walk back in");
-        assertEquals(List.of("plan — open 0 · step in · 4 to break · no rise · then 1 from the ground"), said("plan"));
+        assertEquals(List.of("plan — open 0 · step in · no rise · 4 above · 1 underfoot"), said("plan"));
         assertEquals(FellTree.Stage.PLANNED, task.stage());
-        assertEquals("in the trunk — open 0 · step in · 4 to break · no rise · then 1 from the ground", task.phase());
+        assertEquals("in the trunk — open 0 · step in · no rise · 4 above · 1 underfoot", task.phase());
     }
 
     // ── the ground beside the stump ──────────────────────────────────────────────────────────
@@ -432,10 +489,11 @@ class FellTreeTest {
         assertEquals(third, lastOrder(), "onto the second log, never into it");
 
         arriveAt(third);
-        assertEquals("in the trunk — open 2 · step in · 5 to break · 1 rise · then 2 from the ground",
+        assertEquals("in the trunk — open 2 · step in · 1 rise · 5 above · 1 underfoot · then 1 from outside",
                 task.phase());
-        assertEquals(List.of(new Pos(0, BASE + 1, 0), ANCHOR), task.climb().orElseThrow().last(),
-                "the log underfoot and the stump under it wait for the ground");
+        assertEquals(List.of(new Pos(0, BASE + 1, 0)), task.climb().orElseThrow().under(),
+                "the log underfoot comes out on the way down");
+        assertEquals(List.of(ANCHOR), task.climb().orElseThrow().last(), "and the stump from outside");
     }
 
     @Test
@@ -462,7 +520,7 @@ class FellTreeTest {
         assertEquals(ANCHOR, lastOrder(), "feet where the stump was, on the dirt that held it");
 
         arriveAt(ANCHOR);
-        assertEquals("in the trunk — open 2 · step in · 5 to break · 1 rise", task.phase(),
+        assertEquals("in the trunk — open 2 · step in · 1 rise · 5 above", task.phase(),
                 "the dirt is not the tree's: nothing waits for the end");
     }
 
@@ -515,7 +573,7 @@ class FellTreeTest {
         assertEquals(ANCHOR, lastOrder(), "flat, into the cell the stump stood in");
 
         arriveAt(ANCHOR);
-        assertEquals("in the trunk — open 2 · dig in · 5 to break · 1 rise", task.phase());
+        assertEquals("in the trunk — open 2 · dig in · 1 rise · 5 above", task.phase());
     }
 
     @Test
@@ -527,7 +585,7 @@ class FellTreeTest {
 
         task.tick(ctx);
         assertEquals(0, ctx.mover.moveToCalls, "no walking out to walk back in");
-        assertEquals(List.of("plan — open 0 · dig in · 5 to break · 1 rise"), said("plan"));
+        assertEquals(List.of("plan — open 0 · dig in · 1 rise · 5 above"), said("plan"));
         assertEquals(FellTree.Stage.PLANNED, task.stage());
     }
 
@@ -562,10 +620,13 @@ class FellTreeTest {
         assertEquals("opening the trunk", task.phase());
         assertEquals(List.of("cannot swing at " + at(second) + " from here — " + at(stone)
                 + " is in the way"), said("cannot"), "one line, once it has lasted");
-        for (int i = 0; i < 3 * FellTree.SWING_REFUSED_TICKS; i++) {
-            task.tick(ctx);
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < FellTree.GIVE_UP_TICKS && status == TaskStatus.RUNNING; i++) {
+            status = task.tick(ctx);
         }
-        assertEquals(1, said("cannot").size(), "and not again for the same block");
+        assertEquals(TaskStatus.FAILED, status, "and a while later the tree is given up");
+        assertTrue(task.failureDetail().contains("is in the way"), task.failureDetail());
+        assertEquals(1, said("cannot").size(), "said once; the giving up has its own line");
     }
 
     @Test
@@ -583,6 +644,145 @@ class FellTreeTest {
             task.tick(ctx);
         }
         assertTrue(said("cannot").isEmpty(), "the walk is what cures it");
+    }
+
+    // ── the whole fell ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    void fellsASevenLogBirchAndComesBackToTheGround() {
+        trunk();
+        pack(4);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(400));
+        assertColumnGone(7);
+        assertEquals(0, ctx.riser.ups, "the top was in reach from the base log");
+        assertEquals(new Pos(0, BASE, 0), ctx.percepts.position, "on the dirt where the stump stood");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 7 logs"), said("felled"));
+        assertEquals(4, ctx.percepts.inventory.count("minecraft:birch_log"), "nothing spent");
+    }
+
+    @Test
+    void aTallTrunkIsPillaredToTheMinimumClearedAndClimbedDownFrom() {
+        trunk(12);
+        pack(8);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(5, ctx.riser.ups, "up to where the top is in reach, and no higher");
+        assertEquals("minecraft:birch_log", ctx.riser.lastItem, "on the tree's own wood");
+        assertColumnGone(12);
+        assertEquals(new Pos(0, BASE, 0), ctx.percepts.position, "the pillar came down with the trunk");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"),
+                "the five placed and reclaimed are the body's own, not the tree's");
+        assertEquals(3, ctx.percepts.inventory.count("minecraft:birch_log"),
+                "five spent; what came back down is drops on the ground, which this world lacks");
+    }
+
+    @Test
+    void onRaisedGroundTheStumpIsTakenFromOutsideAtTheEnd() {
+        trunk(9);
+        raisedGround();
+        pack(4);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(1, ctx.riser.ups);
+        assertColumnGone(9);
+        assertEquals(new Pos(0, BASE + 1, 1), ctx.percepts.position, "stepped out to the south side");
+        assertEquals(ANCHOR, ctx.breaker.targets.get(ctx.breaker.targets.size() - 1),
+                "the stump, one below floor level, is the last swing");
+    }
+
+    @Test
+    void onSunkenGroundTheDirtStaysAndTheBodyEndsOnIt() {
+        trunk();
+        sunkenGround();
+        pack(4);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(1, ctx.riser.ups);
+        assertColumnGone(7);
+        assertEquals(BlockKind.OTHER, ctx.percepts.blocks.at(0, BASE - 1, 0),
+                "the dirt under the stump was never the tree's");
+        assertEquals(new Pos(0, BASE, 0), ctx.percepts.position, "on it, where the stump stood");
+    }
+
+    @Test
+    void aLowSideDigsInRisesAndFellsTheLot() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        pack(4);
+        ctx.percepts.blocks.set(0, BASE + 2, 1, BlockKind.OTHER);
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(1, ctx.riser.ups);
+        assertColumnGone(7);
+        assertEquals(new Pos(0, BASE, 0), ctx.percepts.position);
+    }
+
+    @Test
+    void groundTwoUpLeavesTheStumpBuriedAndSaysSo() {
+        trunk(9);
+        pack(4);
+        standSouth();
+        for (Pos cell : List.of(new Pos(0, BASE, -1), new Pos(1, BASE, 0), new Pos(0, BASE, 1),
+                new Pos(-1, BASE, 0))) {
+            ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.OTHER);
+            ctx.percepts.blocks.set(cell.x(), cell.y() + 1, cell.z(), BlockKind.OTHER);
+        }
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(BlockKind.LOG, ctx.percepts.blocks.at(0, BASE, 0),
+                "two below floor level is a pit: left buried");
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(0, BASE + 1, 0), "one below: from outside");
+        assertTrue(said("felled").get(0).endsWith("8 logs, 1 left buried below the ground"),
+                said("felled").get(0));
+    }
+
+    @Test
+    void aRiseRefusedIsTheEndOfIt() {
+        trunk(12);
+        pack(8);
+        standSouth();
+        ctx.riser.refuse = true;
+
+        assertEquals(TaskStatus.FAILED, drive(400));
+        assertTrue(task.failureDetail().startsWith("the rise refused"), task.failureDetail());
+        assertEquals(BreakState.IDLE, ctx.breaker.state, "the arm is let go of");
+    }
+
+    @Test
+    void nothingInThePackToRiseOnIsTheEndOfIt() {
+        trunk(12);
+        standSouth();
+
+        assertEquals(TaskStatus.FAILED, drive(400));
+        assertTrue(task.failureDetail().startsWith("nothing to rise on"), task.failureDetail());
+    }
+
+    @Test
+    void aRestoredRiseCarriesOnFromWhereTheFeetAre() {
+        trunk(12);
+        pack(8);
+        // As the world stands two rises in: the trunk opened, two logs placed, the feet on them.
+        for (int y = BASE + 1; y <= BASE + 4; y++) {
+            ctx.percepts.blocks.clear(0, y, 0);
+        }
+        ctx.percepts.blocks.set(0, BASE + 1, 0, BlockKind.LOG);
+        ctx.percepts.blocks.set(0, BASE + 2, 0, BlockKind.LOG);
+        ctx.percepts.position = new Pos(0, BASE + 3, 0);
+        Climb climb = new Climb(new Pos(0, BASE + 1, 0), BASE + 6, true, false, List.of(),
+                List.of(), List.of(ANCHOR), List.of(), true);
+        FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.RISE,
+                java.util.Optional.of(SOUTH), java.util.Optional.of(climb));
+
+        assertEquals(TaskStatus.SUCCESS, drive(back, 600));
+        assertEquals(3, ctx.riser.ups, "the three still to go");
+        assertColumnGone(12);
+        assertEquals(new Pos(0, BASE, 0), ctx.percepts.position);
     }
 
     // ── cancel ───────────────────────────────────────────────────────────────────────────────

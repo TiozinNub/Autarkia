@@ -27,9 +27,9 @@ import net.minecraft.server.level.ServerPlayer;
  * in its verdict's colour, the feet cell filled where there is one, and the leaves in the way
  * outlined. A label per side says the verdict and its score, the side being taken marked and its
  * feet cell white-rimmed; one over the stump says what the body is doing about it. Once there is
- * a {@link Climb}, the logs it opens are orange, the cell it stands in white, the logs it breaks
- * from each level amber, the blocks it places on the way up blue, and the wood it takes last from
- * the ground a paler orange.
+ * a {@link Climb}, the logs it opens are orange, the cell it stands in white, the logs above it
+ * amber, the blocks it places on the way up blue, and the wood it takes on the way down and from
+ * outside a paler orange.
  *
  * <p>Transport is Anima's cell overlay ({@link CellOverlays}). Same shape as {@link BoardViewer}:
  * a watcher set per server, a redraw cadence, gone on stop.
@@ -161,29 +161,26 @@ public final class FellViewer {
         }
         groups.add(new CellOverlayPayload.Group(WHITE, WIDTH, BASE_FILL, true,
                 List.of(at(climb.stand()))));
-        List<BlockPos> breaks = new ArrayList<>();
-        List<BlockPos> rises = new ArrayList<>();
-        for (Climb.Level level : climb.levels()) {
-            breaks.addAll(cells(level.breaks()));
-            if (level.rise()) {
-                rises.add(new BlockPos(climb.stand().x(), level.feetY(), climb.stand().z()));
-            }
+        if (!climb.above().isEmpty()) {
+            groups.add(new CellOverlayPayload.Group(BREAK_STROKE, THIN, BREAK_FILL, true,
+                    cells(climb.above())));
         }
-        if (!breaks.isEmpty()) {
-            groups.add(new CellOverlayPayload.Group(BREAK_STROKE, THIN, BREAK_FILL, true, breaks));
+        List<BlockPos> rises = new ArrayList<>();
+        for (int y = climb.stand().y(); y < climb.stand().y() + climb.rises(); y++) {
+            rises.add(new BlockPos(climb.stand().x(), y, climb.stand().z()));
         }
         if (!rises.isEmpty()) {
             groups.add(new CellOverlayPayload.Group(RISE_STROKE, WIDTH, RISE_FILL, true, rises));
         }
-        if (!climb.last().isEmpty()) {
+        List<Pos> down = new ArrayList<>(climb.under());
+        down.addAll(climb.last());
+        if (!down.isEmpty()) {
             groups.add(new CellOverlayPayload.Group(LAST_STROKE, THIN, LAST_FILL, true,
-                    cells(climb.last())));
+                    cells(down)));
         }
         int top = climb.stand().y();
-        for (Climb.Level level : climb.levels()) {
-            for (Pos log : level.breaks()) {
-                top = Math.max(top, log.y());
-            }
+        for (Pos log : climb.above()) {
+            top = Math.max(top, log.y());
         }
         labels.add(new CellOverlayPayload.Label("plan: " + climb.describe(), OPEN_STROKE,
                 new BlockPos(climb.stand().x(), top + 2, climb.stand().z())));

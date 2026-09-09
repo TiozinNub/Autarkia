@@ -34,19 +34,16 @@ public final class AutarkiaTasks {
             Codec.INT.fieldOf("z").forGetter(Pos::z)
     ).apply(p, Pos::new));
 
-    private static final Codec<Climb.Level> LEVEL = RecordCodecBuilder.create(l -> l.group(
-            Codec.INT.fieldOf("feet_y").forGetter(Climb.Level::feetY),
-            POS.listOf().fieldOf("breaks").forGetter(Climb.Level::breaks),
-            Codec.BOOL.fieldOf("rise").forGetter(Climb.Level::rise)
-    ).apply(l, Climb.Level::new));
-
     private static final Codec<Climb> CLIMB = RecordCodecBuilder.create(c -> c.group(
             POS.fieldOf("stand").forGetter(Climb::stand),
             Codec.INT.fieldOf("need_feet_y").forGetter(Climb::needFeetY),
             Codec.BOOL.fieldOf("steps_in").forGetter(Climb::stepsIn),
             Codec.BOOL.optionalFieldOf("digs_in", false).forGetter(Climb::digsIn),
             POS.listOf().fieldOf("step_in").forGetter(Climb::stepIn),
-            LEVEL.listOf().fieldOf("levels").forGetter(Climb::levels),
+            // The three lists are optional so a save from the plan's earlier shape still reads;
+            // every stage after the plan reads the column afresh, so an empty one costs nothing.
+            POS.listOf().optionalFieldOf("above", List.of()).forGetter(Climb::above),
+            POS.listOf().optionalFieldOf("under", List.of()).forGetter(Climb::under),
             POS.listOf().optionalFieldOf("last", List.of()).forGetter(Climb::last),
             Codec.BOOL.fieldOf("complete").forGetter(Climb::complete)
     ).apply(c, Climb::new));

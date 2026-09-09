@@ -144,12 +144,11 @@ class AutarkiaTaskCodecsTest {
     void aFellTreeMidClimbComesBackWhereItWas() {
         var anchor = new dev.luizloyola.anima.core.brain.sense.Pos(208, -60, 0);
         var stand = new dev.luizloyola.anima.core.brain.sense.Pos(208, -59, 0);
-        var climb = new dev.luizloyola.autarkia.core.tree.Climb(stand, -59, true, false,
+        var climb = new dev.luizloyola.autarkia.core.tree.Climb(stand, -57, true, false,
                 java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(208, -59, 0)),
-                java.util.List.of(new dev.luizloyola.autarkia.core.tree.Climb.Level(-59,
-                        java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(208, -57, 0)),
-                        true)),
+                java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(208, -57, 0)),
                 java.util.List.of(anchor),
+                java.util.List.of(),
                 false);
         var chosen = new dev.luizloyola.anima.core.brain.sense.Pos(207, -60, 0);
         var task = FellTree.restored(anchor, FellTree.Stage.OPEN,

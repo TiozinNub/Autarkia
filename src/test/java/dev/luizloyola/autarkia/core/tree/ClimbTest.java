@@ -12,8 +12,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Where a body must stand to reach every log, and the ladder of breaks and rises to get there —
- * counted from the cell it stands in beside the trunk, whatever height the ground puts that at.
+ * Where a body must stand to reach every log, how it gets there — counted from the cell it stands
+ * in beside the trunk, whatever height the ground puts that at — and what comes out on the way
+ * up, from the top, on the way down, and from outside.
  */
 class ClimbTest {
 
@@ -111,28 +112,25 @@ class ClimbTest {
         assertTrue(climb.stepsIn());
         assertTrue(climb.stepIn().isEmpty(), "nothing left to open");
         assertEquals(new Pos(0, BASE + 1, 0), climb.stand());
-        assertEquals(List.of(STUMP), climb.last());
-        assertEquals("open 0 · step in · 4 to break · no rise · then 1 from the ground",
-                climb.describe());
+        assertEquals(List.of(STUMP), climb.under());
+        assertEquals("open 0 · step in · no rise · 4 above · 1 underfoot", climb.describe());
     }
 
     @Test
-    void aSevenLogBirchWantsOneStepIn() {
+    void aSevenLogBirchWantsOneStepInAndNoRise() {
         Climb climb = plan(column(7), BESIDE);
 
         assertEquals(BASE + 1, climb.needFeetY(), "the top log is reachable from one up");
         assertEquals(List.of(new Pos(0, BASE + 1, 0), new Pos(0, BASE + 2, 0)), climb.stepIn(),
                 "the two logs a body's height above the stump; the stump stays as the floor");
         assertEquals(new Pos(0, BASE + 1, 0), climb.stand());
-        assertEquals(1, climb.levels().size());
-        Climb.Level level = climb.levels().get(0);
-        assertEquals(BASE + 1, level.feetY());
-        assertEquals(column(BASE + 3, 4), level.breaks());
-        assertFalse(level.rise());
-        assertEquals(List.of(STUMP), climb.last(), "the stump: from the ground, at the end");
+        assertEquals(0, climb.rises());
+        assertEquals(column(BASE + 3, 4), climb.above());
+        assertEquals(List.of(STUMP), climb.under(), "the stump: underfoot, on the way down");
+        assertTrue(climb.last().isEmpty());
+        assertEquals(BASE, climb.floor());
         assertTrue(climb.complete());
-        assertEquals("open 2 · step in · 4 to break · no rise · then 1 from the ground",
-                climb.describe());
+        assertEquals("open 2 · step in · no rise · 4 above · 1 underfoot", climb.describe());
     }
 
     @Test
@@ -143,31 +141,25 @@ class ClimbTest {
         assertFalse(climb.stepsIn());
         assertTrue(climb.stepIn().isEmpty());
         assertEquals(BESIDE, climb.stand());
-        assertEquals(List.of(new Climb.Level(BASE, column(BASE + 1, 3), false)), climb.levels(),
-                "every log above where the body stands, lowest first");
-        assertEquals(List.of(STUMP), climb.last(), "and the stump after them");
+        assertEquals(column(BASE + 1, 3), climb.above(), "every log above the floor, lowest first");
+        assertEquals(List.of(STUMP), climb.last(), "and the stump after them, from where it stands");
+        assertTrue(climb.under().isEmpty());
+        assertEquals(BASE, climb.floor());
         assertTrue(climb.complete());
         assertEquals("4 to break from beside", climb.describe());
     }
 
     @Test
-    void aTallTrunkIsClimbedALogAtATime() {
+    void aTallTrunkRisesToTheMinimumThenTakesTheRest() {
         Climb climb = plan(column(12), BESIDE);
 
         assertEquals(BASE + 6, climb.needFeetY());
+        assertEquals(5, climb.rises(), "from the stand at one up to the height the top demands");
         assertEquals(2, climb.stepIn().size());
-        assertEquals(6, climb.levels().size());
-        assertEquals(4, climb.levels().get(0).breaks().size(), "four in reach from the base log");
-        assertTrue(climb.levels().get(0).rise());
-        for (int i = 1; i < 6; i++) {
-            assertEquals(1, climb.levels().get(i).breaks().size(), "then one per rise");
-        }
-        assertFalse(climb.levels().get(5).rise(), "the top comes out from the last level");
-        assertEquals(5, climb.rises());
-        assertEquals(9, climb.toBreak());
+        assertEquals(column(BASE + 3, 9), climb.above());
+        assertEquals(List.of(STUMP), climb.under());
         assertTrue(climb.complete());
-        assertEquals("open 2 · step in · 9 to break · 5 rises · then 1 from the ground",
-                climb.describe());
+        assertEquals("open 2 · step in · 5 rises · 9 above · 1 underfoot", climb.describe());
     }
 
     @Test
@@ -189,28 +181,26 @@ class ClimbTest {
 
         Climb climb = Climb.plan(ARM, STUMP, logs, world, BESIDE, true, BODY);
         assertEquals(List.of(new Pos(0, BASE + 1, 0), new Pos(0, BASE + 2, 0)), climb.stepIn());
-        assertEquals("open 2 · step in · 4 to break · no rise · then 1 from the ground",
-                climb.describe());
+        assertEquals("open 2 · step in · no rise · 4 above · 1 underfoot", climb.describe());
     }
 
     // ── the ground beside the stump ──────────────────────────────────────────────────────────
 
     @Test
-    void onRaisedGroundTheSecondLogIsTheStepUp() {
+    void onRaisedGroundTheSecondLogIsTheStepUpAndTheStumpComesFromOutside() {
         Climb climb = plan(column(9), RAISED);
 
         assertTrue(climb.stepsIn());
         assertEquals(List.of(new Pos(0, BASE + 2, 0), new Pos(0, BASE + 3, 0)), climb.stepIn(),
                 "the body's height above the log at its own feet height");
         assertEquals(new Pos(0, BASE + 2, 0), climb.stand(), "on the second log");
-        for (Climb.Level level : climb.levels()) {
-            assertFalse(level.breaks().contains(new Pos(0, BASE + 1, 0)),
-                    "never the floor underfoot");
-        }
-        assertEquals(List.of(new Pos(0, BASE + 1, 0), STUMP), climb.last(),
-                "the step up, then the stump under it — from the ground, at the end");
+        assertEquals(1, climb.rises());
+        assertEquals(column(BASE + 4, 5), climb.above());
+        assertEquals(List.of(new Pos(0, BASE + 1, 0)), climb.under(), "the step up, on the way down");
+        assertEquals(List.of(STUMP), climb.last(), "one below floor level: from outside");
+        assertEquals(BASE + 1, climb.floor());
         assertTrue(climb.complete());
-        assertEquals("open 2 · step in · 5 to break · 1 rise · then 2 from the ground",
+        assertEquals("open 2 · step in · 1 rise · 5 above · 1 underfoot · then 1 from outside",
                 climb.describe());
     }
 
@@ -219,23 +209,37 @@ class ClimbTest {
         Climb climb = plan(column(7), RAISED);
 
         assertFalse(climb.stepsIn());
-        assertEquals(column(BASE + 2, 5), climb.levels().get(0).breaks());
-        assertEquals(List.of(new Pos(0, BASE + 1, 0), STUMP), climb.last());
+        assertEquals(column(BASE + 2, 5), climb.above());
+        assertEquals(List.of(new Pos(0, BASE + 1, 0), STUMP), climb.last(),
+                "floor level and one below, highest first");
         assertTrue(climb.complete());
         assertEquals("7 to break from beside", climb.describe());
     }
 
     @Test
-    void onSunkenGroundTheDirtIsTheStepUpAndNothingComesLast() {
+    void onSunkenGroundTheDirtIsTheStepUpAndNothingComesAfter() {
         Climb climb = plan(column(7), SUNKEN);
 
         assertTrue(climb.stepsIn());
         assertEquals(List.of(STUMP, new Pos(0, BASE + 1, 0)), climb.stepIn(),
                 "the stump is in the body's way now, and comes out with the log above it");
         assertEquals(STUMP, climb.stand(), "feet where the stump was, on the dirt under it");
-        assertTrue(climb.last().isEmpty(), "the dirt was never part of the tree");
+        assertEquals(1, climb.rises());
+        assertTrue(climb.under().isEmpty(), "the dirt was never part of the tree");
+        assertTrue(climb.last().isEmpty());
+        assertEquals(BASE - 1, climb.floor());
         assertTrue(climb.complete());
-        assertEquals("open 2 · step in · 5 to break · 1 rise", climb.describe());
+        assertEquals("open 2 · step in · 1 rise · 5 above", climb.describe());
+    }
+
+    @Test
+    void groundTwoUpLeavesTheStumpBuried() {
+        Climb climb = plan(column(9), new Pos(1, BASE + 2, 0));
+
+        assertEquals(List.of(new Pos(0, BASE + 2, 0)), climb.under());
+        assertEquals(List.of(new Pos(0, BASE + 1, 0)), climb.last(), "one below floor level");
+        assertFalse(climb.above().contains(STUMP));
+        assertTrue(climb.complete(), "two below floor level is a pit, and left on purpose");
     }
 
     // ── no room to hop ───────────────────────────────────────────────────────────────────────
@@ -249,21 +253,24 @@ class ClimbTest {
         assertEquals(List.of(STUMP, new Pos(0, BASE + 1, 0)), climb.stepIn(),
                 "the trunk is dug open at the body's own height, stump included");
         assertEquals(STUMP, climb.stand(), "and it walks in flat, onto the dirt under the stump");
-        assertTrue(climb.last().isEmpty(), "nothing of the tree is left underfoot");
+        assertEquals(1, climb.rises());
+        assertTrue(climb.under().isEmpty(), "nothing of the tree is left underfoot");
+        assertEquals(BASE, climb.floor());
         assertTrue(climb.complete());
-        assertEquals("open 2 · dig in · 5 to break · 1 rise", climb.describe());
+        assertEquals("open 2 · dig in · 1 rise · 5 above", climb.describe());
     }
 
     @Test
-    void aLowSideOnRaisedGroundDigsThroughTheSecondLogAndKeepsTheStumpForLast() {
+    void aLowSideOnRaisedGroundDigsThroughTheSecondLogAndKeepsTheStumpForOutside() {
         Climb climb = plan(column(9), RAISED, false);
 
         assertTrue(climb.digsIn());
         assertEquals(List.of(new Pos(0, BASE + 1, 0), new Pos(0, BASE + 2, 0)), climb.stepIn());
         assertEquals(new Pos(0, BASE + 1, 0), climb.stand(), "level with the ground beside");
+        assertEquals(2, climb.rises());
+        assertTrue(climb.under().isEmpty());
         assertEquals(List.of(STUMP), climb.last());
-        assertEquals("open 2 · dig in · 6 to break · 2 rises · then 1 from the ground",
-                climb.describe());
+        assertEquals("open 2 · dig in · 2 rises · 6 above · then 1 from outside", climb.describe());
     }
 
     @Test
