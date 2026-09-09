@@ -12,8 +12,10 @@ import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
+import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.MoveCapabilities;
+import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -89,6 +91,13 @@ public final class FellTree implements PrimitiveTask {
     public static final int NO_GAIN_LIMIT = 3;
 
     /**
+     * How long a tree may have no way in before the chop gives it up — five seconds of the ground
+     * being re-read every second. The board paces the retry; a body holding the claim and looking
+     * is a body doing nothing (Ash, alone at the tree in water, until loneliness took the task).
+     */
+    public static final int NO_WAY_IN_TICKS = 100;
+
+    /**
      * How many leaves in a row the arm chews through to reach the block it was refused. A crown
      * hides its own trunk from the side, and the leaf the breaker blames is as often as not in
      * front of another; past this many the swing is not worth the path.
@@ -121,6 +130,8 @@ public final class FellTree implements PrimitiveTask {
     private boolean arrived;
     /** The tick a failed walk may be ordered again. */
     private int walkRetryAt;
+    /** The tick the tree was first found to have no way in, while that lasts; -1 otherwise. */
+    private int noWayInSince = -1;
     /** How many times the current walk has failed. */
     private int walkFailures;
     /** The block under the arm, or null, and what it was when the swing began. */
@@ -133,8 +144,8 @@ public final class FellTree implements PrimitiveTask {
     private boolean rising;
     private int riseFrom;
     private int noGain;
-    /** The item the body rises on — the tree's own log, read off the trunk once. */
-    private @Nullable String riseOn;
+    /** This tree's own log, read off the trunk once — the first choice of block to rise on. */
+    private @Nullable String treeLog;
     /** Logs broken and rises landed, so the felled count leaves the body's own steps out. */
     private int logsBroken;
     private int risen;
@@ -220,8 +231,14 @@ public final class FellTree implements PrimitiveTask {
         if (side == null) {
             phase = "no way in";
             ctx.actuators().mover().stop();
+            if (noWayInSince < 0) {
+                noWayInSince = ticks;
+            } else if (ticks - noWayInSince >= NO_WAY_IN_TICKS) {
+                return fail(ctx, "no way in — " + approach.summary());
+            }
             return TaskStatus.RUNNING; // and keep looking: the ground may change
         }
+        noWayInSince = -1;
         // Already standing where the plan would put it — in the trunk's column, on the step up or
         // dug in level with it — after a preemption, or a reload that lost its plan. Plan from
         // here, the way it got in; walking out to walk back in is not a step. Anywhere else in the
@@ -329,10 +346,7 @@ public final class FellTree implements PrimitiveTask {
         }
         String item = riseOn(ctx);
         if (item == null) {
-            return fail(ctx, "nothing to rise on — no log of this tree in the pack");
-        }
-        if (ctx.percepts().inventory().count(item) == 0) {
-            return fail(ctx, "nothing to rise on — no " + item + " left in the pack");
+            return fail(ctx, "nothing to rise on — no log in the pack");
         }
         if (!riser.up(item)) {
             return fail(ctx, "the rise refused from " + where(at));
@@ -468,19 +482,33 @@ public final class FellTree implements PrimitiveTask {
         return null;
     }
 
-    /** The item the body rises on: this tree's own log, read off the first of them still standing. */
+    /**
+     * What the body rises on: this tree's own log while it carries any — the felled wood comes
+     * back down with the pillar — else whatever log it does carry, since a body that has just
+     * felled birches and arrives at an oak has no oak to stand on until the opening logs are picked
+     * up. Null with no log in the pack at all.
+     */
     private @Nullable String riseOn(BrainContext ctx) {
-        if (riseOn == null) {
+        Inventory pack = ctx.percepts().inventory();
+        if (treeLog == null) {
             BlockProbe blocks = ctx.percepts().blocks();
             for (Pos log : logsFrom(ctx, anchor.y())) {
                 String id = blocks.idAt(log.x(), log.y(), log.z());
                 if (!id.isEmpty()) {
-                    riseOn = id;
+                    treeLog = id;
                     break;
                 }
             }
         }
-        return riseOn;
+        if (treeLog != null && pack.count(treeLog) > 0) {
+            return treeLog;
+        }
+        for (Inventory.Entry entry : pack.occupied()) {
+            if (Stock.LOGS.matches(entry.stack().id())) {
+                return entry.stack().id();
+            }
+        }
+        return null;
     }
 
     /**

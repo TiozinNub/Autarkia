@@ -805,6 +805,26 @@ class FellTreeTest {
     }
 
     @Test
+    void noWayInForLongIsTheEndOfIt() {
+        trunk();
+        standSouth();
+        for (Pos cell : List.of(new Pos(0, BASE - 1, -1), new Pos(1, BASE - 1, 0),
+                new Pos(0, BASE - 1, 1), new Pos(-1, BASE - 1, 0))) {
+            ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.WATER);
+        }
+
+        TaskStatus status = TaskStatus.RUNNING;
+        int ticks = 0;
+        while (status == TaskStatus.RUNNING && ticks++ < 2 * FellTree.NO_WAY_IN_TICKS) {
+            status = task.tick(ctx);
+        }
+        assertEquals(TaskStatus.FAILED, status);
+        assertTrue(task.failureDetail().startsWith("no way in — "), task.failureDetail());
+        assertTrue(ticks >= FellTree.NO_WAY_IN_TICKS, "not on the spot: the ground may change");
+        assertEquals(1, said("gave up").size());
+    }
+
+    @Test
     void aRiseRefusedIsTheEndOfIt() {
         trunk(12);
         pack(8);
@@ -814,6 +834,17 @@ class FellTreeTest {
         assertEquals(TaskStatus.FAILED, drive(400));
         assertTrue(task.failureDetail().startsWith("the rise refused"), task.failureDetail());
         assertEquals(BreakState.IDLE, ctx.breaker.state, "the arm is let go of");
+    }
+
+    @Test
+    void aBodyRisesOnWhateverLogItCarriesWhenItHasNoneOfThisTree() {
+        trunk(12);
+        ctx.percepts.inventory.add(new ItemStack("minecraft:spruce_log", 8, 64, ""));
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals("minecraft:spruce_log", ctx.riser.lastItem, "a log is a log to stand on");
+        assertEquals(5, ctx.riser.ups);
     }
 
     @Test
