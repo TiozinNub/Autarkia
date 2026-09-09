@@ -64,6 +64,12 @@ public final class FellTree implements PrimitiveTask {
     public static final int WALK_RETRY_TICKS = 40;
 
     /**
+     * How long the arm may be refused every block it has left, with the legs done, before the
+     * journal says what is in the way — two seconds, one line per block.
+     */
+    public static final int SWING_REFUSED_TICKS = 40;
+
+    /**
      * The stages so far, in order. Written into the save by NAME, so add at the end and never
      * rename: a saved body mid-stage reads its stage back by it.
      */
@@ -90,6 +96,9 @@ public final class FellTree implements PrimitiveTask {
     /** The block under the arm, or null, and what it was when the swing began. */
     private @Nullable Pos breaking;
     private @Nullable BlockKind breakingKind;
+    /** The block the arm has been refused since {@code refusedSince}, while nothing else was begun. */
+    private @Nullable Pos refused;
+    private int refusedSince;
     private int ticks;
     /** The last summary journalled — a re-read that says the same thing says nothing. */
     private String told = "";
@@ -189,10 +198,11 @@ public final class FellTree implements PrimitiveTask {
             ctx.actuators().mover().stop();
             return; // and keep looking: the ground may change
         }
-        // Already in the trunk's column, at or above the base: a fresh task after a preemption, or
-        // a reload that lost its plan. Plan from here; walking out to walk back in is not a step.
+        // Already standing where the plan would put it — in the trunk's column, on the step up —
+        // after a preemption, or a reload that lost its plan. Plan from here; walking out to walk
+        // back in is not a step. Anywhere else in the column (on top of the tree, say) is a walk.
         Pos at = ctx.percepts().position();
-        if (at.x() == anchor.x() && at.z() == anchor.z() && at.y() >= anchor.y()) {
+        if (at.x() == anchor.x() && at.z() == anchor.z() && at.y() == side.feet().y() + 1) {
             plan(ctx, side);
             if (stage == Stage.OPEN) {
                 open(ctx);
@@ -329,21 +339,43 @@ public final class FellTree implements PrimitiveTask {
             }
             breaking = null; // FAILED or stopped under us: re-tried below if it still stands
         }
-        boolean left = false;
+        Pos first = null;
         for (Pos cell : cells) {
             BlockKind kind = ctx.percepts().blocks().at(cell.x(), cell.y(), cell.z());
             if (!kinds.contains(kind)) {
                 continue; // already gone
             }
-            left = true;
+            if (first == null) {
+                first = cell;
+            }
             // A refusal is out of reach or a blocked swing — the walk cures both; ask again next tick.
             if (breaker.begin(cell)) {
                 breaking = cell;
                 breakingKind = kind;
+                refused = null;
                 return false;
             }
         }
-        return !left;
+        if (first != null && (arrived || walkingTo == null)) {
+            refusedFor(ctx, breaker, first);
+        }
+        return first == null;
+    }
+
+    /**
+     * The arm has been refused everything it has left and the legs are not going to change that.
+     * Say so once it has lasted, and say what the breaker blames: the trunk beside a body is not
+     * always swingable from the side it walked up to, and nothing above can see that yet.
+     */
+    private void refusedFor(BrainContext ctx, BlockBreaker breaker, Pos cell) {
+        if (!cell.equals(refused)) {
+            refused = cell;
+            refusedSince = ticks;
+        } else if (ticks - refusedSince == SWING_REFUSED_TICKS) {
+            Pos block = breaker.obstruction(cell);
+            say(ctx, "cannot swing at " + where(cell) + " from here — "
+                    + (block == null ? "out of reach" : where(block) + " is in the way"));
+        }
     }
 
     @Override
@@ -351,6 +383,7 @@ public final class FellTree implements PrimitiveTask {
         ctx.actuators().mover().stop();
         ctx.actuators().breaker().abort();
         breaking = null;
+        refused = null;
         walkingTo = null;
         arrived = false;
     }

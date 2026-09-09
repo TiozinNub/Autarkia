@@ -489,6 +489,60 @@ class FellTreeTest {
         assertEquals("stepping in", task.phase());
     }
 
+    // ── what the arm cannot do ───────────────────────────────────────────────────────────────
+
+    @Test
+    void aBodyOnTopOfTheTreeWalksDownToASideFirst() {
+        trunk();
+        ctx.percepts.position = new Pos(0, BASE + 7, 0); // on the top log
+
+        task.tick(ctx);
+        assertEquals(1, ctx.mover.moveToCalls, "in the column is not on the step up");
+        assertEquals(BASE, ctx.mover.lastY, "down to the ground beside the stump");
+        assertTrue(ctx.breaker.targets.isEmpty(), "nothing is swung at from up there");
+        assertTrue(said("plan").isEmpty());
+    }
+
+    @Test
+    void aSwingRefusedAfterArrivalIsSaidOnceWithWhatIsInTheWay() {
+        trunk();
+        standSouth();
+        task.tick(ctx);
+        arriveAt(SOUTH);
+        Pos second = new Pos(0, BASE + 1, 0);
+        Pos stone = new Pos(0, BASE + 2, 1);
+        ctx.breaker.refuseBegin = true; // every opening log, not just the first: the next is tried
+        ctx.breaker.obstructions.put(second, stone);
+
+        for (int i = 0; i < FellTree.SWING_REFUSED_TICKS + 2; i++) {
+            task.tick(ctx);
+        }
+        assertEquals("opening the trunk", task.phase());
+        assertEquals(List.of("cannot swing at " + at(second) + " from here — " + at(stone)
+                + " is in the way"), said("cannot"), "one line, once it has lasted");
+        for (int i = 0; i < 3 * FellTree.SWING_REFUSED_TICKS; i++) {
+            task.tick(ctx);
+        }
+        assertEquals(1, said("cannot").size(), "and not again for the same block");
+    }
+
+    @Test
+    void aRefusalWhileStillWalkingIsNotWorthALine() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        Pos leaf = new Pos(0, BASE, 1);
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        ctx.breaker.refuse.add(leaf);
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.MOVING);
+
+        for (int i = 0; i < 2 * FellTree.SWING_REFUSED_TICKS; i++) {
+            task.tick(ctx);
+        }
+        assertTrue(said("cannot").isEmpty(), "the walk is what cures it");
+    }
+
     // ── cancel ───────────────────────────────────────────────────────────────────────────────
 
     @Test
