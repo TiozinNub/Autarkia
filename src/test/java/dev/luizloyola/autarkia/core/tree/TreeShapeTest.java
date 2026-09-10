@@ -79,6 +79,36 @@ class TreeShapeTest {
     }
 
     @Test
+    void anAcaciaThatBendsAtItsFirstLogIsStillATree() {
+        // The tenth acacia the lab planted, 2026-09-10: one grounded log, both limbs leaving it
+        // diagonally at once, the crown two higher. Neither the foot of a straight column nor a
+        // bush log with a leaf on it — and it was no tree to the split, so no project would ever
+        // have sent anyone to it.
+        log(0, 64, 0);
+        log(-1, 65, 0);
+        log(1, 65, 0);
+        log(-2, 66, 0);
+        log(2, 66, 0);
+        log(3, 67, 0);
+        log(3, 68, 0);
+        for (int x = -3; x <= 4; x++) {
+            for (int z = -1; z <= 1; z++) {
+                for (int y = 66; y <= 69; y++) {
+                    if (probe.at(x, y, z) == BlockKind.AIR) {
+                        leaf(x, y, z);
+                    }
+                }
+            }
+        }
+
+        List<TreeShape.Trunk> trees = TreeShape.split(mass, probe);
+        assertEquals(1, trees.size(), "wood in the layer over a grounded log makes it a column's foot");
+        assertEquals(List.of(new Pos(0, 64, 0)), trees.get(0).base());
+        assertEquals(6, trees.get(0).branches().size(), "both limbs, whole");
+        assertFalse(SplitReport.of(mass, probe).treeless());
+    }
+
+    @Test
     void aFallenLogAgainstATrunkIsBranchesNeverBase() {
         // Touching a real tree, the fallen run is the tree's wood — but it must never read
         // as stump cells: the base is where saplings go back in.

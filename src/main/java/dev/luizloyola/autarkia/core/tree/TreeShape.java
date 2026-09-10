@@ -36,6 +36,33 @@ import java.util.Set;
  * anchor this produces is a memory's identity.
  */
 public final class TreeShape {
+    /**
+     * Whether wood continues over {@code log}: straight up, or as a bend — a log diagonally over
+     * it resting on nothing (one resting on a log is another column's) that has wood over itself
+     * in turn (a branch tip has none).
+     */
+    private static boolean woodAbove(Map<Pos, BlockKind> blocks, Pos log) {
+        return woodAbove(blocks, log, true);
+    }
+
+    private static boolean woodAbove(Map<Pos, BlockKind> blocks, Pos log, boolean bendMustGoOn) {
+        if (blocks.get(new Pos(log.x(), log.y() + 1, log.z())) == BlockKind.LOG) {
+            return true;
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                Pos over = new Pos(log.x() + dx, log.y() + 1, log.z() + dz);
+                if ((dx != 0 || dz != 0)
+                        && blocks.get(over) == BlockKind.LOG
+                        && blocks.get(new Pos(over.x(), log.y(), over.z())) != BlockKind.LOG
+                        && (!bendMustGoOn || woodAbove(blocks, over, false))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** Low-to-high, then west-to-east, then north-to-south: a total order over cells. */
     private static final Comparator<Pos> ORDER = Comparator.comparingInt(Pos::y)
             .thenComparingInt(Pos::x).thenComparingInt(Pos::z);
@@ -72,6 +99,12 @@ public final class TreeShape {
         // single grounded log crowned in leaves, standing lateral-alone. The lateral test tells a
         // jungle bush from a fallen run under a low canopy — a run's cells have grounded,
         // column-less partners beside them and disqualify each other. Decisions: Luiz, 2026-08-02.
+        // The foot of a column is a grounded log with wood over it — straight up, or a bend: a
+        // log diagonally over it that rests on nothing and goes on up itself. An acacia's trunk
+        // can leave its first log sideways at once, and read as bare grounded wood it was no tree
+        // at all (2026-09-10). A neighbour's second log also sits diagonally over a fallen log or
+        // a stump beside its trunk, but rests on that neighbour's base; a branch tip hanging over
+        // a stump rests on nothing but goes no further up. Both stay what they were.
         Set<Pos> grounded = new LinkedHashSet<>();
         Set<Pos> columnFeet = new HashSet<>();
         for (Pos log : logs) {
@@ -81,7 +114,7 @@ public final class TreeShape {
                 continue; // not standing on real ground: no stump candidate
             }
             grounded.add(log);
-            if (blocks.get(new Pos(log.x(), log.y() + 1, log.z())) == BlockKind.LOG) {
+            if (woodAbove(blocks, log)) {
                 columnFeet.add(log);
             }
         }
