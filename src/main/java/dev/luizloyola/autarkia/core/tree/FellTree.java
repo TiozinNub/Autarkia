@@ -21,6 +21,7 @@ import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -133,6 +134,11 @@ public final class FellTree implements PrimitiveTask {
      * front of another; past this many the swing is not worth the path.
      */
     public static final int CHEW_HOPS = 3;
+    /**
+     * How long a lean the body refuses is asked for again before it is given up: the body lands
+     * a tick or two after the probe says there is a block under its feet, and refuses mid-air.
+     */
+    private static final int LEAN_RETRY_TICKS = 20;
 
     /**
      * The stages, in order. Written into the save by NAME, so add at the end and never rename: a
@@ -169,8 +175,14 @@ public final class FellTree implements PrimitiveTask {
     /** The lean under way, if any — from its clearing to the body being back in the middle. */
     private Climb.@Nullable Lean leaning;
     private boolean leanDone;
+    /** The tick a lean was first refused by the body, while it keeps being; -1 otherwise. */
+    private int leanAskedAt = -1;
+    /** Every cell the branches were looked for from, for the word on what was never in reach. */
+    private final Set<Pos> stood = new LinkedHashSet<>();
     /** Branches leant for already, so each is leant for once. */
     private final Set<Pos> leansTried = new HashSet<>();
+    /** Leans the plan did not make: for a branch counted on and refused from a stand a lean reaches it from. */
+    private final List<Climb.Lean> fallbackLeans = new ArrayList<>();
     /** The feet cell the last move order was for; a different one is a new order. */
     private @Nullable Pos walkingTo;
     /** The tick the last move order went out — its state is readable only from the next one. */
@@ -683,9 +695,30 @@ public final class FellTree implements PrimitiveTask {
         }
         int felled = logsBroken - risen;
         int unreached = 0;
+        Climb.Arm arm = Climb.Arm.of(ctx.percepts());
         for (Pos branch : climb.branches()) {
-            if (ctx.percepts().blocks().at(branch.x(), branch.y(), branch.z()) == BlockKind.LOG) {
-                unreached++;
+            if (ctx.percepts().blocks().at(branch.x(), branch.y(), branch.z()) != BlockKind.LOG) {
+                continue;
+            }
+            unreached++;
+            // The word on it: where the body came nearest, and how far that still was — what a
+            // missed log is diagnosed from, once per tree that leaves one.
+            Pos nearest = null;
+            double best = Double.MAX_VALUE;
+            for (Pos cell : stood) {
+                double dx = branch.x() - cell.x();
+                double dz = branch.z() - cell.z();
+                double dy = branch.y() + 0.5 - (cell.y() + arm.eyeHeight());
+                double d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (d < best) {
+                    best = d;
+                    nearest = cell;
+                }
+            }
+            if (nearest != null) {
+                say(ctx, "a branch at " + where(branch) + " was never in reach — "
+                        + Math.round(best * 100) / 100.0 + " from " + where(nearest)
+                        + ", the nearest the body stood");
             }
         }
         say(ctx, "felled the tree at " + where(anchor) + " — " + felled + " logs"
@@ -861,6 +894,16 @@ public final class FellTree implements PrimitiveTask {
                 cells.add(log);
             }
         }
+        if (stood.add(at)) {
+            int leansHere = 0;
+            for (Climb.Lean lean : climb.leans()) {
+                if (lean.stand().equals(at)) {
+                    leansHere++;
+                }
+            }
+            say(ctx, "standing at " + where(at) + " — " + cells.size() + " branches in reach"
+                    + (leansHere == 0 ? "" : ", " + leansHere + " to lean for"));
+        }
         if (cells.isEmpty()) {
             // Settle a swing in flight before anything else.
             return breakNext(ctx, List.of(), WOOD, false) && leans(ctx, at);
@@ -880,6 +923,12 @@ public final class FellTree implements PrimitiveTask {
                 say(ctx, "a branch at " + where(cell) + " refused from " + where(at) + " — "
                         + (block == null ? "the arm calls it out of reach"
                         : where(block) + " is in the way"));
+                // Counted on from here and refused as out of reach — a body lands off the middle
+                // of its cell after a hop, and a mega jungle's limb 4.18 from the cell's centre
+                // was refused from it (2026-09-10) — is what a lean from right here is for.
+                if (block == null && Climb.reachesLeaning(arm, at.x(), at.y(), at.z(), cell)) {
+                    fallbackLeans.add(new Climb.Lean(cell, at));
+                }
             }
         }
         return leans(ctx, at);
@@ -895,7 +944,9 @@ public final class FellTree implements PrimitiveTask {
         Leaner leaner = ctx.actuators().leaner();
         BlockProbe blocks = ctx.percepts().blocks();
         if (leaning == null) {
-            for (Climb.Lean lean : climb.leans()) {
+            List<Climb.Lean> candidates = new ArrayList<>(climb.leans());
+            candidates.addAll(fallbackLeans);
+            for (Climb.Lean lean : candidates) {
                 Pos branch = lean.branch();
                 if (lean.stand().equals(at) && !leansTried.contains(branch)
                         && blocks.at(branch.x(), branch.y(), branch.z()) == BlockKind.LOG) {
@@ -936,11 +987,19 @@ public final class FellTree implements PrimitiveTask {
                     }
                 }
                 if (!leaner.toward(branch.x() + 0.5, branch.z() + 0.5)) {
+                    if (leanAskedAt < 0) {
+                        leanAskedAt = ticks;
+                    }
+                    if (ticks - leanAskedAt < LEAN_RETRY_TICKS) {
+                        return false; // still landing, most likely: ask again
+                    }
                     say(ctx, "the body will not lean from " + where(at) + " for the branch at "
                             + where(branch));
                     leaning = null;
+                    leanAskedAt = -1;
                     return false;
                 }
+                leanAskedAt = -1;
                 say(ctx, "leaning from " + where(at) + " for the branch at " + where(branch));
                 phase = "leaning for a branch";
                 return false;
@@ -1126,6 +1185,11 @@ public final class FellTree implements PrimitiveTask {
             breaking = null; // FAILED or stopped under us: re-tried below if it still stands
         }
         BlockProbe blocks = ctx.percepts().blocks();
+        // The block under the feet is the floor, never something to chew: a branch below the
+        // body puts it on the arm's line, and a cherry's stand was chewed out from under it for
+        // a limb two down (2026-09-10).
+        Pos feet = leaning != null ? leaning.stand() : ctx.percepts().position();
+        Pos floorCell = new Pos(feet.x(), feet.y() - 1, feet.z());
         Pos first = null;
         for (Pos cell : cells) {
             BlockKind kind = blocks.at(cell.x(), cell.y(), cell.z());
@@ -1149,8 +1213,8 @@ public final class FellTree implements PrimitiveTask {
                     return false;
                 }
                 Pos block = breaker.obstruction(target);
-                if (block == null) {
-                    break; // out of reach: the walk's problem
+                if (block == null || block.equals(floorCell)) {
+                    break; // out of reach, or through the floor: the walk's problem, or nobody's
                 }
                 BlockKind inTheWay = blocks.at(block.x(), block.y(), block.z());
                 // A leaf on its decay rim reads as plain solid to the probe — a dying canopy is

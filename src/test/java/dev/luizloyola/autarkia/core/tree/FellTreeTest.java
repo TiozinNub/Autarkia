@@ -1104,6 +1104,82 @@ class FellTreeTest {
     }
 
     @Test
+    void aLeanTheBodyRefusesWhileLandingIsAskedForAgain() {
+        trunk();
+        crown();
+        List<Pos> limb = List.of(new Pos(0, BASE + 5, 1), new Pos(0, BASE + 5, 2),
+                new Pos(0, BASE + 5, 3), new Pos(0, BASE + 6, 3), new Pos(0, BASE + 6, 4),
+                new Pos(0, BASE + 6, 5));
+        for (Pos log : limb) {
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:birch_log");
+        }
+        pack(8);
+        standSouth();
+        ctx.leaner.refuseFor = 3; // the probe says landed a tick or two before the body agrees
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertEquals(1, ctx.leaner.leans);
+        Pos tip = limb.get(5);
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(tip.x(), tip.y(), tip.z()));
+        assertTrue(said("the body will not lean").isEmpty());
+    }
+
+    @Test
+    void theFloorUnderTheFeetIsNeverChewedForABranchBelow() {
+        trunk(10);
+        crown();
+        // A limb low on the trunk, refused from the top with the body's own floor in the way —
+        // what the breaker's march says of a branch below the feet. The old chew took the floor
+        // out from under the body (a cherry, 2026-09-10).
+        Pos low = new Pos(1, BASE + 1, 0);
+        ctx.percepts.blocks.set(low.x(), low.y(), low.z(), BlockKind.LOG);
+        ctx.percepts.blocks.setId(low.x(), low.y(), low.z(), "minecraft:birch_log");
+        Pos top = new Pos(0, BASE + 4, 0);
+        Pos floor = new Pos(0, BASE + 3, 0);
+        ctx.breaker.refuse.add(low);
+        ctx.breaker.obstructions.put(low, floor);
+        pack(4);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertEquals(List.of("a branch at " + at(low) + " refused from " + at(top) + " — " + at(floor)
+                + " is in the way"), said("a branch at " + at(low) + " refused"));
+        assertEquals(3, ctx.riser.ups);
+    }
+
+    @Test
+    void aBranchCountedOnAndRefusedIsLeantForFromThere() {
+        trunk();
+        crown();
+        // Four out at head height: in reach from the stand by the plan, and refused by the arm
+        // as out of reach — a body a little off the middle of its cell.
+        List<Pos> limb = List.of(new Pos(1, BASE + 2, 0), new Pos(2, BASE + 2, 0),
+                new Pos(3, BASE + 2, 0), new Pos(4, BASE + 2, 0));
+        for (Pos log : limb) {
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:birch_log");
+        }
+        Pos tip = limb.get(3);
+        ctx.breaker.refuse.add(tip);
+        pack(4);
+        standSouth();
+
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < 800 && status == TaskStatus.RUNNING; i++) {
+            status = drive(1);
+            if (ctx.leaner.state == LeanState.LEANT) {
+                ctx.breaker.refuse.clear(); // nearer now
+            }
+        }
+        assertEquals(TaskStatus.SUCCESS, status);
+        assertTrue(task.climb().orElseThrow().leans().isEmpty(), "the plan counted on it from the middle");
+        assertEquals(1, ctx.leaner.leans, "leant for from the stand it was refused from");
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(tip.x(), tip.y(), tip.z()));
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 11 logs"), said("felled"));
+    }
+
+    @Test
     void aBranchOutOfReachFromAnyHeightIsLeftAndCounted() {
         ctx.percepts.blocks.placeOak(0, 0);
         // A limb off the cap, one cell out and up per log: the last is six out, farther than
