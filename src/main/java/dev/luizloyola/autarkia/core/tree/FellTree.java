@@ -160,6 +160,8 @@ public final class FellTree implements PrimitiveTask {
     private final Set<Pos> refusedSides = new HashSet<>();
     /** Sides already stood at for the branches from outside, so each is asked once. */
     private final Set<Pos> sidesTried = new HashSet<>();
+    /** Branches whose refusal has been journalled, so each is said once. */
+    private final Set<Pos> branchesRefused = new HashSet<>();
     /** The feet cell the last move order was for; a different one is a new order. */
     private @Nullable Pos walkingTo;
     /** The tick the last move order went out — its state is readable only from the next one. */
@@ -851,7 +853,23 @@ public final class FellTree implements PrimitiveTask {
             return breakNext(ctx, List.of(), WOOD, false); // settle a swing in flight
         }
         phase = "branches in reach (" + cells.size() + ")";
-        return breakNext(ctx, cells, WOOD, false);
+        if (!breakNext(ctx, cells, WOOD, false)) {
+            return false;
+        }
+        // Nothing could be begun on, though the plan had every one of them in reach: say what the
+        // arm said, once per branch, since a skip is silent by design and this is what a missed
+        // log is made of.
+        BlockBreaker breaker = ctx.actuators().breaker();
+        for (Pos cell : cells) {
+            boolean standing = blocks.at(cell.x(), cell.y(), cell.z()) == BlockKind.LOG;
+            if (standing && branchesRefused.add(cell)) {
+                Pos block = breaker.obstruction(cell);
+                say(ctx, "a branch at " + where(cell) + " refused from " + where(at) + " — "
+                        + (block == null ? "the arm calls it out of reach"
+                        : where(block) + " is in the way"));
+            }
+        }
+        return true;
     }
 
     /**
@@ -989,12 +1007,17 @@ public final class FellTree implements PrimitiveTask {
                     break; // out of reach: the walk's problem
                 }
                 BlockKind inTheWay = blocks.at(block.x(), block.y(), block.z());
+                // A leaf on its decay rim reads as plain solid to the probe — a dying canopy is
+                // not a tree's — but the axe takes it like any leaf, and the trunk's own crown is
+                // dying by the time the swing at a limb is refused for it (2026-09-10).
+                boolean leaf = inTheWay == BlockKind.LEAVES
+                        || blocks.idAt(block.x(), block.y(), block.z()).endsWith("_leaves");
                 boolean ours = inTheWay == BlockKind.LOG && climb != null && climb.owns(block);
-                if (inTheWay != BlockKind.LEAVES && !ours) {
+                if (!leaf && !ours) {
                     break; // something the axe is not for: the walk's problem, or nobody's
                 }
                 target = block;
-                targetKind = inTheWay;
+                targetKind = leaf ? BlockKind.LEAVES : BlockKind.LOG;
             }
         }
         if (must && first != null && (arrived || walkingTo == null)) {

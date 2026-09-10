@@ -615,6 +615,23 @@ class FellTreeTest {
     }
 
     @Test
+    void aDyingLeafInTheWayIsStillALeafToTheAxe() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        Pos listed = new Pos(0, BASE + 1, 1);
+        Pos dying = new Pos(0, BASE + 1, 2);
+        ctx.percepts.blocks.set(listed.x(), listed.y(), listed.z(), BlockKind.LEAVES);
+        ctx.percepts.blocks.set(dying.x(), dying.y(), dying.z(), BlockKind.OTHER); // the rim reads solid
+        ctx.percepts.blocks.setId(dying.x(), dying.y(), dying.z(), "minecraft:oak_leaves");
+        ctx.breaker.refuse.add(listed);
+        ctx.breaker.obstructions.put(listed, dying);
+
+        task.tick(ctx);
+        assertEquals(List.of(dying), ctx.breaker.targets, "known by its name, chewed like any leaf");
+    }
+
+    @Test
     void aBlockerThatIsNotALeafIsLeftToTheWalk() {
         trunk();
         standSouth();
