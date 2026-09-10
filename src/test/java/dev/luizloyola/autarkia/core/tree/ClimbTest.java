@@ -71,6 +71,8 @@ class ClimbTest {
 
         assertTrue(Climb.reaches(ARM, 0, 5, 0, new Pos(1, 10, 0)));
         assertFalse(Climb.reaches(ARM, 0, 4, 0, new Pos(1, 10, 0)));
+        assertFalse(Climb.reaches(ARM, 0, 0, 0, new Pos(1, 5, 2)),
+                "4.48 from the cell's centre is inside the arm and outside the plan: the body is never at the centre");
     }
 
     @Test

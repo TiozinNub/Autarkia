@@ -158,6 +158,8 @@ public final class FellTree implements PrimitiveTask {
      * same plan off the same knowledge and ran it again.
      */
     private final Set<Pos> refusedSides = new HashSet<>();
+    /** Sides already stood at for the branches from outside, so each is asked once. */
+    private final Set<Pos> sidesTried = new HashSet<>();
     /** The feet cell the last move order was for; a different one is a new order. */
     private @Nullable Pos walkingTo;
     /** The tick the last move order went out — its state is readable only from the next one. */
@@ -607,7 +609,50 @@ public final class FellTree implements PrimitiveTask {
         if (!branches(ctx, ctx.percepts().position())) {
             return TaskStatus.RUNNING; // the low ones, from the ground
         }
+        // Whatever still stands that some other side of the stump reaches: an acacia leans its
+        // limbs out past the side the body came in by (2026-09-10). Each side once.
+        Pos stand = outsideStand(ctx);
+        if (stand != null) {
+            phase = "branches from outside";
+            if (!walk(ctx, stand)) {
+                return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+            }
+            if (!branches(ctx, ctx.percepts().position())) {
+                return TaskStatus.RUNNING;
+            }
+            sidesTried.add(stand);
+            return TaskStatus.RUNNING; // and look again: another branch, another side
+        }
         return finish(ctx);
+    }
+
+    /**
+     * The feet cell of the side nearest a branch still standing that the arm would reach from
+     * there, among the sides not yet stood at for this; null when no side reaches anything left.
+     */
+    private @Nullable Pos outsideStand(BrainContext ctx) {
+        Climb.Arm arm = Climb.Arm.of(ctx.percepts());
+        BlockProbe blocks = ctx.percepts().blocks();
+        Pos best = null;
+        double nearest = Double.MAX_VALUE;
+        for (Approach.Side side : approach.sides()) {
+            Pos feet = side.feet();
+            if (!side.verdict().approachable() || feet == null || sidesTried.contains(feet)) {
+                continue;
+            }
+            for (Pos branch : climb.branches()) {
+                if (blocks.at(branch.x(), branch.y(), branch.z()) != BlockKind.LOG
+                        || !Climb.reaches(arm, feet.x(), feet.y(), feet.z(), branch)) {
+                    continue;
+                }
+                double d = Math.pow(branch.x() - feet.x(), 2) + Math.pow(branch.z() - feet.z(), 2);
+                if (d < nearest) {
+                    nearest = d;
+                    best = feet;
+                }
+            }
+        }
+        return best;
     }
 
     /** The column read one last time: SUCCESS with the count, or what is left and why. */

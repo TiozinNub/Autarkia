@@ -963,6 +963,57 @@ class FellTreeTest {
         assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 5 logs"), said("felled"));
     }
 
+    /** The acacia that failed on the lab, 2026-09-10: five up, three limbs leaning out. */
+    private void acacia() {
+        for (Pos log : List.of(new Pos(0, BASE, 0), new Pos(0, BASE + 1, 0), new Pos(0, BASE + 2, 0),
+                new Pos(0, BASE + 3, 0), new Pos(0, BASE + 4, 0), new Pos(0, BASE + 4, 1),
+                new Pos(0, BASE + 5, 2), new Pos(1, BASE + 5, 0))) {
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:acacia_log");
+        }
+        for (int dx = -1; dx <= 2; dx++) {
+            for (int dz = -1; dz <= 3; dz++) {
+                for (int y = BASE + 5; y <= BASE + 6; y++) {
+                    if (ctx.percepts.blocks.at(dx, y, dz) == BlockKind.AIR) {
+                        ctx.percepts.blocks.set(dx, y, dz, BlockKind.LEAVES);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void anAcaciaLimbOutOfReachFromBesideMakesTheBodyStepInForIt() {
+        acacia();
+        pack(4);
+        ctx.percepts.position = new Pos(-10, BASE, 0); // from the west, as Alder came
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertEquals(new Pos(-1, BASE, 0), task.chosen().orElseThrow(), "the west side");
+        assertEquals(3, task.climb().orElseThrow().branches().size());
+        assertTrue(task.climb().orElseThrow().stepsIn(), "the limb is past the arm from beside");
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(0, BASE + 5, 2), "and in reach from inside");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 8 logs"), said("felled"));
+    }
+
+    @Test
+    void aLimbNoInsidePositionReachesIsTakenFromTheSideNearestIt() {
+        acacia();
+        // A limb drooping out of the crown to the south-east: two out, four along, three up —
+        // past the arm from the stand, from the floor and from the west; in reach from the south.
+        for (Pos log : List.of(new Pos(1, BASE + 4, 3), new Pos(2, BASE + 3, 4))) {
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:acacia_log");
+        }
+        pack(4);
+        ctx.percepts.position = new Pos(-10, BASE, 0);
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertEquals(new Pos(0, BASE, 1), lastOrder(), "round to the south, the side nearest the limb");
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(2, BASE + 3, 4));
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 10 logs"), said("felled"));
+    }
+
     @Test
     void aBranchOutOfReachFromAnyHeightIsLeftAndCounted() {
         ctx.percepts.blocks.placeOak(0, 0);

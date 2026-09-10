@@ -88,6 +88,14 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
     /** A backstop on rises: a trunk that still wants more after this many is not a tree to climb. */
     static final int MAX_RISES = 64;
 
+    /**
+     * How much of the arm's length the plan does not count on. It measures from the centre of a
+     * cell, and a body never stands exactly there: an acacia limb 4.48 from the centre of the
+     * cell beside its stump was refused by an arm of 4.5 (2026-09-10). What is inside by less
+     * than this is planned as out of reach, and taken from a nearer cell or not at all.
+     */
+    public static final double SLACK = 0.3;
+
     /** Cells a giant's slot has: the body's two, and one more so it can hop on from there. */
     public static final int SLOT = 3;
 
@@ -119,12 +127,16 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         return logs;
     }
 
-    /** Whether the arm reaches {@code log}'s centre from eyes over feet at {@code (x, feetY, z)}. */
+    /**
+     * Whether the arm reaches {@code log}'s centre from eyes over feet at {@code (x, feetY, z)},
+     * with {@link #SLACK} to spare.
+     */
     public static boolean reaches(Arm arm, int x, int feetY, int z, Pos log) {
         double dx = log.x() - x;
         double dz = log.z() - z;
         double dy = log.y() + 0.5 - (feetY + arm.eyeHeight());
-        return dx * dx + dy * dy + dz * dz <= arm.reach() * arm.reach();
+        double reach = arm.reach() - SLACK;
+        return dx * dx + dy * dy + dz * dz <= reach * reach;
     }
 
     /**
@@ -135,7 +147,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         double dx = log.x() - x;
         double dz = log.z() - z;
         double flat = dx * dx + dz * dz;
-        double reach = arm.reach() * arm.reach();
+        double reach = (arm.reach() - SLACK) * (arm.reach() - SLACK);
         if (flat > reach) {
             return OptionalInt.empty();
         }
