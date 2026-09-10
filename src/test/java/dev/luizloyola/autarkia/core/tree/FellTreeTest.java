@@ -1294,6 +1294,28 @@ class FellTreeTest {
     }
 
     @Test
+    void aGiantUnderARoofIsDugIntoAndSpiralledAllTheSame() {
+        giant(12);
+        // A slab of stone two over the ground all round: no side has room for a hop, and the
+        // third cell of the entry slot is behind it from outside (a dark oak, 2026-09-10).
+        for (int x = -2; x <= 3; x++) {
+            for (int z = -2; z <= 3; z++) {
+                if (ctx.percepts.blocks.at(x, BASE + 2, z) == BlockKind.AIR) {
+                    ctx.percepts.blocks.set(x, BASE + 2, z, BlockKind.OTHER);
+                }
+            }
+        }
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(1500));
+        Climb climb = task.climb().orElseThrow();
+        assertTrue(climb.digsIn());
+        assertEquals(2, climb.stepIn().size(), "the body's two; the third came out from inside");
+        assertGiantGone(12);
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 48 logs"), said("felled"));
+    }
+
+    @Test
     void aShortGiantIsAllFromBesideItsBasesLast() {
         giant(5);
         standSouth();

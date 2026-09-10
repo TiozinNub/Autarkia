@@ -242,6 +242,18 @@ class ClimbTest {
     }
 
     @Test
+    void aGiantDugIntoOpensItsOwnTwoAndTakesTheThirdFromInside() {
+        List<Pos> logs = giant(12);
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(), world(logs),
+                new Pos(-1, BASE, 0), false, true, BODY);
+
+        assertTrue(climb.digsIn());
+        assertEquals(column(0, BASE, 0, 2), climb.stepIn(), "the body's two, at its own level");
+        assertTrue(climb.above().contains(new Pos(0, BASE + 2, 0)), "the hop's cell, from inside");
+        assertTrue(climb.describe().startsWith("open 2 · dig in · spiral "), climb.describe());
+    }
+
+    @Test
     void aShortGiantIsAllFromBeside() {
         List<Pos> logs = giant(3);
         Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(), world(logs),

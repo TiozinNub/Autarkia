@@ -280,11 +280,13 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
             return fromBeside(arm, sorted, beside, need, ring, branches);
         }
         // Getting in needs something under the stand and nothing but wood or leaves in the
-        // body's way — and for a giant one cell more, to hop on from the slot.
+        // body's way — and for a giant hopping in, one cell more, to hop on from the slot. Dug
+        // in, the body opens its own two: the third is behind whatever left no room to hop (a
+        // dark oak under a slab of stone, 2026-09-10), and comes out from inside, over the head.
         if (!Approach.holds(probe.at(entry.x(), feetIn - 1, entry.z()))) {
             return fromBeside(arm, sorted, beside, need, ring, branches);
         }
-        int open = giant ? SLOT : bodyCells;
+        int open = giant && jumpRoom ? SLOT : bodyCells;
         List<Pos> stepIn = new ArrayList<>();
         for (int y = feetIn; y < feetIn + open; y++) {
             BlockKind kind = probe.at(entry.x(), y, entry.z());

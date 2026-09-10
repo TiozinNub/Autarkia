@@ -482,12 +482,23 @@ public final class FellTree implements PrimitiveTask {
         if (here == null) {
             return fail(ctx, "out of the trunk at " + where(at));
         }
+        phase = "spiralling up to " + climb.needFeetY() + " (" + at.y() + ")";
+        // The cell over the head first: a body that dug in at its own level opened two, and the
+        // hop into the next column wants a third, which it takes from inside.
+        Pos over = new Pos(here.x(), at.y() + 2, here.z());
+        BlockKind overKind = ctx.percepts().blocks().at(over.x(), over.y(), over.z());
+        if (overKind == BlockKind.LOG || overKind == BlockKind.LEAVES) {
+            if (!breakNext(ctx, List.of(over), WOOD_OR_LEAVES)) {
+                return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+            }
+        } else if (overKind != BlockKind.AIR) {
+            return fail(ctx, "cannot spiral — " + overKind.key() + " over the head at " + where(over));
+        }
         Pos next = climb.next(here, true);
         List<Pos> slot = new ArrayList<>(Climb.SLOT);
         for (int y = at.y() + 1; y <= at.y() + Climb.SLOT; y++) {
             slot.add(new Pos(next.x(), y, next.z()));
         }
-        phase = "spiralling up to " + climb.needFeetY() + " (" + at.y() + ")";
         if (!breakNext(ctx, slot, WOOD_OR_LEAVES)) {
             return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
         }
