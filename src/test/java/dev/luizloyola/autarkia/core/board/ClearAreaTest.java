@@ -269,7 +269,7 @@ class ClearAreaTest {
         project.completed(itemAt(project, felled), ctx);
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 
@@ -283,6 +283,30 @@ class ClearAreaTest {
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state(),
                 "and re-reporting a refusal would restart the loop REFUSE_AFTER exists to end");
         assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(fresh).state());
+    }
+
+    @Test
+    void aFailedTargetSitsOutLongerEachTime() {
+        ClearArea project = posted(ABLE, oneSlice());
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos tree = new Pos(3, 60, 3);
+        ctx.remember(THING, tree);
+        project.completed(project.open().get(0), ctx);
+        AgentId alone = AgentId.random();
+
+        for (int failures = 1; failures <= 3; failures++) {
+            long before = ctx.now();
+            project.failed(itemAt(project, tree), alone, ctx);
+            assertEquals(before + ClearArea.cooldownAfter(failures),
+                    project.ledger().get(tree).retryAfter(), "after failure " + failures);
+            ctx.advance(ClearArea.cooldownAfter(failures));
+            project.tick(ctx.now());
+        }
+        assertEquals(ClearArea.FAIL_COOLDOWN, ClearArea.cooldownAfter(1));
+        assertEquals(ClearArea.FAIL_COOLDOWN * 4, ClearArea.cooldownAfter(3));
+        assertEquals(ClearArea.FAIL_COOLDOWN * 64, ClearArea.cooldownAfter(20), "capped");
+        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(tree).state(),
+                "still one person's word: never refused for it");
     }
 
     // ── residue: what perception will not name ─────────────────────────────────────────────
@@ -706,7 +730,7 @@ class ClearAreaTest {
                 // would burn every attempt within a second of the first.
                 assertTrue(project.open().isEmpty(), "attempt " + attempt + " must cool down");
             }
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
@@ -729,7 +753,7 @@ class ClearAreaTest {
         project.completed(surveyItem(project), ctx);
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
@@ -757,7 +781,7 @@ class ClearAreaTest {
         // Refuse one, fell the other.
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
@@ -779,7 +803,7 @@ class ClearAreaTest {
         project.completed(project.open().get(0), ctx);
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 
@@ -802,14 +826,14 @@ class ClearAreaTest {
         project.completed(project.open().get(0), ctx);
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
         project.completed(itemAt(project, easy), ctx); // felling buys the one retry
 
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 
@@ -834,9 +858,9 @@ class ClearAreaTest {
         project.completed(project.open().get(0), ctx);
 
         AgentId stuck = AgentId.random();
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER * 3; attempt++) {
+        for (int attempt = 1; attempt <= ClearArea.REFUSE_AFTER * 3; attempt++) {
             project.failed(itemAt(project, tree), stuck, ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt));
             project.tick(ctx.now());
         }
         assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(tree).state(),
@@ -853,7 +877,7 @@ class ClearAreaTest {
 
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, tree), AgentId.random(), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
         assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(tree).state());
@@ -954,7 +978,7 @@ class ClearAreaTest {
         project.completed(project.open().get(0), ctx);
         for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
             project.failed(project.open().get(0), ctx);
-            ctx.advance(ClearArea.FAIL_COOLDOWN);
+            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 

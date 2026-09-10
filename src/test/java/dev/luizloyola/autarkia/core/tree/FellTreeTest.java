@@ -323,6 +323,25 @@ class FellTreeTest {
     }
 
     @Test
+    void anArrivalOnAnotherFloorIsAFailedWalk() {
+        trunk();
+        standSouth();
+        task.tick(ctx);
+        assertEquals(1, ctx.mover.moveToCalls);
+        Pos goal = new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
+        // The legs snapped the goal down its column into a cave and call that arriving.
+        Pos pocket = new Pos(goal.x(), goal.y() - 7, goal.z());
+        ctx.percepts.position = pocket;
+        ctx.mover.setState(MoveState.ARRIVED);
+        task.tick(ctx);
+        task.tick(ctx);
+
+        assertEquals(List.of("walk to " + at(goal) + " failed — the legs say arrived, at " + at(pocket)
+                + "; trying again in 2s"), said("walk to"));
+        assertEquals(FellTree.Stage.APPROACH, task.stage(), "not at the tree, so no plan");
+    }
+
+    @Test
     void retriesAFailedWalkAfterAWhile() {
         trunk();
         standSouth();

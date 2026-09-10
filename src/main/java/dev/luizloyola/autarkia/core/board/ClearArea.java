@@ -85,8 +85,20 @@ public final class ClearArea implements PartyProject {
      */
     public static final int REFUSE_AFTER = 3;
 
-    /** Ticks a failed slice or target sits out before being offered again. */
+    /** Ticks a failed slice, or a target on its first failure, sits out before being offered again. */
     public static final int FAIL_COOLDOWN = 600;
+
+    /**
+     * How long a target sits out after its {@code failures}th failure: {@link #FAIL_COOLDOWN}
+     * doubled each time, up to sixty-four times it. Giving up takes several different people
+     * ({@link #REFUSE_AFTER}), and a lone worker never gives up — so with a flat cooldown one
+     * body alone went back to the same two trees under a cave every 600 ticks for as long as it
+     * lived, the rest of the box untouched (2026-09-10). Waiting longer each time is what gets
+     * the rest of the box offered in between.
+     */
+    public static long cooldownAfter(int failures) {
+        return (long) FAIL_COOLDOWN << Math.min(Math.max(failures, 1) - 1, 6);
+    }
 
     /**
      * Distance at which an errand costs the most it can, and how much that is. A bid is
@@ -557,7 +569,7 @@ public final class ClearArea implements PartyProject {
                 sliceRetryAfter.put(indexOf(place), now + FAIL_COOLDOWN);
             } else {
                 Target was = ledger.getOrDefault(place.at(), Target.fresh(place.at()));
-                Target tried = was.andFailedBy(who, now + FAIL_COOLDOWN);
+                Target tried = was.andFailedBy(who, now + cooldownAfter(was.failures() + 1));
                 // Distinct WORKERS, not attempts — see Target.andFailedBy for what counting attempts
                 // cost. Falling back to attempts when nobody is named keeps termination: corroboration
                 // needs identities, and production always names the worker, so this is the seam's
@@ -572,7 +584,8 @@ public final class ClearArea implements PartyProject {
                 ctx.journal().record(Category.PROJECT, name(), giveUp
                         ? "gave up on " + at(place.at()) + " — " + tried.failedBy().size()
                                 + " different people could not"
-                        : "failed at " + at(place.at()) + ", retry in " + FAIL_COOLDOWN + "t");
+                        : "failed at " + at(place.at()) + ", retry in "
+                                + cooldownAfter(tried.failures()) + "t");
             }
         }
         withdraw(key);

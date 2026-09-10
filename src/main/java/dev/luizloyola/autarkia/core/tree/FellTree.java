@@ -1132,30 +1132,47 @@ public final class FellTree implements PrimitiveTask {
         switch (mover.state()) {
             case MOVING:
                 return false;
-            case ARRIVED:
+            case ARRIVED: {
                 // The legs' own word: inside the arrival radius, even if the feet cell disagrees
                 // by a corner. Stopping here rather than fussing is what stops a body shuffling.
-                arrived = true;
-                return true;
+                // Not by a floor, though: a goal whose head cell was leaves was snapped down its
+                // column to a cave pocket seven under the tree, and the legs said arrived there
+                // (2026-09-10). That is a walk that failed.
+                Pos at = ctx.percepts().position();
+                if (Math.abs(at.x() - feet.x()) <= 1 && Math.abs(at.y() - feet.y()) <= 1
+                        && Math.abs(at.z() - feet.z()) <= 1) {
+                    arrived = true;
+                    return true;
+                }
+                return walkFailed(ctx, mover, feet, "the legs say arrived, at " + where(at));
+            }
             case FAILED:
             case IDLE:
             default:
                 if (arrived) {
                     return true; // done earlier; the legs have since been idle, as they should be
                 }
-                if (walkRetryAt == 0) {
-                    String why = "walk to " + where(feet) + " failed — " + mover.failure().describe();
-                    if (++walkFailures >= WALK_GIVE_UP) {
-                        stuck = why + ", " + walkFailures + " times";
-                    } else {
-                        say(ctx, why + "; trying again in " + WALK_RETRY_TICKS / 20 + "s");
-                    }
-                    walkRetryAt = ticks + WALK_RETRY_TICKS;
-                } else if (ticks >= walkRetryAt) {
-                    order(mover, feet);
-                }
-                return false;
+                return walkFailed(ctx, mover, feet, mover.failure().describe());
         }
+    }
+
+    /**
+     * A walk that did not get there, for {@code why}: say so, retry after a while, and after
+     * {@link #WALK_GIVE_UP} of them set the chop giving up on this side.
+     */
+    private boolean walkFailed(BrainContext ctx, Mover mover, Pos feet, String why) {
+        if (walkRetryAt == 0) {
+            String failed = "walk to " + where(feet) + " failed — " + why;
+            if (++walkFailures >= WALK_GIVE_UP) {
+                stuck = failed + ", " + walkFailures + " times";
+            } else {
+                say(ctx, failed + "; trying again in " + WALK_RETRY_TICKS / 20 + "s");
+            }
+            walkRetryAt = ticks + WALK_RETRY_TICKS;
+        } else if (ticks >= walkRetryAt) {
+            order(mover, feet);
+        }
+        return false;
     }
 
     private void order(Mover mover, Pos feet) {
