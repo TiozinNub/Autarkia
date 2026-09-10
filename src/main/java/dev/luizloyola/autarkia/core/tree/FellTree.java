@@ -18,7 +18,9 @@ import dev.luizloyola.anima.core.nav.MoveCapabilities;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -34,7 +36,8 @@ import org.jspecify.annotations.Nullable;
  * in the next column round and hopped into, the logs left every fourth level being the stairs —
  * break everything above from there; come down, breaking underfoot, or back down the spiral
  * breaking each stair as it is left and then the rest of the giant from the entry stand, until the
- * feet are back at floor level; step out and take the logs that may be left one below floor level
+ * feet are back at floor level — and on the way down, from the top and from every level, take
+ * every branch the arm reaches; step out and take the logs that may be left one below floor level
  * from outside. Then SUCCESS, with the count, or FAILED with the one reason: a rise refused,
  * nothing carried to rise on, the arm refused a block for long, every side given up on, or wood
  * left standing that the plan knew it could not reach.
@@ -109,6 +112,12 @@ public final class FellTree implements PrimitiveTask {
     public static final int AIRBORNE_TICKS = 40;
 
     /**
+     * How far out from the trunk the wood is scanned for the tree's branches at plan time — a
+     * fancy oak's reach and a little more. Once, a few thousand reads.
+     */
+    public static final int BRANCH_SCAN = 7;
+
+    /**
      * How many leaves in a row the arm chews through to reach the block it was refused. A crown
      * hides its own trunk from the side, and the leaf the breaker blames is as often as not in
      * front of another; past this many the swing is not worth the path.
@@ -151,7 +160,7 @@ public final class FellTree implements PrimitiveTask {
     private int walkRetryAt;
     /** The tick the tree was first found to have no way in, while that lasts; -1 otherwise. */
     private int noWayInSince = -1;
-    /** The tick the body was first read with nothing under its feet, while that lasts; -1 otherwise. */
+    /** The tick the body was first read with nothing under its feet, while that lasts; else -1. */
     private int airborneSince = -1;
     /** How many times the current walk has failed. */
     private int walkFailures;
@@ -332,8 +341,9 @@ public final class FellTree implements PrimitiveTask {
                 entry = column;
             }
         }
-        climb = Climb.plan(Climb.Arm.of(ctx.percepts()), columns, entry, logs, blocks, side.feet(),
-                jumpRoom, ctx.random().nextBoolean(), bodyCells);
+        climb = Climb.plan(Climb.Arm.of(ctx.percepts()), columns, entry, logs,
+                branchesOf(ctx, columns, logs), blocks, side.feet(), jumpRoom,
+                ctx.random().nextBoolean(), bodyCells);
         say(ctx, "plan — " + climb.describe()
                 + (climb.giant() ? (climb.clockwise() ? ", clockwise" : ", anticlockwise") : ""));
         stage = climb.stepsIn() ? Stage.OPEN : Stage.CLEAR;
@@ -454,7 +464,8 @@ public final class FellTree implements PrimitiveTask {
 
     /**
      * Every log left from the feet up — from inside, in every column, or from beside — lowest
-     * first. A giant's neighbouring columns can hold a log level with the head; it comes out here.
+     * first, then the branches in reach from up here. A giant's neighbouring columns can hold a
+     * log level with the head; it comes out here.
      */
     private TaskStatus clear(BrainContext ctx) {
         Pos at = settled(ctx);
@@ -464,15 +475,18 @@ public final class FellTree implements PrimitiveTask {
         int feet = at.y();
         List<Pos> cells = logsFrom(ctx, climb.stepsIn() ? feet : feet + 1);
         phase = "clearing above (" + cells.size() + " left)";
-        if (breakNext(ctx, cells, WOOD)) {
-            stage = !climb.stepsIn() ? Stage.GROUND : climb.giant() ? Stage.UNWIND : Stage.BOTTOM;
-            return switch (stage) {
-                case UNWIND -> unwind(ctx);
-                case BOTTOM -> bottom(ctx);
-                default -> ground(ctx);
-            };
+        if (!breakNext(ctx, cells, WOOD)) {
+            return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
         }
-        return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+        if (!branches(ctx, at)) {
+            return TaskStatus.RUNNING;
+        }
+        stage = !climb.stepsIn() ? Stage.GROUND : climb.giant() ? Stage.UNWIND : Stage.BOTTOM;
+        return switch (stage) {
+            case UNWIND -> unwind(ctx);
+            case BOTTOM -> bottom(ctx);
+            default -> ground(ctx);
+        };
     }
 
     /**
@@ -494,6 +508,9 @@ public final class FellTree implements PrimitiveTask {
         if (!breakNext(ctx, left, WOOD)) {
             return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
         }
+        if (!branches(ctx, at)) {
+            return TaskStatus.RUNNING;
+        }
         if (here.equals(climb.column(climb.stand())) && at.y() <= climb.stand().y()) {
             stage = Stage.BOTTOM;
             return bottom(ctx);
@@ -508,6 +525,10 @@ public final class FellTree implements PrimitiveTask {
      * first — a giant's unvisited bases, the last stairs — and then down as a lone trunk goes.
      */
     private TaskStatus bottom(BrainContext ctx) {
+        Pos at = settled(ctx);
+        if (at == null || !branches(ctx, at)) {
+            return TaskStatus.RUNNING;
+        }
         Pos entry = climb.stand();
         List<Pos> cells = new ArrayList<>();
         for (Pos log : logsFrom(ctx, climb.floor())) {
@@ -530,8 +551,8 @@ public final class FellTree implements PrimitiveTask {
      */
     private TaskStatus descend(BrainContext ctx) {
         Pos at = settled(ctx);
-        if (at == null) {
-            return TaskStatus.RUNNING; // still falling from the last one
+        if (at == null || !branches(ctx, at)) {
+            return TaskStatus.RUNNING; // still falling from the last one, or a branch in reach
         }
         Pos below = new Pos(climb.stand().x(), at.y() - 1, climb.stand().z());
         if (at.y() <= climb.floor()
@@ -575,6 +596,9 @@ public final class FellTree implements PrimitiveTask {
                 return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
             }
         }
+        if (!branches(ctx, ctx.percepts().position())) {
+            return TaskStatus.RUNNING; // the low ones, from the ground
+        }
         return finish(ctx);
     }
 
@@ -594,8 +618,15 @@ public final class FellTree implements PrimitiveTask {
                     + (climb.complete() ? "" : " — the plan knew"));
         }
         int felled = logsBroken - risen;
+        int unreached = 0;
+        for (Pos branch : climb.branches()) {
+            if (ctx.percepts().blocks().at(branch.x(), branch.y(), branch.z()) == BlockKind.LOG) {
+                unreached++;
+            }
+        }
         say(ctx, "felled the tree at " + where(anchor) + " — " + felled + " logs"
-                + (buried == 0 ? "" : ", " + buried + " left buried below the ground"));
+                + (buried == 0 ? "" : ", " + buried + " left buried below the ground")
+                + (unreached == 0 ? "" : ", " + unreached + " branches out of reach"));
         phase = "felled";
         release(ctx);
         return TaskStatus.SUCCESS;
@@ -708,6 +739,69 @@ public final class FellTree implements PrimitiveTask {
     }
 
     /**
+     * The tree's logs off its columns, as detection would assign them: the wood around the trunk
+     * is scanned, connected and split ({@link TreeShape}), and the tree whose base holds one of
+     * {@code columns} is this one — so a neighbour's trunk within the arm's reach is never taken
+     * for a branch. Nothing when the split finds no tree there: a bare trunk with no crown.
+     */
+    private List<Pos> branchesOf(BrainContext ctx, List<Pos> columns, List<Pos> logs) {
+        BlockProbe blocks = ctx.percepts().blocks();
+        int top = anchor.y();
+        for (Pos log : logs) {
+            top = Math.max(top, log.y());
+        }
+        Map<Pos, BlockKind> wood = new LinkedHashMap<>();
+        for (int x = anchor.x() - BRANCH_SCAN; x <= anchor.x() + BRANCH_SCAN; x++) {
+            for (int z = anchor.z() - BRANCH_SCAN; z <= anchor.z() + BRANCH_SCAN; z++) {
+                for (int y = anchor.y() - 1; y <= top + BRANCH_SCAN; y++) {
+                    BlockKind kind = blocks.at(x, y, z);
+                    if (kind == BlockKind.LOG || kind == BlockKind.LEAVES) {
+                        wood.put(new Pos(x, y, z), kind);
+                    }
+                }
+            }
+        }
+        for (Map<Pos, BlockKind> mass : TreeMasses.connect(wood)) {
+            if (!mass.containsKey(anchor)) {
+                continue;
+            }
+            for (TreeShape.Trunk tree : TreeShape.split(mass, blocks)) {
+                for (Pos base : tree.base()) {
+                    if (columns.contains(base)) {
+                        return tree.branches();
+                    }
+                }
+            }
+        }
+        return List.of();
+    }
+
+    /**
+     * Every branch still standing that the arm reaches from {@code at}, the ones the breaker will
+     * take: a refused one is left for a lower level, or for good — never waited on, since the
+     * trunk does not depend on it. Returns whether nothing more can be done from here.
+     */
+    private boolean branches(BrainContext ctx, Pos at) {
+        if (climb.branches().isEmpty()) {
+            return true;
+        }
+        Climb.Arm arm = Climb.Arm.of(ctx.percepts());
+        BlockProbe blocks = ctx.percepts().blocks();
+        List<Pos> cells = new ArrayList<>();
+        for (Pos log : climb.branches()) {
+            if (blocks.at(log.x(), log.y(), log.z()) == BlockKind.LOG
+                    && Climb.reaches(arm, at.x(), at.y(), at.z(), log)) {
+                cells.add(log);
+            }
+        }
+        if (cells.isEmpty()) {
+            return breakNext(ctx, List.of(), WOOD, false); // settle a swing in flight
+        }
+        phase = "branches in reach (" + cells.size() + ")";
+        return breakNext(ctx, cells, WOOD, false);
+    }
+
+    /**
      * The feet cell once the body is on something — null while it is mid-hop or falling, when
      * the cell it reads from is not the one it will stand in. A hop ordered off a mid-air read
      * lands a cell too high, in a slot with no floor, and the body falls down the column (the
@@ -785,12 +879,19 @@ public final class FellTree implements PrimitiveTask {
         arrived = false;
     }
 
+    private boolean breakNext(BrainContext ctx, List<Pos> cells, Set<BlockKind> kinds) {
+        return breakNext(ctx, cells, kinds, true);
+    }
+
     /**
      * The arm: begin on the first of {@code cells} the probe still shows as one of {@code kinds}
-     * and the arm will take, one at a time, whether or not the legs are still walking. Returns
-     * whether none of them stands any more.
+     * and the arm will take, one at a time, whether or not the legs are still walking. When the
+     * cells are a {@code must}, returns whether none of them stands any more, and a lasting
+     * refusal is counted against the chop; otherwise returns whether nothing could be begun
+     * this tick — gone or refused alike — and a refusal is nobody's problem.
      */
-    private boolean breakNext(BrainContext ctx, List<Pos> cells, Set<BlockKind> kinds) {
+    private boolean breakNext(BrainContext ctx, List<Pos> cells, Set<BlockKind> kinds,
+                              boolean must) {
         BlockBreaker breaker = ctx.actuators().breaker();
         if (breaking != null) {
             BreakState state = breaker.state();
@@ -838,10 +939,10 @@ public final class FellTree implements PrimitiveTask {
                 targetKind = BlockKind.LEAVES;
             }
         }
-        if (first != null && (arrived || walkingTo == null)) {
+        if (must && first != null && (arrived || walkingTo == null)) {
             refusedFor(ctx, breaker, first);
         }
-        return first == null;
+        return !must || first == null;
     }
 
     /**

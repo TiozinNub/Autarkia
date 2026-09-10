@@ -211,11 +211,11 @@ class ClimbTest {
         assertEquals(SQUARE, Climb.ringOf(shuffled), "north-west, north-east, south-east, south-west");
 
         Climb cw = new Climb(SQUARE.get(0), BASE, true, false, List.of(), List.of(), List.of(),
-                List.of(), true, SQUARE, true);
+                List.of(), true, SQUARE, true, List.of());
         assertEquals(SQUARE.get(1), cw.next(SQUARE.get(0), true), "east of the north-west cell");
         assertEquals(SQUARE.get(3), cw.next(SQUARE.get(0), false), "and back the other way");
         Climb ccw = new Climb(SQUARE.get(0), BASE, true, false, List.of(), List.of(), List.of(),
-                List.of(), true, SQUARE, false);
+                List.of(), true, SQUARE, false, List.of());
         assertEquals(SQUARE.get(3), ccw.next(SQUARE.get(0), true));
         assertEquals(SQUARE.get(0), ccw.column(new Pos(0, BASE + 9, 0)), "by x and z, whatever the height");
     }
@@ -224,7 +224,8 @@ class ClimbTest {
     void aGiantIsSpiralledFromTheEntryColumn() {
         List<Pos> logs = giant(12);
         Pos beside = new Pos(-1, BASE, 0); // the west side, beside the north-west column
-        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, world(logs), beside, true, true, BODY);
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(), world(logs), beside,
+                true, true, BODY);
 
         assertTrue(climb.giant());
         assertEquals(new Pos(0, BASE + 1, 0), climb.stand());
@@ -241,12 +242,24 @@ class ClimbTest {
     @Test
     void aShortGiantIsAllFromBeside() {
         List<Pos> logs = giant(3);
-        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, world(logs), new Pos(-1, BASE, 0),
-                true, true, BODY);
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(), world(logs),
+                new Pos(-1, BASE, 0), true, true, BODY);
 
         assertFalse(climb.stepsIn());
         assertEquals(4, climb.columns().size());
         assertEquals("12 to break from beside", climb.describe());
+    }
+
+    @Test
+    void branchesRideAlongAndAreCounted() {
+        List<Pos> logs = column(7);
+        List<Pos> branches = List.of(new Pos(1, BASE + 4, 0), new Pos(2, BASE + 5, 0));
+        Climb climb = Climb.plan(ARM, List.of(STUMP), STUMP, logs, branches, world(logs), BESIDE,
+                true, false, BODY);
+
+        assertEquals(branches, climb.branches());
+        assertEquals("open 2 · step in · no rise · 4 above · 2 branches · 1 underfoot",
+                climb.describe());
     }
 
     // ── the ground beside the stump ──────────────────────────────────────────────────────────

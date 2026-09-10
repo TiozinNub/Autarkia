@@ -35,6 +35,11 @@ import org.jspecify.annotations.Nullable;
  * as it leaves it, to the entry stand, where it takes whatever the other columns still hold,
  * highest first, and then goes down as a lone trunk does.
  *
+ * <p><b>Branches</b> — the tree's logs off its columns — are taken on the way down (decision:
+ * Luiz, 2026-09-10): from the top once the trunk above is clear, then from every level the body
+ * comes down to, and from outside at the end, each time every branch the arm reaches from where
+ * it stands. What no level reaches stays, and is counted.
+ *
  * <p>Either way, a log left one below floor level is broken <b>from outside</b>, and never the one
  * two below: a body in a hole that deep cannot get out, so that log stays buried.
  *
@@ -62,10 +67,12 @@ import org.jspecify.annotations.Nullable;
  * @param columns   the trunk's columns at base height, clockwise from above — one for a lone
  *                  trunk, four for a giant; the entry column is the stand's
  * @param clockwise which way round a giant is spiralled
+ * @param branches  the tree's logs off its columns, as detection assigned them; taken from
+ *                  wherever the body reaches them on the way down
  */
 public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, List<Pos> stepIn,
                     List<Pos> above, List<Pos> under, List<Pos> last, boolean complete,
-                    List<Pos> columns, boolean clockwise) {
+                    List<Pos> columns, boolean clockwise, List<Pos> branches) {
 
     /**
      * The body doing the reaching: its eyes above its feet and how far its arm reaches from
@@ -90,6 +97,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         under = List.copyOf(under);
         last = List.copyOf(last);
         columns = columns.isEmpty() ? List.of(stand) : List.copyOf(columns);
+        branches = List.copyOf(branches);
     }
 
     /**
@@ -135,23 +143,24 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         return OptionalInt.of((int) Math.ceil(lowestEyes - arm.eyeHeight()));
     }
 
-    /** The plan for a lone trunk at {@code base}; see {@link #plan(Arm, List, Pos, List, BlockProbe, Pos, boolean, boolean, int)}. */
+    /** The plan for a lone, branchless trunk at {@code base}; the full shape is the other overload. */
     public static Climb plan(Arm arm, Pos base, List<Pos> logs, BlockProbe probe, Pos beside,
                              boolean jumpRoom, int bodyCells) {
-        return plan(arm, List.of(base), base, logs, probe, beside, jumpRoom, false, bodyCells);
+        return plan(arm, List.of(base), base, logs, List.of(), probe, beside, jumpRoom, false,
+                bodyCells);
     }
 
     /**
      * The plan for {@code logs}, standing in {@code columns} (one, or a giant's four), from a body
      * with {@code arm} standing at {@code beside}, needing {@code bodyCells} of clear column, with
      * or without {@code jumpRoom} to hop up from there. {@code entry} is the column beside the
-     * side taken, and {@code clockwise} the way round a giant. {@code probe} is read only for the
-     * entry column around the body's height: the step up, and what stands in the way of getting
-     * in.
+     * side taken, {@code clockwise} the way round a giant, and {@code branches} the tree's logs
+     * off its columns. {@code probe} is read only for the entry column around the body's height:
+     * the step up, and what stands in the way of getting in.
      */
     public static Climb plan(Arm arm, List<Pos> columns, Pos entry, List<Pos> logs,
-                             BlockProbe probe, Pos beside, boolean jumpRoom, boolean clockwise,
-                             int bodyCells) {
+                             List<Pos> branches, BlockProbe probe, Pos beside, boolean jumpRoom,
+                             boolean clockwise, int bodyCells) {
         List<Pos> ring = ringOf(columns);
         boolean giant = ring.size() == 4;
         int floor = beside.y();
@@ -175,14 +184,14 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
             fromBeside &= reaches(arm, beside.x(), floor, beside.z(), log);
         }
         if (fromBeside) {
-            return fromBeside(arm, sorted, beside, need, ring);
+            return fromBeside(arm, sorted, beside, need, ring, branches);
         }
         // The height the body works from inside: on the step up after a hop, or its own where
         // there is no room to hop. Getting in needs something under that and nothing but wood or
         // leaves in the body's way — and for a giant one cell more, to hop on from the slot.
         int feetIn = jumpRoom ? floor + 1 : floor;
         if (!Approach.holds(probe.at(entry.x(), feetIn - 1, entry.z()))) {
-            return fromBeside(arm, sorted, beside, need, ring);
+            return fromBeside(arm, sorted, beside, need, ring, branches);
         }
         int open = giant ? SLOT : bodyCells;
         List<Pos> stepIn = new ArrayList<>();
@@ -191,7 +200,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
             if (kind == BlockKind.LOG || kind == BlockKind.LEAVES) {
                 stepIn.add(new Pos(entry.x(), y, entry.z()));
             } else if (kind != BlockKind.AIR) {
-                return fromBeside(arm, sorted, beside, need, ring);
+                return fromBeside(arm, sorted, beside, need, ring, branches);
             }
         }
         Pos stand = new Pos(entry.x(), feetIn, entry.z());
@@ -214,7 +223,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         }
         int rises = Math.max(0, need - feetIn);
         return new Climb(stand, need, true, !jumpRoom, stepIn, above, under, last,
-                reachable && rises <= MAX_RISES, ring, clockwise);
+                reachable && rises <= MAX_RISES, ring, clockwise, branches);
     }
 
     /**
@@ -224,7 +233,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
      * step in on.
      */
     private static Climb fromBeside(Arm arm, List<Pos> sorted, Pos beside, int need,
-                                    List<Pos> ring) {
+                                    List<Pos> ring, List<Pos> branches) {
         int floor = beside.y();
         List<Pos> above = new ArrayList<>();
         List<Pos> last = new ArrayList<>();
@@ -240,7 +249,7 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
             complete &= reaches(arm, beside.x(), floor, beside.z(), log);
         }
         return new Climb(beside, need, false, false, List.of(), above, List.of(), last, complete,
-                ring, false);
+                ring, false, branches);
     }
 
     private static List<Pos> sortedByHeight(List<Pos> logs) {
@@ -341,13 +350,15 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
                 : !stepsIn && needFeetY > stand.y() ? " · no footing to step in"
                 : " · some out of reach";
         if (!stepsIn) {
-            return (above.size() + last.size()) + " to break from beside" + tail;
+            return (above.size() + last.size()) + " to break from beside"
+                    + (branches.isEmpty() ? "" : " · " + branches.size() + " branches") + tail;
         }
         int rises = rises();
         String up = giant() ? "spiral " + rises
                 : rises == 0 ? "no rise" : rises == 1 ? "1 rise" : rises + " rises";
         return "open " + stepIn.size() + (digsIn ? " · dig in · " : " · step in · ") + up
                 + " · " + above.size() + (giant() ? " to break" : " above")
+                + (branches.isEmpty() ? "" : " · " + branches.size() + " branches")
                 + (under.isEmpty() ? "" : " · " + under.size() + " underfoot")
                 + (last.isEmpty() ? "" : " · then " + last.size() + " from outside") + tail;
     }

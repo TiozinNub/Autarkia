@@ -898,7 +898,7 @@ class FellTreeTest {
         ctx.percepts.blocks.set(0, BASE + 2, 0, BlockKind.LOG);
         ctx.percepts.position = new Pos(0, BASE + 3, 0);
         Climb climb = new Climb(new Pos(0, BASE + 1, 0), BASE + 6, true, false, List.of(),
-                List.of(), List.of(ANCHOR), List.of(), true, List.of(), false);
+                List.of(), List.of(ANCHOR), List.of(), true, List.of(), false, List.of());
         FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.RISE,
                 java.util.Optional.of(SOUTH), java.util.Optional.of(climb));
 
@@ -906,6 +906,57 @@ class FellTreeTest {
         assertEquals(3, ctx.riser.ups, "the three still to go");
         assertColumnGone(12);
         assertEquals(new Pos(0, BASE, 0), ctx.percepts.position);
+    }
+
+    // ── branches ─────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aBranchInReachComesDownWithTheTrunk() {
+        ctx.percepts.blocks.placeOak(0, 0); // four logs, a crown: a tree the split will own
+        Pos branch = new Pos(1, BASE + 2, 0);
+        ctx.percepts.blocks.set(branch.x(), branch.y(), branch.z(), BlockKind.LOG);
+        ctx.percepts.blocks.setId(branch.x(), branch.y(), branch.z(), "minecraft:oak_log");
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(List.of(branch), task.climb().orElseThrow().branches(),
+                "the split's word: this tree's log, off its column");
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(branch.x(), branch.y(), branch.z()));
+        assertColumnGone(4);
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 5 logs"), said("felled"));
+    }
+
+    @Test
+    void aBranchOutOfReachIsLeftAndCounted() {
+        ctx.percepts.blocks.placeOak(0, 0);
+        Pos near = new Pos(1, BASE + 5, 0);  // on the cap: reached from the ground beside
+        Pos far = new Pos(2, BASE + 6, 0);   // hanging off it: not from anywhere this fell stands
+        for (Pos log : List.of(near, far)) {
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:oak_log");
+        }
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600), "a branch never blocks the fell");
+        assertEquals(List.of(near, far), task.climb().orElseThrow().branches());
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(near.x(), near.y(), near.z()));
+        assertEquals(BlockKind.LOG, ctx.percepts.blocks.at(far.x(), far.y(), far.z()));
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 5 logs, 1 branches out of reach"),
+                said("felled"));
+    }
+
+    @Test
+    void aRefusedBranchIsSkippedNotWaitedOn() {
+        ctx.percepts.blocks.placeOak(0, 0);
+        Pos branch = new Pos(1, BASE + 2, 0);
+        ctx.percepts.blocks.set(branch.x(), branch.y(), branch.z(), BlockKind.LOG);
+        ctx.breaker.refuse.add(branch);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(BlockKind.LOG, ctx.percepts.blocks.at(branch.x(), branch.y(), branch.z()));
+        assertTrue(said("felled").get(0).endsWith("1 branches out of reach"), said("felled").get(0));
+        assertTrue(said("cannot").isEmpty(), "a branch refused is nobody's problem");
     }
 
     // ── a giant ──────────────────────────────────────────────────────────────────────────────

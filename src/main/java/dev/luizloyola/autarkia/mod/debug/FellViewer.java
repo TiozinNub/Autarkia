@@ -161,9 +161,11 @@ public final class FellViewer {
         }
         groups.add(new CellOverlayPayload.Group(WHITE, WIDTH, BASE_FILL, true,
                 List.of(at(climb.stand()))));
-        if (!climb.above().isEmpty()) {
+        List<Pos> toBreak = new ArrayList<>(climb.above());
+        toBreak.addAll(climb.branches());
+        if (!toBreak.isEmpty()) {
             groups.add(new CellOverlayPayload.Group(BREAK_STROKE, THIN, BREAK_FILL, true,
-                    cells(climb.above())));
+                    cells(toBreak)));
         }
         List<BlockPos> rises = new ArrayList<>();
         for (int y = climb.stand().y(); y < climb.stand().y() + climb.rises(); y++) {

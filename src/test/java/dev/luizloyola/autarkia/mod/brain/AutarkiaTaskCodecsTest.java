@@ -151,7 +151,8 @@ class AutarkiaTaskCodecsTest {
                 java.util.List.of(),
                 false,
                 java.util.List.of(anchor),
-                true);
+                true,
+                java.util.List.of(new dev.luizloyola.anima.core.brain.sense.Pos(210, -57, 0)));
         var chosen = new dev.luizloyola.anima.core.brain.sense.Pos(207, -60, 0);
         var task = FellTree.restored(anchor, FellTree.Stage.OPEN,
                 java.util.Optional.of(chosen), java.util.Optional.of(climb));
