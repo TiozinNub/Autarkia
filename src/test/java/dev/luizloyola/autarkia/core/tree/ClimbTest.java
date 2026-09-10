@@ -184,6 +184,71 @@ class ClimbTest {
         assertEquals("open 2 · step in · no rise · 4 above · 1 underfoot", climb.describe());
     }
 
+    // ── a giant ──────────────────────────────────────────────────────────────────────────────
+
+    private static final List<Pos> SQUARE = List.of(new Pos(0, BASE, 0), new Pos(1, BASE, 0),
+            new Pos(1, BASE, 1), new Pos(0, BASE, 1));
+
+    private static List<Pos> giant(int logs) {
+        List<Pos> out = new ArrayList<>();
+        for (Pos c : SQUARE) {
+            out.addAll(column(c.x(), BASE, c.z(), logs));
+        }
+        return out;
+    }
+
+    private static List<Pos> column(int x, int from, int z, int logs) {
+        List<Pos> out = new ArrayList<>();
+        for (int y = from; y < from + logs; y++) {
+            out.add(new Pos(x, y, z));
+        }
+        return out;
+    }
+
+    @Test
+    void theRingRunsClockwiseFromAboveAndBackAgain() {
+        List<Pos> shuffled = List.of(SQUARE.get(2), SQUARE.get(0), SQUARE.get(3), SQUARE.get(1));
+        assertEquals(SQUARE, Climb.ringOf(shuffled), "north-west, north-east, south-east, south-west");
+
+        Climb cw = new Climb(SQUARE.get(0), BASE, true, false, List.of(), List.of(), List.of(),
+                List.of(), true, SQUARE, true);
+        assertEquals(SQUARE.get(1), cw.next(SQUARE.get(0), true), "east of the north-west cell");
+        assertEquals(SQUARE.get(3), cw.next(SQUARE.get(0), false), "and back the other way");
+        Climb ccw = new Climb(SQUARE.get(0), BASE, true, false, List.of(), List.of(), List.of(),
+                List.of(), true, SQUARE, false);
+        assertEquals(SQUARE.get(3), ccw.next(SQUARE.get(0), true));
+        assertEquals(SQUARE.get(0), ccw.column(new Pos(0, BASE + 9, 0)), "by x and z, whatever the height");
+    }
+
+    @Test
+    void aGiantIsSpiralledFromTheEntryColumn() {
+        List<Pos> logs = giant(12);
+        Pos beside = new Pos(-1, BASE, 0); // the west side, beside the north-west column
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, world(logs), beside, true, true, BODY);
+
+        assertTrue(climb.giant());
+        assertEquals(new Pos(0, BASE + 1, 0), climb.stand());
+        assertEquals(column(0, BASE + 1, 0, 3), climb.stepIn(), "three: the body's two and one to hop on from");
+        assertEquals(BASE + 6, climb.needFeetY(), "the top of twelve, priced from the diagonal column");
+        assertEquals(5, climb.rises());
+        assertEquals(List.of(new Pos(0, BASE, 0)), climb.under(), "the entry column's base, on the way down");
+        assertTrue(climb.last().isEmpty());
+        assertEquals(48 - 3 - 1, climb.above().size(), "everything else, the stairs included");
+        assertTrue(climb.complete());
+        assertEquals("open 3 · step in · spiral 5 · 44 to break · 1 underfoot", climb.describe());
+    }
+
+    @Test
+    void aShortGiantIsAllFromBeside() {
+        List<Pos> logs = giant(3);
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, world(logs), new Pos(-1, BASE, 0),
+                true, true, BODY);
+
+        assertFalse(climb.stepsIn());
+        assertEquals(4, climb.columns().size());
+        assertEquals("12 to break from beside", climb.describe());
+    }
+
     // ── the ground beside the stump ──────────────────────────────────────────────────────────
 
     @Test

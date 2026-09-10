@@ -898,7 +898,7 @@ class FellTreeTest {
         ctx.percepts.blocks.set(0, BASE + 2, 0, BlockKind.LOG);
         ctx.percepts.position = new Pos(0, BASE + 3, 0);
         Climb climb = new Climb(new Pos(0, BASE + 1, 0), BASE + 6, true, false, List.of(),
-                List.of(), List.of(ANCHOR), List.of(), true);
+                List.of(), List.of(ANCHOR), List.of(), true, List.of(), false);
         FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.RISE,
                 java.util.Optional.of(SOUTH), java.util.Optional.of(climb));
 
@@ -906,6 +906,90 @@ class FellTreeTest {
         assertEquals(3, ctx.riser.ups, "the three still to go");
         assertColumnGone(12);
         assertEquals(new Pos(0, BASE, 0), ctx.percepts.position);
+    }
+
+    // ── a giant ──────────────────────────────────────────────────────────────────────────────
+
+    /** A 2×2 trunk on the anchor's square, {@code logs} tall, of spruce. */
+    private void giant(int logs) {
+        for (int y = BASE; y < BASE + logs; y++) {
+            for (int[] d : new int[][] {{0, 0}, {1, 0}, {1, 1}, {0, 1}}) {
+                ctx.percepts.blocks.set(d[0], y, d[1], BlockKind.LOG);
+                ctx.percepts.blocks.setId(d[0], y, d[1], "minecraft:spruce_log");
+            }
+        }
+    }
+
+    private void assertGiantGone(int logs) {
+        for (int y = BASE; y < BASE + logs; y++) {
+            for (int[] d : new int[][] {{0, 0}, {1, 0}, {1, 1}, {0, 1}}) {
+                assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(d[0], y, d[1]),
+                        "at (" + d[0] + ", " + y + ", " + d[1] + ")");
+            }
+        }
+    }
+
+    @Test
+    void aGiantIsSpiralledUpAndUnwoundWithNothingPlaced() {
+        giant(12);
+        standSouth();
+
+        task.tick(ctx);
+        assertEquals(new Pos(0, BASE, 2), task.chosen().orElseThrow(), "the nearer of the two south cells");
+        assertEquals(TaskStatus.SUCCESS, drive(1500));
+        Climb climb = task.climb().orElseThrow();
+        assertTrue(climb.giant());
+        assertEquals(new Pos(0, BASE + 1, 1), climb.stand(), "the entry column is the one beside the side");
+        assertEquals(3, climb.stepIn().size(), "the body's two cells and one to hop on from");
+        assertEquals(5, climb.rises(), "five slots up, the top priced from the diagonal column");
+        assertEquals(0, ctx.riser.ups, "nothing placed: the stairs are the tree's own logs");
+        assertGiantGone(12);
+        assertEquals(new Pos(0, BASE, 1), ctx.percepts.position, "back on the ground in the entry column");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 48 logs"), said("felled"));
+    }
+
+    @Test
+    void aHopIsNotReadUntilTheFeetAreOnSomething() {
+        giant(12);
+        standSouth();
+        // Up to the first hop of the spiral: the slot open, the walk into it ordered.
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; i < 200 && ctx.mover.moveToCalls < 3; i++) {
+            status = drive(1);
+        }
+        assertEquals(TaskStatus.RUNNING, status);
+        assertEquals(FellTree.Stage.SPIRAL, task.stage());
+        Pos slot = new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
+        int breaks = ctx.breaker.targets.size();
+
+        // Mid-hop: the feet read a cell higher than the floor, and there is nothing under them.
+        ctx.percepts.position = new Pos(slot.x(), slot.y() + 1, slot.z());
+        ctx.mover.setState(MoveState.MOVING);
+        for (int i = 0; i < 10; i++) {
+            task.tick(ctx);
+        }
+        assertEquals(breaks, ctx.breaker.targets.size(), "nothing is begun off a mid-air read");
+        assertEquals(3, ctx.mover.moveToCalls, "and no hop is ordered off one either");
+
+        // Landed, on the stair: the spiral goes on from the real cell.
+        ctx.percepts.position = slot;
+        ctx.mover.setState(MoveState.ARRIVED);
+        task.tick(ctx);
+        task.tick(ctx);
+        assertTrue(ctx.breaker.targets.size() > breaks, "the next slot is opened from where it stands");
+    }
+
+    @Test
+    void aShortGiantIsAllFromBesideItsBasesLast() {
+        giant(5);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        Climb climb = task.climb().orElseThrow();
+        assertTrue(climb.giant());
+        assertEquals(0, climb.rises());
+        assertGiantGone(5);
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 20 logs"), said("felled"));
     }
 
     // ── cancel ───────────────────────────────────────────────────────────────────────────────

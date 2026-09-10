@@ -28,13 +28,16 @@ import org.jspecify.annotations.Nullable;
  * body could walk up to ({@link Approach}), take the cheapest, walk to its feet cell clearing the
  * leaves that side lists — only those — beginning on any of them the moment the arm can reach it,
  * mid-walk included. Work out the {@link Climb} from the cell it stands in. Then carry it out: open
- * the trunk and get in, hopping up onto the step up or digging in level with it; rise to the
- * height the tallest log demands, one placed log at a time, breaking only what is over the head;
- * break everything above from there; come down breaking underfoot until the feet are back at
- * floor level; step out and take the one log that may be left below floor level from outside. Then
- * SUCCESS, with the count, or FAILED with the one reason: a rise refused, nothing carried to rise
- * on, the arm refused a block for long, the legs gave up on a walk, or wood left standing that the
- * plan knew it could not reach.
+ * the trunk and get in, hopping up onto the step up or digging in level with it; go up to the
+ * height the tallest log demands — a lone trunk by rising on one placed log at a time, breaking
+ * only what is over the head; a 2×2 giant by spiralling, a slot of three cells opened one higher
+ * in the next column round and hopped into, the logs left every fourth level being the stairs —
+ * break everything above from there; come down, breaking underfoot, or back down the spiral
+ * breaking each stair as it is left and then the rest of the giant from the entry stand, until the
+ * feet are back at floor level; step out and take the logs that may be left one below floor level
+ * from outside. Then SUCCESS, with the count, or FAILED with the one reason: a rise refused,
+ * nothing carried to rise on, the arm refused a block for long, every side given up on, or wood
+ * left standing that the plan knew it could not reach.
  *
  * <p><b>The world holds the progress, the save holds the stage.</b> The survey is re-read every
  * second, the walk is re-ordered when the legs give up, a block is only ever begun on because the
@@ -99,6 +102,13 @@ public final class FellTree implements PrimitiveTask {
     public static final int NO_WAY_IN_TICKS = 100;
 
     /**
+     * How long a body may hang with nothing under its feet before its position is believed
+     * anyway — two seconds; a fall is over well before, and a body stood on something the probe
+     * calls air (a lily pad) should not wait forever.
+     */
+    public static final int AIRBORNE_TICKS = 40;
+
+    /**
      * How many leaves in a row the arm chews through to reach the block it was refused. A crown
      * hides its own trunk from the side, and the leaf the breaker blames is as often as not in
      * front of another; past this many the swing is not worth the path.
@@ -110,7 +120,9 @@ public final class FellTree implements PrimitiveTask {
      * saved body mid-stage reads its stage back by it. PLANNED is the moment of standing in the
      * trunk with the plan, and hands straight on.
      */
-    public enum Stage { APPROACH, OPEN, ENTER, PLANNED, RISE, CLEAR, DESCEND, GROUND }
+    public enum Stage {
+        APPROACH, OPEN, ENTER, PLANNED, RISE, CLEAR, DESCEND, GROUND, SPIRAL, UNWIND, BOTTOM
+    }
 
     /** What the arm takes: a side's leaves; whatever the trunk is opened through; the wood itself. */
     private static final Set<BlockKind> LEAVES_ONLY = Set.of(BlockKind.LEAVES);
@@ -139,6 +151,8 @@ public final class FellTree implements PrimitiveTask {
     private int walkRetryAt;
     /** The tick the tree was first found to have no way in, while that lasts; -1 otherwise. */
     private int noWayInSince = -1;
+    /** The tick the body was first read with nothing under its feet, while that lasts; -1 otherwise. */
+    private int airborneSince = -1;
     /** How many times the current walk has failed. */
     private int walkFailures;
     /** The block under the arm, or null, and what it was when the swing began. */
@@ -222,7 +236,10 @@ public final class FellTree implements PrimitiveTask {
             case ENTER -> enter(ctx);
             case PLANNED -> planned(ctx);
             case RISE -> rise(ctx);
+            case SPIRAL -> spiral(ctx);
             case CLEAR -> clear(ctx);
+            case UNWIND -> unwind(ctx);
+            case BOTTOM -> bottom(ctx);
             case DESCEND -> descend(ctx);
             case GROUND -> ground(ctx);
         };
@@ -296,13 +313,29 @@ public final class FellTree implements PrimitiveTask {
         return TaskStatus.RUNNING;
     }
 
-    /** Work out the climb from beside the stump, and which stage it starts. */
+    /**
+     * Work out the climb from beside the stump, and which stage it starts. The trunk is every
+     * column the survey put in the base — one, or a giant's four — and the entry column is the one
+     * beside the side taken; which way round a giant is spiralled is drawn here, once.
+     */
     private void plan(BrainContext ctx, Approach.Side side, boolean jumpRoom) {
         int bodyCells = body(ctx);
         BlockProbe blocks = ctx.percepts().blocks();
-        climb = Climb.plan(Climb.Arm.of(ctx.percepts()), anchor,
-                Climb.column(anchor, blocks, bodyCells), blocks, side.feet(), jumpRoom, bodyCells);
-        say(ctx, "plan — " + climb.describe());
+        List<Pos> columns = approach.base();
+        Pos entry = anchor;
+        List<Pos> logs = new ArrayList<>();
+        for (Pos column : columns) {
+            logs.addAll(Climb.column(column, blocks, bodyCells));
+            int apart = Math.abs(column.x() - side.cell().x())
+                    + Math.abs(column.z() - side.cell().z());
+            if (apart == 1) {
+                entry = column;
+            }
+        }
+        climb = Climb.plan(Climb.Arm.of(ctx.percepts()), columns, entry, logs, blocks, side.feet(),
+                jumpRoom, ctx.random().nextBoolean(), bodyCells);
+        say(ctx, "plan — " + climb.describe()
+                + (climb.giant() ? (climb.clockwise() ? ", clockwise" : ", anticlockwise") : ""));
         stage = climb.stepsIn() ? Stage.OPEN : Stage.CLEAR;
     }
 
@@ -329,8 +362,12 @@ public final class FellTree implements PrimitiveTask {
 
     /** Standing in the trunk with the plan: the moment lasts a tick. */
     private TaskStatus planned(BrainContext ctx) {
-        stage = climb.stepsIn() ? Stage.RISE : Stage.CLEAR;
-        return stage == Stage.RISE ? rise(ctx) : clear(ctx);
+        stage = !climb.stepsIn() ? Stage.CLEAR : climb.giant() ? Stage.SPIRAL : Stage.RISE;
+        return switch (stage) {
+            case SPIRAL -> spiral(ctx);
+            case RISE -> rise(ctx);
+            default -> clear(ctx);
+        };
     }
 
     // ── up, across, and down ─────────────────────────────────────────────────────────────────
@@ -363,7 +400,7 @@ public final class FellTree implements PrimitiveTask {
             return clear(ctx);
         }
         phase = "rising to " + climb.needFeetY() + " (" + at.y() + ")";
-        Pos over = new Pos(anchor.x(), at.y() + 2, anchor.z());
+        Pos over = new Pos(climb.stand().x(), at.y() + 2, climb.stand().z());
         BlockKind kind = ctx.percepts().blocks().at(over.x(), over.y(), over.z());
         if (kind == BlockKind.LOG || kind == BlockKind.LEAVES) {
             if (!breakNext(ctx, List.of(over), WOOD_OR_LEAVES)) {
@@ -384,14 +421,104 @@ public final class FellTree implements PrimitiveTask {
         return TaskStatus.RUNNING;
     }
 
-    /** Every log left in the column above the head — from inside, or from beside — lowest first. */
+    /**
+     * The spiral: three cells opened one higher in the next column round, then a hop into that
+     * slot, until the feet are at the height the tallest log demands. The world says where the
+     * body is and which column it stands in; nothing else has to be remembered.
+     */
+    private TaskStatus spiral(BrainContext ctx) {
+        Pos at = settled(ctx);
+        if (at == null) {
+            return TaskStatus.RUNNING;
+        }
+        if (at.y() >= climb.needFeetY()) {
+            stage = Stage.CLEAR;
+            return clear(ctx);
+        }
+        Pos here = climb.column(at);
+        if (here == null) {
+            return fail(ctx, "out of the trunk at " + where(at));
+        }
+        Pos next = climb.next(here, true);
+        List<Pos> slot = new ArrayList<>(Climb.SLOT);
+        for (int y = at.y() + 1; y <= at.y() + Climb.SLOT; y++) {
+            slot.add(new Pos(next.x(), y, next.z()));
+        }
+        phase = "spiralling up to " + climb.needFeetY() + " (" + at.y() + ")";
+        if (!breakNext(ctx, slot, WOOD_OR_LEAVES)) {
+            return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+        }
+        walk(ctx, new Pos(next.x(), at.y() + 1, next.z()));
+        return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+    }
+
+    /**
+     * Every log left from the feet up — from inside, in every column, or from beside — lowest
+     * first. A giant's neighbouring columns can hold a log level with the head; it comes out here.
+     */
     private TaskStatus clear(BrainContext ctx) {
-        int feet = ctx.percepts().position().y();
-        List<Pos> cells = logsFrom(ctx, climb.stepsIn() ? feet + 2 : feet + 1);
+        Pos at = settled(ctx);
+        if (at == null) {
+            return TaskStatus.RUNNING;
+        }
+        int feet = at.y();
+        List<Pos> cells = logsFrom(ctx, climb.stepsIn() ? feet : feet + 1);
         phase = "clearing above (" + cells.size() + " left)";
         if (breakNext(ctx, cells, WOOD)) {
-            stage = climb.stepsIn() ? Stage.DESCEND : Stage.GROUND;
-            return stage == Stage.DESCEND ? descend(ctx) : ground(ctx);
+            stage = !climb.stepsIn() ? Stage.GROUND : climb.giant() ? Stage.UNWIND : Stage.BOTTOM;
+            return switch (stage) {
+                case UNWIND -> unwind(ctx);
+                case BOTTOM -> bottom(ctx);
+                default -> ground(ctx);
+            };
+        }
+        return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+    }
+
+    /**
+     * Back down the spiral: whatever is left level with the feet or higher comes out first — the
+     * stair just left — then a step down into the previous column's slot, onto its stair, until
+     * the body is back on the entry stand.
+     */
+    private TaskStatus unwind(BrainContext ctx) {
+        Pos at = settled(ctx);
+        if (at == null) {
+            return TaskStatus.RUNNING;
+        }
+        Pos here = climb.column(at);
+        if (here == null) {
+            return fail(ctx, "out of the trunk at " + where(at));
+        }
+        List<Pos> left = logsFrom(ctx, at.y());
+        phase = "coming down the spiral (" + at.y() + ")";
+        if (!breakNext(ctx, left, WOOD)) {
+            return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+        }
+        if (here.equals(climb.column(climb.stand())) && at.y() <= climb.stand().y()) {
+            stage = Stage.BOTTOM;
+            return bottom(ctx);
+        }
+        Pos prev = climb.next(here, false);
+        walk(ctx, new Pos(prev.x(), at.y() - 1, prev.z()));
+        return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
+    }
+
+    /**
+     * From the entry stand, whatever the other columns still hold from floor level up, highest
+     * first — a giant's unvisited bases, the last stairs — and then down as a lone trunk goes.
+     */
+    private TaskStatus bottom(BrainContext ctx) {
+        Pos entry = climb.stand();
+        List<Pos> cells = new ArrayList<>();
+        for (Pos log : logsFrom(ctx, climb.floor())) {
+            if (log.x() != entry.x() || log.z() != entry.z() || log.y() >= entry.y()) {
+                cells.add(0, log); // highest first
+            }
+        }
+        phase = "the rest of the trunk (" + cells.size() + " left)";
+        if (breakNext(ctx, cells, WOOD)) {
+            stage = Stage.DESCEND;
+            return descend(ctx);
         }
         return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
     }
@@ -402,8 +529,11 @@ public final class FellTree implements PrimitiveTask {
      * axe goes — the dirt under a sunken stump — and the way out from there is a step down.
      */
     private TaskStatus descend(BrainContext ctx) {
-        Pos at = ctx.percepts().position();
-        Pos below = new Pos(anchor.x(), at.y() - 1, anchor.z());
+        Pos at = settled(ctx);
+        if (at == null) {
+            return TaskStatus.RUNNING; // still falling from the last one
+        }
+        Pos below = new Pos(climb.stand().x(), at.y() - 1, climb.stand().z());
         if (at.y() <= climb.floor()
                 || ctx.percepts().blocks().at(below.x(), below.y(), below.z()) != BlockKind.LOG) {
             stage = Stage.GROUND;
@@ -425,8 +555,10 @@ public final class FellTree implements PrimitiveTask {
         BlockProbe blocks = ctx.percepts().blocks();
         List<Pos> cells = new ArrayList<>();
         for (int y = climb.floor(); y >= climb.floor() - 1; y--) {
-            if (blocks.at(anchor.x(), y, anchor.z()) == BlockKind.LOG) {
-                cells.add(new Pos(anchor.x(), y, anchor.z()));
+            for (Pos column : climb.columns()) {
+                if (blocks.at(column.x(), y, column.z()) == BlockKind.LOG) {
+                    cells.add(new Pos(column.x(), y, column.z()));
+                }
             }
         }
         if (!cells.isEmpty()) {
@@ -450,9 +582,11 @@ public final class FellTree implements PrimitiveTask {
     private TaskStatus finish(BrainContext ctx) {
         List<Pos> left = logsFrom(ctx, climb.floor() - 1);
         int buried = 0;
-        for (int y = anchor.y(); y < climb.floor() - 1; y++) {
-            if (ctx.percepts().blocks().at(anchor.x(), y, anchor.z()) == BlockKind.LOG) {
-                buried++;
+        for (Pos column : climb.columns()) {
+            for (int y = anchor.y(); y < climb.floor() - 1; y++) {
+                if (ctx.percepts().blocks().at(column.x(), y, column.z()) == BlockKind.LOG) {
+                    buried++;
+                }
             }
         }
         if (!left.isEmpty()) {
@@ -552,7 +686,7 @@ public final class FellTree implements PrimitiveTask {
     }
 
     /**
-     * The logs standing in the trunk's column from {@code fromY} up to the plan's top, lowest
+     * The logs standing in the trunk's columns from {@code fromY} up to the plan's top, lowest
      * first — read without the gap rule {@link Climb#column} has, because from inside the gap
      * between the stump and the next log is whatever the body has cleared so far.
      */
@@ -560,8 +694,10 @@ public final class FellTree implements PrimitiveTask {
         BlockProbe blocks = ctx.percepts().blocks();
         List<Pos> logs = new ArrayList<>();
         for (int y = fromY; y <= climb.top(); y++) {
-            if (blocks.at(anchor.x(), y, anchor.z()) == BlockKind.LOG) {
-                logs.add(new Pos(anchor.x(), y, anchor.z()));
+            for (Pos column : climb.columns()) {
+                if (blocks.at(column.x(), y, column.z()) == BlockKind.LOG) {
+                    logs.add(new Pos(column.x(), y, column.z()));
+                }
             }
         }
         return logs;
@@ -569,6 +705,25 @@ public final class FellTree implements PrimitiveTask {
 
     private static int body(BrainContext ctx) {
         return MoveCapabilities.of(ctx.profile()).clearCells();
+    }
+
+    /**
+     * The feet cell once the body is on something — null while it is mid-hop or falling, when
+     * the cell it reads from is not the one it will stand in. A hop ordered off a mid-air read
+     * lands a cell too high, in a slot with no floor, and the body falls down the column (the
+     * first spiral, 2026-09-09). Believed anyway after {@link #AIRBORNE_TICKS}.
+     */
+    private @Nullable Pos settled(BrainContext ctx) {
+        Pos at = ctx.percepts().position();
+        BlockKind under = ctx.percepts().blocks().at(at.x(), at.y() - 1, at.z());
+        if (under != BlockKind.AIR) {
+            airborneSince = -1;
+            return at;
+        }
+        if (airborneSince < 0) {
+            airborneSince = ticks;
+        }
+        return ticks - airborneSince > AIRBORNE_TICKS ? at : null;
     }
 
     // ── the legs and the arm ─────────────────────────────────────────────────────────────────

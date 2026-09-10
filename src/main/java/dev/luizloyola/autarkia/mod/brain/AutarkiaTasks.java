@@ -45,7 +45,9 @@ public final class AutarkiaTasks {
             POS.listOf().optionalFieldOf("above", List.of()).forGetter(Climb::above),
             POS.listOf().optionalFieldOf("under", List.of()).forGetter(Climb::under),
             POS.listOf().optionalFieldOf("last", List.of()).forGetter(Climb::last),
-            Codec.BOOL.fieldOf("complete").forGetter(Climb::complete)
+            Codec.BOOL.fieldOf("complete").forGetter(Climb::complete),
+            POS.listOf().optionalFieldOf("columns", List.of()).forGetter(Climb::columns),
+            Codec.BOOL.optionalFieldOf("clockwise", false).forGetter(Climb::clockwise)
     ).apply(c, Climb::new));
 
     /** By name, guarded into a DataResult — never trusted raw off a hand-edited save. */
