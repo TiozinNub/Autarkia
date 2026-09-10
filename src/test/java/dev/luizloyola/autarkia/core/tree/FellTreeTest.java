@@ -15,6 +15,7 @@ import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.Entry;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -927,21 +928,65 @@ class FellTreeTest {
     }
 
     @Test
-    void aBranchOutOfReachIsLeftAndCounted() {
-        ctx.percepts.blocks.placeOak(0, 0);
-        Pos near = new Pos(1, BASE + 5, 0);  // on the cap: reached from the ground beside
-        Pos far = new Pos(2, BASE + 6, 0);   // hanging off it: not from anywhere this fell stands
-        for (Pos log : List.of(near, far)) {
-            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
-            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:oak_log");
-        }
+    void aTrunkGivenUpOnHalfwayIsReadWholeByTheNextVisit() {
+        // The stump, three cells of air a fell from beside left, and two logs still up there.
+        ctx.percepts.blocks.set(0, BASE, 0, BlockKind.LOG);
+        ctx.percepts.blocks.set(0, BASE + 4, 0, BlockKind.LOG);
+        ctx.percepts.blocks.set(0, BASE + 5, 0, BlockKind.LOG);
         standSouth();
 
-        assertEquals(TaskStatus.SUCCESS, drive(600), "a branch never blocks the fell");
-        assertEquals(List.of(near, far), task.climb().orElseThrow().branches());
-        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(near.x(), near.y(), near.z()));
+        assertEquals(TaskStatus.SUCCESS, drive(400));
+        assertEquals(List.of("plan — 3 to break from beside"), said("plan"), "not a one-log tree");
+        assertColumnGone(6);
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 3 logs"), said("felled"));
+    }
+
+    @Test
+    void aBranchOfThisTreeInTheWayOfItsTrunkIsChewedThroughFirst() {
+        ctx.percepts.blocks.placeOak(0, 0);
+        Pos branch = new Pos(1, BASE + 2, 0);
+        ctx.percepts.blocks.set(branch.x(), branch.y(), branch.z(), BlockKind.LOG);
+        ctx.percepts.blocks.setId(branch.x(), branch.y(), branch.z(), "minecraft:oak_log");
+        Pos top = new Pos(0, BASE + 3, 0);
+        ctx.breaker.refuse.add(top);
+        ctx.breaker.obstructions.put(top, branch); // the branch hangs over the side, in the swing
+        standSouth();
+
+        for (int i = 0; i < 40 && !ctx.breaker.targets.contains(branch); i++) {
+            drive(1);
+        }
+        assertTrue(ctx.breaker.targets.contains(branch), "its own branch, chewed through");
+        assertFalse(ctx.breaker.targets.contains(top), "before the log it hid");
+        ctx.breaker.refuse.clear();
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertColumnGone(4);
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 5 logs"), said("felled"));
+    }
+
+    @Test
+    void aBranchOutOfReachFromAnyHeightIsLeftAndCounted() {
+        ctx.percepts.blocks.placeOak(0, 0);
+        // A limb off the cap, one cell out and up per log: the last is five out, farther than the
+        // arm is long from the trunk at any height. The others set the height and come down.
+        List<Pos> limb = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            Pos log = new Pos(i, BASE + 4 + i, 0);
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:oak_log");
+            limb.add(log);
+        }
+        pack(8);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(800), "a branch never blocks the fell");
+        assertEquals(5, task.climb().orElseThrow().branches().size());
+        assertTrue(task.climb().orElseThrow().rises() > 0, "the limb, not the top log, set the height");
+        Pos far = limb.get(4);
+        for (Pos log : limb.subList(0, 4)) {
+            assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(log.x(), log.y(), log.z()), "at " + at(log));
+        }
         assertEquals(BlockKind.LOG, ctx.percepts.blocks.at(far.x(), far.y(), far.z()));
-        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 5 logs, 1 branches out of reach"),
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 8 logs, 1 branches out of reach"),
                 said("felled"));
     }
 

@@ -118,6 +118,14 @@ public final class FellTree implements PrimitiveTask {
     public static final int BRANCH_SCAN = 7;
 
     /**
+     * How many cells of air a trunk is read across at plan time. A fell given up on from beside
+     * leaves up to the arm's reach of air over the stump — three cells on 2026-09-10, where the
+     * next settler read a one-log tree, took the stump, and left the rest floating over a closed
+     * project (the seventh's finding four, again). Wider than that is somebody else's wood.
+     */
+    public static final int COLUMN_GAP = 5;
+
+    /**
      * How many leaves in a row the arm chews through to reach the block it was refused. A crown
      * hides its own trunk from the side, and the leaf the breaker blames is as often as not in
      * front of another; past this many the swing is not worth the path.
@@ -334,7 +342,7 @@ public final class FellTree implements PrimitiveTask {
         Pos entry = anchor;
         List<Pos> logs = new ArrayList<>();
         for (Pos column : columns) {
-            logs.addAll(Climb.column(column, blocks, bodyCells));
+            logs.addAll(Climb.column(column, blocks, COLUMN_GAP));
             int apart = Math.abs(column.x() - side.cell().x())
                     + Math.abs(column.z() - side.cell().z());
             if (apart == 1) {
@@ -918,9 +926,10 @@ public final class FellTree implements PrimitiveTask {
             if (first == null) {
                 first = cell;
             }
-            // A refusal is out of reach or a blocked swing. The walk cures the first. A leaf in the
-            // way is cured here: chewed through, a hop at a time, before the block it hides — the
-            // crown's own leaves stand between a body and its trunk, and none of them is listed.
+            // A refusal is out of reach or a blocked swing. The walk cures the first. What is in
+            // the way is cured here when the axe is for it: a leaf, or a log of this very tree —
+            // chewed through, a hop at a time, before the block it hides. The crown's own leaves
+            // and its own low branches stand between a body and its trunk, and none is listed.
             Pos target = cell;
             BlockKind targetKind = kind;
             for (int hop = 0; hop <= CHEW_HOPS; hop++) {
@@ -931,12 +940,16 @@ public final class FellTree implements PrimitiveTask {
                     return false;
                 }
                 Pos block = breaker.obstruction(target);
-                if (block == null
-                        || blocks.at(block.x(), block.y(), block.z()) != BlockKind.LEAVES) {
-                    break; // out of reach, or something the axe is not for: the walk's problem
+                if (block == null) {
+                    break; // out of reach: the walk's problem
+                }
+                BlockKind inTheWay = blocks.at(block.x(), block.y(), block.z());
+                boolean ours = inTheWay == BlockKind.LOG && climb != null && climb.owns(block);
+                if (inTheWay != BlockKind.LEAVES && !ours) {
+                    break; // something the axe is not for: the walk's problem, or nobody's
                 }
                 target = block;
-                targetKind = BlockKind.LEAVES;
+                targetKind = inTheWay;
             }
         }
         if (must && first != null && (arrived || walkingTo == null)) {

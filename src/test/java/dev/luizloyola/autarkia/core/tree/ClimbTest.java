@@ -251,6 +251,49 @@ class ClimbTest {
     }
 
     @Test
+    void aBranchInReachOfTheTrunkSetsTheHeightToo() {
+        List<Pos> logs = column(7);
+        Pos branch = new Pos(3, BASE + 9, 0); // three out, over the crown: reachable from six up
+        Climb climb = Climb.plan(ARM, List.of(STUMP), STUMP, logs, List.of(branch), world(logs),
+                BESIDE, true, false, BODY);
+
+        assertEquals(BASE + 5, climb.needFeetY(), "the branch, not the top log, is the demand");
+        assertEquals(4, climb.rises());
+        assertTrue(climb.complete());
+    }
+
+    @Test
+    void aBranchOutOfAnyReachFromTheTrunkLeavesTheHeightAlone() {
+        List<Pos> logs = column(7);
+        Pos far = new Pos(6, BASE + 4, 0); // farther out than the arm is long
+        Climb climb = Climb.plan(ARM, List.of(STUMP), STUMP, logs, List.of(far), world(logs),
+                BESIDE, true, false, BODY);
+
+        assertEquals(BASE + 1, climb.needFeetY());
+        assertEquals(0, climb.rises());
+    }
+
+    @Test
+    void aShortTrunkWithAHighBranchStepsInForIt() {
+        List<Pos> logs = column(4);
+        Pos branch = new Pos(2, BASE + 7, 0);
+        Climb climb = Climb.plan(ARM, List.of(STUMP), STUMP, logs, List.of(branch), world(logs),
+                BESIDE, true, false, BODY);
+
+        assertTrue(climb.stepsIn(), "from beside the branch is out of reach; from inside it is not");
+    }
+
+    @Test
+    void aGiantNeverSpiralsAboveItsTrunkForABranch() {
+        List<Pos> logs = giant(12);
+        Pos branch = new Pos(3, BASE + 20, 0);
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(branch), world(logs),
+                new Pos(-1, BASE, 0), true, true, BODY);
+
+        assertEquals(BASE + 12, climb.needFeetY(), "the top log plus one: the last stair there is");
+    }
+
+    @Test
     void branchesRideAlongAndAreCounted() {
         List<Pos> logs = column(7);
         List<Pos> branches = List.of(new Pos(1, BASE + 4, 0), new Pos(2, BASE + 5, 0));

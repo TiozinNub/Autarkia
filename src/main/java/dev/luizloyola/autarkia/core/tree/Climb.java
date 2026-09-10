@@ -166,9 +166,11 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         int floor = beside.y();
         List<Pos> sorted = sortedByHeight(logs);
         int need = Integer.MIN_VALUE;
+        int topLog = Integer.MIN_VALUE;
         boolean fromBeside = true;
         boolean reachable = true;
         for (Pos log : sorted) {
+            topLog = Math.max(topLog, log.y());
             if (log.y() <= floor) {
                 continue;
             }
@@ -182,6 +184,22 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
                 reachable = false;
             }
             fromBeside &= reaches(arm, beside.x(), floor, beside.z(), log);
+        }
+        // The furthest block sets the height, and a branch is a block (decision: Luiz,
+        // 2026-09-10): one the arm can reach from the trunk at some height counts toward it, and
+        // toward going in at all. One it cannot reach from any height is out of reach, and said
+        // so at the end. A giant's spiral has no stairs above its trunk, so its height is capped
+        // at the top log.
+        for (Pos branch : branches) {
+            OptionalInt feet = giant ? feetToReach(arm, branch.x() + 1, branch.z() + 1, branch)
+                    : feetToReach(arm, entry.x(), entry.z(), branch);
+            if (feet.isPresent()) {
+                need = Math.max(need, feet.getAsInt());
+                fromBeside &= reaches(arm, beside.x(), floor, beside.z(), branch);
+            }
+        }
+        if (giant && topLog > Integer.MIN_VALUE) {
+            need = Math.min(need, topLog + 1);
         }
         if (fromBeside) {
             return fromBeside(arm, sorted, beside, need, ring, branches);
@@ -286,6 +304,11 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
             }
         }
         return ring.size() == 4 ? ring : List.copyOf(columns);
+    }
+
+    /** Whether {@code cell} is this tree's own wood by the plan: in a column, or a branch. */
+    public boolean owns(Pos cell) {
+        return branches.contains(cell) || column(cell) != null;
     }
 
     /** Whether this is a 2×2 to spiral rather than a lone trunk to climb. */
