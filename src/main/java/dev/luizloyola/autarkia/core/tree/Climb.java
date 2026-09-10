@@ -30,10 +30,12 @@ import org.jspecify.annotations.Nullable;
  * <p><b>A 2×2 giant</b> is spiralled (decision: Luiz, 2026-09-09): three cells are opened on the
  * way in, the body's two and one for a hop, and from then on the next column round — clockwise or
  * not, drawn once — has three cells opened one higher, and the body hops into that slot. Nothing
- * is ever placed: each column keeps a log every fourth level, and those are the stairs. From the
- * top everything above comes out; then the body steps back down the spiral, breaking each stair
- * as it leaves it, to the entry stand, where it takes whatever the other columns still hold,
- * highest first, and then goes down as a lone trunk does.
+ * is ever placed: each column keeps a log every fourth level, and those are the stairs. The
+ * spiral goes as far as they do — a column with no log at the height the body would hop from
+ * ends it — and every log is priced from the lowest of its stands that reaches it, never from a
+ * column the body will not be in. From the top everything above comes out; then the body steps
+ * back down the spiral, breaking each stair as it leaves it, to the entry stand, where it takes
+ * whatever the other columns still hold, highest first, and then goes down as a lone trunk does.
  *
  * <p><b>Branches</b> — the tree's logs off its columns — are taken on the way down (decision:
  * Luiz, 2026-09-10): from the top once the trunk above is clear, then from every level the body
@@ -176,19 +178,23 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         List<Pos> ring = ringOf(columns);
         boolean giant = ring.size() == 4;
         int floor = beside.y();
+        // The height the body works from inside: on the step up after a hop, or its own where
+        // there is no room to hop.
+        int feetIn = jumpRoom ? floor + 1 : floor;
+        // A giant is worked from wherever the spiral stands the body, so each log is priced from
+        // the lowest of those stands that reaches it. Priced from the cell diagonal to it
+        // instead, a dark oak's limbs beside its two tall columns were "reachable" from a stand
+        // in a short one, and stayed (2026-09-10).
+        List<Pos> stands = giant ? spiral(ring, entry, clockwise, feetIn, logs) : List.of();
         List<Pos> sorted = sortedByHeight(logs);
         int need = Integer.MIN_VALUE;
-        int topLog = Integer.MIN_VALUE;
         boolean fromBeside = true;
         boolean reachable = true;
         for (Pos log : sorted) {
-            topLog = Math.max(topLog, log.y());
             if (log.y() <= floor) {
                 continue;
             }
-            // A giant is worked from whichever column the spiral ends in, so every log is priced
-            // from the column diagonal to it — the farthest a body inside can be.
-            OptionalInt feet = giant ? feetToReach(arm, log.x() + 1, log.z() + 1, log)
+            OptionalInt feet = giant ? feetAlong(arm, stands, log)
                     : feetToReach(arm, entry.x(), entry.z(), log);
             if (feet.isPresent()) {
                 need = Math.max(need, feet.getAsInt());
@@ -200,26 +206,20 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         // The furthest block sets the height, and a branch is a block (decision: Luiz,
         // 2026-09-10): one the arm can reach from the trunk at some height counts toward it, and
         // toward going in at all. One it cannot reach from any height is out of reach, and said
-        // so at the end. A giant's spiral has no stairs above its trunk, so its height is capped
-        // at the top log.
+        // so at the end.
         for (Pos branch : branches) {
-            OptionalInt feet = giant ? feetToReach(arm, branch.x() + 1, branch.z() + 1, branch)
+            OptionalInt feet = giant ? feetAlong(arm, stands, branch)
                     : feetToReach(arm, entry.x(), entry.z(), branch);
             if (feet.isPresent()) {
                 need = Math.max(need, feet.getAsInt());
                 fromBeside &= reaches(arm, beside.x(), floor, beside.z(), branch);
             }
         }
-        if (giant && topLog > Integer.MIN_VALUE) {
-            need = Math.min(need, topLog + 1);
-        }
         if (fromBeside) {
             return fromBeside(arm, sorted, beside, need, ring, branches);
         }
-        // The height the body works from inside: on the step up after a hop, or its own where
-        // there is no room to hop. Getting in needs something under that and nothing but wood or
-        // leaves in the body's way — and for a giant one cell more, to hop on from the slot.
-        int feetIn = jumpRoom ? floor + 1 : floor;
+        // Getting in needs something under the stand and nothing but wood or leaves in the
+        // body's way — and for a giant one cell more, to hop on from the slot.
         if (!Approach.holds(probe.at(entry.x(), feetIn - 1, entry.z()))) {
             return fromBeside(arm, sorted, beside, need, ring, branches);
         }
@@ -280,6 +280,37 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
         }
         return new Climb(beside, need, false, false, List.of(), above, List.of(), last, complete,
                 ring, false, branches);
+    }
+
+    /**
+     * Where a giant's spiral stands the body, lowest first: the entry stand, then one column
+     * round and one cell up for as long as that column has a log at the height the body hops
+     * from — its stair. Columns of unequal height end it early; a dark oak's are.
+     */
+    static List<Pos> spiral(List<Pos> ring, Pos entry, boolean clockwise, int feetIn,
+                            List<Pos> logs) {
+        List<Pos> stands = new ArrayList<>();
+        int from = Math.max(0, ring.indexOf(entry));
+        int step = clockwise ? 1 : -1;
+        for (int k = 0; k <= MAX_RISES; k++) {
+            Pos column = ring.get(Math.floorMod(from + step * k, ring.size()));
+            int feet = feetIn + k;
+            if (k > 0 && !logs.contains(new Pos(column.x(), feet - 1, column.z()))) {
+                break;
+            }
+            stands.add(new Pos(column.x(), feet, column.z()));
+        }
+        return stands;
+    }
+
+    /** The feet of the lowest of {@code stands} the arm reaches {@code cell} from; empty when none. */
+    static OptionalInt feetAlong(Arm arm, List<Pos> stands, Pos cell) {
+        for (Pos stand : stands) {
+            if (reaches(arm, stand.x(), stand.y(), stand.z(), cell)) {
+                return OptionalInt.of(stand.y());
+            }
+        }
+        return OptionalInt.empty();
     }
 
     private static List<Pos> sortedByHeight(List<Pos> logs) {

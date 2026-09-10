@@ -1105,7 +1105,7 @@ class FellTreeTest {
         assertTrue(climb.giant());
         assertEquals(new Pos(0, BASE + 1, 1), climb.stand(), "the entry column is the one beside the side");
         assertEquals(3, climb.stepIn().size(), "the body's two cells and one to hop on from");
-        assertEquals(5, climb.rises(), "five slots up, the top priced from the diagonal column");
+        assertEquals(5, climb.rises(), "five slots up: the top of twelve is in reach from where the fifth lands");
         assertEquals(0, ctx.riser.ups, "nothing placed: the stairs are the tree's own logs");
         assertGiantGone(12);
         assertEquals(new Pos(0, BASE, 1), ctx.percepts.position, "back on the ground in the entry column");

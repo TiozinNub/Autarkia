@@ -232,7 +232,7 @@ class ClimbTest {
         assertTrue(climb.giant());
         assertEquals(new Pos(0, BASE + 1, 0), climb.stand());
         assertEquals(column(0, BASE + 1, 0, 3), climb.stepIn(), "three: the body's two and one to hop on from");
-        assertEquals(BASE + 6, climb.needFeetY(), "the top of twelve, priced from the diagonal column");
+        assertEquals(BASE + 6, climb.needFeetY(), "the top of twelve, from where the fifth hop lands");
         assertEquals(5, climb.rises());
         assertEquals(List.of(new Pos(0, BASE, 0)), climb.under(), "the entry column's base, on the way down");
         assertTrue(climb.last().isEmpty());
@@ -286,13 +286,59 @@ class ClimbTest {
     }
 
     @Test
-    void aGiantNeverSpiralsAboveItsTrunkForABranch() {
+    void aGiantsBranchIsPricedFromTheStandTheSpiralPutsBesideIt() {
+        List<Pos> logs = giant(12);
+        Pos branch = new Pos(3, BASE + 14, 0); // east of the east columns, over the crown
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(branch), world(logs),
+                new Pos(-1, BASE, 0), true, true, BODY);
+
+        assertEquals(BASE + 10, climb.needFeetY(),
+                "the ninth hop lands in the north-east column, two cells from the branch; "
+                        + "the eighth, in the north-west, is three from it and too low");
+    }
+
+    @Test
+    void aGiantHasNoStairsAboveItsTrunk() {
         List<Pos> logs = giant(12);
         Pos branch = new Pos(3, BASE + 20, 0);
         Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(branch), world(logs),
                 new Pos(-1, BASE, 0), true, true, BODY);
 
-        assertEquals(BASE + 12, climb.needFeetY(), "the top log plus one: the last stair there is");
+        assertEquals(BASE + 6, climb.needFeetY(),
+                "the last stair is the top log, and from there the branch is out of reach: the trunk alone sets the height");
+        assertTrue(climb.complete(), "a branch out of reach is counted at the end, not planned around");
+    }
+
+    @Test
+    void aGiantOfUnequalColumnsIsPricedWhereTheSpiralStands() {
+        // The dark oak that kept two limbs (2026-09-10): two columns of six, two of eight, the
+        // limbs beside the tall pair at their top. Priced from the cell diagonal to each limb they
+        // looked reachable from the second stand — which is in a short column, three cells away.
+        List<Pos> logs = new ArrayList<>();
+        logs.addAll(column(0, BASE, 0, 6));
+        logs.addAll(column(0, BASE, 1, 6));
+        logs.addAll(column(1, BASE, 0, 8));
+        logs.addAll(column(1, BASE, 1, 8));
+        List<Pos> limbs = List.of(new Pos(2, BASE + 7, 0), new Pos(2, BASE + 7, 1));
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, limbs, world(logs),
+                new Pos(-1, BASE, 0), true, false, BODY);
+
+        assertEquals(BASE + 3, climb.needFeetY(), "the third stand, anticlockwise: the tall south-east column");
+        assertEquals(2, climb.rises());
+        assertTrue(climb.complete());
+    }
+
+    @Test
+    void theSpiralEndsWhereTheNextColumnHasNoStair() {
+        List<Pos> logs = new ArrayList<>();
+        logs.addAll(column(0, BASE, 0, 12));
+        logs.addAll(column(1, BASE, 0, 12));
+        logs.addAll(column(1, BASE, 1, 4));
+        logs.addAll(column(0, BASE, 1, 4));
+        List<Pos> stands = Climb.spiral(SQUARE, SQUARE.get(0), true, BASE + 1, logs);
+
+        assertEquals(6, stands.size(), "the sixth hop would land on a log the south-east column does not have");
+        assertEquals(new Pos(1, BASE + 6, 0), stands.get(5));
     }
 
     @Test
