@@ -1032,6 +1032,35 @@ class FellTreeTest {
     }
 
     @Test
+    void aBranchInsideTheArmButOutsideThePlansMarginIsTriedAnyway() {
+        trunk();
+        // A limb out to the east and round to the south whose tip is four out and two along:
+        // past the arm less its margin from anywhere in the column, so the plan neither counts
+        // it nor climbs for it — and 4.47 from the stand, inside the arm.
+        List<Pos> limb = List.of(new Pos(1, BASE + 2, 0), new Pos(2, BASE + 2, 0),
+                new Pos(3, BASE + 2, 0), new Pos(4, BASE + 2, 0), new Pos(4, BASE + 2, 1),
+                new Pos(4, BASE + 2, 2));
+        for (Pos log : limb) {
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:birch_log");
+        }
+        // A crown, or the split calls the whole thing a woodpile and owns no branch.
+        for (Pos leaf : List.of(new Pos(0, BASE + 7, 0), new Pos(1, BASE + 6, 0),
+                new Pos(-1, BASE + 6, 0), new Pos(0, BASE + 6, 1), new Pos(0, BASE + 6, -1))) {
+            ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        }
+        pack(4);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertEquals(6, task.climb().orElseThrow().branches().size());
+        assertEquals(0, task.climb().orElseThrow().rises(), "the tip set no height: the plan does not count on it");
+        Pos tip = limb.get(5);
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(tip.x(), tip.y(), tip.z()), "asked for all the same");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 13 logs"), said("felled"));
+    }
+
+    @Test
     void aBranchOutOfReachFromAnyHeightIsLeftAndCounted() {
         ctx.percepts.blocks.placeOak(0, 0);
         // A limb off the cap, one cell out and up per log: the last is five out, farther than the

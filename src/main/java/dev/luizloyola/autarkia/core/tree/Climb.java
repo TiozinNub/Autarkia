@@ -131,13 +131,18 @@ public record Climb(Pos stand, int needFeetY, boolean stepsIn, boolean digsIn, L
 
     /**
      * Whether the arm reaches {@code log}'s centre from eyes over feet at {@code (x, feetY, z)},
-     * with {@link #SLACK} to spare.
+     * with {@link #SLACK} to spare — what the plan counts on.
      */
     public static boolean reaches(Arm arm, int x, int feetY, int z, Pos log) {
+        return reaches(arm, x, feetY, z, log, SLACK);
+    }
+
+    /** The same with {@code slack} to spare; none is the arm's whole length, what a try costs nothing to ask. */
+    public static boolean reaches(Arm arm, int x, int feetY, int z, Pos log, double slack) {
         double dx = log.x() - x;
         double dz = log.z() - z;
         double dy = log.y() + 0.5 - (feetY + arm.eyeHeight());
-        double reach = arm.reach() - SLACK;
+        double reach = arm.reach() - slack;
         return dx * dx + dy * dy + dz * dz <= reach * reach;
     }
 

@@ -644,7 +644,7 @@ public final class FellTree implements PrimitiveTask {
             }
             for (Pos branch : climb.branches()) {
                 if (blocks.at(branch.x(), branch.y(), branch.z()) != BlockKind.LOG
-                        || !Climb.reaches(arm, feet.x(), feet.y(), feet.z(), branch)) {
+                        || !Climb.reaches(arm, feet.x(), feet.y(), feet.z(), branch, 0)) {
                     continue;
                 }
                 double d = Math.pow(branch.x() - feet.x(), 2) + Math.pow(branch.z() - feet.z(), 2);
@@ -842,10 +842,13 @@ public final class FellTree implements PrimitiveTask {
         }
         Climb.Arm arm = Climb.Arm.of(ctx.percepts());
         BlockProbe blocks = ctx.percepts().blocks();
+        // The plan counts on the arm less its margin; a try costs nothing but a refused swing, so
+        // everything within the arm's whole length is asked for. A mega jungle's limb tip 4.27
+        // from the one stand near it was never asked (2026-09-10).
         List<Pos> cells = new ArrayList<>();
         for (Pos log : climb.branches()) {
             if (blocks.at(log.x(), log.y(), log.z()) == BlockKind.LOG
-                    && Climb.reaches(arm, at.x(), at.y(), at.z(), log)) {
+                    && Climb.reaches(arm, at.x(), at.y(), at.z(), log, 0)) {
                 cells.add(log);
             }
         }
