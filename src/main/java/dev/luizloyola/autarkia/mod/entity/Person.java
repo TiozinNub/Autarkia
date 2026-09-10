@@ -48,6 +48,7 @@ import dev.luizloyola.autarkia.core.board.StandingWants;
 import dev.luizloyola.autarkia.core.board.StowSurplus;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
+import dev.luizloyola.anima.mod.brain.AgentLeaner;
 import dev.luizloyola.anima.mod.brain.AgentRiser;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
 import dev.luizloyola.autarkia.mod.inv.PersonContainer;
@@ -366,6 +367,7 @@ public class Person extends Avatar implements AgentBody {
      */
     private final AgentBlockBreaker blockBreaker = new AgentBlockBreaker(this);
     private final AgentRiser riser = new AgentRiser(this);
+    private final AgentLeaner leaner = new AgentLeaner(this);
     /**
      * Where these legs have lately been beaten. A body organ like the others and persisted like
      * them: a settler re-walking the doorway it was wedged in could tell a reboot had happened.
@@ -555,7 +557,7 @@ public class Person extends Avatar implements AgentBody {
         // answers with last tick's leg — one tick of lag, against a second call site that would
         // have to agree with the first. Server side only: the pose is synched.
         if (level() instanceof ServerLevel) {
-            updateSwimmingPose();
+            updatePose();
         }
     }
 
@@ -649,6 +651,8 @@ public class Person extends Avatar implements AgentBody {
         // ("never coast on stale input"), which would wipe the rise's centring shuffle and its
         // held jump every tick.
         this.riser.tick();
+        // The lean after the riser, for the same reason. The two are never asked for at once.
+        this.leaner.tick();
         // The gaze after everything that might want the head: this tick's claims are its input,
         // and what is left over is the body's own to look at. Before the swimmer, which owns a
         // wet body's pitch.
@@ -681,7 +685,7 @@ public class Person extends Avatar implements AgentBody {
     }
 
     /**
-     * Puts the body into the shape the swim flag says it is in — a Person's version of
+     * Puts the body into the shape the swim flag, or the lean, says it is in — a Person's version of
      * {@code Player.updatePlayerPose}, which does not apply to an {@link Avatar}. Everything else
      * already works unmodified: {@code Avatar.POSES} carries the 0.6×0.6 swimming box,
      * {@code LivingEntity.tick} ramps {@code swimAmount} off it, and {@code AvatarRenderer} reads
@@ -691,11 +695,12 @@ public class Person extends Avatar implements AgentBody {
      * ledge from standing up into it — vanilla guards the same way. Refusing to stand leaves them
      * swimming, which out of water is vanilla's crawl.
      */
-    private void updateSwimmingPose() {
+    private void updatePose() {
         // Read from the organ, not the synched flag: the flag is published in baseTick, before the
         // swimmer decides, so following it put the pose two ticks behind — a settler flapping on
         // the shore after its feet were down. The flag stays a tick behind for vanilla's own uses.
-        Pose desired = this.swimmer.isSwimming() ? Pose.SWIMMING : Pose.STANDING;
+        Pose desired = this.swimmer.isSwimming() ? Pose.SWIMMING
+                : this.leaner.crouching() ? Pose.CROUCHING : Pose.STANDING;
         if (getPose() == desired || !fitsAs(desired)) {
             return;
         }
@@ -746,6 +751,10 @@ public class Person extends Avatar implements AgentBody {
     @Override
     public AgentRiser riser() {
         return this.riser;
+    }
+
+    public AgentLeaner leaner() {
+        return this.leaner;
     }
 
     /** Where these legs have lately been beaten — see {@link Setbacks}. */

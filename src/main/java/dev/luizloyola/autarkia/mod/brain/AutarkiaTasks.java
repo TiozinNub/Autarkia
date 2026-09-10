@@ -34,6 +34,11 @@ public final class AutarkiaTasks {
             Codec.INT.fieldOf("z").forGetter(Pos::z)
     ).apply(p, Pos::new));
 
+    private static final Codec<Climb.Lean> LEAN = RecordCodecBuilder.create(l -> l.group(
+            POS.fieldOf("branch").forGetter(Climb.Lean::branch),
+            POS.fieldOf("stand").forGetter(Climb.Lean::stand)
+    ).apply(l, Climb.Lean::new));
+
     private static final Codec<Climb> CLIMB = RecordCodecBuilder.create(c -> c.group(
             POS.fieldOf("stand").forGetter(Climb::stand),
             Codec.INT.fieldOf("need_feet_y").forGetter(Climb::needFeetY),
@@ -48,7 +53,8 @@ public final class AutarkiaTasks {
             Codec.BOOL.fieldOf("complete").forGetter(Climb::complete),
             POS.listOf().optionalFieldOf("columns", List.of()).forGetter(Climb::columns),
             Codec.BOOL.optionalFieldOf("clockwise", false).forGetter(Climb::clockwise),
-            POS.listOf().optionalFieldOf("branches", List.of()).forGetter(Climb::branches)
+            POS.listOf().optionalFieldOf("branches", List.of()).forGetter(Climb::branches),
+            LEAN.listOf().optionalFieldOf("leans", List.of()).forGetter(Climb::leans)
     ).apply(c, Climb::new));
 
     /** By name, guarded into a DataResult — never trusted raw off a hand-edited save. */

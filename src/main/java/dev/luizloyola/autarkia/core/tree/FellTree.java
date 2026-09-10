@@ -3,6 +3,8 @@ package dev.luizloyola.autarkia.core.tree;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.act.BlockBreaker;
 import dev.luizloyola.anima.core.brain.act.BreakState;
+import dev.luizloyola.anima.core.brain.act.LeanState;
+import dev.luizloyola.anima.core.brain.act.Leaner;
 import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.Mover;
 import dev.luizloyola.anima.core.brain.act.RiseState;
@@ -145,6 +147,8 @@ public final class FellTree implements PrimitiveTask {
     private static final Set<BlockKind> LEAVES_ONLY = Set.of(BlockKind.LEAVES);
     private static final Set<BlockKind> WOOD_OR_LEAVES = Set.of(BlockKind.LOG, BlockKind.LEAVES);
     private static final Set<BlockKind> WOOD = Set.of(BlockKind.LOG);
+    /** Half the body's width: what its box reaches into the next cell over when it leans. */
+    private static final double BODY_HALF_WIDTH = 0.3;
 
     private final Pos anchor;
     private Stage stage = Stage.APPROACH;
@@ -162,6 +166,11 @@ public final class FellTree implements PrimitiveTask {
     private final Set<Pos> sidesTried = new HashSet<>();
     /** Branches whose refusal has been journalled, so each is said once. */
     private final Set<Pos> branchesRefused = new HashSet<>();
+    /** The lean under way, if any — from its clearing to the body being back in the middle. */
+    private Climb.@Nullable Lean leaning;
+    private boolean leanDone;
+    /** Branches leant for already, so each is leant for once. */
+    private final Set<Pos> leansTried = new HashSet<>();
     /** The feet cell the last move order was for; a different one is a new order. */
     private @Nullable Pos walkingTo;
     /** The tick the last move order went out — its state is readable only from the next one. */
@@ -853,7 +862,8 @@ public final class FellTree implements PrimitiveTask {
             }
         }
         if (cells.isEmpty()) {
-            return breakNext(ctx, List.of(), WOOD, false); // settle a swing in flight
+            // Settle a swing in flight before anything else.
+            return breakNext(ctx, List.of(), WOOD, false) && leans(ctx, at);
         }
         phase = "branches in reach (" + cells.size() + ")";
         if (!breakNext(ctx, cells, WOOD, false)) {
@@ -872,7 +882,137 @@ public final class FellTree implements PrimitiveTask {
                         : where(block) + " is in the way"));
             }
         }
-        return true;
+        return leans(ctx, at);
+    }
+
+    /**
+     * The lean (decision: Luiz, 2026-09-10): a branch the plan gave to a crouch at this stand's
+     * edge is taken from there — the way cleared first, the lean held while the arm swings, and
+     * let go of before anything else moves, since out at the edge the feet read as the next
+     * cell over. Returns whether nothing more is to be done from here.
+     */
+    private boolean leans(BrainContext ctx, Pos at) {
+        Leaner leaner = ctx.actuators().leaner();
+        BlockProbe blocks = ctx.percepts().blocks();
+        if (leaning == null) {
+            for (Climb.Lean lean : climb.leans()) {
+                Pos branch = lean.branch();
+                if (lean.stand().equals(at) && !leansTried.contains(branch)
+                        && blocks.at(branch.x(), branch.y(), branch.z()) == BlockKind.LOG) {
+                    leaning = lean;
+                    leanDone = false;
+                    leansTried.add(branch);
+                    break;
+                }
+            }
+            if (leaning == null) {
+                return true;
+            }
+        }
+        Pos branch = leaning.branch();
+        switch (leaner.state()) {
+            case IDLE -> {
+                if (leanDone || blocks.at(branch.x(), branch.y(), branch.z()) != BlockKind.LOG) {
+                    leaning = null; // back in the middle, or nothing to lean for: the next one
+                    return false;
+                }
+                List<Pos> way = wayToLean(ctx, at, branch);
+                if (way == null) {
+                    say(ctx, "no room to lean from " + where(at) + " for the branch at "
+                            + where(branch));
+                    leaning = null;
+                    return false;
+                }
+                if (!way.isEmpty()) {
+                    if (!breakNext(ctx, way, WOOD_OR_LEAVES, false)) {
+                        return false;
+                    }
+                    List<Pos> still = wayToLean(ctx, at, branch);
+                    if (still == null || !still.isEmpty()) {
+                        say(ctx, "cannot clear the way to lean from " + where(at)
+                                + " for the branch at " + where(branch));
+                        leaning = null;
+                        return false;
+                    }
+                }
+                if (!leaner.toward(branch.x() + 0.5, branch.z() + 0.5)) {
+                    say(ctx, "the body will not lean from " + where(at) + " for the branch at "
+                            + where(branch));
+                    leaning = null;
+                    return false;
+                }
+                say(ctx, "leaning from " + where(at) + " for the branch at " + where(branch));
+                phase = "leaning for a branch";
+                return false;
+            }
+            case LEANING, RELEASING -> {
+                return false;
+            }
+            case LEANT -> {
+                if (!breakNext(ctx, List.of(branch), WOOD, false)) {
+                    return false;
+                }
+                if (blocks.at(branch.x(), branch.y(), branch.z()) == BlockKind.LOG) {
+                    Pos block = ctx.actuators().breaker().obstruction(branch);
+                    say(ctx, "a branch at " + where(branch) + " refused even leaning from "
+                            + where(at) + " — " + (block == null ? "the arm calls it out of reach"
+                            : where(block) + " is in the way"));
+                }
+                leaner.release();
+                leanDone = true;
+                return false;
+            }
+            case FAILED -> {
+                say(ctx, "the lean from " + where(at) + " failed — the branch at " + where(branch)
+                        + " stays");
+                leaner.release();
+                leanDone = true;
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What a body leant from {@code at} toward {@code branch} puts its box into, at its feet and
+     * its head, that is not air or water: the cells to clear first. Null when there is no lean to
+     * make — the branch is over the stand — or a cell is not the axe's to clear: stone, or
+     * another tree's wood.
+     */
+    private @Nullable List<Pos> wayToLean(BrainContext ctx, Pos at, Pos branch) {
+        BlockProbe blocks = ctx.percepts().blocks();
+        double dx = branch.x() - at.x();
+        double dz = branch.z() - at.z();
+        double d = Math.sqrt(dx * dx + dz * dz);
+        if (d < 1.0E-6) {
+            return null;
+        }
+        double x = at.x() + 0.5 + dx / d * Leaner.MAX_LEAN;
+        double z = at.z() + 0.5 + dz / d * Leaner.MAX_LEAN;
+        List<Pos> way = new ArrayList<>();
+        for (int y = at.y(); y <= at.y() + 1; y++) {
+            for (int cx = (int) Math.floor(x - BODY_HALF_WIDTH);
+                    cx <= (int) Math.floor(x + BODY_HALF_WIDTH); cx++) {
+                for (int cz = (int) Math.floor(z - BODY_HALF_WIDTH);
+                        cz <= (int) Math.floor(z + BODY_HALF_WIDTH); cz++) {
+                    if (cx == at.x() && cz == at.z()) {
+                        continue;
+                    }
+                    BlockKind kind = blocks.at(cx, y, cz);
+                    if (kind == BlockKind.AIR || kind == BlockKind.WATER) {
+                        continue;
+                    }
+                    Pos cell = new Pos(cx, y, cz);
+                    boolean leaf = kind == BlockKind.LEAVES
+                            || blocks.idAt(cx, y, cz).endsWith("_leaves");
+                    if (!leaf && !(kind == BlockKind.LOG && climb.owns(cell))) {
+                        return null;
+                    }
+                    way.add(cell);
+                }
+            }
+        }
+        return way;
     }
 
     /**
@@ -882,6 +1022,9 @@ public final class FellTree implements PrimitiveTask {
      * first spiral, 2026-09-09). Believed anyway after {@link #AIRBORNE_TICKS}.
      */
     private @Nullable Pos settled(BrainContext ctx) {
+        if (leaning != null) {
+            return leaning.stand(); // out at the edge the feet read as the next cell over
+        }
         Pos at = ctx.percepts().position();
         BlockKind under = ctx.percepts().blocks().at(at.x(), at.y() - 1, at.z());
         if (under != BlockKind.AIR) {
@@ -1067,6 +1210,9 @@ public final class FellTree implements PrimitiveTask {
         ctx.actuators().mover().stop();
         ctx.actuators().breaker().abort();
         ctx.actuators().riser().abort();
+        ctx.actuators().leaner().release();
+        leaning = null;
+        leanDone = false;
         breaking = null;
         refused = null;
         rising = false;

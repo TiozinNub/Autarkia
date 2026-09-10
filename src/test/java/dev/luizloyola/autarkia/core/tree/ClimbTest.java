@@ -27,7 +27,7 @@ class ClimbTest {
     private static final Pos SUNKEN = new Pos(1, BASE - 1, 0);
     private static final int BODY = 2;
     /** A settler's eyes and arm — the survival player's numbers. */
-    private static final Climb.Arm ARM = new Climb.Arm(1.62, 4.5);
+    private static final Climb.Arm ARM = new Climb.Arm(1.62, 1.27, 4.5);
 
     private static List<Pos> column(int logs) {
         return column(BASE, logs);
@@ -213,11 +213,11 @@ class ClimbTest {
         assertEquals(SQUARE, Climb.ringOf(shuffled), "north-west, north-east, south-east, south-west");
 
         Climb cw = new Climb(SQUARE.get(0), BASE, true, false, List.of(), List.of(), List.of(),
-                List.of(), true, SQUARE, true, List.of());
+                List.of(), true, SQUARE, true, List.of(), List.of());
         assertEquals(SQUARE.get(1), cw.next(SQUARE.get(0), true), "east of the north-west cell");
         assertEquals(SQUARE.get(3), cw.next(SQUARE.get(0), false), "and back the other way");
         Climb ccw = new Climb(SQUARE.get(0), BASE, true, false, List.of(), List.of(), List.of(),
-                List.of(), true, SQUARE, false, List.of());
+                List.of(), true, SQUARE, false, List.of(), List.of());
         assertEquals(SQUARE.get(3), ccw.next(SQUARE.get(0), true));
         assertEquals(SQUARE.get(0), ccw.column(new Pos(0, BASE + 9, 0)), "by x and z, whatever the height");
     }
@@ -339,6 +339,47 @@ class ClimbTest {
 
         assertEquals(6, stands.size(), "the sixth hop would land on a log the south-east column does not have");
         assertEquals(new Pos(1, BASE + 6, 0), stands.get(5));
+    }
+
+    @Test
+    void aBranchPastTheArmFromTheColumnIsLeantForFromTheNearestHeight() {
+        List<Pos> logs = column(7);
+        // Five out: 4.2 is as far as the plan counts on from the middle of a cell, but crouched
+        // at its edge the eyes are 0.65 nearer, and five up puts them level with it.
+        Pos branch = new Pos(0, BASE + 6, 5);
+        Climb climb = Climb.plan(ARM, List.of(STUMP), STUMP, logs, List.of(branch), world(logs),
+                BESIDE, true, false, BODY);
+
+        assertEquals(List.of(new Climb.Lean(branch, new Pos(0, BASE + 5, 0))), climb.leans());
+        assertEquals(BASE + 5, climb.needFeetY(), "the lean sets the height, like any branch");
+        assertTrue(climb.stepsIn() && climb.complete());
+        assertEquals("open 2 · step in · 4 rises · 4 above · 1 branches · 1 leaning · 1 underfoot",
+                climb.describe());
+    }
+
+    @Test
+    void aBranchPastEvenTheLeanIsLeftAlone() {
+        List<Pos> logs = column(7);
+        Pos branch = new Pos(0, BASE + 6, 6);
+        Climb climb = Climb.plan(ARM, List.of(STUMP), STUMP, logs, List.of(branch), world(logs),
+                BESIDE, true, false, BODY);
+
+        assertTrue(climb.leans().isEmpty());
+        assertEquals(BASE + 1, climb.needFeetY(), "the trunk alone sets the height");
+    }
+
+    @Test
+    void aGiantsFarLimbIsLeantForFromTheSpiralStandNearestIt() {
+        List<Pos> logs = giant(12);
+        // The fifth mega jungle's limb tip (2026-09-10): four out and two along from the
+        // south-east column, thirteen up. Past the arm from every stand; leant for from the
+        // south-east column's third stand, whose crouched eyes are a cell under it.
+        Pos tip = new Pos(5, BASE + 13, 3);
+        Climb climb = Climb.plan(ARM, SQUARE, SQUARE.get(0), logs, List.of(tip), world(logs),
+                new Pos(-1, BASE, 0), true, true, BODY);
+
+        assertEquals(List.of(new Climb.Lean(tip, new Pos(1, BASE + 11, 1))), climb.leans());
+        assertEquals(BASE + 11, climb.needFeetY(), "ten hops, where six would do for the trunk");
     }
 
     @Test

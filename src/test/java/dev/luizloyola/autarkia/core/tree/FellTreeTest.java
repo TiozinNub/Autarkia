@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.brain.act.BreakState;
+import dev.luizloyola.anima.core.brain.act.LeanState;
 import dev.luizloyola.anima.core.brain.act.MoveFailure;
 import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.RiseState;
@@ -48,6 +49,14 @@ class FellTreeTest {
         }
     }
 
+    /** A crown on the seven-log trunk, or the split calls the whole thing a woodpile and owns no branch. */
+    private void crown() {
+        for (Pos leaf : List.of(new Pos(0, BASE + 7, 0), new Pos(1, BASE + 6, 0),
+                new Pos(-1, BASE + 6, 0), new Pos(0, BASE + 6, 1), new Pos(0, BASE + 6, -1))) {
+            ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        }
+    }
+
     /** The pack: this tree's own logs, to rise on. */
     private void pack(int logs) {
         ctx.percepts.inventory.add(new ItemStack("minecraft:birch_log", logs, 64, ""));
@@ -78,6 +87,11 @@ class FellTreeTest {
                 ctx.percepts.inventory.remove(ctx.riser.lastItem, 1);
                 ctx.percepts.position = new Pos(p.x(), p.y() + 1, p.z());
                 ctx.riser.state = RiseState.RISEN;
+            }
+            if (ctx.leaner.state == LeanState.LEANING) {
+                ctx.leaner.state = LeanState.LEANT;
+            } else if (ctx.leaner.state == LeanState.RELEASING) {
+                ctx.leaner.state = LeanState.IDLE;
             }
             Pos p = ctx.percepts.position;
             while (ctx.percepts.blocks.at(p.x(), p.y() - 1, p.z()) == BlockKind.AIR) {
@@ -916,7 +930,8 @@ class FellTreeTest {
         ctx.percepts.blocks.set(0, BASE + 2, 0, BlockKind.LOG);
         ctx.percepts.position = new Pos(0, BASE + 3, 0);
         Climb climb = new Climb(new Pos(0, BASE + 1, 0), BASE + 6, true, false, List.of(),
-                List.of(), List.of(ANCHOR), List.of(), true, List.of(), false, List.of());
+                List.of(), List.of(ANCHOR), List.of(), true, List.of(), false, List.of(),
+                List.of());
         FellTree back = FellTree.restored(ANCHOR, FellTree.Stage.RISE,
                 java.util.Optional.of(SOUTH), java.util.Optional.of(climb));
 
@@ -1016,9 +1031,11 @@ class FellTreeTest {
     @Test
     void aLimbNoInsidePositionReachesIsTakenFromTheSideNearestIt() {
         acacia();
-        // A limb drooping out of the crown to the south-east: two out, four along, three up —
-        // past the arm from the stand, from the floor and from the west; in reach from the south.
-        for (Pos log : List.of(new Pos(1, BASE + 4, 3), new Pos(2, BASE + 3, 4))) {
+        // A limb drooping out of the crown to the south, down to a cell over the ground five
+        // along: its last two logs are past the arm from the stand — past even a lean, which
+        // gets the eyes 0.65 nearer and no more — and from the west; in reach from the south.
+        for (Pos log : List.of(new Pos(0, BASE + 4, 3), new Pos(0, BASE + 3, 4),
+                new Pos(1, BASE + 2, 5), new Pos(1, BASE + 1, 5))) {
             ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
             ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:acacia_log");
         }
@@ -1027,8 +1044,10 @@ class FellTreeTest {
 
         assertEquals(TaskStatus.SUCCESS, drive(800));
         assertEquals(new Pos(0, BASE, 1), lastOrder(), "round to the south, the side nearest the limb");
-        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(2, BASE + 3, 4));
-        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 10 logs"), said("felled"));
+        assertEquals(0, ctx.leaner.leans, "no lean reaches it, so none is planned");
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(1, BASE + 2, 5));
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(1, BASE + 1, 5));
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"));
     }
 
     @Test
@@ -1044,11 +1063,7 @@ class FellTreeTest {
             ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
             ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:birch_log");
         }
-        // A crown, or the split calls the whole thing a woodpile and owns no branch.
-        for (Pos leaf : List.of(new Pos(0, BASE + 7, 0), new Pos(1, BASE + 6, 0),
-                new Pos(-1, BASE + 6, 0), new Pos(0, BASE + 6, 1), new Pos(0, BASE + 6, -1))) {
-            ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
-        }
+        crown();
         pack(4);
         standSouth();
 
@@ -1061,12 +1076,41 @@ class FellTreeTest {
     }
 
     @Test
+    void aBranchPastTheArmIsLeantForOnTheWayDown() {
+        trunk();
+        crown();
+        // A limb out to the south whose tip is five out and six up: past the arm from the column
+        // at any height, in reach of a body crouched at the edge of the fifth stand.
+        List<Pos> limb = List.of(new Pos(0, BASE + 5, 1), new Pos(0, BASE + 5, 2),
+                new Pos(0, BASE + 5, 3), new Pos(0, BASE + 6, 3), new Pos(0, BASE + 6, 4),
+                new Pos(0, BASE + 6, 5));
+        for (Pos log : limb) {
+            ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
+            ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:birch_log");
+        }
+        pack(8);
+        standSouth();
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        Pos tip = limb.get(5);
+        assertEquals(List.of(new Climb.Lean(tip, new Pos(0, BASE + 5, 0))),
+                task.climb().orElseThrow().leans());
+        assertEquals(1, ctx.leaner.leans, "one lean, toward the tip");
+        assertEquals(5.5, ctx.leaner.lastZ);
+        assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(tip.x(), tip.y(), tip.z()));
+        assertEquals(LeanState.IDLE, ctx.leaner.state, "let go of before the way down went on");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 13 logs"), said("felled"));
+        assertEquals(1, said("leaning").size());
+    }
+
+    @Test
     void aBranchOutOfReachFromAnyHeightIsLeftAndCounted() {
         ctx.percepts.blocks.placeOak(0, 0);
-        // A limb off the cap, one cell out and up per log: the last is five out, farther than the
-        // arm is long from the trunk at any height. The others set the height and come down.
+        // A limb off the cap, one cell out and up per log: the last is six out, farther than
+        // even a lean reaches from the trunk at any height. The others set the height and come
+        // down — the fifth by a lean, the one place the plan can put it.
         List<Pos> limb = new ArrayList<>();
-        for (int i = 1; i <= 5; i++) {
+        for (int i = 1; i <= 6; i++) {
             Pos log = new Pos(i, BASE + 4 + i, 0);
             ctx.percepts.blocks.set(log.x(), log.y(), log.z(), BlockKind.LOG);
             ctx.percepts.blocks.setId(log.x(), log.y(), log.z(), "minecraft:oak_log");
@@ -1076,14 +1120,15 @@ class FellTreeTest {
         standSouth();
 
         assertEquals(TaskStatus.SUCCESS, drive(800), "a branch never blocks the fell");
-        assertEquals(5, task.climb().orElseThrow().branches().size());
+        assertEquals(6, task.climb().orElseThrow().branches().size());
         assertTrue(task.climb().orElseThrow().rises() > 0, "the limb, not the top log, set the height");
-        Pos far = limb.get(4);
-        for (Pos log : limb.subList(0, 4)) {
+        assertEquals(1, ctx.leaner.leans, "the fifth, by a lean");
+        Pos far = limb.get(5);
+        for (Pos log : limb.subList(0, 5)) {
             assertEquals(BlockKind.AIR, ctx.percepts.blocks.at(log.x(), log.y(), log.z()), "at " + at(log));
         }
         assertEquals(BlockKind.LOG, ctx.percepts.blocks.at(far.x(), far.y(), far.z()));
-        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 8 logs, 1 branches out of reach"),
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 9 logs, 1 branches out of reach"),
                 said("felled"));
     }
 
