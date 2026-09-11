@@ -11,6 +11,8 @@ import dev.luizloyola.anima.core.brain.act.RiseState;
 import dev.luizloyola.anima.core.brain.act.Riser;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.core.brain.sense.Drop;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
@@ -40,10 +42,14 @@ import org.jspecify.annotations.Nullable;
  * break everything above from there; come down, breaking underfoot, or back down the spiral
  * breaking each stair as it is left and then the rest of the giant from the entry stand, until the
  * feet are back at floor level — and on the way down, from the top and from every level, take
- * every branch the arm reaches; step out and take the logs that may be left one below floor level
- * from outside. Then SUCCESS, with the count, or FAILED with the one reason: a rise refused,
- * nothing carried to rise on, the arm refused a block for long, every side given up on, or wood
- * left standing that the plan knew it could not reach.
+ * every branch the arm reaches, and free every item of the tree's worth taking — an apple, a log
+ * off a branch, anything but a sapling or a stick — that lies on its leaves, by breaking the
+ * leaves under it from wherever the arm reaches them, until it is on the ground; step out and
+ * take the logs that may be left one below floor level from outside; then pick up the drops on
+ * the ground, nearest first, until none is left (decision: Luiz, 2026-09-10). Then SUCCESS, with
+ * the count, or FAILED with the one reason: a rise refused, nothing carried to rise on, the arm
+ * refused a block for long, every side given up on, or wood left standing that the plan knew it
+ * could not reach.
  *
  * <p><b>The world holds the progress, the save holds the stage.</b> The survey is re-read every
  * second, the walk is re-ordered when the legs give up, a block is only ever begun on because the
@@ -134,6 +140,33 @@ public final class FellTree implements PrimitiveTask {
      * front of another; past this many the swing is not worth the path.
      */
     public static final int CHEW_HOPS = 3;
+
+    /**
+     * How far out from the anchor an item on the ground is still this tree's: the branch scan and
+     * a little, for the bounce off a landing.
+     */
+    public static final int DROP_SPREAD = BRANCH_SCAN + 2;
+
+    /**
+     * How long the body stands at an item that is not picked up before it is given up — two
+     * seconds, past any pickup delay. A full pack, or an item on a ledge the legs called arrived
+     * beside, is what is left.
+     */
+    public static final int PICKUP_TICKS = 40;
+
+    /**
+     * How many times a walk to one item may fail before it is given up — fewer than a side's
+     * {@link #WALK_GIVE_UP}, since the tree is down and nothing waits on the item.
+     */
+    public static final int DROP_WALK_GIVE_UP = 2;
+
+    /**
+     * How long the sweep waits on an item still in the air near the tree with nothing on the
+     * ground to go for — two seconds, longer than any fall out of a crown; an item held up by
+     * something the probe calls air, a cobweb, is not waited on past it.
+     */
+    public static final int FALL_TICKS = 40;
+
     /**
      * How long a lean the body refuses is asked for again before it is given up: the body lands
      * a tick or two after the probe says there is a block under its feet, and refuses mid-air.
@@ -146,7 +179,8 @@ public final class FellTree implements PrimitiveTask {
      * trunk with the plan, and hands straight on.
      */
     public enum Stage {
-        APPROACH, OPEN, ENTER, PLANNED, RISE, CLEAR, DESCEND, GROUND, SPIRAL, UNWIND, BOTTOM
+        APPROACH, OPEN, ENTER, PLANNED, RISE, CLEAR, DESCEND, GROUND, SPIRAL, UNWIND, BOTTOM,
+        COLLECT
     }
 
     /** What the arm takes: a side's leaves; whatever the trunk is opened through; the wood itself. */
@@ -183,6 +217,27 @@ public final class FellTree implements PrimitiveTask {
     private final Set<Pos> leansTried = new HashSet<>();
     /** Leans the plan did not make: for a branch counted on and refused from a stand a lean reaches it from. */
     private final List<Climb.Lean> fallbackLeans = new ArrayList<>();
+    /**
+     * The tree's crown as the split assigned it at plan time. A leaf on its decay rim reads as
+     * plain solid to the probe, and so does a placed one, and only the plan knows which of the
+     * two an item is lying on: an item is freed from these cells and from any leaf still growing,
+     * never from a solid the plan did not call a leaf. Empty after a reload, which leaves what is
+     * on the dying leaves there.
+     */
+    private final Set<Pos> crown = new HashSet<>();
+    /** Items given up on: not picked up while stood at, or never got to. */
+    private final Set<Pos> dropsGivenUp = new HashSet<>();
+    /** The tick the body arrived at the item it is after; -1 while walking. */
+    private int atDropSince = -1;
+    /** The tick the sweep began waiting on an item in the air; -1 while not. */
+    private int fallingSince = -1;
+    /** Whether the sweep has said how many it found. */
+    private boolean collectSaid;
+    /** Walks to items ordered, and how many may be — the sweep's own bound. */
+    private int dropWalks;
+    private int dropWalkCap = -1;
+    /** The stand the items on the leaves were last reported from, so each stand says it once. */
+    private @Nullable Pos strandedSaidAt;
     /** The feet cell the last move order was for; a different one is a new order. */
     private @Nullable Pos walkingTo;
     /** The tick the last move order went out — its state is readable only from the next one. */
@@ -268,7 +323,9 @@ public final class FellTree implements PrimitiveTask {
 
     @Override
     public TaskStatus tick(BrainContext ctx) {
-        if (approach == null || ticks % RESURVEY_TICKS == 0) {
+        // The ground around the stump matters until the tree is down; a sweep re-reading it
+        // journals a fresh bearing from every cell it walks through.
+        if (approach == null || (stage != Stage.COLLECT && ticks % RESURVEY_TICKS == 0)) {
             look(ctx);
         }
         // A stage that finishes hands straight on to the next, so no tick is spent idle between.
@@ -284,6 +341,7 @@ public final class FellTree implements PrimitiveTask {
             case BOTTOM -> bottom(ctx);
             case DESCEND -> descend(ctx);
             case GROUND -> ground(ctx);
+            case COLLECT -> collect(ctx);
         };
         ticks++;
         return status;
@@ -522,7 +580,7 @@ public final class FellTree implements PrimitiveTask {
         if (!breakNext(ctx, cells, WOOD)) {
             return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
         }
-        if (!branches(ctx, at)) {
+        if (!branches(ctx, at) || !stranded(ctx, at)) {
             return TaskStatus.RUNNING;
         }
         stage = !climb.stepsIn() ? Stage.GROUND : climb.giant() ? Stage.UNWIND : Stage.BOTTOM;
@@ -552,7 +610,7 @@ public final class FellTree implements PrimitiveTask {
         if (!breakNext(ctx, left, WOOD)) {
             return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
         }
-        if (!branches(ctx, at)) {
+        if (!branches(ctx, at) || !stranded(ctx, at)) {
             return TaskStatus.RUNNING;
         }
         if (here.equals(climb.column(climb.stand())) && at.y() <= climb.stand().y()) {
@@ -570,7 +628,7 @@ public final class FellTree implements PrimitiveTask {
      */
     private TaskStatus bottom(BrainContext ctx) {
         Pos at = settled(ctx);
-        if (at == null || !branches(ctx, at)) {
+        if (at == null || !branches(ctx, at) || !stranded(ctx, at)) {
             return TaskStatus.RUNNING;
         }
         Pos entry = climb.stand();
@@ -595,7 +653,7 @@ public final class FellTree implements PrimitiveTask {
      */
     private TaskStatus descend(BrainContext ctx) {
         Pos at = settled(ctx);
-        if (at == null || !branches(ctx, at)) {
+        if (at == null || !branches(ctx, at) || !stranded(ctx, at)) {
             return TaskStatus.RUNNING; // still falling from the last one, or a branch in reach
         }
         Pos below = new Pos(climb.stand().x(), at.y() - 1, climb.stand().z());
@@ -640,7 +698,8 @@ public final class FellTree implements PrimitiveTask {
                 return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
             }
         }
-        if (!branches(ctx, ctx.percepts().position())) {
+        Pos here = ctx.percepts().position();
+        if (!branches(ctx, here) || !stranded(ctx, here)) {
             return TaskStatus.RUNNING; // the low ones, from the ground
         }
         // Whatever still stands that some other side of the stump reaches: an acacia leans its
@@ -651,13 +710,114 @@ public final class FellTree implements PrimitiveTask {
             if (!walk(ctx, stand)) {
                 return stuck == null ? TaskStatus.RUNNING : fail(ctx, stuck);
             }
-            if (!branches(ctx, ctx.percepts().position())) {
+            here = ctx.percepts().position();
+            if (!branches(ctx, here) || !stranded(ctx, here)) {
                 return TaskStatus.RUNNING;
             }
             sidesTried.add(stand);
             return TaskStatus.RUNNING; // and look again: another branch, another side
         }
-        return finish(ctx);
+        stage = Stage.COLLECT;
+        return collect(ctx);
+    }
+
+    /**
+     * The tree is down: pick up its drops (decision: Luiz, 2026-09-10) — every item worth taking
+     * on the ground within {@link #DROP_SPREAD} of the stump, nearest first, over and over, the
+     * walk-over pickup taking each as the body arrives. One not picked up while stood at, or that
+     * the legs cannot get to, is given up and the next taken; what is left is counted at the end.
+     */
+    private TaskStatus collect(BrainContext ctx) {
+        if (!breakNext(ctx, List.of(), WOOD, false)) {
+            return TaskStatus.RUNNING; // the last swing is still landing
+        }
+        List<Drop> drops = onTheGround(ctx);
+        if (drops.isEmpty() && falling(ctx)) {
+            // Freed from the last stand a moment ago, still on its way down: it lands in under a
+            // second, and the sweep that missed it left it for the next passer-by.
+            if (fallingSince < 0) {
+                fallingSince = ticks;
+            }
+            if (ticks - fallingSince < FALL_TICKS) {
+                phase = "waiting for an item to land";
+                return TaskStatus.RUNNING;
+            }
+        } else {
+            fallingSince = -1;
+        }
+        if (!drops.isEmpty() && !collectSaid) {
+            collectSaid = true;
+            say(ctx, drops.size() + " items on the ground to pick up");
+        }
+        // A bound, not a budget: items keep landing out of a dying crown while the sweep goes.
+        dropWalkCap = Math.max(dropWalkCap, drops.size() * 3 + 6);
+        Pos at = ctx.percepts().position();
+        Drop target = null;
+        double nearest = Double.MAX_VALUE;
+        for (Drop drop : drops) {
+            double dx = drop.pos().x() - at.x();
+            double dy = drop.pos().y() - at.y();
+            double dz = drop.pos().z() - at.z();
+            double d = dx * dx + dy * dy + dz * dz;
+            if (d < nearest) {
+                nearest = d;
+                target = drop;
+            }
+        }
+        if (target == null) {
+            return finish(ctx);
+        }
+        if (dropWalks >= dropWalkCap) {
+            say(ctx, drops.size() + " items still on the ground after " + dropWalks
+                    + " walks — leaving them");
+            return finish(ctx);
+        }
+        Pos cell = target.pos();
+        if (!cell.equals(walkingTo)) {
+            dropWalks++;
+            atDropSince = -1;
+        }
+        phase = "picking up items (" + drops.size() + " left)";
+        boolean there = walk(ctx, cell);
+        if (stuck != null || (!there && walkFailures >= DROP_WALK_GIVE_UP)) {
+            say(ctx, "cannot get to the item at " + where(cell)
+                    + (stuck == null ? "" : " — " + stuck));
+            giveUp(ctx, cell);
+        } else if (!there) {
+            atDropSince = -1;
+        } else if (atDropSince < 0) {
+            atDropSince = ticks;
+        } else if (ticks - atDropSince >= PICKUP_TICKS) {
+            say(ctx, "the item at " + where(cell) + " was not picked up, stood at " + where(at));
+            giveUp(ctx, cell);
+        }
+        return TaskStatus.RUNNING;
+    }
+
+    /** An item the body will not get: crossed off, the legs stopped, the walk forgotten. */
+    private void giveUp(BrainContext ctx, Pos cell) {
+        dropsGivenUp.add(cell);
+        stuck = null;
+        walkingTo = null;
+        arrived = false;
+        walkFailures = 0;
+        atDropSince = -1;
+        ctx.actuators().mover().stop();
+    }
+
+    /** The tree's items on the ground, worth taking, nobody else's and not given up on. */
+    private List<Drop> onTheGround(BrainContext ctx) {
+        BlockProbe blocks = ctx.percepts().blocks();
+        long now = ctx.percepts().time();
+        List<Drop> drops = new ArrayList<>();
+        for (Drop drop : ctx.percepts().drops()) {
+            if (worthTaking(drop.itemId()) && nearTheTree(drop.pos())
+                    && !dropsGivenUp.contains(drop.pos()) && onGround(drop, blocks)
+                    && !ctx.claims().claimedByOther(drop.pos(), now)) {
+                drops.add(drop);
+            }
+        }
+        return drops;
     }
 
     /**
@@ -732,9 +892,23 @@ public final class FellTree implements PrimitiveTask {
                         + ", the nearest the body stood");
             }
         }
+        int onGround = 0;
+        int onLeaves = 0;
+        for (Drop drop : ctx.percepts().drops()) {
+            if (!worthTaking(drop.itemId()) || !nearTheTree(drop.pos())) {
+                continue;
+            }
+            if (onGround(drop, ctx.percepts().blocks())) {
+                onGround++;
+            } else if (!leavesUnder(drop, ctx.percepts().blocks()).isEmpty()) {
+                onLeaves++;
+            }
+        }
         say(ctx, "felled the tree at " + where(anchor) + " — " + felled + " logs"
                 + (buried == 0 ? "" : ", " + buried + " left buried below the ground")
-                + (unreached == 0 ? "" : ", " + unreached + " branches out of reach"));
+                + (unreached == 0 ? "" : ", " + unreached + " branches out of reach")
+                + (onGround == 0 ? "" : ", " + onGround + " items left on the ground")
+                + (onLeaves == 0 ? "" : ", " + onLeaves + " items left on the leaves"));
         phase = "felled";
         release(ctx);
         return TaskStatus.SUCCESS;
@@ -850,7 +1024,8 @@ public final class FellTree implements PrimitiveTask {
      * The tree's logs off its columns, as detection would assign them: the wood around the trunk
      * is scanned, connected and split ({@link TreeShape}), and the tree whose base holds one of
      * {@code columns} is this one — so a neighbour's trunk within the arm's reach is never taken
-     * for a branch. Nothing when the split finds no tree there: a bare trunk with no crown.
+     * for a branch. Its crown is kept as the leaves an item may be freed from. Nothing when the
+     * split finds no tree there: a bare trunk with no crown.
      */
     private List<Pos> branchesOf(BrainContext ctx, List<Pos> columns, List<Pos> logs) {
         BlockProbe blocks = ctx.percepts().blocks();
@@ -876,6 +1051,8 @@ public final class FellTree implements PrimitiveTask {
             for (TreeShape.Trunk tree : TreeShape.split(mass, blocks)) {
                 for (Pos base : tree.base()) {
                     if (columns.contains(base)) {
+                        crown.clear();
+                        crown.addAll(tree.leaves());
                         return tree.branches();
                     }
                 }
@@ -943,6 +1120,129 @@ public final class FellTree implements PrimitiveTask {
             }
         }
         return leans(ctx, at);
+    }
+
+    /**
+     * Items worth taking that lie on the leaves, and the leaves under them the arm reaches from
+     * {@code at}: broken, so the item falls on — to the ground, or to the next leaf down, which a
+     * lower stand sees to. A leaf refused is left for a lower stand too, never waited on. Returns
+     * whether nothing more is to be done from here.
+     */
+    private boolean stranded(BrainContext ctx, Pos at) {
+        Climb.Arm arm = Climb.Arm.of(ctx.percepts());
+        BlockProbe blocks = ctx.percepts().blocks();
+        List<Pos> cells = new ArrayList<>();
+        int items = 0;
+        for (Drop drop : ctx.percepts().drops()) {
+            if (!worthTaking(drop.itemId()) || !nearTheTree(drop.pos())) {
+                continue;
+            }
+            List<Pos> leaves = leavesUnder(drop, blocks);
+            if (leaves.isEmpty()) {
+                continue;
+            }
+            items++;
+            for (Pos leaf : leaves) {
+                if (!cells.contains(leaf) && Climb.reaches(arm, at.x(), at.y(), at.z(), leaf, 0)) {
+                    cells.add(leaf);
+                }
+            }
+        }
+        if (cells.isEmpty()) {
+            return true;
+        }
+        if (!at.equals(strandedSaidAt)) {
+            strandedSaidAt = at;
+            say(ctx, items + " items on the leaves — " + cells.size()
+                    + " leaves under them in reach from " + where(at));
+        }
+        phase = "freeing items from the leaves (" + cells.size() + ")";
+        return breakNext(ctx, cells, LEAVES_ONLY, false);
+    }
+
+    /**
+     * The leaves that hold {@code drop} up — the crown's, or any still growing — or nothing: the
+     * item is falling, or rests on something the axe is not for, the ground included.
+     */
+    private List<Pos> leavesUnder(Drop drop, BlockProbe blocks) {
+        Region box = drop.box();
+        int floor = box.min().y() - 1;
+        List<Pos> leaves = new ArrayList<>();
+        for (int x = box.min().x(); x <= box.max().x(); x++) {
+            for (int z = box.min().z(); z <= box.max().z(); z++) {
+                BlockKind kind = blocks.at(x, floor, z);
+                if (kind == BlockKind.AIR || kind == BlockKind.WATER) {
+                    continue;
+                }
+                Pos cell = new Pos(x, floor, z);
+                if (kind == BlockKind.LEAVES
+                        || (kind == BlockKind.OTHER && crown.contains(cell) && leaf(blocks, x, floor, z))) {
+                    leaves.add(cell);
+                } else {
+                    return List.of();
+                }
+            }
+        }
+        return leaves;
+    }
+
+    /** Whether nothing at all is under {@code drop}'s footprint: on its way down. */
+    private boolean falling(BrainContext ctx) {
+        BlockProbe blocks = ctx.percepts().blocks();
+        for (Drop drop : ctx.percepts().drops()) {
+            if (!worthTaking(drop.itemId()) || !nearTheTree(drop.pos())) {
+                continue;
+            }
+            Region box = drop.box();
+            int floor = box.min().y() - 1;
+            boolean air = true;
+            for (int x = box.min().x(); x <= box.max().x() && air; x++) {
+                for (int z = box.min().z(); z <= box.max().z() && air; z++) {
+                    air = blocks.at(x, floor, z) == BlockKind.AIR;
+                }
+            }
+            if (air) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the ground — a solid the axe is not for — holds {@code drop} up under any of its footprint. */
+    private static boolean onGround(Drop drop, BlockProbe blocks) {
+        Region box = drop.box();
+        int floor = box.min().y() - 1;
+        for (int x = box.min().x(); x <= box.max().x(); x++) {
+            for (int z = box.min().z(); z <= box.max().z(); z++) {
+                if (blocks.at(x, floor, z) == BlockKind.OTHER && !leaf(blocks, x, floor, z)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What the chop bothers with off the leaves and the ground: anything but a sapling — a
+     * mangrove's propagule is one — or a stick (decision: Luiz, 2026-09-10, to start with).
+     */
+    public static boolean worthTaking(String itemId) {
+        return !itemId.endsWith(":stick") && !itemId.endsWith("_sapling")
+                && !itemId.endsWith("_propagule");
+    }
+
+    /** Whether an item at {@code cell} is this tree's to see to, by where it lies. */
+    private boolean nearTheTree(Pos cell) {
+        return Math.abs(cell.x() - anchor.x()) <= DROP_SPREAD
+                && Math.abs(cell.z() - anchor.z()) <= DROP_SPREAD;
+    }
+
+    /**
+     * A leaf by kind, or by name where the probe calls one solid: on its decay rim a dying canopy
+     * is nobody's tree, but the axe takes it like any leaf.
+     */
+    private static boolean leaf(BlockProbe blocks, int x, int y, int z) {
+        return blocks.at(x, y, z) == BlockKind.LEAVES || blocks.idAt(x, y, z).endsWith("_leaves");
     }
 
     /**
@@ -1073,8 +1373,7 @@ public final class FellTree implements PrimitiveTask {
                         continue;
                     }
                     Pos cell = new Pos(cx, y, cz);
-                    boolean leaf = kind == BlockKind.LEAVES
-                            || blocks.idAt(cx, y, cz).endsWith("_leaves");
+                    boolean leaf = leaf(blocks, cx, y, cz);
                     if (!leaf && !(kind == BlockKind.LOG && climb.owns(cell))) {
                         return null;
                     }
@@ -1221,6 +1520,10 @@ public final class FellTree implements PrimitiveTask {
         Pos first = null;
         for (Pos cell : cells) {
             BlockKind kind = blocks.at(cell.x(), cell.y(), cell.z());
+            if (kind == BlockKind.OTHER && kinds.contains(BlockKind.LEAVES)
+                    && leaf(blocks, cell.x(), cell.y(), cell.z())) {
+                kind = BlockKind.LEAVES; // on its decay rim: solid to the probe, a leaf to the axe
+            }
             if (!kinds.contains(kind)) {
                 continue; // already gone
             }
@@ -1245,11 +1548,9 @@ public final class FellTree implements PrimitiveTask {
                     break; // out of reach, or through the floor: the walk's problem, or nobody's
                 }
                 BlockKind inTheWay = blocks.at(block.x(), block.y(), block.z());
-                // A leaf on its decay rim reads as plain solid to the probe — a dying canopy is
-                // not a tree's — but the axe takes it like any leaf, and the trunk's own crown is
-                // dying by the time the swing at a limb is refused for it (2026-09-10).
-                boolean leaf = inTheWay == BlockKind.LEAVES
-                        || blocks.idAt(block.x(), block.y(), block.z()).endsWith("_leaves");
+                // The trunk's own crown is dying by the time the swing at a limb is refused for
+                // one of its leaves (2026-09-10).
+                boolean leaf = leaf(blocks, block.x(), block.y(), block.z());
                 boolean ours = inTheWay == BlockKind.LOG && climb != null && climb.owns(block);
                 if (!leaf && !ours) {
                     break; // something the axe is not for: the walk's problem, or nobody's

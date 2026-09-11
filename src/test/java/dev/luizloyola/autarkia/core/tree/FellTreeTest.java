@@ -11,13 +11,17 @@ import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.RiseState;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.core.brain.sense.Drop;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.Entry;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -36,6 +40,8 @@ class FellTreeTest {
 
     private final FakeContext ctx = new FakeContext();
     private final FellTree task = new FellTree(ANCHOR);
+    /** Items the little world never lets the body pick up — a full pack, a ledge. */
+    private final Set<Pos> stuckDrops = new HashSet<>();
 
     /** A seven-log trunk: its top is out of reach from the ground beside it. */
     private void trunk() {
@@ -62,10 +68,31 @@ class FellTreeTest {
         ctx.percepts.inventory.add(new ItemStack("minecraft:birch_log", logs, 64, ""));
     }
 
+    /** Twelve logs under a crown the split owns: a ring at the top log, a cap over it. */
+    private void tallOak() {
+        trunk(12);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx != 0 || dz != 0) {
+                    ctx.percepts.blocks.set(dx, BASE + 11, dz, BlockKind.LEAVES);
+                }
+                ctx.percepts.blocks.set(dx, BASE + 12, dz, BlockKind.LEAVES);
+            }
+        }
+    }
+
+    /** An item lying at {@code cell}, its box within it. */
+    private void drop(Pos cell, String id) {
+        List<Drop> drops = new ArrayList<>(ctx.percepts.drops);
+        drops.add(new Drop(cell, id, Region.of(cell)));
+        ctx.percepts.drops = drops;
+    }
+
     /**
      * A little world that answers the fakes the way the real one would, one tick behind: a swing
      * begun lands and the block is gone, a walk ordered arrives, a rise ordered lands one higher
-     * on a log from the pack, and nothing under the feet drops the body one.
+     * on a log from the pack, nothing under the feet drops the body one, an item on nothing falls
+     * one, and an item within a cell of the body is picked up.
      */
     private TaskStatus drive(FellTree task, int maxTicks) {
         TaskStatus status = TaskStatus.RUNNING;
@@ -98,6 +125,20 @@ class FellTreeTest {
                 p = new Pos(p.x(), p.y() - 1, p.z());
                 ctx.percepts.position = p;
             }
+            List<Drop> drops = new ArrayList<>();
+            for (Drop drop : ctx.percepts.drops) {
+                Pos d = drop.pos();
+                if (ctx.percepts.blocks.at(d.x(), d.y() - 1, d.z()) == BlockKind.AIR) {
+                    Pos down = new Pos(d.x(), d.y() - 1, d.z());
+                    drops.add(new Drop(down, drop.itemId(), Region.of(down)));
+                } else if (!stuckDrops.contains(d) && Math.abs(d.x() - p.x()) <= 1
+                        && Math.abs(d.y() - p.y()) <= 1 && Math.abs(d.z() - p.z()) <= 1) {
+                    ctx.percepts.inventory.add(new ItemStack(drop.itemId(), 1, 64, ""));
+                } else {
+                    drops.add(drop);
+                }
+            }
+            ctx.percepts.drops = drops;
         }
         return status;
     }
@@ -1345,6 +1386,163 @@ class FellTreeTest {
         assertEquals(0, climb.rises());
         assertGiantGone(5);
         assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 20 logs"), said("felled"));
+    }
+
+    // ── the tree's drops ─────────────────────────────────────────────────────────────────────
+
+    @Test
+    void anItemOnTheLeavesIsFreedFromTheTopAndPickedUpAtTheEnd() {
+        tallOak();
+        pack(8);
+        standSouth();
+        Pos leaf = new Pos(2, BASE + 11, 0); // level with the top log: in reach from the top stand
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        drop(new Pos(2, BASE + 12, 0), "minecraft:apple");
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertTrue(ctx.breaker.targets.contains(leaf), "the leaf under the apple");
+        assertEquals(List.of("1 items on the leaves — 1 leaves under them in reach from "
+                + at(new Pos(0, BASE + 6, 0))), said("1 items on the leaves"));
+        assertEquals(List.of("1 items on the ground to pick up"), said("1 items on the ground"));
+        assertEquals(1, ctx.percepts.inventory.count("minecraft:apple"));
+        assertTrue(ctx.percepts.drops.isEmpty());
+        assertEquals(new Pos(2, BASE, 0), ctx.percepts.position, "walked to where it fell");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"));
+    }
+
+    @Test
+    void aLeafOnItsDecayRimIsStillTheCrownsToFreeAnItemFrom() {
+        tallOak();
+        pack(8);
+        standSouth();
+        Pos leaf = new Pos(2, BASE + 11, 0);
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        drop(new Pos(2, BASE + 12, 0), "minecraft:apple");
+
+        for (int i = 0; i < 200 && task.climb().isEmpty(); i++) {
+            drive(1);
+        }
+        assertTrue(task.climb().isPresent(), "planned, the crown read while the trunk stood");
+        // The trunk comes down and the crown dies: the probe calls every leaf of it solid now.
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.OTHER);
+        ctx.percepts.blocks.setId(leaf.x(), leaf.y(), leaf.z(), "minecraft:oak_leaves");
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertTrue(ctx.breaker.targets.contains(leaf), "the plan knew it for a leaf");
+        assertEquals(1, ctx.percepts.inventory.count("minecraft:apple"));
+    }
+
+    @Test
+    void anItemOnAPlacedLeafIsNobodys() {
+        tallOak();
+        pack(8);
+        standSouth();
+        Pos leaf = new Pos(2, BASE + 11, 0); // solid to the probe from the start: never the crown's
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.OTHER);
+        ctx.percepts.blocks.setId(leaf.x(), leaf.y(), leaf.z(), "minecraft:oak_leaves");
+        drop(new Pos(2, BASE + 12, 0), "minecraft:apple");
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertFalse(ctx.breaker.targets.contains(leaf), "somebody's roof, for all the plan knows");
+        assertEquals(0, ctx.percepts.inventory.count("minecraft:apple"));
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"),
+                "not counted either: it is not on the tree");
+    }
+
+    @Test
+    void saplingsAndSticksAreLeftWhereTheyLie() {
+        assertTrue(FellTree.worthTaking("minecraft:apple"));
+        assertTrue(FellTree.worthTaking("minecraft:oak_log"));
+        assertFalse(FellTree.worthTaking("minecraft:stick"));
+        assertFalse(FellTree.worthTaking("minecraft:oak_sapling"));
+        assertFalse(FellTree.worthTaking("minecraft:mangrove_propagule"));
+
+        tallOak();
+        pack(8);
+        standSouth();
+        Pos leaf = new Pos(2, BASE + 11, 0);
+        ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
+        drop(new Pos(2, BASE + 12, 0), "minecraft:oak_sapling");
+        drop(new Pos(3, BASE, 0), "minecraft:stick");
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertFalse(ctx.breaker.targets.contains(leaf), "a sapling is not worth a swing");
+        assertFalse(ctx.mover.events.contains("moveTo(3, " + BASE + ", 0)"), "nor a stick a walk");
+        assertEquals(2, ctx.percepts.drops.size());
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"));
+    }
+
+    @Test
+    void itemsOnTheGroundAreSweptNearestFirst() {
+        ctx.percepts.blocks.placeOak(0, 0);
+        standSouth();
+        drop(new Pos(-4, BASE, 0), "minecraft:apple");
+        drop(new Pos(5, BASE, 0), "minecraft:oak_log");
+        drop(new Pos(3, BASE, 0), "minecraft:apple");
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        List<String> walks = ctx.mover.events.stream().filter(e -> e.startsWith("moveTo")).toList();
+        assertEquals(List.of("moveTo(3, " + BASE + ", 0)", "moveTo(5, " + BASE + ", 0)",
+                "moveTo(-4, " + BASE + ", 0)"), walks.subList(walks.size() - 3, walks.size()),
+                "from the south side: the nearest, then the nearest from there");
+        assertEquals(List.of("3 items on the ground to pick up"), said("3 items"));
+        assertEquals(2, ctx.percepts.inventory.count("minecraft:apple"));
+        assertEquals(1, ctx.percepts.inventory.count("minecraft:oak_log"));
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 4 logs"), said("felled"));
+    }
+
+    @Test
+    void anItemThatIsNotPickedUpIsGivenUpAndCounted() {
+        ctx.percepts.blocks.placeOak(0, 0);
+        standSouth();
+        Pos stuck = new Pos(3, BASE, 0);
+        drop(stuck, "minecraft:apple");
+        drop(new Pos(-3, BASE, 0), "minecraft:apple");
+        stuckDrops.add(stuck);
+
+        assertEquals(TaskStatus.SUCCESS, drive(600));
+        assertEquals(List.of("the item at " + at(stuck) + " was not picked up, stood at "
+                + at(stuck)), said("the item at"));
+        assertEquals(1, ctx.percepts.inventory.count("minecraft:apple"), "the other one");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 4 logs, 1 items left on the ground"),
+                said("felled"));
+    }
+
+    @Test
+    void anItemOnLeavesOutOfReachIsCounted() {
+        tallOak();
+        pack(8);
+        standSouth();
+        for (int x = 2; x <= 6; x++) {
+            ctx.percepts.blocks.set(x, BASE + 11, 0, BlockKind.LEAVES); // a limb of leaves, out to six
+        }
+        drop(new Pos(6, BASE + 12, 0), "minecraft:apple");
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        assertFalse(ctx.breaker.targets.contains(new Pos(6, BASE + 11, 0)));
+        assertEquals(1, ctx.percepts.drops.size());
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs, 1 items left on the leaves"),
+                said("felled"));
+    }
+
+    @Test
+    void anItemOnTheWayDownFallsToTheNextLeafAndIsFreedAgain() {
+        tallOak();
+        pack(8);
+        standSouth();
+        Pos upper = new Pos(2, BASE + 11, 0);
+        Pos lower = new Pos(2, BASE + 7, 0);
+        ctx.percepts.blocks.set(upper.x(), upper.y(), upper.z(), BlockKind.LEAVES);
+        ctx.percepts.blocks.set(lower.x(), lower.y(), lower.z(), BlockKind.LEAVES);
+        ctx.percepts.blocks.set(1, BASE + 7, 0, BlockKind.LEAVES); // joins the lower to the trunk
+        drop(new Pos(2, BASE + 12, 0), "minecraft:apple");
+
+        assertEquals(TaskStatus.SUCCESS, drive(800));
+        int first = ctx.breaker.targets.indexOf(upper);
+        int second = ctx.breaker.targets.indexOf(lower);
+        assertTrue(first >= 0 && second > first, "the upper leaf from the top, the lower on the way down");
+        assertEquals(1, ctx.percepts.inventory.count("minecraft:apple"));
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"));
     }
 
     // ── cancel ───────────────────────────────────────────────────────────────────────────────
