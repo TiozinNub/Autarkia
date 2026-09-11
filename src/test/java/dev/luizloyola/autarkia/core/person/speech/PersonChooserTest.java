@@ -334,7 +334,7 @@ class PersonChooserTest {
     void fullConversationGreetsIdentifiesAndEnds() {
         FakeContext other = new FakeContext();
         // The second body's speech over the first's roster — the shared-roster constructor.
-        FakeSpeech otherSpeech = new FakeSpeech(other.self, () -> other.profile,
+        FakeSpeech otherSpeech = new FakeSpeech(other.self,
                 () -> other.percepts.time, ctx.speech.roster);
         BrainContext otherContext = new SecondSpeaker(other, otherSpeech);
         ctx.speech.chooser = chooser;
