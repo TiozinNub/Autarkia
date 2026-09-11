@@ -42,11 +42,12 @@ import org.jspecify.annotations.Nullable;
  * break everything above from there; come down, breaking underfoot, or back down the spiral
  * breaking each stair as it is left and then the rest of the giant from the entry stand, until the
  * feet are back at floor level — and on the way down, from the top and from every level, take
- * every branch the arm reaches, and free every item of the tree's worth taking — an apple, a log
+ * every branch the arm reaches, and free every item of the tree's worth a swing — an apple, a log
  * off a branch, anything but a sapling or a stick — that lies on its leaves, by breaking the
  * leaves under it from wherever the arm reaches them, until it is on the ground; step out and
- * take the logs that may be left one below floor level from outside; then pick up the drops on
- * the ground, nearest first, until none is left (decision: Luiz, 2026-09-10). Then SUCCESS, with
+ * take the logs that may be left one below floor level from outside; then pick up whatever lies
+ * on the ground, saplings and sticks included, nearest first, until none is left (decisions:
+ * Luiz, 2026-09-10 and 2026-09-11). Then SUCCESS, with
  * the count, or FAILED with the one reason: a rise refused, nothing carried to rise on, the arm
  * refused a block for long, every side given up on, or wood left standing that the plan knew it
  * could not reach.
@@ -722,10 +723,11 @@ public final class FellTree implements PrimitiveTask {
     }
 
     /**
-     * The tree is down: pick up its drops (decision: Luiz, 2026-09-10) — every item worth taking
-     * on the ground within {@link #DROP_SPREAD} of the stump, nearest first, over and over, the
-     * walk-over pickup taking each as the body arrives. One not picked up while stood at, or that
-     * the legs cannot get to, is given up and the next taken; what is left is counted at the end.
+     * The tree is down: pick up its drops (decision: Luiz, 2026-09-10) — every item on the ground
+     * within {@link #DROP_SPREAD} of the stump, a sapling or a stick as much as a log since it
+     * costs a step and no swing (2026-09-11), nearest first, over and over, the walk-over pickup
+     * taking each as the body arrives. One not picked up while stood at, or that the legs cannot
+     * get to, is given up and the next taken; what is left is counted at the end.
      */
     private TaskStatus collect(BrainContext ctx) {
         if (!breakNext(ctx, List.of(), WOOD, false)) {
@@ -805,13 +807,13 @@ public final class FellTree implements PrimitiveTask {
         ctx.actuators().mover().stop();
     }
 
-    /** The tree's items on the ground, worth taking, nobody else's and not given up on. */
+    /** The tree's items on the ground, whatever they are, nobody else's and not given up on. */
     private List<Drop> onTheGround(BrainContext ctx) {
         BlockProbe blocks = ctx.percepts().blocks();
         long now = ctx.percepts().time();
         List<Drop> drops = new ArrayList<>();
         for (Drop drop : ctx.percepts().drops()) {
-            if (worthTaking(drop.itemId()) && nearTheTree(drop.pos())
+            if (nearTheTree(drop.pos())
                     && !dropsGivenUp.contains(drop.pos()) && onGround(drop, blocks)
                     && !ctx.claims().claimedByOther(drop.pos(), now)) {
                 drops.add(drop);
@@ -895,12 +897,13 @@ public final class FellTree implements PrimitiveTask {
         int onGround = 0;
         int onLeaves = 0;
         for (Drop drop : ctx.percepts().drops()) {
-            if (!worthTaking(drop.itemId()) || !nearTheTree(drop.pos())) {
+            if (!nearTheTree(drop.pos())) {
                 continue;
             }
             if (onGround(drop, ctx.percepts().blocks())) {
                 onGround++;
-            } else if (!leavesUnder(drop, ctx.percepts().blocks()).isEmpty()) {
+            } else if (worthFreeing(drop.itemId())
+                    && !leavesUnder(drop, ctx.percepts().blocks()).isEmpty()) {
                 onLeaves++;
             }
         }
@@ -1134,7 +1137,7 @@ public final class FellTree implements PrimitiveTask {
         List<Pos> cells = new ArrayList<>();
         int items = 0;
         for (Drop drop : ctx.percepts().drops()) {
-            if (!worthTaking(drop.itemId()) || !nearTheTree(drop.pos())) {
+            if (!worthFreeing(drop.itemId()) || !nearTheTree(drop.pos())) {
                 continue;
             }
             List<Pos> leaves = leavesUnder(drop, blocks);
@@ -1186,11 +1189,11 @@ public final class FellTree implements PrimitiveTask {
         return leaves;
     }
 
-    /** Whether nothing at all is under {@code drop}'s footprint: on its way down. */
+    /** Whether an item near the tree has nothing at all under its footprint: on its way down. */
     private boolean falling(BrainContext ctx) {
         BlockProbe blocks = ctx.percepts().blocks();
         for (Drop drop : ctx.percepts().drops()) {
-            if (!worthTaking(drop.itemId()) || !nearTheTree(drop.pos())) {
+            if (!nearTheTree(drop.pos())) {
                 continue;
             }
             Region box = drop.box();
@@ -1223,10 +1226,11 @@ public final class FellTree implements PrimitiveTask {
     }
 
     /**
-     * What the chop bothers with off the leaves and the ground: anything but a sapling — a
-     * mangrove's propagule is one — or a stick (decision: Luiz, 2026-09-10, to start with).
+     * What the chop breaks leaves for: anything but a sapling — a mangrove's propagule is one — or
+     * a stick (decision: Luiz, 2026-09-10, to start with). The sweep off the ground takes those
+     * too; a swing is the cost, not a step (2026-09-11).
      */
-    public static boolean worthTaking(String itemId) {
+    public static boolean worthFreeing(String itemId) {
         return !itemId.endsWith(":stick") && !itemId.endsWith("_sapling")
                 && !itemId.endsWith("_propagule");
     }

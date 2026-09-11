@@ -1450,12 +1450,12 @@ class FellTreeTest {
     }
 
     @Test
-    void saplingsAndSticksAreLeftWhereTheyLie() {
-        assertTrue(FellTree.worthTaking("minecraft:apple"));
-        assertTrue(FellTree.worthTaking("minecraft:oak_log"));
-        assertFalse(FellTree.worthTaking("minecraft:stick"));
-        assertFalse(FellTree.worthTaking("minecraft:oak_sapling"));
-        assertFalse(FellTree.worthTaking("minecraft:mangrove_propagule"));
+    void saplingsAndSticksAreNotWorthASwingButAreSweptOffTheGround() {
+        assertTrue(FellTree.worthFreeing("minecraft:apple"));
+        assertTrue(FellTree.worthFreeing("minecraft:oak_log"));
+        assertFalse(FellTree.worthFreeing("minecraft:stick"));
+        assertFalse(FellTree.worthFreeing("minecraft:oak_sapling"));
+        assertFalse(FellTree.worthFreeing("minecraft:mangrove_propagule"));
 
         tallOak();
         pack(8);
@@ -1464,12 +1464,16 @@ class FellTreeTest {
         ctx.percepts.blocks.set(leaf.x(), leaf.y(), leaf.z(), BlockKind.LEAVES);
         drop(new Pos(2, BASE + 12, 0), "minecraft:oak_sapling");
         drop(new Pos(3, BASE, 0), "minecraft:stick");
+        drop(new Pos(-3, BASE, 0), "minecraft:oak_sapling");
 
         assertEquals(TaskStatus.SUCCESS, drive(800));
         assertFalse(ctx.breaker.targets.contains(leaf), "a sapling is not worth a swing");
-        assertFalse(ctx.mover.events.contains("moveTo(3, " + BASE + ", 0)"), "nor a stick a walk");
-        assertEquals(2, ctx.percepts.drops.size());
-        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"));
+        assertTrue(ctx.mover.events.contains("moveTo(3, " + BASE + ", 0)"), "but a stick is worth a step");
+        assertEquals(1, ctx.percepts.inventory.count("minecraft:stick"));
+        assertEquals(1, ctx.percepts.inventory.count("minecraft:oak_sapling"), "the one on the ground");
+        assertEquals(1, ctx.percepts.drops.size(), "the one on the leaf");
+        assertEquals(List.of("felled the tree at " + at(ANCHOR) + " — 12 logs"), said("felled"),
+                "a sapling on the leaves is not counted as left: nobody swung for it");
     }
 
     @Test
