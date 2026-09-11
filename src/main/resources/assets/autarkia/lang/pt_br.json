@@ -51,5 +51,8 @@
   "autarkia.speech.small_talk.need.breath.1": "Só recuperando o fôlego.",
   "autarkia.speech.small_talk.need.breath.2": "Me dê um instante pra respirar.",
   "autarkia.speech.small_talk.need.vigor.1": "Eu precisava descansar um pouco.",
-  "autarkia.speech.small_talk.need.vigor.2": "Dia longo. Meus pés sabem disso."
+  "autarkia.speech.small_talk.need.vigor.2": "Dia longo. Meus pés sabem disso.",
+  "autarkia.speech.ask_identity.button": "Perguntar o nome",
+  "autarkia.speech.inform_name.button": "Apresentar-se",
+  "autarkia.speech.small_talk.button": "Puxar conversa"
 }

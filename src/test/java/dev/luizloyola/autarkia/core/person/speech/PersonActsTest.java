@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.person.speech;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -45,6 +46,45 @@ class PersonActsTest {
         assertFalse(PersonActs.SMALL_TALK.obliges());
         assertFalse(PersonActs.SMALL_TALK.introduces());
         assertFalse(PersonActs.SMALL_TALK.ends());
+    }
+
+    /**
+     * The only act of ours with a topic, and it declares the FLAVOUR half alone — what a body
+     * feels is read off its own gauges at the moment of speaking, and a speaker choosing from a
+     * menu has none to read. {@link Topics} owns the list; this pins that the act got it.
+     */
+    @Test
+    @DisplayName("small_talk declares the flavour topics, and nothing else does")
+    void smallTalkTopics() {
+        assertEquals(Topics.FLAVOURS, PersonActs.SMALL_TALK.topics());
+        assertTrue(PersonActs.ASK_IDENTITY.topics().isEmpty());
+        assertTrue(PersonActs.INFORM_NAME.topics().isEmpty());
+    }
+
+    /**
+     * A menu renders each of these as a button, labelled {@code <langKey>.button} — Anima's
+     * {@code SpeechActsTest} holds its own acts to the same rule. A missing label reaches a
+     * player's chat as a raw lang key, and nothing at runtime would say so.
+     */
+    @Test
+    @DisplayName("every person act has a button label in en_us")
+    void buttonLabels() {
+        String lang = langSource();
+        for (var act : List.of(PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME,
+                PersonActs.SMALL_TALK)) {
+            assertTrue(lang.contains("\"" + act.langKey() + ".button\""),
+                    act.key() + " has no " + act.langKey() + ".button label");
+        }
+    }
+
+    private static String langSource() {
+        String path = "/assets/autarkia/lang/en_us.json";
+        try (java.io.InputStream in = PersonActsTest.class.getResourceAsStream(path)) {
+            assertNotNull(in, "missing resource " + path);
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new AssertionError("could not read " + path, e);
+        }
     }
 
     @Test

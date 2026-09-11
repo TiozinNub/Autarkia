@@ -18,8 +18,15 @@ public final class PersonActs {
             List.of("inform_name", "deflect")));
     public static final SpeechAct INFORM_NAME = SpeechActs.register(new SpeechAct(
             "inform_name", "autarkia.speech.inform_name", 2, true, false, true, false, List.of()));
+    /**
+     * The declared topics are the FLAVOUR half only — weather, work, mood. What a body feels
+     * ({@code need.*}) is sourced live from its own gauges by {@link Topics}, and a speaker with no
+     * gauges to read (a player, off a menu) gets the flavours. Declaring the need topics here would
+     * offer a player "I'm hungry" as a thing to say about somebody else's hunger.
+     */
     public static final SpeechAct SMALL_TALK = SpeechActs.register(new SpeechAct(
-            "small_talk", "autarkia.speech.small_talk", 2, true, false, false, false, List.of()));
+            "small_talk", "autarkia.speech.small_talk", 2, true, false, false, false, List.of(),
+            Topics.FLAVOURS));
 
     private PersonActs() {
     }

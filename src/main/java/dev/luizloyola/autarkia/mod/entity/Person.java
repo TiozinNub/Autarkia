@@ -70,8 +70,8 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -1038,21 +1038,20 @@ public class Person extends Avatar implements AgentBody {
 
     /**
      * Opens this Person's inventory as a container screen (all 41 slots) for {@code player}, backed
-     * by a live {@link PersonContainer} over the core inventory. Server-authoritative; the client
-     * predicts success so the arm swings.
+     * by a live {@link PersonContainer} over the core inventory. Server-authoritative.
      *
-     * <p>Driven from a Fabric {@code UseEntityCallback} rather than a vanilla {@code interact}
-     * override, whose signature drifts across versions — a plain method keeps this {@code mod} class
-     * version-neutral. The callback does the empty-hand/main-hand gating.
+     * <p>Anima's {@code AgentBody} hook, driven by {@code /anima inv see}. It used to be a Fabric
+     * {@code UseEntityCallback} registered here; social rung 7 gave that click to the hail and the
+     * library kept the command, which is a better home for a dev tool anyway — the whole
+     * {@code /anima} tree is op-gated, and an empty-handed right-click is not.
      */
-    public InteractionResult openInventory(Player player) {
-        if (!this.level().isClientSide()) {
-            player.openMenu(new SimpleMenuProvider(
-                    (syncId, playerInv, opener) ->
-                            new PersonInventoryMenu(syncId, playerInv, new PersonContainer(this), getId()),
-                    getName()));
-        }
-        return InteractionResult.SUCCESS;
+    @Override
+    public boolean showInventory(ServerPlayer player) {
+        player.openMenu(new SimpleMenuProvider(
+                (syncId, playerInv, opener) ->
+                        new PersonInventoryMenu(syncId, playerInv, new PersonContainer(this), getId()),
+                getName()));
+        return true;
     }
 
     /**

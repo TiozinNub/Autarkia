@@ -51,5 +51,8 @@
   "autarkia.speech.small_talk.need.breath.1": "Just catching my breath.",
   "autarkia.speech.small_talk.need.breath.2": "Give me a moment to breathe.",
   "autarkia.speech.small_talk.need.vigor.1": "I could use a rest.",
-  "autarkia.speech.small_talk.need.vigor.2": "Long day. My feet know it."
+  "autarkia.speech.small_talk.need.vigor.2": "Long day. My feet know it.",
+  "autarkia.speech.ask_identity.button": "Ask their name",
+  "autarkia.speech.inform_name.button": "Introduce yourself",
+  "autarkia.speech.small_talk.button": "Chat a bit"
 }

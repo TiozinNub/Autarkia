@@ -46,9 +46,6 @@ import dev.luizloyola.autarkia.mod.person.PersonDirectory;
 import dev.luizloyola.autarkia.mod.person.PersonPortraits;
 import dev.luizloyola.anima.mod.net.DebugGlowSync;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.player.UseEntityCallback;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -174,25 +171,10 @@ public class AutarkiaMod implements ModInitializer {
             GrowthRules.register(rule.seed(), rule);
             KnowledgeViewer.particle(rule.kind(), ParticleTypes.COMPOSTER);
         }
-        registerInteraction();
+        // No right-click handler here any more: an empty-handed click is Anima's targeted hail
+        // since social rung 7, and the inventory it used to open moved to `/anima inv see`
+        // (decision: Luiz, 2026-08-04). What is left for us is Person.showInventory, the screen
+        // that command asks for.
         LOGGER.info("Autarkia {} initialized on Minecraft {}", VERSION, MINECRAFT);
-    }
-
-    /**
-     * Right-click a Person with an empty main hand to open its inventory. A Fabric
-     * {@code UseEntityCallback} (fires before the entity's own interact and before any held item's
-     * use) rather than a vanilla {@code Entity#interact} override, whose signature drifts across MC
-     * versions — this keeps the entity class free of version-specific code. Returning {@code PASS}
-     * for any other case lets vanilla proceed, so e.g. the debug wand still selects the Person.
-     */
-    private static void registerInteraction() {
-        UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
-            if (entity instanceof Person person
-                    && hand == InteractionHand.MAIN_HAND
-                    && player.getItemInHand(hand).isEmpty()) {
-                return person.openInventory(player);
-            }
-            return InteractionResult.PASS;
-        });
     }
 }

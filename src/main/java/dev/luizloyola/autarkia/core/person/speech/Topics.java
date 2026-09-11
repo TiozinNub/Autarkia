@@ -14,6 +14,14 @@ import java.util.Map;
  */
 public final class Topics {
 
+    /**
+     * The three that are always on the table — declared HERE and handed to
+     * {@link PersonActs#SMALL_TALK} rather than the other way round, because a static initializer
+     * reading its own class's act while that act is still being built is a cycle waiting to be
+     * written. One list, two readers.
+     */
+    static final List<String> FLAVOURS = List.of("weather", "work", "mood");
+
     private Topics() {
     }
 
@@ -26,7 +34,7 @@ public final class Topics {
 
     /** Always the three flavours, plus {@code "need." + kind.key()} for every gauge pressing. */
     static List<String> options(BrainContext ctx) {
-        List<String> options = new ArrayList<>(List.of("weather", "work", "mood"));
+        List<String> options = new ArrayList<>(FLAVOURS);
         for (Gauge gauge : ctx.percepts().needs().all()) {
             if (gauge.pressure() > 0.0) {
                 options.add("need." + gauge.kind().key());
