@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.person.speech;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -258,6 +259,42 @@ class PersonChooserTest {
 
         assertEquals(PersonActs.SMALL_TALK, line.act(), "a line of theirs is answered, whatever the gauge says");
         assertTrue(Topics.options(ctx).contains(line.payload().get("topic")));
+        assertTrue(line.payload().containsKey(PersonChooser.ANSWER),
+                "and says it is a courtesy, or it would be answered back");
+    }
+
+    @Test
+    @DisplayName("priority 6 does not answer a courtesy of theirs — an answer is owed to what was volunteered")
+    void priority6DoesNotAnswerTheirCourtesy() {
+        ctx.percepts.company.setValue(1.0);
+        Encounter e = freshEncounter();
+        e.append(new Utterance(ctx.self, PersonActs.SMALL_TALK.key(), Map.of("topic", "work"), 0));
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Map.of("topic", "weather", PersonChooser.ANSWER, "1"), 20));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
+                Optional.of(otherId.asPerson()));
+        ctx.percepts.time = 40;
+
+        assertNull(chooser.choose(ctx, turn),
+                "two content bodies trading courtesies talked out the turn cap — the silence clock runs instead");
+    }
+
+    @Test
+    @DisplayName("a body that wants company volunteers small talk, never marks it a courtesy")
+    void wantedSmallTalkIsVolunteered() {
+        ctx.percepts.company.setValue(0.0);
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Map.of("topic", "weather", PersonChooser.ANSWER, "1"), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
+                Optional.of(otherId.asPerson()));
+
+        Chooser.Line line = chooser.choose(ctx, turn);
+
+        assertEquals(PersonActs.SMALL_TALK, line.act(), "lonely: keeps talking whatever their last line was");
+        assertFalse(line.payload().containsKey(PersonChooser.ANSWER), "wanted, so the counterpart owes it an answer");
     }
 
     @Test

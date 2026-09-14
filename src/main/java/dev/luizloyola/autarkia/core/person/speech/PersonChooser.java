@@ -12,8 +12,10 @@ import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -40,13 +42,22 @@ import org.jspecify.annotations.Nullable;
  *   <li>Still wanting company, or answering small talk of theirs: small talk — the topic varies
  *       (see {@link Topics}), the act never does; see {@link #choose}'s own rung 6 for why. The
  *       answer is a courtesy owed whatever the gauge says: a content settler that stood mute while
- *       the player chatted at it was the first client run's second finding (2026-09-13).</li>
+ *       the player chatted at it was the first client run's second finding (2026-09-13). A
+ *       courtesy is marked as one ({@link #ANSWER}) and earns no courtesy back: owed to what was
+ *       volunteered, never to an answer — two content settlers trading answers talked out the
+ *       whole turn cap (2026-09-14).</li>
  *   <li>Nothing pressing, and nobody has spoken for this body's patience: say goodbye. Leaving
  *       the moment nothing is pressing reads as bolting — two seconds after learning a name, on
  *       the first client run (decision: Luiz, 2026-09-13).</li>
  * </ol>
  */
 public final class PersonChooser implements Chooser {
+
+    /**
+     * Payload key on a small-talk line said as a courtesy rather than wanted — so the counterpart
+     * does not answer it in turn. A player's line never carries it: a click is always volunteered.
+     */
+    public static final String ANSWER = "answer";
 
     @Override
     public @Nullable Line choose(BrainContext ctx, Turn turn) {
@@ -74,7 +85,13 @@ public final class PersonChooser implements Chooser {
             // No act-level variety roll here: rungs 4 and 5 already claim any card such a roll
             // could legally deal, so act variety is structurally impossible at this rung —
             // conversational variety comes from the topic draw below and the reply beat's jitter.
-            return new Line(PersonActs.SMALL_TALK, Topics.pick(ctx));
+            Map<String, String> payload = Topics.pick(ctx);
+            if (!wantsCompany(ctx)) {
+                Map<String, String> courtesy = new HashMap<>(payload);
+                courtesy.put(ANSWER, "1");
+                payload = courtesy;
+            }
+            return new Line(PersonActs.SMALL_TALK, payload);
         }
 
         if (saysGoodbye(ctx, turn)) {
@@ -161,16 +178,23 @@ public final class PersonChooser implements Chooser {
 
     private static boolean makesSmallTalk(BrainContext ctx, Turn turn) {
         return turn.applicable().contains(PersonActs.SMALL_TALK)
-                && (ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx)
-                        || answersSmallTalk(turn));
+                && (wantsCompany(ctx) || answersSmallTalk(turn));
     }
 
-    /** Whether the last thing said was small talk of THEIRS — a line this body owes an answer to. */
+    private static boolean wantsCompany(BrainContext ctx) {
+        return ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx);
+    }
+
+    /**
+     * Whether the last thing said was small talk of THEIRS that they volunteered — a line this
+     * body owes an answer to. Their own courtesy answer ({@link #ANSWER}) is owed nothing.
+     */
     private static boolean answersSmallTalk(Turn turn) {
         AgentId counterpart = turn.counterpart().orElse(null);
         return Picker.lastSpoken(turn.encounter())
                 .filter(line -> line.author().equals(counterpart)
-                        && line.act().equals(PersonActs.SMALL_TALK.key()))
+                        && line.act().equals(PersonActs.SMALL_TALK.key())
+                        && !line.payload().containsKey(ANSWER))
                 .isPresent();
     }
 
