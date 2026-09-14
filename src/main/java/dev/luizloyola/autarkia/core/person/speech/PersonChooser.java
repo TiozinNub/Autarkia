@@ -1,11 +1,13 @@
 package dev.luizloyola.autarkia.core.person.speech;
 
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.agent.need.NeedKind;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.social.speech.Chooser;
+import dev.luizloyola.anima.core.social.speech.Picker;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
@@ -35,9 +37,13 @@ import org.jspecify.annotations.Nullable;
  *   <li>A counterpart seen but never introduced, who has not already given a name in this
  *       record, and whom this body has not already asked here: ask. Once per record — a
  *       deflection is an answer, and asking again after one is badgering.</li>
- *   <li>Still wanting company: small talk — the topic varies (see {@link Topics}), the act
- *       never does; see {@link #choose}'s own rung 6 for why.</li>
- *   <li>Nothing pressing: say goodbye.</li>
+ *   <li>Still wanting company, or answering small talk of theirs: small talk — the topic varies
+ *       (see {@link Topics}), the act never does; see {@link #choose}'s own rung 6 for why. The
+ *       answer is a courtesy owed whatever the gauge says: a content settler that stood mute while
+ *       the player chatted at it was the first client run's second finding (2026-09-13).</li>
+ *   <li>Nothing pressing, and nobody has spoken for this body's patience: say goodbye. Leaving
+ *       the moment nothing is pressing reads as bolting — two seconds after learning a name, on
+ *       the first client run (decision: Luiz, 2026-09-13).</li>
  * </ol>
  */
 public final class PersonChooser implements Chooser {
@@ -71,7 +77,7 @@ public final class PersonChooser implements Chooser {
             return new Line(PersonActs.SMALL_TALK, Topics.pick(ctx));
         }
 
-        if (saysGoodbye(turn)) {
+        if (saysGoodbye(ctx, turn)) {
             return Line.of(SpeechActs.END_CHAT);
         }
         return null;
@@ -106,9 +112,11 @@ public final class PersonChooser implements Chooser {
                         + ", ask_identity " + offer(turn, PersonActs.ASK_IDENTITY)),
                 new Rung(makesSmallTalk(ctx, turn), "6 small talk", "company " + number(company)
                         + (company < boundary ? " < " : " ≥ ") + "content " + number(boundary)
+                        + (answersSmallTalk(turn) ? ", theirs to answer" : "")
                         + ", small_talk " + offer(turn, PersonActs.SMALL_TALK)),
-                new Rung(saysGoodbye(turn), "7 say goodbye",
-                        "end_chat " + offer(turn, SpeechActs.END_CHAT)));
+                new Rung(saysGoodbye(ctx, turn), "7 say goodbye",
+                        "silent " + silence(ctx, turn) + " of " + patience(ctx) + " ticks, end_chat "
+                                + offer(turn, SpeechActs.END_CHAT)));
 
         List<String> out = new ArrayList<>();
         boolean spoken = false;
@@ -152,12 +160,31 @@ public final class PersonChooser implements Chooser {
     }
 
     private static boolean makesSmallTalk(BrainContext ctx, Turn turn) {
-        return ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx)
-                && turn.applicable().contains(PersonActs.SMALL_TALK);
+        return turn.applicable().contains(PersonActs.SMALL_TALK)
+                && (ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx)
+                        || answersSmallTalk(turn));
     }
 
-    private static boolean saysGoodbye(Turn turn) {
-        return turn.applicable().contains(SpeechActs.END_CHAT);
+    /** Whether the last thing said was small talk of THEIRS — a line this body owes an answer to. */
+    private static boolean answersSmallTalk(Turn turn) {
+        AgentId counterpart = turn.counterpart().orElse(null);
+        return Picker.lastSpoken(turn.encounter())
+                .filter(line -> line.author().equals(counterpart)
+                        && line.act().equals(PersonActs.SMALL_TALK.key()))
+                .isPresent();
+    }
+
+    private static boolean saysGoodbye(BrainContext ctx, Turn turn) {
+        return turn.applicable().contains(SpeechActs.END_CHAT)
+                && silence(ctx, turn) > patience(ctx);
+    }
+
+    private static long silence(BrainContext ctx, Turn turn) {
+        return Picker.silence(turn.encounter(), ctx.percepts().time());
+    }
+
+    private static int patience(BrainContext ctx) {
+        return ctx.profile().i(ProfileAspect.SOCIAL_PATIENCE_TICKS);
     }
 
     // ── what the readout says about them ─────────────────────────────────────────────────────

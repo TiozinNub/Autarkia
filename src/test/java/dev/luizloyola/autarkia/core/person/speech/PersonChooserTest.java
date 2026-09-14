@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.AgentProfile;
+import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.act.ActuatorAccess;
@@ -218,6 +219,7 @@ class PersonChooserTest {
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
                 List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
+        ctx.percepts.time = 301; // opened at 0, and the silence has run — rung 7 is free to take it
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
     }
@@ -225,14 +227,53 @@ class PersonChooserTest {
     // ── priority 7: nothing pressing ─────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("priority 7: greeted, known, company more than enough — says goodbye")
+    @DisplayName("priority 7: greeted, known, company more than enough — says goodbye once the silence has run")
     void priority7SaysGoodbyeWhenCompanyIsMoreThanEnough() {
         ctx.percepts.company.setValue(1.0); // crowded
-        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), SpeechActs.GREETING.key(), Map.of(), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
                 List.of(SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
+        ctx.percepts.time = 300; // patience is inclusive — still the floor a player is reading at
+        assertNull(chooser.choose(ctx, turn), "leaving the moment nothing is pressing is bolting");
+
+        ctx.percepts.time = 301;
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
+    }
+
+    @Test
+    @DisplayName("priority 6 answers their small talk even when company wants no more")
+    void priority6AnswersTheirSmallTalkWhenContent() {
+        ctx.percepts.company.setValue(1.0); // crowded — no reason of its own to chat
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Map.of("topic", "weather"), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
+                Optional.of(otherId.asPerson()));
+
+        Chooser.Line line = chooser.choose(ctx, turn);
+
+        assertEquals(PersonActs.SMALL_TALK, line.act(), "a line of theirs is answered, whatever the gauge says");
+        assertTrue(Topics.options(ctx).contains(line.payload().get("topic")));
+    }
+
+    @Test
+    @DisplayName("priority 6 does not answer its OWN small talk — the courtesy is theirs to earn again")
+    void priority6DoesNotChainItsOwnSmallTalkWhenContent() {
+        ctx.percepts.company.setValue(1.0);
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Map.of("topic", "weather"), 0));
+        e.append(new Utterance(ctx.self, PersonActs.SMALL_TALK.key(), Map.of("topic", "work"), 20));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
+                Optional.of(otherId.asPerson()));
+        ctx.percepts.time = 40;
+
+        assertNull(chooser.choose(ctx, turn), "answered — now it waits, and the silence clock runs");
     }
 
     @Test
@@ -278,6 +319,7 @@ class PersonChooserTest {
                 PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK);
         Chooser.Turn discharged = new Chooser.Turn(e, everything, Optional.empty(),
                 Optional.empty(), true, Optional.of(otherId.asPerson()));
+        ctx.percepts.time = 20 + 301; // their reply landed at 20; the silence has run since
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, discharged),
                 "the other party's reply discharged what self was owed — initiative is self's again, "
@@ -311,8 +353,9 @@ class PersonChooserTest {
         assertTrue(lines.get(1).contains("pending none"), lines.get(1));
         assertTrue(lines.get(4).contains("seen at INDIVIDUAL"), lines.get(4));
         assertTrue(lines.get(5).contains("company 0.50 < content 0.85"), lines.get(5));
-        // Rung 7 would have fired on its own — it still reads skipped, because rung 5 spoke.
+        // Rung 7 reads skipped: rung 5 spoke, and the silence it waits for has not run either.
         assertTrue(lines.get(6).startsWith("skipped"), lines.get(6));
+        assertTrue(lines.get(6).contains("silent 0 of 300 ticks"), lines.get(6));
     }
 
     // ── the full two-party conversation ──────────────────────────────────────────────────────
@@ -388,10 +431,17 @@ class PersonChooserTest {
 
         clockTo(ctx, other, 7 * beat);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx),
-                "both names known, company at the boundary — A says goodbye");
+                "both names known, company at the boundary — A holds: a goodbye waits out the silence");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "so does B");
+        assertEquals(7, ctx.speech.roster.open().get(0).transcript().size(), "nobody spoke");
+
+        long patience = ctx.profile().i(ProfileAspect.SOCIAL_PATIENCE_TICKS);
+        long quiet = 6 * beat + patience + 1;
+        clockTo(ctx, other, quiet);
+        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "the silence has run — A says goodbye");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on the goodbye");
 
-        clockTo(ctx, other, 8 * beat);
+        clockTo(ctx, other, quiet + beat);
         assertEquals(TaskStatus.SUCCESS, taskB.tick(otherContext),
                 "B's pending is a goodbye — priority 2 acknowledges it, and that closes the record");
         assertEquals(TaskStatus.SUCCESS, taskA.tick(ctx), "the shared record now reads closed");
