@@ -77,59 +77,31 @@ class PersonChooserTest {
         assertEquals(PersonActs.SMALL_TALK, line.act());
     }
 
-    // ── priority 2: answering a proposal to end ──────────────────────────────────────────────
+    // ── priority 2: a goodbye is acknowledged, whatever company says ─────────────────────────
 
     @Test
-    @DisplayName("priority 2: pending request_end_chat with pressure 0.0 ends the chat, "
-            + "not a reflex inform_name")
-    void priority2EndsWhenCompanyNoLongerPresses() {
-        ctx.percepts.company.setValue(0.6); // between "alone" and "content" — pressure is flat at 0
-        Utterance ask = new Utterance(otherId.asPerson(), SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
-        // inform_name is included deliberately: request_end_chat is unconstrained ("any reply
-        // discharges"), so Picker leaves it technically applicable too — priority 1 must not grab
-        // it here (that was the regression: see PersonChooser#pendingIsAskIdentity).
-        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.INFORM_NAME),
-                Optional.of(ask), Optional.empty(), true, Optional.of(otherId.asPerson()));
-
-        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
-    }
-
-    @Test
-    @DisplayName("priority 2: pending request_end_chat with pressure > 0.0 raises a new topic, "
-            + "not a reflex inform_name")
-    void priority2ChangesTheSubjectWhenCompanyStillPresses() {
-        ctx.percepts.company.setValue(0.0); // desolate — pressure 0.50
-        Utterance ask = new Utterance(otherId.asPerson(), SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
-        // Same deliberate inclusion of inform_name as above — this is the exact regression the
-        // ask_identity-only gate on priority 1 exists to close.
-        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.SMALL_TALK,
-                        PersonActs.INFORM_NAME),
-                Optional.of(ask), Optional.empty(), true, Optional.of(otherId.asPerson()));
-
-        Chooser.Line line = chooser.choose(ctx, turn);
-
-        assertEquals(PersonActs.SMALL_TALK, line.act(),
-                "the discharge is any self line — small talk legitimately answers the proposal, "
-                        + "and must win over inform_name");
-        assertTrue(Topics.options(ctx).contains(line.payload().get("topic")));
-    }
-
-    @Test
-    @DisplayName("priority 2: pending request_end_chat with company CROWDED still ends the chat")
-    void priority2EndsWhenCompanyIsAlreadyTooMuch() {
-        // The far side of the V, and the deadlock this test exists for: at 1.0 the gauge presses
-        // again — from the crowded end — so a chooser reading `pressure == 0.0` refused to leave.
-        // Two of these proposed leaving to each other one line per tick until the world stopped.
-        ctx.percepts.company.setValue(1.0);
-        Utterance ask = new Utterance(otherId.asPerson(), SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
-        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.REQUEST_END_CHAT, SpeechActs.END_CHAT, PersonActs.SMALL_TALK),
-                Optional.of(ask), Optional.empty(), true, Optional.of(otherId.asPerson()));
+    @DisplayName("priority 2: a pending end_chat is answered with end_chat, however lonely")
+    void priority2AcknowledgesAGoodbye() {
+        ctx.percepts.company.setValue(0.0); // desolate — all the reason there is to keep talking
+        Utterance bye = new Utterance(otherId.asPerson(), SpeechActs.END_CHAT.key(), Map.of(), 0);
+        Chooser.Turn turn = new Chooser.Turn(freshEncounter(), List.of(SpeechActs.END_CHAT),
+                Optional.of(bye), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn),
-                "a settler who has had too much company is the last one who wants to keep talking");
+                "a goodbye is not a proposal — nobody gets to refuse one");
+    }
+
+    @Test
+    @DisplayName("priority 1 does not answer a goodbye with a name, even with inform_name on offer")
+    void priority1IsGatedOnTheAskItself() {
+        Utterance bye = new Utterance(otherId.asPerson(), SpeechActs.END_CHAT.key(), Map.of(), 0);
+        // inform_name included deliberately: an answer is to what was asked, and rung 1 must not
+        // grab an obligation that merely leaves its line applicable.
+        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
+                List.of(SpeechActs.END_CHAT, PersonActs.INFORM_NAME), Optional.of(bye),
+                Optional.empty(), true, Optional.of(otherId.asPerson()));
+
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
     }
 
     // ── priority 4: greet first ──────────────────────────────────────────────────────────────
@@ -181,6 +153,23 @@ class PersonChooserTest {
     }
 
     @Test
+    @DisplayName("priority 5 asks once per record — a deflection is an answer, not a cue to re-ask")
+    void priority5AsksOncePerRecord() {
+        ctx.percepts.company.setValue(0.5); // below content — falls to priority 6
+        ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
+        Encounter e = freshEncounter();
+        e.append(new Utterance(ctx.self, PersonActs.ASK_IDENTITY.key(), Map.of(), 0));
+        e.append(new Utterance(otherId.asPerson(), SpeechActs.DEFLECT.key(), Map.of(), 20));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK), Optional.empty(), Optional.empty(), true,
+                Optional.of(otherId.asPerson()));
+
+        Chooser.Line line = chooser.choose(ctx, turn);
+
+        assertEquals(PersonActs.SMALL_TALK, line.act(), "they declined — asking again is badgering");
+    }
+
+    @Test
     @DisplayName("priority 5 is skipped once the counterpart is already named")
     void priority5SkipsWhenTheCounterpartIsAlreadyNamed() {
         ctx.percepts.company.setValue(0.5); // below content — falls to priority 6
@@ -227,23 +216,23 @@ class PersonChooserTest {
     void priority6DoesNotFireAtOrAboveTheBoundary() {
         ctx.percepts.company.setValue(0.85); // exactly the boundary — not below it
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(PersonActs.SMALL_TALK, SpeechActs.REQUEST_END_CHAT), Optional.empty(), Optional.empty(), true,
+                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
-        assertEquals(Chooser.Line.of(SpeechActs.REQUEST_END_CHAT), chooser.choose(ctx, turn));
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
     }
 
     // ── priority 7: nothing pressing ─────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("priority 7: greeted, known, company more than enough — proposes leaving")
-    void priority7ProposesEndingWhenCompanyIsMoreThanEnough() {
+    @DisplayName("priority 7: greeted, known, company more than enough — says goodbye")
+    void priority7SaysGoodbyeWhenCompanyIsMoreThanEnough() {
         ctx.percepts.company.setValue(1.0); // crowded
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.REQUEST_END_CHAT), Optional.empty(), Optional.empty(), true,
+                List.of(SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
                 Optional.of(otherId.asPerson()));
 
-        assertEquals(Chooser.Line.of(SpeechActs.REQUEST_END_CHAT), chooser.choose(ctx, turn));
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
     }
 
     @Test
@@ -258,42 +247,41 @@ class PersonChooserTest {
     // ── priority 3: hold while awaiting an answer (the regression this task fixes) ──────────────
 
     @Test
-    @DisplayName("regression: self's own undischarged request_end_chat holds the ladder silent")
+    @DisplayName("regression: self's own unacknowledged goodbye holds the ladder silent")
     void priority3HoldsSilentWhileSelfsOwnAskIsUnanswered() {
-        // Crowded, so absent the gate rung 7 would fire and re-propose leaving — the exact bug
+        // Crowded, so absent the gate rung 7 would fire and say goodbye again — the exact bug
         // observed in-world: a body proposing the same goodbye every beat.
         ctx.percepts.company.setValue(1.0);
         Encounter e = freshEncounter();
-        Utterance selfAsk = new Utterance(ctx.self, SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0);
-        e.append(selfAsk);
+        Utterance selfBye = new Utterance(ctx.self, SpeechActs.END_CHAT.key(), Map.of(), 0);
+        e.append(selfBye);
         // Everything a livelier turn could offer, all at once — a null here can only be the
         // awaiting gate, not some narrower rung missing by coincidence.
-        List<SpeechAct> everything = List.of(SpeechActs.GREETING, SpeechActs.REQUEST_END_CHAT,
-                SpeechActs.END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK);
+        List<SpeechAct> everything = List.of(SpeechActs.GREETING, SpeechActs.END_CHAT,
+                PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK);
         Chooser.Turn stillWaiting = new Chooser.Turn(e, everything, Optional.empty(),
-                Optional.of(selfAsk), true, Optional.of(otherId.asPerson()));
+                Optional.of(selfBye), true, Optional.of(otherId.asPerson()));
 
         assertNull(chooser.choose(ctx, stillWaiting),
-                "self already asked to end the chat — the ladder must not ask it again");
+                "self already said goodbye — the ladder must not say it again");
     }
 
     @Test
     @DisplayName("regression: the counterpart's discharging reply restores initiative")
-    void priority3DischargedByTheCounterpartsReplyRestoresProposing() {
+    void priority3DischargedByTheCounterpartsReplyRestoresInitiative() {
         ctx.percepts.company.setValue(1.0);
         Encounter e = freshEncounter();
-        e.append(new Utterance(ctx.self, SpeechActs.REQUEST_END_CHAT.key(), Map.of(), 0));
-        // Any line of theirs discharges it — small talk legitimately answers request_end_chat,
-        // same rule Picker.pendingOn already applies from the other direction.
-        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
-                Map.of("topic", "weather"), 20));
-        List<SpeechAct> everything = List.of(SpeechActs.GREETING, SpeechActs.REQUEST_END_CHAT,
-                SpeechActs.END_CHAT, PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK);
+        e.append(new Utterance(ctx.self, PersonActs.ASK_IDENTITY.key(), Map.of(), 0));
+        // Their answer discharges it — same rule Picker.pendingOn applies from the other direction.
+        e.append(new Utterance(otherId.asPerson(), PersonActs.INFORM_NAME.key(), Map.of(), 20));
+        List<SpeechAct> everything = List.of(SpeechActs.GREETING, SpeechActs.END_CHAT,
+                PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK);
         Chooser.Turn discharged = new Chooser.Turn(e, everything, Optional.empty(),
                 Optional.empty(), true, Optional.of(otherId.asPerson()));
 
-        assertEquals(Chooser.Line.of(SpeechActs.REQUEST_END_CHAT), chooser.choose(ctx, discharged),
-                "the other party's reply discharged what self was owed — initiative is self's again");
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, discharged),
+                "the other party's reply discharged what self was owed — initiative is self's again, "
+                        + "and with nothing left to ask a crowded body says goodbye");
     }
 
     // ── explain(): the ladder read aloud ─────────────────────────────────────────────────────
@@ -306,7 +294,7 @@ class PersonChooserTest {
         ctx.percepts.company.setValue(0.5);
         ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
         Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
-                List.of(SpeechActs.GREETING, SpeechActs.REQUEST_END_CHAT, PersonActs.ASK_IDENTITY,
+                List.of(SpeechActs.GREETING, SpeechActs.END_CHAT, PersonActs.ASK_IDENTITY,
                         PersonActs.SMALL_TALK),
                 Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
@@ -339,17 +327,15 @@ class PersonChooserTest {
         BrainContext otherContext = new SecondSpeaker(other, otherSpeech);
         ctx.speech.chooser = chooser;
         otherSpeech.chooser = chooser;
-        // Default caps throughout — no turn-cap trick needed: priority 1 only answers a pending
-        // ask_identity now, so the answering side's pending request_end_chat always reaches
-        // priority 2, whatever the transcript length.
+        // Default caps throughout — no turn-cap trick needed: a goodbye is acknowledged whatever
+        // company says, so the script ends the turn after it lands.
 
         Pos here = new Pos(4, 64, 0);
         // Each side perceives the other, seen but never introduced — INDIVIDUAL tier, empty name.
         ctx.percepts.beings = List.of(FakePercepts.personAt(BeingId.of(other.self), here, 4.0, ""));
         other.percepts.beings = List.of(FakePercepts.personAt(BeingId.of(ctx.self), here, 4.0, ""));
-        // At the content boundary itself: not below it (skips small talk), and its own pressure
-        // anchor is 0.0 (so the eventual request to end settles the SAME turn it lands, rather
-        // than opening another round of small talk).
+        // At the content boundary itself: not below it, so neither side makes small talk and the
+        // script stays short.
         ctx.percepts.company.setValue(0.85);
         other.percepts.company.setValue(0.85);
 
@@ -402,13 +388,12 @@ class PersonChooserTest {
 
         clockTo(ctx, other, 7 * beat);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx),
-                "both names known, company at the boundary — A proposes ending");
-        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on the proposal");
+                "both names known, company at the boundary — A says goodbye");
+        assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on the goodbye");
 
         clockTo(ctx, other, 8 * beat);
         assertEquals(TaskStatus.SUCCESS, taskB.tick(otherContext),
-                "B's pending is request_end_chat, not ask_identity — priority 2 decides: "
-                        + "pressure 0.0 at the content boundary ends it");
+                "B's pending is a goodbye — priority 2 acknowledges it, and that closes the record");
         assertEquals(TaskStatus.SUCCESS, taskA.tick(ctx), "the shared record now reads closed");
 
         Encounter e = ctx.speech.roster.closed().get(0);
@@ -416,8 +401,8 @@ class PersonChooserTest {
         assertEquals(List.of(SpeechActs.HAIL.key(), SpeechActs.GREETING.key(), SpeechActs.GREETING.key(),
                 PersonActs.ASK_IDENTITY.key(), PersonActs.INFORM_NAME.key(),
                 PersonActs.ASK_IDENTITY.key(), PersonActs.INFORM_NAME.key(),
-                SpeechActs.REQUEST_END_CHAT.key(), SpeechActs.END_CHAT.key()), acts,
-                "GREETING and ASK_IDENTITY/INFORM_NAME both ways, then END_CHAT");
+                SpeechActs.END_CHAT.key(), SpeechActs.END_CHAT.key()), acts,
+                "GREETING and ASK_IDENTITY/INFORM_NAME both ways, then two goodbyes");
         assertTrue(e.closed());
         // Both sides settle the conversation in a handful of lines, nowhere near their own cap.
         assertTrue(ctx.speech.saidLines.size() < ctx.speech.caps.turnCap(),
