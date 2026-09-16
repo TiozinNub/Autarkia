@@ -70,7 +70,7 @@ Speaking of her, she is pregnant! We are very happy, and can't wait to meet our 
 
 ## Versions and compatibility
 
-**Fabric**, for Minecraft **1.21.11**, **26.1.x** and **26.2.x**. Needs **Fabric API**.
+**Fabric**, for Minecraft **1.21.11**, **26.1.x**, **26.2.x** and **26.3.x**. Needs **Fabric API**.
 
 First-party support for **Forge / NeoForge** through [Sinytra Connector](https://connector.sinytra.org/). All features in this mod are 100% compatible with it. I don't want to lock this mod to a single loader, but also don't have to build 2 compat layers. May change my mind in the future and actually build a Forge/NeoForge compat layer.
 

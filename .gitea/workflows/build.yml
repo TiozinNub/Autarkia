@@ -39,7 +39,7 @@ jobs:
         # notices when it stops: a node Anima never published has no `anima-<mc>` to resolve, and a
         # fabric_api pin that has drifted is EXERCISED rather than compared, because one API jar is
         # installed and both mods run against it.
-        version: ['1.21.11', '26.1.x', '26.2.x']
+        version: ['1.21.11', '26.1.x', '26.2.x', '26.3.x']
     continue-on-error: >-
       ${{ matrix.version != '26.1.x'
           && github.event_name != 'schedule'

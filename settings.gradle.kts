@@ -36,6 +36,7 @@ val targets = listOf(
     "1.21.11" to "1.21.11",
     "26.1.x" to "26.1.2",
     "26.2.x" to "26.2",
+    "26.3.x" to "26.3",
 )
 
 stonecutter {
