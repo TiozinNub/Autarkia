@@ -4,6 +4,7 @@
   "compatibilityLevel": "${java}",
   "mixins": [
     "LivingEntityHurtSoundMixin",
+    "LivingEntitySwingAccess",
     "MobAmbientSoundMixin",
     "NearestAttackableTargetGoalMixin",
     "ServerLevelCrackMixin",

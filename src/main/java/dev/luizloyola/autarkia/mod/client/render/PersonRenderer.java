@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.luizloyola.anima.compat.agent.Arms;
 import dev.luizloyola.anima.mod.client.AgentContactsClient;
 import dev.luizloyola.autarkia.mod.client.anim.NeaBridge;
 import dev.luizloyola.autarkia.mod.client.entity.ClientPerson;
@@ -21,7 +22,6 @@ import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.tags.ItemTags;
@@ -32,8 +32,6 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SwingAnimationType;
-import net.minecraft.world.item.component.SwingAnimation;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -167,7 +165,7 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
      */
     private static HumanoidModel.ArmPose armPose(Person person, ItemStack stack, InteractionHand hand) {
         if (stack.isEmpty()) return HumanoidModel.ArmPose.EMPTY;
-        if (!person.swinging && stack.is(Items.CROSSBOW) && CrossbowItem.isCharged(stack)) {
+        if (!Arms.swinging(person) && stack.is(Items.CROSSBOW) && CrossbowItem.isCharged(stack)) {
             return HumanoidModel.ArmPose.CROSSBOW_HOLD;
         }
         if (person.getUsedItemHand() == hand && person.getUseItemRemainingTicks() > 0) {
@@ -181,8 +179,7 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
             if (animation == ItemUseAnimation.BRUSH) return HumanoidModel.ArmPose.BRUSH;
             if (animation == ItemUseAnimation.SPEAR) return HumanoidModel.ArmPose.SPEAR;
         }
-        SwingAnimation swing = stack.get(DataComponents.SWING_ANIMATION);
-        if (swing != null && swing.type() == SwingAnimationType.STAB && person.swinging) {
+        if (Arms.stabbing(person, hand)) {
             return HumanoidModel.ArmPose.SPEAR;
         }
         return stack.is(ItemTags.SPEARS) ? HumanoidModel.ArmPose.SPEAR : HumanoidModel.ArmPose.ITEM;

@@ -12,6 +12,7 @@ import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.log.AgentJournal;
+import dev.luizloyola.autarkia.compat.entity.SwingClock;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.anima.core.appearance.Recipe;
 import dev.luizloyola.autarkia.core.person.Appearance;
@@ -593,16 +594,17 @@ public class Person extends Avatar implements AgentBody {
     private static boolean CHUNK_SAVE_CHECKED;
 
     /**
-     * Both-sides tick step. {@code updateSwingTime()} is the clock behind the visible arm-swing
-     * animation, and in vanilla it is driven only from {@code Player.aiStep} (verified against
-     * the 26.1.2 bytecode — neither {@code LivingEntity} nor {@code Mob} advances it). An
-     * {@link Avatar} is not a Player, so without this the working arm's swing broadcast sets
-     * {@code swinging} on every client and then animates nothing — frozen at frame zero.
+     * Both-sides tick step. Before 26.3 the clock behind the visible arm-swing animation is
+     * driven only from {@code Player.aiStep} (verified against the 26.1.2 bytecode — neither
+     * {@code LivingEntity} nor {@code Mob} advances it), and an {@link Avatar} is not a Player:
+     * without this the working arm's swing broadcast sets {@code swinging} on every client and
+     * then animates nothing — frozen at frame zero. 26.3 winds it for every body, and
+     * {@link SwingClock} knows which side it is on.
      */
     @Override
     public void aiStep() {
         super.aiStep();
-        this.updateSwingTime();
+        SwingClock.advance(this);
     }
 
     /**

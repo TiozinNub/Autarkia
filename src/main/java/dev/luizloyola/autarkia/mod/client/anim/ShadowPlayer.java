@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.client.anim;
 
 import com.mojang.authlib.GameProfile;
+import dev.luizloyola.autarkia.compat.client.anim.SwingMirror;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.lang.reflect.Field;
@@ -38,8 +39,8 @@ public final class ShadowPlayer {
     /** {@code LivingEntity.useItem} / {@code useItemRemaining}: protected, so reflected. They are
      *  the only way to hand NEA a countdown — {@code startUsingItem} would re-arm the timer to full
      *  duration on every call (client-side it never sets the using flag that guards re-entry), and a
-     *  frozen counter means an eating arm raised but perfectly still. Same field names on 1.21.11,
-     *  26.1.x and 26.2.x. */
+     *  frozen counter means an eating arm raised but perfectly still. Same field names on every live
+     *  node, 26.3 included. */
     private static @Nullable Field useItemField;
     private static @Nullable Field useItemRemainingField;
     private static boolean fieldsResolved;
@@ -88,11 +89,7 @@ public final class ShadowPlayer {
 
         target.setItemSlot(EquipmentSlot.MAINHAND, source.getMainHandItem());
         target.setItemSlot(EquipmentSlot.OFFHAND, source.getOffhandItem());
-        target.swinging = source.swinging;
-        target.swingTime = source.swingTime;
-        target.swingingArm = source.swingingArm;
-        target.attackAnim = source.attackAnim;
-        target.oAttackAnim = source.oAttackAnim;
+        SwingMirror.copy(target, source);
         try {
             useItemField.set(target, source.getUseItem());
             useItemRemainingField.setInt(target, source.getUseItemRemainingTicks());
@@ -115,6 +112,7 @@ public final class ShadowPlayer {
         if (!(level instanceof ClientLevel clientLevel)) return null;
         this.shadow = new RemotePlayer(
                 clientLevel, new GameProfile(this.person.getUUID(), PROFILE_NAME));
+        SwingMirror.bind(this.shadow, this.person);
         return this.shadow;
     }
 
