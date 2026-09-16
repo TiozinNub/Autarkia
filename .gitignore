@@ -55,3 +55,6 @@ replay_*.log
 # split behind (dead Gradle nodes, commands that had moved) with nothing to catch it.
 .claude/*
 !.claude/skills/
+
+# The opt-in snapshot node, written by scripts/snapshot.sh — a target nobody can commit
+versions/snapshot/

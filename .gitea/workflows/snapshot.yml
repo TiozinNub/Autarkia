@@ -1,0 +1,185 @@
+# The snapshot watch: try this mod beside the Anima built for the same build against Mojang's newest
+# build the hour it appears, so "does this run on the next Minecraft" is answered while the answer
+# is still cheap.
+#
+# Every hour it asks Fabric meta for the newest game version. One that is already a target is
+# nothing to do; one Fabric has no Loader or API for yet is "not yet", tried again next hour; a new
+# one gets what a committed node gets on a push — unit tests, a build, a real server booted from the
+# jar. Each build is tried ONCE by itself: the repository variable SNAPSHOT_TRIED remembers the last
+# one, so a red run stays in this list until somebody fixes it or Mojang ships the next build.
+# `workflow_dispatch` with force=true retries by hand.
+#
+# Nothing here reaches Modrinth, and nothing here changes the committed node set:
+# scripts/snapshot.sh writes a file git ignores. Staggered from Anima's: one runner serves both.
+
+name: Snapshot
+
+on:
+  schedule:
+    - cron: '47 * * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Minecraft version to try; "latest" is the newest Fabric meta lists'
+        required: false
+        default: 'latest'
+      force:
+        description: 'Try it even if SNAPSHOT_TRIED says it was tried already'
+        required: false
+        default: 'false'
+
+# Step names carry no expressions: Gitea's runner renders them at the reader instead of expanding
+# them (the same reason build.yml's do not).
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REPO_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 25 alone: every 26.x runs on it, and scripts/snapshot.sh refuses a build that does not,
+      # naming the places to teach when Mojang moves.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Point Gradle at the installed JDK
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.java.installations.fromEnv=JAVA_HOME_25_X64' > ~/.gradle/gradle.properties
+
+      # The verdict is the exit code: 0 a node to try, 3 nothing newer than the targets, 4 a build
+      # the ecosystem has not caught up with. Only another code is this step failing.
+      - name: Resolve the newest build
+        id: pick
+        run: |
+          set +e
+          scripts/snapshot.sh "${{ github.event.inputs.version || 'latest' }}"
+          rc=$?
+          set -e
+          case $rc in
+            0) echo "state=ready" >> "$GITHUB_OUTPUT" ;;
+            3) echo "state=nothing" >> "$GITHUB_OUTPUT" ;;
+            4) echo "state=waiting" >> "$GITHUB_OUTPUT" ;;
+            *) exit $rc ;;
+          esac
+
+      # Once per build, by itself. Read through the API rather than the `vars` context so a
+      # variable that does not exist yet is an empty string and not a template error.
+      - name: Was this build tried already?
+        id: tried
+        if: steps.pick.outputs.state == 'ready'
+        env:
+          CI_TOKEN: ${{ secrets.CI_TOKEN }}
+        run: |
+          last=$(curl -fsS -H "Authorization: token $CI_TOKEN" "$REPO_API/actions/variables/SNAPSHOT_TRIED" \
+                 | python3 -c 'import sys,json; print(json.load(sys.stdin).get("data",""))' 2>/dev/null || true)
+          if [[ "$last" == "${{ steps.pick.outputs.minecraft }}" && "${{ github.event.inputs.force }}" != "true" ]]; then
+            echo "${{ steps.pick.outputs.minecraft }} was already tried — nothing new until Mojang ships the next build"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The library first. Anima's watch runs half an hour ahead and publishes `anima-<mc>` when
+      # its own boot is green; until that coordinate exists there is nothing to compile against,
+      # and this is "not yet" rather than red — tried again next hour, and not recorded as tried.
+      - name: Is Anima published for it?
+        id: anima
+        if: steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false'
+        env:
+          CI_TOKEN: ${{ secrets.CI_TOKEN }}
+        run: |
+          pin=$(awk '/^\[/{exit} /^deps\.anima/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)
+          url="${{ github.server_url }}/api/packages/${{ github.repository_owner }}/maven/dev/luizloyola/anima-${{ steps.pick.outputs.minecraft }}/$pin/maven-metadata.xml"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: token $CI_TOKEN" "$url")
+          if [[ "$code" == 200 ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Anima has not published anima-${{ steps.pick.outputs.minecraft }} $pin yet (http $code) — nothing to build against; retrying next hour"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache the Gradle and Loom caches
+        if: steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        uses: actions/cache@v3
+        continue-on-error: true
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/fabric-loom
+            ~/.gradle/wrapper
+            ~/.gradle/jdks
+          key: gradle-snapshot-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties', 'versions/snapshot/stonecutter.properties.toml') }}
+          restore-keys: gradle-snapshot-
+
+      # As in build.yml: a changing module is held for 24 hours, and a restored cache would build
+      # against an older Anima and call the pair tried.
+      - name: Forget any cached Anima
+        if: steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        run: |
+          rm -rf ~/.gradle/caches/modules-2/files-2.1/dev.luizloyola \
+                 ~/.gradle/caches/modules-2/metadata-*/descriptors/dev.luizloyola
+
+      - name: Unit-test
+        if: steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        run: ./gradlew :snapshot:test --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      - name: Build
+        if: steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        run: ./gradlew :snapshot:build --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      - name: Stage this mod and the Anima it was built against
+        if: steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        run: ./gradlew :snapshot:smokeMods --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      # The EULA is the operator's legal choice and the script refuses to make it. This line is the
+      # repository owner recording that choice, as in build.yml.
+      - name: Boot the pair, spawn a Person, read it back
+        if: steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        run: scripts/smoke.sh snapshot
+        env:
+          SMOKE_EULA: 'true'
+          READY_TIMEOUT: '900'
+
+      - name: Upload the test reports
+        if: failure() && steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: autarkia-test-reports-snapshot-${{ steps.pick.outputs.minecraft }}
+          path: versions/snapshot/build/reports/tests/
+          retention-days: 14
+
+      # Whatever the outcome — a red build is a build that was tried. Best effort: a variable that
+      # cannot be written means one more attempt next hour, not a red run on top of the real one.
+      - name: Record the build as tried
+        if: always() && steps.pick.outputs.state == 'ready' && steps.tried.outputs.skip == 'false' && steps.anima.outputs.present == 'true'
+        env:
+          CI_TOKEN: ${{ secrets.CI_TOKEN }}
+        run: |
+          mc="${{ steps.pick.outputs.minecraft }}"
+          body=$(printf '{"value":"%s","description":"The newest Minecraft build the snapshot watch has tried (snapshot.yml)"}' "$mc")
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT -H "Authorization: token $CI_TOKEN" \
+                 -H 'Content-Type: application/json' -d "$body" "$REPO_API/actions/variables/SNAPSHOT_TRIED")
+          if [[ "$code" != 204 && "$code" != 200 ]]; then
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "Authorization: token $CI_TOKEN" \
+                   -H 'Content-Type: application/json' -d "$body" "$REPO_API/actions/variables/SNAPSHOT_TRIED")
+          fi
+          case "$code" in
+            200|201|204) echo "SNAPSHOT_TRIED=$mc" ;;
+            *) echo "::warning::could not record SNAPSHOT_TRIED=$mc (http $code) — this build will be tried again next hour" ;;
+          esac

@@ -10,7 +10,9 @@ stonecutter parameters {
     // this one and the multi-branch tree this was split out of, where the root had no
     // `mod.version` at all. `AutarkiaMod.VERSION` is the one consumer.
     swaps["mod_version"] = "\"${node.project.property("mod.version")}\";"
-    swaps["minecraft"] = "\"${node.metadata.version}\";"
+    // The id the game knows. For the snapshot node that is not the node's own version — see
+    // settings.gradle.kts — so the file it came from is asked first.
+    swaps["minecraft"] = "\"${node.project.findProperty("mod.minecraft") ?: node.metadata.version}\";"
     dependencies["fapi"] = node.project.property("deps.fabric_api") as String
 
     replacements {

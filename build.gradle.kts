@@ -52,6 +52,12 @@ val buildStamp = git("log", "-1", "--format=%cd", "--date=format:%Y%m%d%H%M%S")
 // Anima's version is now a PIN, read from stonecutter.properties.toml, not a number recomputed
 // from this repo's git tags. It could be recomputed while both mods shared a commit; they are
 // separate repositories now and this repo's history says nothing about the library's.
+// The Minecraft version this node builds against. A node's own version is a comparison key: for
+// the snapshot node it is Fabric Loader's normalised name (26.4-alpha.3), which Mojang publishes
+// nothing under, so the id the game and Maven know travels separately when the two differ. For
+// every committed target they are the same string. See settings.gradle.kts.
+val mcVersion: String = (findProperty("mod.minecraft") as String?) ?: sc.current.version
+
 val animaGroup = "dev.luizloyola"
 val animaVersion: String = sc.properties["deps.anima"]
 
@@ -62,9 +68,9 @@ val animaVersion: String = sc.properties["deps.anima"]
 // library built for a different Minecraft version, and a Maven coordinate can say anything at all.
 // Now a 26.1.2 build can only ever ask for anima-26.1.2, and asking for a version Anima has not
 // published fails the build outright instead of producing a pair that loads and misbehaves.
-val animaArtifact = "anima-${sc.current.version}"
+val animaArtifact = "anima-$mcVersion"
 
-version = "$modVersion+${sc.current.version}"
+version = "$modVersion+$mcVersion"
 base.archivesName = modId
 
 val requiredJava: JavaVersion = when {
@@ -137,7 +143,7 @@ dependencies {
         for (it in modules) modImplementation(fabricApi.module(it, sc.properties["deps.fabric_api"]))
     }
 
-    minecraft("com.mojang:minecraft:${sc.current.version}")
+    minecraft("com.mojang:minecraft:$mcVersion")
     // Applies Mojang Mappings on obfuscated versions
     loomx.applyMojangMappings()
 
@@ -538,7 +544,7 @@ tasks {
             "Implementation-Title" to (sc.properties["mod.name"] as String),
             "Implementation-Version" to modVersion,
             "Implementation-Build" to buildStamp,
-            "Minecraft-Version" to sc.current.version,
+            "Minecraft-Version" to mcVersion,
             "Anima-Version" to animaVersion,
         )
 
@@ -562,7 +568,7 @@ tasks {
 // Without MODRINTH_TOKEN set this is a dry run (files land in build/publishMods/).
 publishMods {
     file = loomx.modJar.flatMap { it.archiveFile }
-    displayName = "Autarkia $modVersion for MC ${sc.current.version}"
+    displayName = "Autarkia $modVersion for MC $mcVersion"
     version = project.version.toString()
     changelog = providers.environmentVariable("CHANGELOG").orElse("See the commit history.")
     type = ALPHA

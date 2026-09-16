@@ -42,8 +42,19 @@ NODE="${1:-$(grep -oP 'vcsVersion = "\K[^"]+' settings.gradle.kts)}"
 # ── The pins, READ and never written ───────────────────────────────────────────────────────────
 # Every version here comes out of the files the jars were built from. A smoke that carried its own
 # copy of a version could boot a pairing the build never produced, and report green on it.
-MC="$(sed -n "s/^[[:space:]]*\"${NODE//./\\.}\" to \"\([^\"]*\)\",[[:space:]]*$/\1/p" settings.gradle.kts)"
-[[ -n "$MC" ]] || die "no Minecraft version for node '$NODE' in settings.gradle.kts"
+if [[ "$NODE" == snapshot ]]; then
+    # The opt-in node: its pins live in the file scripts/snapshot.sh wrote, not in settings.
+    SNAP=versions/snapshot/stonecutter.properties.toml
+    [[ -f "$SNAP" ]] || die "no snapshot node — run scripts/snapshot.sh first"
+    MC="$(sed -n 's/^mod\.minecraft = "\([^"]*\)".*/\1/p' "$SNAP")"
+    FAPI="$(sed -n 's/^deps\.fabric_api = "\([^"]*\)".*/\1/p' "$SNAP")"
+else
+    MC="$(sed -n "s/^[[:space:]]*\"${NODE//./\\.}\" to \"\([^\"]*\)\",[[:space:]]*$/\1/p" settings.gradle.kts)"
+    # Inside this node's own table.
+    FAPI="$(awk -v s="[\"$NODE\"]" '$0==s{f=1;next} /^\[/{f=0} f && /^deps\.fabric_api/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)"
+fi
+[[ -n "$MC" ]] || die "no Minecraft version for node '$NODE'"
+[[ -n "$FAPI" ]] || die "no deps.fabric_api for node '$NODE'"
 
 # Top level of the TOML (before the first ["<node>"] table).
 LOADER="$(awk '/^\[/{exit} /^deps\.fabric_loader/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)"
@@ -51,10 +62,6 @@ LOADER="$(awk '/^\[/{exit} /^deps\.fabric_loader/{sub(/.*= *"/,"");sub(/".*/,"")
 
 ANIMA_PIN="$(awk '/^\[/{exit} /^deps\.anima/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)"
 [[ -n "$ANIMA_PIN" ]] || die "no deps.anima in stonecutter.properties.toml"
-
-# Inside this node's own table.
-FAPI="$(awk -v s="[\"$NODE\"]" '$0==s{f=1;next} /^\[/{f=0} f && /^deps\.fabric_api/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)"
-[[ -n "$FAPI" ]] || die "no deps.fabric_api for [$NODE] in stonecutter.properties.toml"
 
 # ── The JVM, per node ──────────────────────────────────────────────────────────────────────────
 # 26.x runs on 25, 1.21.x on 21. Getting this wrong is an UnsupportedClassVersionError a long way

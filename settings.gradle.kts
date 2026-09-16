@@ -39,11 +39,27 @@ val targets = listOf(
     "26.3.x" to "26.3",
 )
 
+// The snapshot node: a Minecraft version that is not a target yet, usually Mojang's newest
+// build. It exists only while the file scripts/snapshot.sh writes does, and git ignores that
+// file, so the committed node set never changes. Its version is what Fabric Loader itself calls
+// the build — 26.4-snapshot-3 is 26.4-alpha.3 — so it sorts after every 26.3 and before 26.4,
+// and a change first seen in a snapshot is gated `//? if >=26.4-alpha`: 26.4 and the road to it.
+// The id the game and Maven know travels in the file as `mod.minecraft`.
+val snapshotSemver: String? = file("versions/snapshot/stonecutter.properties.toml")
+    .takeIf { it.exists() }
+    ?.let { f ->
+        Regex("""^snapshot\.semver\s*=\s*"([^"]+)"""", RegexOption.MULTILINE)
+            .find(f.readText())?.groupValues?.get(1)
+            ?: error("${f.path} has no snapshot.semver — rewrite it with scripts/snapshot.sh, "
+                    + "or remove it with scripts/snapshot.sh off")
+    }
+
 stonecutter {
     create(rootProject) {
         // A ROOT branch: one mod, one source root at `src/`, node paths of `:<version>` rather
         // than the `:<mod>:<version>` this used while it shared a tree with Anima.
         targets.forEach { (proj, ver) -> version(proj, ver) }
+        snapshotSemver?.let { version("snapshot", it) }
 
         // Primary dev target: 26.1.x (Sinytra Connector's primary supported line)
         vcsVersion = "26.1.x"
