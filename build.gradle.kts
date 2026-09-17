@@ -198,7 +198,14 @@ dependencies {
     // Named by configuration rather than testFixtures(project(...)): the main dependency above
     // already takes Anima through an explicit `namedElements` configuration, and mixing that
     // with normal variant selection collides on the project's own capability.
-    testImplementation(testFixtures("$animaGroup:$animaArtifact:$animaVersion"))
+    //
+    // NON-TRANSITIVE: the fixtures variant depends on Anima's main component, which puts the RAW
+    // published jar on the test runtime classpath ahead of Loom's remapped copy. Below 26.x that
+    // jar is intermediary, so `AnimaTasks.<clinit>` dies on `class_4844` where the test JVM has a
+    // named Minecraft. 26.x is unobfuscated and remaps to itself, which hid this on every node but
+    // 1.21.11 — and `continue-on-error` hid THAT everywhere but the nightly.
+    testImplementation((testFixtures("$animaGroup:$animaArtifact:$animaVersion") as ModuleDependency)
+            .apply { isTransitive = false })
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
