@@ -115,6 +115,14 @@ public final class FellTree implements PrimitiveTask {
     public static final int NO_WAY_IN_TICKS = 100;
 
     /**
+     * How long a tree that beat the chop stays off {@link ChopForLogs}' menu. An achieve-goal's
+     * next round assumes the last attempt changed something; without the mark it picks the same
+     * nearest unreachable tree every round until the rounds cap (lost in the 2026-09-06 rewrite,
+     * found 2026-09-23).
+     */
+    public static final int AVOID_TICKS = 2400;
+
+    /**
      * How long a body may hang with nothing under its feet before its position is believed
      * anyway — two seconds; a fall is over well before, and a body stood on something the probe
      * calls air (a lily pad) should not wait forever.
@@ -914,6 +922,9 @@ public final class FellTree implements PrimitiveTask {
                 + (onLeaves == 0 ? "" : ", " + onLeaves + " items left on the leaves"));
         phase = "felled";
         release(ctx);
+        // Nothing stands — a real fell, or a remembered tree already gone. Either way the memory
+        // must say so, or ChopForLogs picks this stump again next round, for 0 logs a tick.
+        ctx.knowledge().forget(Pois.TREE, anchor);
         return TaskStatus.SUCCESS;
     }
 
@@ -1600,6 +1611,7 @@ public final class FellTree implements PrimitiveTask {
         phase = "gave up — " + why;
         say(ctx, phase);
         release(ctx);
+        ctx.knowledge().avoid(Pois.TREE, anchor, ctx.percepts().time() + AVOID_TICKS);
         return TaskStatus.FAILED;
     }
 

@@ -11,6 +11,7 @@ import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.RiseState;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Drop;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -18,6 +19,7 @@ import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.Entry;
+import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -35,6 +37,8 @@ class FellTreeTest {
 
     private static final int BASE = FakeProbe.GROUND_Y + 1;
     private static final Pos ANCHOR = new Pos(0, BASE, 0);
+    /** A second remembered tree, farther from the body than {@link #ANCHOR}. */
+    private static final Pos FAR = new Pos(0, BASE, 40);
     /** The south side's feet cell — nearest to a body standing to the south. */
     private static final Pos SOUTH = new Pos(0, BASE, 1);
 
@@ -46,6 +50,16 @@ class FellTreeTest {
     /** A seven-log trunk: its top is out of reach from the ground beside it. */
     private void trunk() {
         trunk(7);
+    }
+
+    /** A birch remembered at {@code anchor}, the way perception notes one. */
+    private void remember(Pos anchor) {
+        ctx.knowledge().note(new PoiMemory(Pois.TREE, "minecraft:birch_log", null, anchor,
+                new Region(anchor, new Pos(anchor.x(), anchor.y() + 6, anchor.z())), 7, false, 0), 8);
+    }
+
+    private boolean remembers(Pos anchor) {
+        return ctx.knowledge().all(Pois.TREE).stream().anyMatch(m -> m.anchor().equals(anchor));
     }
 
     private void trunk(int logs) {
@@ -944,6 +958,56 @@ class FellTreeTest {
         assertTrue(task.failureDetail().startsWith("no way in — "), task.failureDetail());
         assertTrue(ticks >= FellTree.NO_WAY_IN_TICKS, "not on the spot: the ground may change");
         assertEquals(1, said("gave up").size());
+    }
+
+    @Test
+    void aFelledTreeIsForgottenSoTheNextRoundTakesAnother() {
+        trunk();
+        pack(4);
+        standSouth();
+        remember(ANCHOR);
+        remember(FAR);
+        ChopForLogs chop = new ChopForLogs(Stock.LOGS);
+        FellTree first = (FellTree) chop.decompose(ctx).get(0);
+        assertEquals(ANCHOR, first.anchor(), "the nearer tree first");
+
+        assertEquals(TaskStatus.SUCCESS, drive(first, 400));
+
+        assertEquals(FAR, ((FellTree) chop.decompose(ctx).get(0)).anchor(),
+                "a remembered stump won every round and was felled for 0 logs a tick (2026-09-23)");
+    }
+
+    @Test
+    void aRememberedTreeAlreadyGoneIsForgotten() {
+        standSouth();
+        remember(ANCHOR);
+
+        assertEquals(TaskStatus.SUCCESS, drive(400), "nothing stands, so nothing is left to do");
+        assertFalse(remembers(ANCHOR), "and the memory says so, or the next round comes back");
+    }
+
+    @Test
+    void aTreeWithNoWayInIsAvoidedForAWhile() {
+        trunk();
+        standSouth();
+        for (Pos cell : List.of(new Pos(0, BASE - 1, -1), new Pos(1, BASE - 1, 0),
+                new Pos(0, BASE - 1, 1), new Pos(-1, BASE - 1, 0))) {
+            ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.WATER);
+        }
+        remember(ANCHOR);
+        remember(FAR);
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; status == TaskStatus.RUNNING && i < 2 * FellTree.NO_WAY_IN_TICKS; i++) {
+            status = task.tick(ctx);
+        }
+        assertEquals(TaskStatus.FAILED, status);
+
+        long now = ctx.percepts.time;
+        assertTrue(ctx.knowledge().isAvoided(Pois.TREE, ANCHOR, now));
+        assertEquals(FAR, ((FellTree) new ChopForLogs(Stock.LOGS).decompose(ctx).get(0)).anchor(),
+                "a tree given up on was picked again every round, to the rounds cap (2026-09-23)");
+        assertFalse(ctx.knowledge().isAvoided(Pois.TREE, ANCHOR, now + FellTree.AVOID_TICKS),
+                "for a while: the ground may change");
     }
 
     @Test
