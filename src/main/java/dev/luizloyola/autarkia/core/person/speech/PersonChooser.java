@@ -21,7 +21,7 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The part with the personality — v1's seven-rung ladder, first match wins, every rung gated on
+ * The part with the personality — an eight-rung ladder, first match wins, every rung gated on
  * the act being in {@link Turn#applicable()}: the picker filters, this only wants.
  *
  * <ol>
@@ -47,7 +47,10 @@ import org.jspecify.annotations.Nullable;
  *       courtesy is marked as one ({@link #ANSWER}) and earns no courtesy back: owed to what was
  *       volunteered, never to an answer — two content settlers trading answers talked out the
  *       whole turn cap (2026-09-14). A deed of theirs is answered with the latest of this body's
- *       own, when it has one — the first reply that follows from what it answers (2026-09-23).</li>
+ *       own, when it has one — the first reply that follows from what it answers (2026-09-23).
+ *       Only ever something this body has not already brought up here ({@link Topics.Said}).</li>
+ *   <li>Rung 6 would speak but has nothing new left to say: say goodbye. Running out of things to
+ *       say is how a chat ends, not a reason to say them again (decision: Luiz, 2026-09-23).</li>
  *   <li>Nothing pressing, and nobody has spoken for this body's patience: say goodbye. Leaving
  *       the moment nothing is pressing reads as bolting — two seconds after learning a name, on
  *       the first client run (decision: Luiz, 2026-09-13).</li>
@@ -87,15 +90,21 @@ public final class PersonChooser implements Chooser {
             // No act-level variety roll here: rungs 4 and 5 already claim any card such a roll
             // could legally deal, so act variety is structurally impossible at this rung —
             // conversational variety comes from the topic draw below and the reply beat's jitter.
-            Map<String, String> payload = answersADeed(turn)
-                    ? Topics.latestDeed(ctx).orElseGet(() -> Topics.pick(ctx))
-                    : Topics.pick(ctx);
+            // orElseThrow is safe: the rung's own predicate checked something new is left.
+            Topics.Said said = saidHere(turn);
+            Map<String, String> payload = (answersADeed(turn)
+                    ? Topics.latestDeed(ctx, said).or(() -> Topics.pick(ctx, said))
+                    : Topics.pick(ctx, said)).orElseThrow();
             if (!wantsCompany(ctx)) {
                 Map<String, String> courtesy = new HashMap<>(payload);
                 courtesy.put(ANSWER, "1");
                 payload = courtesy;
             }
             return new Line(PersonActs.SMALL_TALK, payload);
+        }
+
+        if (runsOutOfThingsToSay(ctx, turn)) {
+            return Line.of(SpeechActs.END_CHAT);
         }
 
         if (saysGoodbye(ctx, turn)) {
@@ -136,7 +145,9 @@ public final class PersonChooser implements Chooser {
                         + (answersSmallTalk(turn) ? ", theirs to answer" : "")
                         + (answersADeed(turn) ? ", a deed of theirs" : "")
                         + ", small_talk " + offer(turn, PersonActs.SMALL_TALK)),
-                new Rung(saysGoodbye(ctx, turn), "7 say goodbye",
+                new Rung(runsOutOfThingsToSay(ctx, turn), "7 out of things to say",
+                        saidFacts(ctx, turn) + ", end_chat " + offer(turn, SpeechActs.END_CHAT)),
+                new Rung(saysGoodbye(ctx, turn), "8 say goodbye",
                         "silent " + silence(ctx, turn) + " of " + patience(ctx) + " ticks, end_chat "
                                 + offer(turn, SpeechActs.END_CHAT)));
 
@@ -182,8 +193,29 @@ public final class PersonChooser implements Chooser {
     }
 
     private static boolean makesSmallTalk(BrainContext ctx, Turn turn) {
+        return wouldChat(ctx, turn) && Topics.anythingLeft(ctx, saidHere(turn));
+    }
+
+    /** Rung 7: rung 6's reasons to speak hold, and everything this body could say, it has said. */
+    private static boolean runsOutOfThingsToSay(BrainContext ctx, Turn turn) {
+        return wouldChat(ctx, turn) && !Topics.anythingLeft(ctx, saidHere(turn))
+                && turn.applicable().contains(SpeechActs.END_CHAT);
+    }
+
+    /** Rung 6's reasons to speak, before asking whether there is anything new to say. */
+    private static boolean wouldChat(BrainContext ctx, Turn turn) {
         return turn.applicable().contains(PersonActs.SMALL_TALK)
                 && (wantsCompany(ctx) || answersSmallTalk(turn));
+    }
+
+    /**
+     * What this body has already brought up in THIS record — read the way {@link #alreadyAsked}
+     * reads it: in a two-party record a line the counterpart did not say is this body's own.
+     */
+    private static Topics.Said saidHere(Turn turn) {
+        AgentId counterpart = turn.counterpart().orElse(null);
+        return Topics.Said.in(turn.encounter().transcript(),
+                line -> !line.system() && !line.author().equals(counterpart));
     }
 
     private static boolean wantsCompany(BrainContext ctx) {
@@ -235,6 +267,14 @@ public final class PersonChooser implements Chooser {
         return turn.awaiting()
                 .map(asked -> "waiting: " + asked.act() + ", ball is theirs")
                 .orElse("nothing outstanding");
+    }
+
+    /** What rung 7 tells the readout: how much has been said here, and whether anything is left. */
+    private static String saidFacts(BrainContext ctx, Turn turn) {
+        Topics.Said said = saidHere(turn);
+        return "said " + said.topics().size() + " topic(s) and " + said.deeds().size()
+                + " deed(s) here, " + (Topics.anythingLeft(ctx, said) ? "something new left"
+                        : "nothing new left");
     }
 
     private static String offer(Turn turn, SpeechAct act) {

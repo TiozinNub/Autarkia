@@ -384,7 +384,7 @@ class PersonChooserTest {
 
         List<String> lines = chooser.explain(ctx, turn);
 
-        assertEquals(7, lines.size(), "one line per rung, whatever happens");
+        assertEquals(8, lines.size(), "one line per rung, whatever happens");
         List<String> fired = lines.stream().filter(line -> line.startsWith("fired")).toList();
         assertEquals(1, fired.size(), "first match wins — exactly one rung takes the turn");
         assertTrue(fired.get(0).contains("5 ask their name"), fired.get(0));
@@ -395,9 +395,12 @@ class PersonChooserTest {
         assertTrue(lines.get(1).contains("pending none"), lines.get(1));
         assertTrue(lines.get(4).contains("seen at INDIVIDUAL"), lines.get(4));
         assertTrue(lines.get(5).contains("company 0.50 < content 0.85"), lines.get(5));
-        // Rung 7 reads skipped: rung 5 spoke, and the silence it waits for has not run either.
+        // Rung 7 reads skipped: nothing has been said here yet, so plenty is left to say.
         assertTrue(lines.get(6).startsWith("skipped"), lines.get(6));
-        assertTrue(lines.get(6).contains("silent 0 of 300 ticks"), lines.get(6));
+        assertTrue(lines.get(6).contains("something new left"), lines.get(6));
+        // Rung 8 reads skipped: rung 5 spoke, and the silence it waits for has not run either.
+        assertTrue(lines.get(7).startsWith("skipped"), lines.get(7));
+        assertTrue(lines.get(7).contains("silent 0 of 300 ticks"), lines.get(7));
     }
 
     // ── the full two-party conversation ──────────────────────────────────────────────────────
@@ -594,5 +597,73 @@ class PersonChooserTest {
         assertEquals(Deed.of(Doings.EATING), Recounting.read(line.payload()).orElseThrow().deed(),
                 "their day, answered with ours — not a fresh random topic");
         assertTrue(line.payload().containsKey(PersonChooser.ANSWER), "and still a courtesy");
+    }
+
+    // ── nothing said twice ───────────────────────────────────────────────────────────────────
+
+    /** A line of this body's own small talk about {@code topic}. */
+    private Utterance mine(String topic) {
+        return new Utterance(ctx.self, PersonActs.SMALL_TALK.key(), Map.of("topic", topic), 0);
+    }
+
+    /** Their small talk about the weather — a line of theirs to answer, not a monologue of ours. */
+    private Utterance theirs() {
+        return new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Map.of("topic", "weather"), 0);
+    }
+
+    private Chooser.Turn chatting(Encounter e) {
+        return new Chooser.Turn(e, List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT),
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
+    }
+
+    @Test
+    @DisplayName("priority 6 never brings up a topic it already brought up here")
+    void priority6NeverRepeatsATopic() {
+        ctx.percepts.company.setValue(0.5);
+        Encounter e = freshEncounter();
+        List<String> topics = Topics.options(ctx);
+        for (String topic : topics.subList(1, topics.size())) {
+            e.append(mine(topic));
+        }
+        e.append(theirs());
+
+        for (int i = 0; i < 20; i++) {
+            assertEquals(topics.get(0), chooser.choose(ctx, chatting(e)).payload().get("topic"),
+                    "the one thing not yet said, every time");
+        }
+    }
+
+    @Test
+    @DisplayName("priority 7: everything said, it says goodbye at once rather than again")
+    void priority7SaysGoodbyeWhenOutOfThingsToSay() {
+        ctx.percepts.company.setValue(0.5); // still wants company — and has nothing left to say
+        Encounter e = freshEncounter();
+        for (String topic : Topics.options(ctx)) {
+            e.append(mine(topic));
+        }
+        e.append(theirs());
+
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, chatting(e)),
+                "running out of things to say is how a chat ends");
+        String rung7 = chooser.explain(ctx, chatting(e)).get(6);
+        assertTrue(rung7.startsWith("fired:   7 out of things to say"), rung7);
+    }
+
+    @Test
+    @DisplayName("a deed already told is not the answer to theirs — the next untold one is")
+    void aToldDeedDoesNotAnswerAgain() {
+        ctx.percepts.company.setValue(0.5);
+        History.Entry ate = new History.Entry(Deed.of(Doings.EATING), 0, 1);
+        History.Entry fled = new History.Entry(Deed.of(Doings.FLEEING, Slot.entity("zombie")), 0, 1);
+        ctx.history.add(ate);
+        ctx.history.add(fled);
+        Encounter e = freshEncounter();
+        e.append(new Utterance(ctx.self, PersonActs.SMALL_TALK.key(), Recounting.payload(ate, 0), 0));
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Recounting.payload(new History.Entry(Deed.of(Doings.SORTING_PACK), 0, 1), 0), 0));
+
+        assertEquals(fled.deed(),
+                Recounting.read(chooser.choose(ctx, chatting(e)).payload()).orElseThrow().deed());
     }
 }
