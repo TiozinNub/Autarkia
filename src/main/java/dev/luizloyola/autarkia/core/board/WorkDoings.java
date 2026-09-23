@@ -1,0 +1,56 @@
+package dev.luizloyola.autarkia.core.board;
+
+import dev.luizloyola.anima.core.brain.history.Doing;
+import dev.luizloyola.anima.core.brain.history.Doings;
+import dev.luizloyola.anima.core.brain.history.Slot;
+import dev.luizloyola.anima.core.inv.ItemSpec;
+import java.util.List;
+import java.util.TreeSet;
+
+/**
+ * A settler's work as they tell it afterwards — Autarkia's doings, declared by the board's work
+ * items the way Anima's instincts declare theirs (2026-09-23-small-talk-history-design.md).
+ *
+ * <p>Registered the moment this class loads; {@code AutarkiaMod} touches it at bootstrap, or a
+ * saved history naming one of these would load before the word existed and be dropped.
+ */
+public final class WorkDoings {
+
+    /** Slots: the goods, and what they were for. */
+    public static final Doing GATHERING = Doings.register(new Doing(
+            "gathering", "autarkia.doing.gathering", List.of("item", "for"), true));
+    /** Slot: the goods a standing want keeps. */
+    public static final Doing STOCKING_UP = Doings.register(new Doing(
+            "stocking_up", "autarkia.doing.stocking_up", List.of("item"), true));
+    /** Slot: what was cleared — the clearing's kind. */
+    public static final Doing CLEARING = Doings.register(new Doing(
+            "clearing", "autarkia.doing.clearing", List.of("what"), true));
+    /** Slot: what the ground was being walked for. */
+    public static final Doing SURVEYING = Doings.register(new Doing(
+            "surveying", "autarkia.doing.surveying", List.of("what"), true));
+    public static final Doing STOWING = Doings.register(new Doing(
+            "stowing", "autarkia.doing.stowing", List.of(), true));
+
+    /**
+     * What every gather delivers to today. A building project that starts gathers will pass what it
+     * is building instead, which is why the slot exists before anything fills it differently.
+     */
+    public static final Slot FOR_THE_YARD = Slot.lang("autarkia.purpose.yard");
+
+    private WorkDoings() {
+    }
+
+    /**
+     * A spec as words: one of Autarkia's families by its own lang key, a literal the gather command
+     * built by its first item, which the game names.
+     */
+    public static Slot goods(ItemSpec spec) {
+        return ItemSpec.literalIds(spec)
+                .map(ids -> Slot.item(new TreeSet<>(ids).first()))
+                .orElseGet(() -> Slot.lang("autarkia.goods." + spec.name()));
+    }
+
+    public static Slot cleared(Clearing clearing) {
+        return Slot.lang("autarkia.clearing." + clearing.id());
+    }
+}

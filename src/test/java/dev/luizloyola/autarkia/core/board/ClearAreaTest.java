@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.history.Slot;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
@@ -1102,5 +1104,15 @@ class ClearAreaTest {
 
         board.tick(1L);
         assertTrue(board.isEmpty(), "a satisfied project is dropped by the host's beat");
+    }
+
+    @Test
+    void itsErrandsTellOfSurveyingAndClearingTheirKind() {
+        ClearArea project = posted(ABLE, oneSlice());
+        Slot kind = Slot.lang("autarkia.clearing." + ABLE.id());
+        assertEquals(Deed.of(WorkDoings.SURVEYING, kind), surveyItem(project).doing());
+
+        project.completed(project.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
+        assertEquals(Deed.of(WorkDoings.CLEARING, kind), clearItem(project).doing());
     }
 }

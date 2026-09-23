@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.history.Slot;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
@@ -207,5 +209,13 @@ class KeepStockedTest {
         }
         assertTrue(reloaded.viewFor(() -> me).bestAvailable(ctx).isEmpty(),
                 "still sitting out the retry it was told to sit out");
+    }
+
+    @Test
+    void theWantTellsOfStockingUpOnItsGoods() {
+        ticks(KeepStocked.CHECK_INTERVAL * 2);
+
+        assertEquals(Deed.of(WorkDoings.STOCKING_UP, Slot.lang("autarkia.goods.logs")),
+                work.bestAvailable(ctx).orElseThrow().doing());
     }
 }

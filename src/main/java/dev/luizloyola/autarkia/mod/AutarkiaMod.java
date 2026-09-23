@@ -33,6 +33,7 @@ import dev.luizloyola.autarkia.core.person.speech.PersonActs;
 import dev.luizloyola.autarkia.core.person.speech.PersonChooser;
 import dev.luizloyola.autarkia.core.tree.ChopForLogs;
 import dev.luizloyola.autarkia.core.board.Stock;
+import dev.luizloyola.autarkia.core.board.WorkDoings;
 import java.util.List;
 import java.util.Objects;
 import dev.luizloyola.autarkia.core.tree.Pois;
@@ -91,6 +92,9 @@ public class AutarkiaMod implements ModInitializer {
         // initializer only runs once something reads the class, so this touch is the whole
         // registration (NeedKind's idiom); Anima's registry throws if it ever ran twice.
         Objects.requireNonNull(PersonActs.ASK_IDENTITY);
+        // What a settler's work is, as they tell it — the same idiom, and it has to land before any
+        // Person loads: a saved history naming a doing nobody has declared yet is dropped.
+        Objects.requireNonNull(WorkDoings.GATHERING);
         // The part with the personality — must come after the touch above: Picker.applicable()
         // walks SpeechActs.all() on every turn, so registration has to be finished before a
         // chooser can be handed a conversation to decide on.

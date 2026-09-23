@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.history.Slot;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
@@ -868,5 +870,15 @@ class GatherTest {
 
         assertTrue(further.offerableTo(further.open().get(0), KYLE, new BoardBrainContext()),
                 "and it actually expires — a saved cooldown is not a permanent ban");
+    }
+
+    @Test
+    void aSliceAndItsTripBothTellOfGatheringForTheYard() {
+        Gather project = posted(64);
+        Deed told = Deed.of(WorkDoings.GATHERING, Slot.lang("autarkia.goods.logs"),
+                WorkDoings.FOR_THE_YARD);
+
+        assertEquals(told, project.open().get(0).doing());
+        assertEquals(told, claims(project, KYLE, new BoardBrainContext()).doing());
     }
 }

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.history.Deed;
+import dev.luizloyola.anima.core.brain.task.FakeDoings;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
@@ -215,6 +217,11 @@ class KitGateTest {
         @Override
         public Task root() {
             throw new UnsupportedOperationException("no test here runs the work");
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(FakeDoings.IDLED);
         }
 
         @Override

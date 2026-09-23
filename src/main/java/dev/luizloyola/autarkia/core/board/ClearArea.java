@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.Coverage;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
@@ -893,6 +894,11 @@ public final class ClearArea implements PartyProject {
         }
 
         @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.SURVEYING, WorkDoings.cleared(clearing));
+        }
+
+        @Override
         public String describe() {
             return "survey slice " + (index + 1) + "/" + slices.size() + " of " + clearing.label();
         }
@@ -929,6 +935,11 @@ public final class ClearArea implements PartyProject {
             Task work = yard == null ? felling : new HaulingErrand(felling, yard, HAUL_LINE);
             // Outermost, so the walk out, the felling and the walk to the yard all count.
             return new SweepingErrand(work, ground);
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.CLEARING, WorkDoings.cleared(clearing));
         }
 
         /** The clearing kind's answer, not this project's — see {@link Clearing#kit()}. */

@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Task;
@@ -149,6 +150,11 @@ public final class KeepStocked implements PersonalProject {
         @Override
         public Task root() {
             return new ObtainItem(spec, target);
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.STOCKING_UP, WorkDoings.goods(spec));
         }
 
         @Override

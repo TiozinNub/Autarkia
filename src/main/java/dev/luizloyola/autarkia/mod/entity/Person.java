@@ -40,6 +40,7 @@ import dev.luizloyola.autarkia.core.person.PersonSpecies;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.anima.mod.brain.BrainDriver;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
+import dev.luizloyola.anima.core.brain.history.History;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.autarkia.core.board.ComposedBoards;
@@ -60,6 +61,7 @@ import dev.luizloyola.anima.mod.nav.Swimmer;
 import dev.luizloyola.autarkia.mod.brain.AutarkiaTasks;
 import dev.luizloyola.autarkia.mod.person.PersonAppearance;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -164,6 +166,7 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_RANDOM = "BrainRandom";
     /** Drives sitting out a fail-cooldown, by name, with the ticks they have left. */
     private static final String TAG_BRAIN_COOLDOWNS = "BrainCooldowns";
+    private static final String TAG_BRAIN_HISTORY = "BrainHistory";
     /** The plan in progress and the grant that owns it — one tag, never two. */
     private static final String TAG_BRAIN_PLAN = "BrainPlan";
     /** What this body remembers of other bodies — tracks, linger and herds. */
@@ -1375,6 +1378,12 @@ public class Person extends Avatar implements AgentBody {
         if (!cooldowns.isEmpty()) {
             output.store(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS, cooldowns);
         }
+        // What they did lately — what they talk about. Losing it on a restart would leave a whole
+        // settlement with nothing to say about the day it just had.
+        List<History.Entry> history = this.brain.history();
+        if (!history.isEmpty()) {
+            output.store(TAG_BRAIN_HISTORY, BrainState.HISTORY, history);
+        }
         // The plan and its grant, as one field. A body mid-errand that came back with an empty
         // executor would re-decide from scratch, which is a reboot it noticed.
         output.store(TAG_BRAIN_PLAN, BrainState.brain(), this.brain.snapshot());
@@ -1433,6 +1442,7 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_BRAIN_RANDOM, Codec.LONG).ifPresent(this.brain.random()::restore);
         input.read(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS)
                 .ifPresent(this.brain::restoreCooldowns);
+        input.read(TAG_BRAIN_HISTORY, BrainState.HISTORY).ifPresent(this.brain::restoreHistory);
         this.pendingBrain = input.read(TAG_BRAIN_PLAN, BrainState.brain()).orElse(null);
         this.pendingBoard = input.read(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD).orElse(null);
         input.read(TAG_BEINGS, SenseState.BEINGS).ifPresent(this.beingSense::restore);

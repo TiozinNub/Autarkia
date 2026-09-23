@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.Picker;
+import dev.luizloyola.anima.core.social.speech.Recounting;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
@@ -45,7 +46,8 @@ import org.jspecify.annotations.Nullable;
  *       the player chatted at it was the first client run's second finding (2026-09-13). A
  *       courtesy is marked as one ({@link #ANSWER}) and earns no courtesy back: owed to what was
  *       volunteered, never to an answer — two content settlers trading answers talked out the
- *       whole turn cap (2026-09-14).</li>
+ *       whole turn cap (2026-09-14). A deed of theirs is answered with the latest of this body's
+ *       own, when it has one — the first reply that follows from what it answers (2026-09-23).</li>
  *   <li>Nothing pressing, and nobody has spoken for this body's patience: say goodbye. Leaving
  *       the moment nothing is pressing reads as bolting — two seconds after learning a name, on
  *       the first client run (decision: Luiz, 2026-09-13).</li>
@@ -85,7 +87,9 @@ public final class PersonChooser implements Chooser {
             // No act-level variety roll here: rungs 4 and 5 already claim any card such a roll
             // could legally deal, so act variety is structurally impossible at this rung —
             // conversational variety comes from the topic draw below and the reply beat's jitter.
-            Map<String, String> payload = Topics.pick(ctx);
+            Map<String, String> payload = answersADeed(turn)
+                    ? Topics.latestDeed(ctx).orElseGet(() -> Topics.pick(ctx))
+                    : Topics.pick(ctx);
             if (!wantsCompany(ctx)) {
                 Map<String, String> courtesy = new HashMap<>(payload);
                 courtesy.put(ANSWER, "1");
@@ -130,6 +134,7 @@ public final class PersonChooser implements Chooser {
                 new Rung(makesSmallTalk(ctx, turn), "6 small talk", "company " + number(company)
                         + (company < boundary ? " < " : " ≥ ") + "content " + number(boundary)
                         + (answersSmallTalk(turn) ? ", theirs to answer" : "")
+                        + (answersADeed(turn) ? ", a deed of theirs" : "")
                         + ", small_talk " + offer(turn, PersonActs.SMALL_TALK)),
                 new Rung(saysGoodbye(ctx, turn), "7 say goodbye",
                         "silent " + silence(ctx, turn) + " of " + patience(ctx) + " ticks, end_chat "
@@ -196,6 +201,13 @@ public final class PersonChooser implements Chooser {
                         && line.act().equals(PersonActs.SMALL_TALK.key())
                         && !line.payload().containsKey(ANSWER))
                 .isPresent();
+    }
+
+    /** Whether the small talk owed an answer was the counterpart telling of their own day. */
+    private static boolean answersADeed(Turn turn) {
+        return answersSmallTalk(turn) && Picker.lastSpoken(turn.encounter())
+                .map(line -> line.payload().containsKey(Recounting.DID))
+                .orElse(false);
     }
 
     private static boolean saysGoodbye(BrainContext ctx, Turn turn) {

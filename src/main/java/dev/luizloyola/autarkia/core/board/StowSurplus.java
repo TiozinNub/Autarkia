@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.brain.task.Task;
@@ -149,6 +150,11 @@ public final class StowSurplus implements PersonalProject {
         @Override
         public Task root() {
             return new PutAwaySurplus();
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.STOWING);
         }
 
         @Override

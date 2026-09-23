@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.inv.ItemCall;
@@ -134,5 +135,15 @@ class StowSurplusTest {
         assertTrue(bid < 0.5,
                 "under what a posted clear-area costs, so tidying never outranks the job");
         assertFalse(stow.finished(), "and it is never done");
+    }
+
+    @Test
+    void theErrandTellsOfStowing() {
+        BoardBrainContext ctx = new BoardBrainContext();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        StowSurplus stow = new StowSurplus(0);
+        beats(stow, ctx, 2);
+
+        assertEquals(Deed.of(WorkDoings.STOWING), stow.open().get(0).doing());
     }
 }

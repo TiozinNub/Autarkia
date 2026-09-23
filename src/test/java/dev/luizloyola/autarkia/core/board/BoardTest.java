@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.history.Deed;
+import dev.luizloyola.anima.core.brain.task.FakeDoings;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
@@ -604,6 +606,11 @@ class BoardTest {
         }
 
         @Override
+        public Deed doing() {
+            return Deed.of(FakeDoings.IDLED);
+        }
+
+        @Override
         public String describe() {
             return name;
         }
@@ -625,6 +632,11 @@ class BoardTest {
         }
 
         @Override
+        public Deed doing() {
+            return Deed.of(FakeDoings.IDLED);
+        }
+
+        @Override
         public String describe() {
             return name;
         }
@@ -635,6 +647,11 @@ class BoardTest {
         @Override
         public Task root() {
             throw new UnsupportedOperationException("never run in a board test");
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(FakeDoings.IDLED);
         }
 
         @Override

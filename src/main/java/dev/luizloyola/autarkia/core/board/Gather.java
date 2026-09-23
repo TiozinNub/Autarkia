@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.board;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
@@ -620,6 +621,11 @@ public final class Gather implements PartyProject {
         }
 
         @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.GATHERING, WorkDoings.goods(spec), WorkDoings.FOR_THE_YARD);
+        }
+
+        @Override
         public String describe() {
             return "fetch " + size + " " + spec.name() + " to " + at(yard);
         }
@@ -667,6 +673,11 @@ public final class Gather implements PartyProject {
         @Override
         public Task root() {
             return new GatheringErrand(spec, size, yard);
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.GATHERING, WorkDoings.goods(spec), WorkDoings.FOR_THE_YARD);
         }
 
         @Override

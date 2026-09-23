@@ -5,6 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.social.speech.Recounting;
+import dev.luizloyola.anima.core.brain.history.Slot;
+import dev.luizloyola.anima.core.brain.history.History;
+import dev.luizloyola.anima.core.brain.history.Doings;
+import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.AgentProfile;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
@@ -567,5 +572,27 @@ class PersonChooserTest {
         public RandomGenerator random() {
             return body.random();
         }
+    }
+
+    @Test
+    @DisplayName("priority 6 answers a deed of theirs with the latest of its own")
+    void priority6AnswersADeedWithADeed() {
+        ctx.percepts.company.setValue(1.0);
+        History.Entry mine = new History.Entry(Deed.of(Doings.EATING), 0, 1);
+        ctx.history.add(mine);
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Recounting.payload(new History.Entry(
+                        Deed.of(Doings.FLEEING, Slot.entity("zombie")), 0, 1), 0), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(),
+                Optional.empty(), true, Optional.of(otherId.asPerson()));
+
+        Chooser.Line line = chooser.choose(ctx, turn);
+
+        assertEquals(PersonActs.SMALL_TALK, line.act());
+        assertEquals(Deed.of(Doings.EATING), Recounting.read(line.payload()).orElseThrow().deed(),
+                "their day, answered with ours — not a fresh random topic");
+        assertTrue(line.payload().containsKey(PersonChooser.ANSWER), "and still a courtesy");
     }
 }
