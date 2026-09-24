@@ -63,7 +63,10 @@ public final class Topics {
     static final String CLEAR_DAY = "world.clear_day";
     static final String CLEAR_NIGHT = "world.clear_night";
     static final String RAIN = "world.rain";
+    /** A thunderclap just heard — not the weather's name: a storm with no clap is only rain. */
     static final String THUNDER = "world.thunder";
+    /** A thunderclap just heard, and near. */
+    static final String THUNDER_CLOSE = "world.thunder_close";
     static final String SNOW = "world.snow";
     static final String DAWN = "world.dawn";
     static final String DUSK = "world.dusk";
@@ -94,6 +97,16 @@ public final class Topics {
     static final int PILE = 32;
     /** How many of a speaker's latest deeds are on the table at once. */
     static final int RECENT_DEEDS = 3;
+    /** How long a thunderclap stays worth remarking on — the next line or two. */
+    static final long THUNDER_FRESH_TICKS = 300;
+    /** Closer than this, a strike is on top of you. */
+    static final double THUNDER_CLOSE_BLOCKS = 32.0;
+
+    /**
+     * What is said before anything else while it is fresh: a thunderclap nobody remarks on reads as
+     * a body that did not hear it (decision: Luiz, 2026-09-24 — "did she actually hear the thunder?").
+     */
+    private static final List<String> SALIENT = List.of(THUNDER_CLOSE, THUNDER);
 
     private Topics() {
     }
@@ -252,6 +265,13 @@ public final class Topics {
         if (topics.isEmpty() && deeds.isEmpty()) {
             return Optional.empty();
         }
+        for (String salient : SALIENT) {
+            for (Topic topic : topics) {
+                if (topic.key().equals(salient)) {
+                    return Optional.of(topic.payload());
+                }
+            }
+        }
         int draw = random.nextInt(topics.size() + deeds.size());
         return Optional.of(draw < topics.size() ? topics.get(draw).payload()
                 : Recounting.payload(deeds.get(draw - topics.size()), speaker.now()));
@@ -326,8 +346,7 @@ public final class Topics {
                         out.add(Topic.of(CLEAR_DAY));
                     }
                 }
-                case RAIN -> out.add(Topic.of(RAIN));
-                case THUNDER -> out.add(Topic.of(THUNDER));
+                case RAIN, THUNDER -> out.add(Topic.of(RAIN));
                 case SNOW -> out.add(Topic.of(SNOW));
             }
             switch (around.phase()) {
@@ -341,6 +360,11 @@ public final class Topics {
         if (around.light() <= DARK_LIGHT) {
             out.add(Topic.of(DARK));
         }
+        // A sound, so it is heard with a roof overhead too.
+        around.thunder()
+                .filter(clap -> clap.ticksAgo() <= THUNDER_FRESH_TICKS)
+                .ifPresent(clap -> out.add(Topic.of(clap.distance() < THUNDER_CLOSE_BLOCKS
+                        ? THUNDER_CLOSE : THUNDER)));
     }
 
     private static void them(Them them, List<Topic> out) {
@@ -382,8 +406,8 @@ public final class Topics {
         for (String flavour : FLAVOURS) {
             out.put(flavour, 0);
         }
-        for (String key : List.of(CLEAR_DAY, CLEAR_NIGHT, RAIN, THUNDER, SNOW, DAWN, DUSK, NIGHT,
-                DARK, SNEAKING, EATING, HEAVY_PACK)) {
+        for (String key : List.of(CLEAR_DAY, CLEAR_NIGHT, RAIN, THUNDER, THUNDER_CLOSE, SNOW, DAWN,
+                DUSK, NIGHT, DARK, SNEAKING, EATING, HEAVY_PACK)) {
             out.put(key, 0);
         }
         out.put(HOLDING, 1);

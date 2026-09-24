@@ -196,7 +196,8 @@ class TopicsTest {
 
         List<String> storm = keysUnder(new Surroundings(Surroundings.Weather.THUNDER,
                 Surroundings.DayPhase.DUSK, 9, true));
-        assertTrue(storm.containsAll(List.of(Topics.THUNDER, Topics.DUSK)), storm.toString());
+        assertTrue(storm.containsAll(List.of(Topics.RAIN, Topics.DUSK)), storm.toString());
+        assertFalse(storm.contains(Topics.THUNDER), "a storm with no clap heard is only rain");
     }
 
     @Test
@@ -351,5 +352,43 @@ class TopicsTest {
         List<String> forest = keysUnder(new Surroundings(Surroundings.Weather.RAIN,
                 Surroundings.DayPhase.NIGHT, 3, true));
         assertTrue(forest.containsAll(List.of(Topics.RAIN, Topics.NIGHT)), forest.toString());
+    }
+
+    // ── thunder, heard ───────────────────────────────────────────────────────────────────────
+
+    private static Topics.Speaker hearing(Surroundings.Thunderclap clap, boolean outdoors) {
+        return new Topics.Speaker(Optional.of(new Surroundings(Surroundings.Weather.THUNDER,
+                        Surroundings.DayPhase.DAY, 12, outdoors, Optional.of(clap))),
+                Optional.empty(), Topics.Pack.of(new Inventory()), List.of("hunger"), List.of(), 0);
+    }
+
+    @Test
+    @DisplayName("a clap just heard is said first — a body that heard thunder remarks on it")
+    void aFreshClapIsSaidFirst() {
+        for (int i = 0; i < 30; i++) {
+            assertEquals(Topics.THUNDER, Topics.pick(hearing(new Surroundings.Thunderclap(40, 90.0),
+                    true), Topics.Said.NOTHING, RandomGenerator.getDefault()).orElseThrow().get("topic"));
+        }
+        assertEquals(Topics.THUNDER_CLOSE, Topics.pick(hearing(new Surroundings.Thunderclap(40, 12.0),
+                true), Topics.Said.NOTHING, RandomGenerator.getDefault()).orElseThrow().get("topic"),
+                "near enough, it struck close");
+    }
+
+    @Test
+    @DisplayName("thunder is heard under a roof, forgotten after a while, and said only once")
+    void thunderIsASound() {
+        List<String> indoors = Topics.options(hearing(new Surroundings.Thunderclap(40, 90.0), false))
+                .stream().map(Topics.Topic::key).toList();
+        assertTrue(indoors.contains(Topics.THUNDER), indoors.toString());
+        assertFalse(indoors.contains(Topics.RAIN), "the rain is the sky's to tell, and there is none");
+
+        List<String> stale = Topics.options(hearing(new Surroundings.Thunderclap(
+                Topics.THUNDER_FRESH_TICKS + 1, 90.0), true)).stream().map(Topics.Topic::key).toList();
+        assertFalse(stale.contains(Topics.THUNDER), stale.toString());
+
+        String next = Topics.pick(hearing(new Surroundings.Thunderclap(40, 90.0), true),
+                new Topics.Said(Set.of(Topics.THUNDER), Set.of()), RandomGenerator.getDefault())
+                .orElseThrow().get("topic");
+        assertFalse(Topics.THUNDER.equals(next), "remarked on once, and the chat moves on");
     }
 }
