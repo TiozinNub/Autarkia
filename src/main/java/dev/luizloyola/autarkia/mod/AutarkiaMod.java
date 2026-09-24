@@ -158,6 +158,15 @@ public class AutarkiaMod implements ModInitializer {
         // outlives every worker who touches it, so a swallowed load would send a settlement to
         // re-walk ground it had already surveyed.
         StoreGuard.guard("party boards", PartyBoardData.ID, PartyBoardData::get);
+        // Layer 4: what each line of Directions means, then the tree, the beat and the gate's
+        // answers. The lines first — loading a table checks every Direction names one.
+        dev.luizloyola.autarkia.core.direction.Lines.register(
+                dev.luizloyola.autarkia.core.direction.AreaLine.INSTANCE);
+        dev.luizloyola.autarkia.core.direction.Lines.register(
+                dev.luizloyola.autarkia.core.direction.WoodLine.INSTANCE);
+        dev.luizloyola.autarkia.mod.direction.Directions.init();
+        StoreGuard.guard("directions", dev.luizloyola.autarkia.mod.direction.DirectionsData.ID,
+                dev.luizloyola.autarkia.mod.direction.DirectionsData::get);
         // Teach the debug wand what a block MEANS to a settler — Anima's wand can point at
         // anything and knows what none of it is. Unclaimed clicks still fall back to walking
         // there.

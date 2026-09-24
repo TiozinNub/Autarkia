@@ -87,6 +87,16 @@ public class Board {
         return Optional.empty();
     }
 
+    /** The handle this project is posted under, or empty when it is not on this board. */
+    public java.util.OptionalInt handleOf(Project project) {
+        for (Entry entry : entries) {
+            if (entry.project() == project) {
+                return java.util.OptionalInt.of(entry.handle());
+            }
+        }
+        return java.util.OptionalInt.empty();
+    }
+
     /** Every posted project, in post order. */
     public List<Project> projects() {
         List<Project> all = new ArrayList<>(entries.size());
@@ -195,14 +205,17 @@ public class Board {
     }
 
     /**
-     * The needs among {@code missing} this asker cannot get at all: no registered producer and no
-     * REACHABLE recipe — the same recursive question {@code CraftFor} asks of its own book, so an
-     * item is only claimed toward a craft some plan can finish.
+     * The needs among {@code missing} this asker cannot get at all: one the gate will not let them
+     * seek, or one with no registered producer and no REACHABLE recipe — the same recursive
+     * question {@code CraftFor} asks of its own book, so an item is only claimed toward a craft
+     * some plan can finish.
      */
     private static List<ItemCall> uncoverable(List<ItemCall> missing, BrainContext ctx) {
         List<ItemCall> unreachable = new ArrayList<>();
         for (ItemCall need : missing) {
-            if (!Producers.knows(need.spec())
+            if (!ctx.gate().maySeek(need.spec())) {
+                unreachable.add(need);
+            } else if (!Producers.knows(need.spec())
                     && !dev.luizloyola.anima.core.brain.task.CraftFor.anyReachable(need.spec(), ctx)) {
                 unreachable.add(need);
             }
