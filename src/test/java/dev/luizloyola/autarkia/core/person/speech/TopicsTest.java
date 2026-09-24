@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.social.speech.LineSlots;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.agent.need.NeedKind;
@@ -21,6 +22,7 @@ import dev.luizloyola.anima.core.brain.history.History;
 import dev.luizloyola.anima.core.brain.history.Doings;
 import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
+import java.util.random.RandomGenerator;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.Optional;
@@ -292,5 +294,62 @@ class TopicsTest {
             }
         }
         assertEquals(List.of(), problems);
+    }
+
+    // ── a player, or anybody with no brain ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("a body with no gauges shows hunger below 15 food, fatigue at half health, breath when short")
+    void theNeedsABodyShows() {
+        assertEquals(List.of(), Topics.needsShown(20, 20f, 20f, 300, 300));
+        assertEquals(List.of("hunger"), Topics.needsShown(14, 20f, 20f, 300, 300));
+        assertEquals(List.of("vigor"), Topics.needsShown(15, 10f, 20f, 300, 300));
+        assertEquals(List.of("breath"), Topics.needsShown(20, 20f, 20f, 299, 300));
+    }
+
+    /** A player at dusk under a canopy, facing a settler with an axe, forty logs in the pack, peckish. */
+    private static Topics.Speaker playerAtDusk() {
+        Inventory pack = new Inventory();
+        pack.set(0, ItemStack.of("minecraft:oak_log", 40, 64));
+        return new Topics.Speaker(
+                Optional.of(new Surroundings(Surroundings.Weather.CLEAR,
+                        Surroundings.DayPhase.DUSK, 9, true)),
+                Optional.of(new Topics.Them("minecraft:iron_axe", false, false)),
+                Topics.Pack.of(pack), List.of("hunger"), List.of(), 0);
+    }
+
+    @Test
+    @DisplayName("a player talks about the sky over them, the settler in front of them, and themselves")
+    void aPlayerDrawsFromTheSameWell() {
+        List<String> keys = Topics.options(playerAtDusk()).stream().map(Topics.Topic::key).toList();
+
+        assertTrue(keys.containsAll(List.of(Topics.DUSK, Topics.HOLDING, Topics.CARRYING,
+                "need.hunger")), keys.toString());
+        assertFalse(keys.contains("weather"), "no \"Fine day for it\" at dusk, for a player either");
+    }
+
+    @Test
+    @DisplayName("a player never says the same thing twice, and runs out like anybody")
+    void aPlayerNeverRepeatsEither() {
+        Topics.Speaker player = playerAtDusk();
+        Set<String> allButDusk = new HashSet<>(
+                Topics.options(player).stream().map(Topics.Topic::key).toList());
+        allButDusk.remove(Topics.DUSK);
+
+        for (int i = 0; i < 30; i++) {
+            assertEquals(Topics.DUSK, Topics.pick(player, new Topics.Said(allButDusk, Set.of()),
+                    RandomGenerator.getDefault()).orElseThrow().get("topic"));
+        }
+        allButDusk.add(Topics.DUSK);
+        assertFalse(Topics.anythingLeft(player, new Topics.Said(allButDusk, Set.of())),
+                "everything said: the chat button goes, the goodbye stays");
+    }
+
+    @Test
+    @DisplayName("under a canopy the rain and the hour still show")
+    void aCanopyStillShowsTheSky() {
+        List<String> forest = keysUnder(new Surroundings(Surroundings.Weather.RAIN,
+                Surroundings.DayPhase.NIGHT, 3, true));
+        assertTrue(forest.containsAll(List.of(Topics.RAIN, Topics.NIGHT)), forest.toString());
     }
 }

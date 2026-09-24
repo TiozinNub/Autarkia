@@ -99,6 +99,9 @@ public class AutarkiaMod implements ModInitializer {
         // walks SpeechActs.all() on every turn, so registration has to be finished before a
         // chooser can be handed a conversation to decide on.
         Choosers.provide(new PersonChooser());
+        // A player chatting draws from the same vocabulary, read off the player.
+        dev.luizloyola.anima.mod.social.PlayerTopics.provide(
+                new dev.luizloyola.autarkia.mod.person.PlayerSmallTalk());
         // Settlers craft: the vanilla recipe book becomes the library's RecipeSource. Anima
         // ships the mechanism unregistered — this call is the consumer saying recipes exist.
         dev.luizloyola.anima.mod.craft.VanillaRecipeSource.install();
