@@ -92,9 +92,10 @@ public final class PersonChooser implements Chooser {
             // conversational variety comes from the topic draw below and the reply beat's jitter.
             // orElseThrow is safe: the rung's own predicate checked something new is left.
             Topics.Said said = saidHere(turn);
+            Optional<Being> them = counterpartSeen(ctx, turn);
             Map<String, String> payload = (answersADeed(turn)
-                    ? Topics.latestDeed(ctx, said).or(() -> Topics.pick(ctx, said))
-                    : Topics.pick(ctx, said)).orElseThrow();
+                    ? Topics.latestDeed(ctx, said).or(() -> Topics.pick(ctx, them, said))
+                    : Topics.pick(ctx, them, said)).orElseThrow();
             if (!wantsCompany(ctx)) {
                 Map<String, String> courtesy = new HashMap<>(payload);
                 courtesy.put(ANSWER, "1");
@@ -193,12 +194,14 @@ public final class PersonChooser implements Chooser {
     }
 
     private static boolean makesSmallTalk(BrainContext ctx, Turn turn) {
-        return wouldChat(ctx, turn) && Topics.anythingLeft(ctx, saidHere(turn));
+        return wouldChat(ctx, turn)
+                && Topics.anythingLeft(ctx, counterpartSeen(ctx, turn), saidHere(turn));
     }
 
     /** Rung 7: rung 6's reasons to speak hold, and everything this body could say, it has said. */
     private static boolean runsOutOfThingsToSay(BrainContext ctx, Turn turn) {
-        return wouldChat(ctx, turn) && !Topics.anythingLeft(ctx, saidHere(turn))
+        return wouldChat(ctx, turn)
+                && !Topics.anythingLeft(ctx, counterpartSeen(ctx, turn), saidHere(turn))
                 && turn.applicable().contains(SpeechActs.END_CHAT);
     }
 
@@ -273,7 +276,8 @@ public final class PersonChooser implements Chooser {
     private static String saidFacts(BrainContext ctx, Turn turn) {
         Topics.Said said = saidHere(turn);
         return "said " + said.topics().size() + " topic(s) and " + said.deeds().size()
-                + " deed(s) here, " + (Topics.anythingLeft(ctx, said) ? "something new left"
+                + " deed(s) here, "
+                + (Topics.anythingLeft(ctx, counterpartSeen(ctx, turn), said) ? "something new left"
                         : "nothing new left");
     }
 
@@ -376,6 +380,11 @@ public final class PersonChooser implements Chooser {
             }
         }
         return false;
+    }
+
+    /** The counterpart as this body perceives them right now — empty when out of its senses. */
+    private static Optional<Being> counterpartSeen(BrainContext ctx, Turn turn) {
+        return turn.counterpart().map(BeingId::of).flatMap(id -> findBeing(ctx, id));
     }
 
     private static Optional<Being> findBeing(BrainContext ctx, BeingId id) {

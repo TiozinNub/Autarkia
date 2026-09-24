@@ -215,7 +215,7 @@ class PersonChooserTest {
         Chooser.Line line = chooser.choose(ctx, turn);
 
         assertEquals(PersonActs.SMALL_TALK, line.act());
-        assertTrue(Topics.options(ctx).contains(line.payload().get("topic")));
+        assertTrue(Topics.keys(ctx, Optional.empty()).contains(line.payload().get("topic")));
     }
 
     @Test
@@ -263,7 +263,7 @@ class PersonChooserTest {
         Chooser.Line line = chooser.choose(ctx, turn);
 
         assertEquals(PersonActs.SMALL_TALK, line.act(), "a line of theirs is answered, whatever the gauge says");
-        assertTrue(Topics.options(ctx).contains(line.payload().get("topic")));
+        assertTrue(Topics.keys(ctx, Optional.empty()).contains(line.payload().get("topic")));
         assertTrue(line.payload().containsKey(PersonChooser.ANSWER),
                 "and says it is a courtesy, or it would be answered back");
     }
@@ -622,7 +622,7 @@ class PersonChooserTest {
     void priority6NeverRepeatsATopic() {
         ctx.percepts.company.setValue(0.5);
         Encounter e = freshEncounter();
-        List<String> topics = Topics.options(ctx);
+        List<String> topics = Topics.keys(ctx, Optional.empty());
         for (String topic : topics.subList(1, topics.size())) {
             e.append(mine(topic));
         }
@@ -639,7 +639,7 @@ class PersonChooserTest {
     void priority7SaysGoodbyeWhenOutOfThingsToSay() {
         ctx.percepts.company.setValue(0.5); // still wants company — and has nothing left to say
         Encounter e = freshEncounter();
-        for (String topic : Topics.options(ctx)) {
+        for (String topic : Topics.keys(ctx, Optional.empty())) {
             e.append(mine(topic));
         }
         e.append(theirs());
