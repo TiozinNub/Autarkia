@@ -173,6 +173,7 @@ public final class AutarkiaCommands {
                                 AgentCommands::profile,
                                 AgentCommands::grave, AgentCommands::chat, AutarkiaCommands::whois,
                                 () -> board(registryAccess),
+                                DirectionsCommands::directions, DirectionsCommands::home,
                                 () -> AgentCommands.inv(registryAccess)),
                         // noSubject — the root alone. `tree` paints the live world, `spawn` makes a
                         // body there is not one of yet, and `debug` and `board view` are per-player
