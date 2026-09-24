@@ -1,0 +1,16 @@
+{
+  "note": "PLACEHOLDER (2026-09-24): the node table is Luiz's to write. The key, the pool and the count are stand-ins that prove the machinery.",
+  "kind": "core",
+  "parents": ["autarkia:wood"],
+  "needs": "all",
+  "requires": {
+    "key": "autarkia:wood/wood",
+    "pool": ["autarkia:wood/area"],
+    "of": 1
+  },
+  "directions": [
+    {"line": "wood", "count": 256}
+  ],
+  "items": ["#autarkia:node/stone"],
+  "acts": []
+}

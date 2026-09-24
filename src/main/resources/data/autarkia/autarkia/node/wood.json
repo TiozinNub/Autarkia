@@ -1,0 +1,11 @@
+{
+  "note": "PLACEHOLDER (2026-09-24): the node table is Luiz's to write. Wood is the root, always reached; the count is a stand-in.",
+  "kind": "core",
+  "parents": [],
+  "directions": [
+    {"line": "area"},
+    {"line": "wood", "count": 64}
+  ],
+  "items": ["#autarkia:node/wood"],
+  "acts": []
+}

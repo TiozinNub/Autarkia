@@ -1,0 +1,15 @@
+{
+  "values": [
+    "minecraft:wooden_axe",
+    "minecraft:wooden_pickaxe",
+    "minecraft:wooden_shovel",
+    "minecraft:wooden_hoe",
+    "minecraft:wooden_sword",
+    "minecraft:crafting_table",
+    "minecraft:chest",
+    "#minecraft:beds",
+    "minecraft:torch",
+    "minecraft:furnace",
+    "minecraft:campfire"
+  ]
+}
