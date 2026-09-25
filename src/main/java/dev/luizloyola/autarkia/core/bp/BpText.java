@@ -70,29 +70,12 @@ public final class BpText {
         }
         for (List<Integer> group : layerGroups(bp)) {
             out.append("\nlayer ").append(indexSet(group)).append('\n');
-            int layer = group.get(0);
-            for (int z = 0; z < bp.depth(); z++) {
-                StringBuilder row = new StringBuilder("  ");
-                for (int x = 0; x < bp.width(); x++) {
-                    row.append(bp.glyph(layer, x, z));
-                }
-                out.append(row).append(ids(bp, layer, z, true)).append('\n');
-            }
+            rows(bp, group.get(0)).forEach(row -> out.append("  ").append(row).append('\n'));
         }
         for (int layer = bp.minLayer(); layer <= bp.maxLayer(); layer++) {
-            if (!hasOverlay(bp, layer)) {
-                continue;
-            }
-            out.append("\nnode layer ").append(layer).append('\n');
-            for (int z = 0; z < bp.depth(); z++) {
-                char[] row = new char[bp.width()];
-                Arrays.fill(row, Blueprint.AIR);
-                for (Node node : bp.nodes().values()) {
-                    if (!node.inline() && node.layer() == layer && node.z() == z) {
-                        row[node.x()] = Blueprint.NODE_AIR;
-                    }
-                }
-                out.append("  ").append(row).append(ids(bp, layer, z, false)).append('\n');
+            if (hasOverlay(bp, layer)) {
+                out.append("\nnode layer ").append(layer).append('\n');
+                overlayRows(bp, layer).forEach(row -> out.append("  ").append(row).append('\n'));
             }
         }
         if (!bp.nodes().isEmpty()) {
@@ -108,6 +91,38 @@ public final class BpText {
                     .append('\n'));
         }
         return out.toString();
+    }
+
+    /** One layer's grid, north row first, each row with its inline node ids. */
+    public static List<String> rows(Blueprint bp, int layer) {
+        List<String> rows = new ArrayList<>();
+        for (int z = 0; z < bp.depth(); z++) {
+            StringBuilder row = new StringBuilder();
+            for (int x = 0; x < bp.width(); x++) {
+                row.append(bp.glyph(layer, x, z));
+            }
+            rows.add(row + ids(bp, layer, z, true));
+        }
+        return rows;
+    }
+
+    /** The node grid drawn over a layer, or nothing when no node sits on a block there. */
+    public static List<String> overlayRows(Blueprint bp, int layer) {
+        if (!hasOverlay(bp, layer)) {
+            return List.of();
+        }
+        List<String> rows = new ArrayList<>();
+        for (int z = 0; z < bp.depth(); z++) {
+            char[] row = new char[bp.width()];
+            Arrays.fill(row, Blueprint.AIR);
+            for (Node node : bp.nodes().values()) {
+                if (!node.inline() && node.layer() == layer && node.z() == z) {
+                    row[node.x()] = Blueprint.NODE_AIR;
+                }
+            }
+            rows.add(new String(row) + ids(bp, layer, z, false));
+        }
+        return rows;
     }
 
     private static void header(StringBuilder out, String key, String value) {

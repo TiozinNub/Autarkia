@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.mod.command;
 
-import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -23,6 +23,7 @@ import dev.luizloyola.autarkia.mod.bp.Blueprints.Entry;
 import dev.luizloyola.autarkia.mod.direction.Directions;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
@@ -34,8 +35,12 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.Identifier;
 
 /**
  * {@code /autarkia bp}: the blueprint library at the command line. What a blueprint says stays
@@ -55,7 +60,10 @@ public final class BlueprintCommands {
                 .executes(BlueprintCommands::list)
                 .then(Commands.literal("list").executes(BlueprintCommands::list))
                 .then(Commands.literal("check").then(id(BlueprintCommands::check)))
-                .then(Commands.literal("show").then(id(BlueprintCommands::show)))
+                .then(Commands.literal("show").then(id(BlueprintCommands::show)
+                        .then(Commands.argument("layer", IntegerArgumentType.integer())
+                                .executes(ctx -> withEntry(ctx, (source, entry) -> showLayer(source, entry,
+                                        IntegerArgumentType.getInteger(ctx, "layer")))))))
                 .then(Commands.literal("query").then(id(BlueprintCommands::query)))
                 .then(Commands.literal("reload").executes(BlueprintCommands::reload))
                 .then(Commands.literal("dictionary").executes(BlueprintCommands::dictionary));
@@ -65,18 +73,21 @@ public final class BlueprintCommands {
         int run(CommandSourceStack source, Entry entry);
     }
 
-    /** Greedy, so a namespaced id needs no quotes; its path alone will do when it is unique. */
-    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> id(
+    /**
+     * An id argument, so another can follow it; its path alone will do when one namespace has it — a
+     * bare word parses as {@code minecraft:}, which no blueprint of ours is.
+     */
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, Identifier> id(
             IdCommand command) {
-        return Commands.argument("id", StringArgumentType.greedyString()).suggests(IDS)
+        return Commands.argument("id", IdentifierArgument.id()).suggests(IDS)
                 .executes(ctx -> withEntry(ctx, command));
     }
 
     private static int withEntry(CommandContext<CommandSourceStack> ctx, IdCommand command) {
-        String id = StringArgumentType.getString(ctx, "id").trim();
-        Optional<Entry> entry = Blueprints.find(id);
+        Identifier id = IdentifierArgument.getId(ctx, "id");
+        Optional<Entry> entry = Blueprints.find(id.toString()).or(() -> Blueprints.find(id.getPath()));
         if (entry.isEmpty()) {
-            Replies.fail(ctx.getSource(), Component.translatable("autarkia.command.bp.unknown", id));
+            Replies.fail(ctx.getSource(), Component.translatable("autarkia.command.bp.unknown", id.getPath()));
             return 0;
         }
         return command.run(ctx.getSource(), entry.get());
@@ -170,6 +181,14 @@ public final class BlueprintCommands {
                 .append(Component.literal(text.substring(column)).withStyle(ChatFormatting.GRAY));
     }
 
+    /** Minecraft's fixed-width font: a grid row in the chat font does not line up with the next. */
+    private static final Style GRID = Style.EMPTY.withColor(ChatFormatting.GRAY)
+            .withFont(new FontDescription.Resource(Identifier.fromNamespaceAndPath("minecraft", "uniform")));
+
+    /**
+     * One message per section, and a grid always as a single message: sent row by row, a chat mod that
+     * folds repeated lines turns three identical wall rows into one line marked (x3).
+     */
     private static int show(CommandSourceStack source, Entry entry) {
         Blueprint bp = entry.compiled().blueprint();
         if (bp == null) {
@@ -178,10 +197,52 @@ public final class BlueprintCommands {
         }
         send(source, Component.translatable("autarkia.command.bp.show.header", entry.id())
                 .withStyle(ChatFormatting.LIGHT_PURPLE));
-        for (String line : BpText.render(bp).split("\n")) {
-            send(source, Component.literal(line.isEmpty() ? " " : line).withStyle(ChatFormatting.GRAY));
+        for (String section : BpText.render(bp).split("\n\n")) {
+            List<String> lines = List.of(section.strip().split("\n"));
+            boolean grid = lines.get(0).startsWith("layer ") || lines.get(0).startsWith("node layer ");
+            send(source, grid ? grid(lines.get(0), lines.subList(1, lines.size()))
+                    : Component.literal(String.join("\n", lines)).withStyle(ChatFormatting.GRAY));
         }
         return 1;
+    }
+
+    /** A single layer, with the legend entries drawn in it — what fits on a screen. */
+    private static int showLayer(CommandSourceStack source, Entry entry, int layer) {
+        Blueprint bp = entry.compiled().blueprint();
+        if (bp == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.broken", entry.id()));
+            return 0;
+        }
+        if (layer < bp.minLayer() || layer > bp.maxLayer()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.show.no_layer", entry.id(),
+                    bp.minLayer(), bp.maxLayer(), layer));
+            return 0;
+        }
+        send(source, Component.translatable("autarkia.command.bp.show.layer", entry.id(), layer, bp.minLayer(),
+                bp.maxLayer()).withStyle(ChatFormatting.LIGHT_PURPLE));
+        send(source, grid("layer " + layer, BpText.rows(bp, layer)));
+        List<String> overlay = BpText.overlayRows(bp, layer);
+        if (!overlay.isEmpty()) {
+            send(source, grid("node layer " + layer, overlay));
+        }
+        // The cells only: a row's node ids would otherwise match the glyphs their letters spell.
+        String cells = BpText.rows(bp, layer).stream().map(row -> row.substring(0, bp.width()))
+                .collect(Collectors.joining());
+        List<String> used = new ArrayList<>();
+        bp.legend().values().forEach(e -> {
+            if (cells.indexOf(e.glyph()) >= 0) {
+                used.add(e.glyph() + " " + e.text());
+            }
+        });
+        if (!used.isEmpty()) {
+            send(source, Component.literal(String.join("\n", used)).withStyle(ChatFormatting.GRAY));
+        }
+        return 1;
+    }
+
+    private static Component grid(String header, List<String> rows) {
+        return Component.literal(header).withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("\n" + String.join("\n", rows)).withStyle(GRID));
     }
 
     // ── query ───────────────────────────────────────────────────────────────────────────────

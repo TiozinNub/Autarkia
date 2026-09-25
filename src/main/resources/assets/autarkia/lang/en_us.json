@@ -166,6 +166,8 @@
   "autarkia.command.bp.check.header": "%1$s (from %2$s): %3$s error(s), %4$s note(s)",
   "autarkia.command.bp.check.clean": "Nothing to say — it loads clean.",
   "autarkia.command.bp.show.header": "%s, as the reader understood it:",
+  "autarkia.command.bp.show.layer": "%1$s, layer %2$s (it has %3$s to %4$s):",
+  "autarkia.command.bp.show.no_layer": "%1$s has layers %2$s to %3$s; there is no layer %4$s.",
   "autarkia.command.bp.kind.material": "material",
   "autarkia.command.bp.kind.palette": "palette",
   "autarkia.command.bp.query.header": "%1$s — %2$s, version %3$s, by %4$s",
