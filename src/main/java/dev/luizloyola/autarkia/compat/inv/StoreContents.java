@@ -1,7 +1,7 @@
 package dev.luizloyola.autarkia.compat.inv;
 
 import dev.luizloyola.anima.core.brain.sense.Pos;
-import java.util.OptionalInt;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
@@ -22,21 +22,26 @@ public final class StoreContents {
     private StoreContents() {
     }
 
+    /** What one store held when read: how many items the predicate accepted, and empty slots. */
+    public record Reading(int matching, int free) {
+    }
+
     /**
-     * How many items at this store the predicate accepts: zero when nothing stands there any more,
-     * empty when its chunk is not loaded — never a load, since a read must not keep the world awake.
+     * How many items at this store the predicate accepts, and how many slots are empty: zeroes when
+     * nothing stands there any more, empty when its chunk is not loaded — never a load, since a read
+     * must not keep the world awake.
      *
      * @param counted cells already read this pass. A double chest can be claimed once per half, and
      *                both halves answer with all 54 slots, so the first read marks both.
      */
-    public static OptionalInt count(ServerLevel level, Pos at, Predicate<String> ids,
-                                    Set<BlockPos> counted) {
+    public static Optional<Reading> read(ServerLevel level, Pos at, Predicate<String> ids,
+                                         Set<BlockPos> counted) {
         BlockPos pos = new BlockPos(at.x(), at.y(), at.z());
         if (!level.isLoaded(pos)) {
-            return OptionalInt.empty();
+            return Optional.empty();
         }
         if (!counted.add(pos)) {
-            return OptionalInt.of(0);
+            return Optional.of(new Reading(0, 0));
         }
         BlockState state = level.getBlockState(pos);
         Container container;
@@ -50,15 +55,18 @@ public final class StoreContents {
             container = level.getBlockEntity(pos) instanceof Container found ? found : null;
         }
         if (container == null) {
-            return OptionalInt.of(0);
+            return Optional.of(new Reading(0, 0));
         }
-        int total = 0;
+        int matching = 0;
+        int free = 0;
         for (int slot = 0; slot < container.getContainerSize(); slot++) {
             ItemStack held = container.getItem(slot);
-            if (!held.isEmpty() && ids.test(BuiltInRegistries.ITEM.getKey(held.getItem()).toString())) {
-                total += held.getCount();
+            if (held.isEmpty()) {
+                free++;
+            } else if (ids.test(BuiltInRegistries.ITEM.getKey(held.getItem()).toString())) {
+                matching += held.getCount();
             }
         }
-        return OptionalInt.of(total);
+        return Optional.of(new Reading(matching, free));
     }
 }

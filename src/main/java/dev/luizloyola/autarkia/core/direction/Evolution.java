@@ -83,8 +83,8 @@ public final class Evolution {
                         posted.add(new Posted(direction, project, handle));
                     }
                 }
-                case UNKNOWN, NO_HOME -> {
-                    // Nothing to go on: a store out of sight, or nowhere to put anything. Waits.
+                case UNKNOWN, WAITING -> {
+                    // Nothing to go on: a store out of sight, or nowhere to put anything yet.
                 }
             }
         }

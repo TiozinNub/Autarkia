@@ -37,6 +37,9 @@ public final class WoodLine implements DirectionLine {
         if (party.home().isEmpty()) {
             return Status.NO_HOME;
         }
+        if (!party.baseReady()) {
+            return Status.NO_BASE;
+        }
         OptionalInt stored = party.storedAtHome(Stock.LOGS);
         if (stored.isEmpty()) {
             return Status.UNREAD;

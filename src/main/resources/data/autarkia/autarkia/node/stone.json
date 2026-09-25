@@ -5,8 +5,8 @@
   "needs": "all",
   "requires": {
     "key": "autarkia:wood/wood",
-    "pool": ["autarkia:wood/area"],
-    "of": 1
+    "pool": ["autarkia:wood/area", "autarkia:wood/base"],
+    "of": 2
   },
   "directions": [
     {"line": "wood", "count": 256}

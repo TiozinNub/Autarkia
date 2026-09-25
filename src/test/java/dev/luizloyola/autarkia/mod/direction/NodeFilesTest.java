@@ -6,10 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonParser;
 import dev.luizloyola.autarkia.core.direction.AreaLine;
+import dev.luizloyola.autarkia.core.direction.BaseLine;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
 import dev.luizloyola.autarkia.core.direction.Lines;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.NodeKind;
+import dev.luizloyola.autarkia.core.direction.StorageLine;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.core.direction.WoodLine;
 import java.io.IOException;
@@ -32,6 +34,8 @@ class NodeFilesTest {
     void lines() {
         Lines.register(AreaLine.INSTANCE);
         Lines.register(WoodLine.INSTANCE);
+        Lines.register(BaseLine.INSTANCE);
+        Lines.register(StorageLine.INSTANCE);
     }
 
     @AfterEach

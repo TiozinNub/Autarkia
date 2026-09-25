@@ -382,7 +382,7 @@ public final class DirectionsCommands {
         return switch (reading) {
             case MET -> ChatFormatting.GREEN;
             case UNMET -> ChatFormatting.YELLOW;
-            case UNKNOWN, NO_HOME -> ChatFormatting.GRAY;
+            case UNKNOWN, WAITING -> ChatFormatting.GRAY;
         };
     }
 

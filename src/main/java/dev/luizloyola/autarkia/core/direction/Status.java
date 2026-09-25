@@ -17,8 +17,8 @@ public record Status(Reading reading, String langKey, List<Object> args) {
         UNMET,
         /** The party cannot tell this beat — a store in an unloaded chunk. Nothing changes. */
         UNKNOWN,
-        /** The line needs a HOME and the party has none. It waits. */
-        NO_HOME
+        /** The line needs something the party does not have yet — a HOME, a base. It waits. */
+        WAITING
     }
 
     public Status {
@@ -31,7 +31,10 @@ public record Status(Reading reading, String langKey, List<Object> args) {
         return new Status(reading, langKey, List.of(args));
     }
 
-    public static final Status NO_HOME = of(Reading.NO_HOME, "autarkia.direction.status.no_home");
+    public static final Status NO_HOME = of(Reading.WAITING, "autarkia.direction.status.no_home");
+
+    /** HOME has no workbench and chest yet, and nothing hauls to a HOME with nowhere to put it. */
+    public static final Status NO_BASE = of(Reading.WAITING, "autarkia.direction.status.no_base");
 
     public static final Status UNREAD = of(Reading.UNKNOWN, "autarkia.direction.status.unread");
 }

@@ -37,6 +37,9 @@ public final class AreaLine implements DirectionLine {
         if (home.isEmpty()) {
             return Status.NO_HOME;
         }
+        if (!party.baseReady()) {
+            return Status.NO_BASE;
+        }
         return home.get().cleared()
                 ? Status.of(Status.Reading.MET, "autarkia.direction.area.cleared")
                 : Status.of(Status.Reading.UNMET, "autarkia.direction.area.uncleared");

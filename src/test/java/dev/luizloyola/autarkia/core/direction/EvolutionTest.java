@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
@@ -66,6 +67,17 @@ class EvolutionTest {
         @Override
         public OptionalInt storedAtHome(ItemSpec spec) {
             return logs;
+        }
+
+        /** The base stands in these tests: they are about the lines that wait for it. */
+        @Override
+        public boolean hasAtHome(PoiKind kind) {
+            return true;
+        }
+
+        @Override
+        public OptionalInt freeSlotsAtHome() {
+            return OptionalInt.of(27);
         }
     }
 

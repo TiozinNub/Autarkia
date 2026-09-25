@@ -1,6 +1,8 @@
 package dev.luizloyola.autarkia.mod.direction;
 
 import dev.luizloyola.anima.core.agent.ProfileAspect;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.PlaceRow;
@@ -15,6 +17,8 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 
@@ -56,26 +60,53 @@ final class HomeView implements PartyView {
 
     @Override
     public OptionalInt storedAtHome(ItemSpec spec) {
+        return readHome(spec::matches, StoreContents.Reading::matching);
+    }
+
+    @Override
+    public OptionalInt freeSlotsAtHome() {
+        return readHome(id -> false, StoreContents.Reading::free);
+    }
+
+    @Override
+    public boolean hasAtHome(PoiKind kind) {
+        Home home = progress.home();
+        if (home == null) {
+            return false;
+        }
+        for (PlaceRow row : PlacesData.get(server).places().rows()) {
+            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(home, row.at())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** One number summed over HOME's stores, or empty when any of them could not be read. */
+    private OptionalInt readHome(Predicate<String> ids, ToIntFunction<StoreContents.Reading> part) {
         Home home = progress.home();
         if (home == null) {
             return OptionalInt.empty();
         }
-        double radius = AutarkiaConfig.PERSON.i(ProfileAspect.STORES_FOUND_RADIUS);
         Set<BlockPos> counted = new HashSet<>();
         int total = 0;
         for (PlaceRow row : PlacesData.get(server).places().rows()) {
-            if (!row.kind().equals(Store.POI) || !party.equals(row.party())) {
+            if (!row.kind().equals(Store.POI) || !party.equals(row.party()) || !atHome(home, row.at())) {
                 continue;
             }
-            if (!home.plot().contains(row.at()) && Store.distance(row.at(), home.yard()) > radius) {
-                continue;
-            }
-            OptionalInt held = StoreContents.count(server.overworld(), row.at(), spec::matches, counted);
-            if (held.isEmpty()) {
+            Optional<StoreContents.Reading> read = StoreContents.read(server.overworld(), row.at(), ids,
+                    counted);
+            if (read.isEmpty()) {
                 return OptionalInt.empty();
             }
-            total += held.getAsInt();
+            total += part.applyAsInt(read.get());
         }
         return OptionalInt.of(total);
+    }
+
+    /** On the plot, or near enough its yard to count — the radius a gather's own yard uses. */
+    private static boolean atHome(Home home, Pos at) {
+        return home.plot().contains(at)
+                || Store.distance(at, home.yard()) <= AutarkiaConfig.PERSON.i(ProfileAspect.STORES_FOUND_RADIUS);
     }
 }
