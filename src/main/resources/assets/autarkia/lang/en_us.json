@@ -143,5 +143,14 @@
   "autarkia.node.autarkia.wood": "Wood",
   "autarkia.node.autarkia.wood.age": "the Wood Age",
   "autarkia.node.autarkia.stone": "Stone",
-  "autarkia.node.autarkia.stone.age": "the Stone Age"
+  "autarkia.node.autarkia.stone.age": "the Stone Age",
+  "autarkia.direction.line.base": "Set up the base",
+  "autarkia.direction.line.storage": "Keep room in storage",
+  "autarkia.direction.status.no_base": "waiting for the base",
+  "autarkia.direction.base.ready": "the workbench and the chest are set up",
+  "autarkia.direction.base.missing": "%s of %s stations set up",
+  "autarkia.direction.storage.free": "%s free slots in HOME's stores, %s wanted",
+  "autarkia.doing.setting_up.1": "I was setting up %1$s at home %2$s.",
+  "autarkia.doing.setting_up.2": "Put %1$s down at home %2$s.",
+  "autarkia.doing.setting_up.3": "Set up %1$s at the base %2$s. It's coming together."
 }

@@ -33,6 +33,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Fetching items toward a quota nobody else is credited for. */
     String GATHER = "gather";
 
+    /** Putting a station down at a base. */
+    String SET_UP = "set_up";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

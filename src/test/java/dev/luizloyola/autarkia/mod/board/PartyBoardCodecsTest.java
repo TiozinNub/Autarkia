@@ -17,6 +17,7 @@ import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
+import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.ProjectState;
 import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.board.WorkKey;
@@ -383,5 +384,19 @@ class PartyBoardCodecsTest {
         assertTrue(PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, project).result().isPresent(),
                 "an undeclared name decodes; refusing the WORLD is PartyBoardData's job, not the "
                         + "codec's — a row that fails here drops inside a party that still counts");
+    }
+
+    @Test
+    void aSetUpComesBackAtTheStationItWasOn() {
+        SetUp.State state = new SetUp.State(List.of(SetUp.WORKBENCH, SetUp.STORE),
+                new Pos(10, 64, 10), 0.5, 1,
+                List.of(new Gather.Cooldown(AgentId.of(new java.util.UUID(1, 2)), 900L)));
+        PartyBoard.Row row = new PartyBoard.Row(state, List.of());
+
+        PartyBoard.Row back = roundTrip(row);
+
+        assertEquals(row, back);
+        assertEquals("set_up", PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow()
+                .getAsJsonObject().getAsJsonObject("project").get("type").getAsString());
     }
 }

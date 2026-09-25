@@ -7,6 +7,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
@@ -15,6 +16,7 @@ import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.ProjectState;
+import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.WorkKey;
 import java.util.HashSet;
 import java.util.List;
@@ -217,6 +219,26 @@ public final class PartyBoardCodecs {
                     cooldowns) -> new Gather.State(spec, target, yard, priority, PartyId.of(party),
                             split, chests, readings, trips, cooldowns)));
 
+    /** A station by the place kind it is remembered as and the block that places it. */
+    public static final Codec<SetUp.Station> STATION = RecordCodecBuilder.create(station -> station.group(
+            Codec.STRING.comapFlatMap(
+                    key -> PoiKind.byKey(key).map(DataResult::success)
+                            .orElseGet(() -> DataResult.error(() -> "no place kind \"" + key + "\"")),
+                    PoiKind::key).fieldOf("kind").forGetter(SetUp.Station::kind),
+            Codec.STRING.fieldOf("item").forGetter(SetUp.Station::itemId)
+    ).apply(station, SetUp.Station::new));
+
+    /** Everything a {@code set_up} row carries beyond its kind. */
+    public static final MapCodec<SetUp.State> SET_UP =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    STATION.listOf().fieldOf("stations").forGetter(SetUp.State::stations),
+                    POS.fieldOf("near").forGetter(SetUp.State::near),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(SetUp.State::priority),
+                    Codec.INT.optionalFieldOf("next", 0).forGetter(SetUp.State::next),
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(SetUp.State::cooldowns)
+            ).apply(project, SetUp.State::new));
+
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this
      * cannot be a bare {@code optionalFieldOf(name, default)} — that omits the field whenever the
@@ -239,6 +261,7 @@ public final class PartyBoardCodecs {
         return switch (type) {
             case "clear_area" -> DataResult.success(CLEAR_AREA);
             case "gather" -> DataResult.success(GATHER);
+            case "set_up" -> DataResult.success(SET_UP);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }
