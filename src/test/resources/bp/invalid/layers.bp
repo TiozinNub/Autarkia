@@ -1,0 +1,27 @@
+// Layer index sets partition the span: no index twice, no gap, no '@' in a shared grid.
+// expect error layer_gap
+bp 1
+
+name        layers
+author      test
+version     1
+orientation all
+flippable   false
+
+legend
+  # stone
+
+layer 0 1
+  ###
+  #@#             // expect error node_in_shared_layer
+  ###
+
+layer 1           // expect error layer_twice
+  ###
+  ###
+  ###
+
+layer 4
+  ###
+  ###
+  ###

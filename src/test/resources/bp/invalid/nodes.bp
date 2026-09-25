@@ -1,0 +1,26 @@
+// Nodes: ids pair with their cells, every id is declared and placed, paths join path nodes.
+bp 1
+
+name        nodes
+author      test
+version     1
+orientation all
+flippable   false
+
+legend
+  # stone
+
+layer 0
+  #####
+  #####
+
+layer 1
+  @.@..  < a                    // expect error row_ids
+  .@...  < q                    // expect error node_undeclared
+
+nodes
+  b     path_node               // expect error node_unplaced
+  c     chair                   // expect error unknown_node_type, error node_unplaced
+
+path
+  b > zz                        // expect error path_unknown

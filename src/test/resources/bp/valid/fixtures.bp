@@ -1,0 +1,34 @@
+// Beds and doors written every legal way: partner spelled out, partner inferred, two beds side by side.
+bp 1
+
+name        fixtures
+author      test
+version     1
+orientation all
+flippable   false
+
+materials
+  1 option any_color
+  2 option overworld_wood
+
+legend
+  # stone
+  B $1 bed[facing=north]
+  b $1 bed[facing=north,part=foot]
+  D $2 door[facing=east]
+  d $2 door[facing=east,half=upper]
+
+layer 0
+  #######
+  #######
+  #######
+
+layer 1
+  #BB.B.#
+  #bb...#       // two beds across the facing axis, feet spelled; the third infers its foot
+  #..D..#
+
+layer 2
+  #.....#
+  #.....#
+  #..d..#       // the door's upper half, spelled out

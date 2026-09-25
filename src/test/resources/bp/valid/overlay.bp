@@ -1,0 +1,37 @@
+// A node on a real block goes in a node layer; a comment-only line inside a grid is invisible.
+bp 1
+
+name        corner
+author      test
+version     1
+orientation all
+flippable   true
+
+legend
+  # cobblestone
+  = cobblestone_slab
+
+layer 0
+  ###
+// a comment in column 0 does not end the grid
+  ###
+  ###
+
+layer 1
+  =??
+  =??
+  ===
+
+node layer 1
+  n..  < north
+  ...
+  c.w  < corner west
+
+nodes
+  north  path_node
+  corner path_node
+  west   path_node
+
+path
+  west > corner > north
+  north > corner > west

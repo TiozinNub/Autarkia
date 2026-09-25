@@ -1,0 +1,31 @@
+bp 1
+
+name        road segment, straight
+author      TiozinNub
+version     1
+orientation all
+flippable   true
+
+palette
+  1 option dirt_path|gravel|cobblestone
+
+legend
+  # $1
+
+layer 0
+  #########
+  #########
+  #########
+
+layer 1
+  ?????????           // shoulders: leave the world alone
+  @.......@  < west east
+  ?????????
+
+nodes
+  west path_node
+  east path_node
+
+path
+  west > east
+  east > west

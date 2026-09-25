@@ -1,0 +1,24 @@
+// What the dictionary knows: blocks, forms, properties, and what every member can supply.
+bp 1
+
+name        vocabulary
+author      test
+version     1
+orientation all
+flippable   false
+
+materials
+  1 option overworld_wood
+  2 option oak|spruce              // expect error empty_domain
+
+legend
+  A oak_plank                      // expect error unknown_block
+  B $1 plank                       // expect error unknown_form
+  C $1 stripped log                // expect error form_words
+  D $1 planks[axis=x]              // expect error unknown_property
+  E $1 log[axis=w]                 // expect error property_value
+  F $1 fence[north=true]           // expect report computed_property
+  G $2 wall
+
+layer 0
+  ABCDEFG

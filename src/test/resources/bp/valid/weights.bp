@@ -1,0 +1,41 @@
+// Every binding form the format spec shows, in one file that must load clean.
+bp 1
+
+name        slot zoo
+author      test
+version     3
+orientation north east
+flippable   false
+size        6 2 2
+
+materials
+  1 option overworld_wood
+  3 mix    oak|spruce
+
+palette
+  5 option grass_block|dirt
+  6 mix    grass_block|dirt
+  7 mix    $3 log|$3 planks
+  8 option stone|cobblestone
+  9 mix    $6|stone             // stone half, the rest split between grass and dirt
+
+legend
+  A $1 planks
+  B $3 planks
+  C mix stone|cobblestone
+  D option stone|cobblestone
+  E $7
+  G option $8|obsidian
+  H mix $8|obsidian
+  L $1 stripped_log[axis=x]
+  s $5
+  w $9
+  K $8
+
+layer 0
+  ssssss
+  wwwwww
+
+layer 1
+  ABCDEG
+  HLK...

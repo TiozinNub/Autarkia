@@ -1,0 +1,28 @@
+// Two kinds of slot, one number space, references only backwards.
+bp 1
+
+name        slots
+author      test
+version     1
+orientation all
+flippable   false
+
+materials
+  1 option oak
+  2 option grass_block|dirt       // expect error material_is_block, error material_is_block
+  4 option oek                    // expect error unknown_material
+  6 option $1|$5                  // expect error forward_ref
+  1 mix    spruce                 // expect error slot_twice
+
+palette
+  5 option dirt|coarse_dirt
+  7 mix $5|$1                     // expect error form_missing
+  8 $1 planks                     // expect error binding_missing
+
+legend
+  A $5 planks                     // expect error slot_kind
+  B $1 planks
+  C $9                            // expect error unknown_slot
+
+layer 0
+  AB

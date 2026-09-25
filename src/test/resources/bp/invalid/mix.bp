@@ -1,0 +1,24 @@
+// mix is an error exactly when the outcome is provably constant.
+bp 1
+
+name        mix
+author      test
+version     1
+orientation all
+flippable   false
+
+materials
+  1 mix    oak|spruce
+  2 mix    oak                    // expect error mix_constant
+
+palette
+  8 option stone|cobblestone
+
+legend
+  F mix $8                        // expect error mix_constant
+  M mix $1 planks                 // expect report mix_noop
+  O option torch                  // expect report binding_unneeded
+  P $2 planks
+
+layer 0
+  FMOP

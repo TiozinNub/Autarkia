@@ -1,0 +1,30 @@
+// Grids: strict rows, strict depth, no tabs, every glyph declared.
+bp 1
+
+name        rows
+author      test
+version     1
+orientation all
+flippable   false
+
+legend
+  # stone
+
+layer 0
+  #####
+  #####
+  #####
+
+layer 1
+  #...#
+  #..#            // expect error row_width
+  #...#
+
+layer 2           // expect error grid_depth
+  #...#
+  #...#
+
+layer 3
+  #...#
+  #.Q.#           // expect error unknown_glyph
+  #.	.#           // expect error tab_in_row

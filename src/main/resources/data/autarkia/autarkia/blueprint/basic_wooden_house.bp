@@ -1,0 +1,67 @@
+bp 1
+
+name        basic wooden house
+author      TiozinNub
+version     1
+orientation all
+flippable   true
+
+materials
+  1 option overworld_wood
+  2 option any_color
+
+palette
+  3 option dirt|coarse_dirt|gravel
+
+legend
+  # $1 planks
+  - $1 log[axis=x]
+  | $1 log[axis=z]
+  o $1 log[axis=y]
+  D $1 door[facing=north,hinge=right]
+  B $2 bed[facing=south]
+  b $2 bed[facing=south,part=foot]
+  T torch
+  g $3
+
+layer -1
+  ggggg               // a deliberate slab of real material...
+  ggggg
+  ~~~~~               // ...over terrain that follows the hill
+  ~~~~~
+  ~~~~~
+
+layer 0
+  o---o
+  |###|
+  |###|
+  |###|
+  o---o
+
+layer 1
+  o###o
+  #b..#               // foot: optional, and must match what the head infers
+  #B..#               // head, facing south
+  #...#
+  o#D#o               // lower half only; the upper half is inferred
+
+layer 2
+  o###o
+  #.T.#               // one adjacent solid (the north wall): a wall torch facing south
+  .....               // window band
+  #...#
+  o#.#o               // must be air: the door's upper half lands here
+
+layer 3
+  o###o
+  #...#
+  #...#
+  #...#
+  o###o
+
+layer 4
+  o---o
+  |###|
+  |###|
+  |###|
+  o---o

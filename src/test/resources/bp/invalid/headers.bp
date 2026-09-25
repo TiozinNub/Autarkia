@@ -1,0 +1,15 @@
+// Required headers have no defaults; values are checked; an unknown header is only reported.
+// expect error header_missing
+bp 1
+
+name        headers
+author      test
+version     one           // expect error header_version
+orientation up            // expect error header_orientation
+colour      blue          // expect report header_unknown
+
+legend
+  # stone
+
+layer 0
+  ##
