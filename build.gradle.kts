@@ -251,6 +251,16 @@ tasks.register<Copy>("smokeMods") {
     into(layout.buildDirectory.dir("smoke-mods"))
 }
 
+// The offline blueprint checker the workspace's scripts/bp-check.sh runs: binds .bp files against a
+// dictionary the game exported with `/autarkia bp dictionary`, through the same core classes the
+// game compiles them with, and loads nothing of Minecraft's.
+tasks.register<JavaExec>("bpCheck") {
+    group = "verification"
+    description = "Check .bp blueprints against an exported dictionary, with no game running."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.luizloyola.autarkia.core.bp.BpCheck"
+}
+
 
 tasks.named<Test>("test") {
     useJUnitPlatform()

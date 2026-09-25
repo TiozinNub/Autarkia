@@ -176,11 +176,11 @@ public final class AutarkiaCommands {
                                 DirectionsCommands::directions, DirectionsCommands::home,
                                 () -> AgentCommands.inv(registryAccess)),
                         // noSubject — the root alone. `tree` paints the live world, `spawn` makes a
-                        // body there is not one of yet, and `debug` and `board view` are per-player
-                        // switches that vary with nothing about a subject.
+                        // body there is not one of yet, `debug` and `board view` are per-player
+                        // switches that vary with nothing about a subject, and `bp` reads files.
                         List.of(AgentCommands::list, AgentCommands::debug,
                                 AutarkiaCommands::whoisTargets, AutarkiaCommands::tree,
-                                AutarkiaCommands::spawn, AutarkiaCommands::boardViewNode,
+                                AutarkiaCommands::spawn, AutarkiaCommands::boardViewNode, BlueprintCommands::bp,
                                 () -> ConfigCommands.tree(AutarkiaConfig.store(), configFile)),
                         // asOnly — must name its subject; see erase().
                         List.of(AutarkiaCommands::erase))));

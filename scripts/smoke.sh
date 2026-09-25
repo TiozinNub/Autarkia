@@ -317,6 +317,20 @@ mc 'execute as @e[type=autarkia:person,name="CiProbe",limit=1] run autarkia need
 mc 'autarkia as CiProbe needs'
 grep -q 'food' <<< "$MC_OUT" || die "the Person exists but is not ticking"
 
+# Every blueprint the jar ships binds against THIS node's registry. A block renamed between versions
+# breaks a blueprint on one node and nowhere else, and the unit tests bind against a hand-built
+# slice of vanilla, so a boot is the only place that shows up. The library logs its count once the
+# dictionary is built from the live tags; `bp check` then reads one back through the command tree.
+await 'blueprints: [0-9]+ loaded, [0-9]+ broken' 60 'load its blueprints'
+grep -qaE 'blueprints: [1-9][0-9]* loaded, 0 broken' "$LOG" \
+    || die "a shipped blueprint does not bind on $NODE — the log names it; /autarkia bp check says why"
+mc 'autarkia bp check autarkia:basic_wooden_house'
+grep -q 'loads clean' <<< "$MC_OUT" || die "the shipped house binds but is not clean on $NODE"
+# And the dictionary the offline checker reads, written beside this node's world for anyone who
+# wants to check a blueprint against exactly this version: config/autarkia/blueprints/.
+mc 'autarkia bp dictionary'
+grep -q 'Wrote ' <<< "$MC_OUT" || die "the blueprint dictionary could not be exported on $NODE"
+
 # A server can reach "Done" and still have logged something that bites later — a failed datapack
 # load, a codec that dropped rows, an entity that threw on its first tick.
 #
