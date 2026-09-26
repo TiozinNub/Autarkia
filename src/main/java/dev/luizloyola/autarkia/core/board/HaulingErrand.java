@@ -57,6 +57,14 @@ public final class HaulingErrand implements CompoundTask {
         return work;
     }
 
+    /** The work comes first, before the haul. */
+    @Override
+    public void rejoin(List<Task> subtasks) {
+        if (!subtasks.isEmpty() && subtasks.get(0).getClass() == work.getClass()) {
+            subtasks.set(0, work);
+        }
+    }
+
     public Pos yard() {
         return yard;
     }
