@@ -23,7 +23,6 @@ import dev.luizloyola.autarkia.core.direction.PartyView;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -66,9 +65,6 @@ public final class Directions {
 
     private static @Nullable MinecraftServer live;
 
-    /** Each party's Directions' work as last seen on its board — see {@link Evolution#beat}. */
-    private static final Map<PartyId, Map<DirectionId, Project>> TRACKED = new HashMap<>();
-
     private Directions() {
     }
 
@@ -83,11 +79,9 @@ public final class Directions {
             rebuild();
         });
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, manager, success) -> rebuild());
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
-            live = null;
-            TRACKED.clear();
-        });
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         ServerTickEvents.END_SERVER_TICK.register(Directions::tick);
+        PartyBoards.onClosed(Directions::closed);
         Gate.install(new Answers());
     }
 
@@ -152,8 +146,7 @@ public final class Directions {
         }
         Home before = progress.home();
         PartyBoard board = PartyBoards.of(server, party);
-        Evolution.Outcome outcome = Evolution.beat(tree, progress, view(server, party, progress), board,
-                TRACKED.computeIfAbsent(party, p -> new HashMap<>()));
+        Evolution.Outcome outcome = Evolution.beat(tree, progress, view(server, party, progress), board);
         JournalService journal = Journals.of(server);
         for (Evolution.Posted posted : outcome.posted()) {
             tell(journal, members, "posted #" + posted.handle() + " " + posted.project().describe()
@@ -183,6 +176,22 @@ public final class Directions {
         if (grew || !outcome.reached().isEmpty()) {
             Gate.changed();
         }
+    }
+
+    /**
+     * A party's board closed finished work: each line whose work it was hears now, while the
+     * project still holds what it learned. Saved with the progress, so a restart loses nothing.
+     */
+    private static void closed(MinecraftServer server, PartyId party, List<Project> finished) {
+        if (server != live || tree.isEmpty()) {
+            return;
+        }
+        DirectionsData data = DirectionsData.get(server);
+        data.find(party).ifPresent(progress -> {
+            if (!Evolution.collect(tree, progress, view(server, party, progress), finished).isEmpty()) {
+                data.setDirty();
+            }
+        });
     }
 
     public static PartyView view(MinecraftServer server, PartyId party, PartyProgress progress) {
@@ -265,12 +274,17 @@ public final class Directions {
      */
     public static void home(MinecraftServer server, PartyId party, @Nullable Home home) {
         DirectionsData data = DirectionsData.get(server);
-        data.progress(party).home(home);
+        PartyProgress progress = data.progress(party);
+        // Found by content against the HOME being left, since its work names that plot and yard.
+        // An in-memory map of it was empty after a restart, and a HOME moved then left the old
+        // yard's gather and clearing running (2026-09-25).
+        PartyBoard board = PartyBoards.of(server, party);
+        List<Project> old = tree.isEmpty() || progress.home() == null ? List.of()
+                : Evolution.ownWork(tree, progress, view(server, party, progress), board);
+        progress.home(home);
         data.setDirty();
-        Map<DirectionId, Project> work = TRACKED.remove(party);
-        if (work != null) {
-            PartyBoard board = PartyBoards.of(server, party);
-            for (Project project : work.values()) {
+        if (!old.isEmpty()) {
+            for (Project project : old) {
                 board.handleOf(project).ifPresent(board::cancel);
             }
             PartyBoards.touch(server);

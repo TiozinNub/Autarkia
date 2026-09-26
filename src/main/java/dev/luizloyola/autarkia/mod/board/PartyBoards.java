@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.board;
 
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
+import dev.luizloyola.autarkia.core.board.Project;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +29,19 @@ public final class PartyBoards {
     /** Ticks between one board's beats. Slow on purpose: a project's cadence, not a body's. */
     public static final int TICK_INTERVAL = 40;
 
+    /** Told of every project a party's board closes finished, on the tick it closes. */
+    @FunctionalInterface
+    public interface ClosedListener {
+        void closed(MinecraftServer server, PartyId party, List<Project> finished);
+    }
+
+    private static final List<ClosedListener> CLOSED = new ArrayList<>();
+
+    /** Call from mod init. */
+    public static void onClosed(ClosedListener listener) {
+        CLOSED.add(listener);
+    }
+
     /** One registry per live server; dropped on stop. Server-thread only, like the journals. */
     private static final Map<MinecraftServer, Map<PartyId, PartyBoard>> BY_SERVER = new HashMap<>();
 
@@ -53,7 +67,12 @@ public final class PartyBoards {
             // none of which should be a concurrent modification of the map being walked.
             for (PartyBoard board : new ArrayList<>(boards.values())) {
                 if (dueThisTick(board.party(), now)) {
-                    board.tick(now);
+                    List<Project> finished = board.tick(now);
+                    if (!finished.isEmpty()) {
+                        for (ClosedListener listener : CLOSED) {
+                            listener.closed(server, board.party(), finished);
+                        }
+                    }
                 }
                 anythingPosted |= !board.isEmpty();
             }

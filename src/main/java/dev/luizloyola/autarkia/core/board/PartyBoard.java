@@ -38,16 +38,18 @@ public final class PartyBoard extends Board {
      * anything satisfied is closed — the beat that frees a shared errand when the member holding it
      * died, unloaded or was pulled away, with no member ticking and no death hook anywhere.
      *
-     * <p>A project that is not a {@link PartyProject} is carried but never ticked.
+     * <p>A project that is not a {@link PartyProject} is carried but never ticked. Returns the
+     * projects it closed finished, which the host passes on the same tick — the one moment a
+     * Direction can learn its work was done (see {@code Evolution.collect}).
      */
-    public void tick(long now) {
+    public List<Project> tick(long now) {
         for (Project project : projects()) {
             if (project instanceof PartyProject party) {
                 party.tick(now);
             }
         }
         expire(now);
-        closeFinished();
+        return closeFinished();
     }
 
     /**

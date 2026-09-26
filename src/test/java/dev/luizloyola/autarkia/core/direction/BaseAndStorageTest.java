@@ -14,10 +14,8 @@ import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.tree.TreeClearing;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -40,7 +38,6 @@ class BaseAndStorageTest {
     private final PartyId partyId = PartyId.of(new UUID(7, 7));
     private final PartyBoard board = new PartyBoard(partyId);
     private final PartyProgress progress = new PartyProgress();
-    private final Map<DirectionId, Project> tracked = new HashMap<>();
     private final Base view = new Base();
     private Tree tree;
 
@@ -104,7 +101,7 @@ class BaseAndStorageTest {
     }
 
     private Evolution.Outcome beat() {
-        return Evolution.beat(tree, progress, view, board, tracked);
+        return Evolution.beat(tree, progress, view, board);
     }
 
     private static List<String> lines(Evolution.Outcome outcome) {

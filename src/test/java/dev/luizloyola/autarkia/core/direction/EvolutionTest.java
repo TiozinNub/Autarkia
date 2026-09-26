@@ -15,9 +15,7 @@ import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.tree.TreeClearing;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -41,7 +39,6 @@ class EvolutionTest {
     private final PartyId partyId = PartyId.of(new UUID(4, 2));
     private final PartyBoard board = new PartyBoard(partyId);
     private final PartyProgress progress = new PartyProgress();
-    private final Map<DirectionId, Project> tracked = new HashMap<>();
     private final Stores view = new Stores();
     private Tree tree;
 
@@ -104,7 +101,7 @@ class EvolutionTest {
     }
 
     private Evolution.Outcome beat() {
-        return Evolution.beat(tree, progress, view, board, tracked);
+        return Evolution.beat(tree, progress, view, board);
     }
 
     @Test
@@ -164,15 +161,16 @@ class EvolutionTest {
         beat();
         view.logs = OptionalInt.of(64);
         beat();
-        // The clearing finishes on the board's own beat, and the board closes it before the
-        // Directions look again — the line only ever sees it gone.
-        ClearArea posted = (ClearArea) tracked.get(new DirectionId(WOOD, "area"));
+        // The clearing finishes, and the board's own tick closes it and hands it over on that tick
+        // — the one moment its ledger still exists. A restart between that close and the next
+        // Directions beat used to lose it: the map that remembered it lived in memory.
+        ClearArea posted = clearingOnTheBoard();
         board.cancel(board.handleOf(posted).orElseThrow());
         ClearArea done = ClearArea.restore(new ClearArea.State("trees", PLOT, 0.5, ClearArea.Phase.DONE,
                 List.of(), List.of(), 0, List.of(), YARD, List.of()), 0L).orElseThrow();
         board.post(done);
-        beat();
-        board.closeFinished();
+        assertEquals(List.of(new DirectionId(WOOD, "area")),
+                Evolution.collect(tree, progress, view, board.closeFinished()));
 
         Evolution.Outcome outcome = beat();
         assertTrue(progress.home().cleared(), "the finished clearing is the party's knowledge");
@@ -188,10 +186,29 @@ class EvolutionTest {
                 "and it leads nowhere new in a two-node tree");
     }
 
+    private ClearArea clearingOnTheBoard() {
+        return (ClearArea) board.projects().stream().filter(p -> p instanceof ClearArea)
+                .findFirst().orElseThrow();
+    }
+
+    /**
+     * Moving HOME withdraws the work the Directions had out for the old one, found by content —
+     * an in-memory map of it was empty after a restart and left the old yard's work running.
+     */
+    @Test
+    void theWorkForAHomeIsFoundByWhatItIs() {
+        beat();
+        board.post(new Gather(dev.luizloyola.autarkia.core.board.Stock.LOGS, 500,
+                new dev.luizloyola.anima.core.brain.sense.Pos(900, 64, 900), 0.5, partyId,
+                dev.luizloyola.autarkia.core.board.CarrySplit.INSTANCE));
+        List<Project> own = Evolution.ownWork(tree, progress, view, board);
+        assertEquals(2, own.size(), "the clearing and the gather for this HOME, not a gather elsewhere");
+    }
+
     @Test
     void aCancelledClearingIsPostedAgain() {
         beat();
-        ClearArea posted = (ClearArea) tracked.get(new DirectionId(WOOD, "area"));
+        ClearArea posted = clearingOnTheBoard();
         board.cancel(board.handleOf(posted).orElseThrow());
         Evolution.Outcome outcome = beat();
         assertEquals(List.of("area"), outcome.posted().stream().map(p -> p.direction().line()).toList());

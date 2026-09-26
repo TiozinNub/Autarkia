@@ -115,14 +115,17 @@ public class Board {
      * whatever cadence the owning scope ticks at, and separate from posting so a board nobody has
      * ticked yet still cannot serve items from a done project.
      */
-    public void closeFinished() {
+    public List<Project> closeFinished() {
+        List<Project> closed = new ArrayList<>();
         entries.removeIf(entry -> {
             if (!entry.project().finished()) {
                 return false;
             }
             forget(entry.project());
+            closed.add(entry.project());
             return true;
         });
+        return closed;
     }
 
     /**
