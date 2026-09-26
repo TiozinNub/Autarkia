@@ -1366,7 +1366,13 @@ public class Person extends Avatar implements AgentBody {
         // Only while actually going somewhere: ARRIVED and FAILED keep the goal for inspection,
         // and restoring either would send them walking back to a place they are already standing
         // in or have already given up on.
-        if (this.navigator.state() == Navigator.State.PATHING
+        //
+        // Everything loaded but not yet handed over is written back as it came in (here and below):
+        // a body saved before its first tick — a border chunk, an early autosave — otherwise wrote
+        // its fresh, empty organs over the ones it had, and lost them for good (2026-09-25).
+        if (this.pendingWalk != null) {
+            output.store(TAG_NAV_WALK, BrainState.WALK, this.pendingWalk);
+        } else if (this.navigator.state() == Navigator.State.PATHING
                 || this.navigator.state() == Navigator.State.FOLLOWING) {
             output.store(TAG_NAV_WALK, BrainState.WALK, this.navigator.snapshot());
         }
@@ -1386,8 +1392,10 @@ public class Person extends Avatar implements AgentBody {
         }
         // The plan and its grant, as one field. A body mid-errand that came back with an empty
         // executor would re-decide from scratch, which is a reboot it noticed.
-        output.store(TAG_BRAIN_PLAN, BrainState.brain(), this.brain.snapshot());
-        output.store(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD, this.personalBoard.snapshot());
+        output.store(TAG_BRAIN_PLAN, BrainState.brain(),
+                this.pendingBrain != null ? this.pendingBrain : this.brain.snapshot());
+        output.store(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD,
+                this.pendingBoard != null ? this.pendingBoard : this.personalBoard.snapshot());
         // Losing these does not blank the senses, it makes a body RE-NOTICE everyone around it and
         // announce them again — the loudest way an agent could tell you it had been rebooted.
         output.store(TAG_BEINGS, SenseState.BEINGS, this.beingSense.snapshot());
@@ -1407,8 +1415,8 @@ public class Person extends Avatar implements AgentBody {
             output.putDouble(TAG_LAST_X, this.lastX);
             output.putDouble(TAG_LAST_Z, this.lastZ);
         }
-        output.store(TAG_JOURNAL, BrainState.JOURNAL,
-                    Journals.of(level.getServer()).snapshot(this.personId));
+        output.store(TAG_JOURNAL, BrainState.JOURNAL, this.pendingJournal != null
+                    ? this.pendingJournal : Journals.of(level.getServer()).snapshot(this.personId));
         }
     }
 
