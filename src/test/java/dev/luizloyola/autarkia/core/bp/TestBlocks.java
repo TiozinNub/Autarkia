@@ -31,6 +31,10 @@ final class TestBlocks {
             + "south:none*,low,tall;west:none*,low,tall;" + WATER;
     private static final String BED = FACING + ";occupied:true,false*;part:head,foot*";
 
+    /** Wall-hung blocks share their standing twin's item, as vanilla's {@code StandingAndWallBlockItem} does. */
+    private static final Map<String, String> ITEM_OF = Map.of("wall_torch", "torch", "oak_wall_sign", "oak_sign",
+            "oak_wall_hanging_sign", "oak_hanging_sign");
+
     private static final Map<String, BlockInfo> BLOCKS = new LinkedHashMap<>();
 
     static {
@@ -98,6 +102,11 @@ final class TestBlocks {
         put("sand", true, 0, true, "");
         put("torch", false, 14, false, "");
         put("wall_torch", false, 14, false, FACING);
+        put("lantern", false, 15, false, "hanging:true,false*;" + WATER);
+        open("oak_sign", "rotation:0*,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15;" + WATER);
+        open("oak_wall_sign", FACING + ";" + WATER);
+        open("oak_hanging_sign", "rotation:0*,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15;attached:true,false*;" + WATER);
+        open("oak_wall_hanging_sign", FACING + ";" + WATER);
         open("chest", FACING + ";type:single*,left,right;" + WATER);
         open("oak_leaves", "distance:1,2,3,4,5,6,7*;persistent:true,false*;" + WATER);
         open("tall_grass", "half:upper,lower*");
@@ -135,7 +144,7 @@ final class TestBlocks {
             properties.put(kv[0], values);
         }
         String qualified = "minecraft:" + id;
-        String item = id.equals("air") ? "" : id.equals("wall_torch") ? "minecraft:torch" : qualified;
+        String item = id.equals("air") ? "" : "minecraft:" + ITEM_OF.getOrDefault(id, id);
         BLOCKS.put(qualified, new BlockInfo(qualified, properties, defaults, solid, light, falls, item));
     }
 

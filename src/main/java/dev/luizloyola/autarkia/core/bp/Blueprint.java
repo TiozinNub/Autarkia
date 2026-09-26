@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.bp;
 
+import dev.luizloyola.autarkia.core.bp.BpSource.Term;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,9 +77,11 @@ public final class Blueprint {
      * @param domain   what survives narrowing — the choices a planner is given
      * @param forms    for a material slot, every form the file asks of it
      */
-    public record SlotInfo(int number, SlotKind kind, Binding binding, String text, Set<String> declared,
-                           Set<String> domain, Set<String> forms, List<Outcome> outcomes, int line) {
+    public record SlotInfo(int number, SlotKind kind, Binding binding, String text, List<Term> terms,
+                           Set<String> declared, Set<String> domain, Set<String> forms, List<Outcome> outcomes,
+                           int line) {
         public SlotInfo {
+            terms = List.copyOf(terms);
             declared = Set.copyOf(declared);
             domain = Set.copyOf(domain);
             forms = Set.copyOf(forms);
@@ -87,8 +90,10 @@ public final class Blueprint {
     }
 
     /** A legend entry and every block it can come out as. */
-    public record EntryInfo(char glyph, @Nullable Binding binding, String text, List<Outcome> outcomes, int line) {
+    public record EntryInfo(char glyph, @Nullable Binding binding, String text, List<Term> terms,
+                            List<Outcome> outcomes, int line) {
         public EntryInfo {
+            terms = List.copyOf(terms);
             outcomes = List.copyOf(outcomes);
         }
     }

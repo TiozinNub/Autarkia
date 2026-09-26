@@ -112,7 +112,8 @@ public final class Binder {
         List<SlotInfo> slotInfos = new ArrayList<>();
         for (SlotState state : ordered()) {
             slotInfos.add(new SlotInfo(state.slot.number(), state.kind, state.slot.binding(),
-                    BpText.union(state.slot.binding(), state.slot.terms()), state.declared, state.domain,
+                    BpText.union(state.slot.binding(), state.slot.terms()), state.slot.terms(), state.declared,
+                    state.domain,
                     state.demands.stream().map(Demand::form).collect(Collectors.toCollection(TreeSet::new)),
                     state.outcomes, state.slot.line()));
         }
@@ -655,7 +656,7 @@ public final class Binder {
             checkBinding(entry.binding(), entry.terms(), outcomes.size(), entry.line(), entry.column(),
                     "'" + entry.glyph() + "'", false, true);
             legend.put(entry.glyph(), new EntryInfo(entry.glyph(), entry.binding(),
-                    BpText.union(entry.binding(), entry.terms()), outcomes, entry.line()));
+                    BpText.union(entry.binding(), entry.terms()), entry.terms(), outcomes, entry.line()));
         }
     }
 
@@ -950,7 +951,22 @@ public final class Binder {
                         Map<String, String> props) {
     }
 
-    enum Fixture { BED, TALL }
+    /** A bed's head and foot, or a door's or tall plant's two halves. */
+    enum Fixture {
+        BED("part", "head", "foot"),
+        TALL("half", "lower", "upper");
+
+        /** The property that names the part, and its value on the main part and on the other. */
+        final String key;
+        final String main;
+        final String other;
+
+        Fixture(String key, String main, String other) {
+            this.key = key;
+            this.main = main;
+            this.other = other;
+        }
+    }
 
     /** Null when the entry is no fixture; an error, and null, when its outcomes disagree. */
     private @Nullable Part part(EntryInfo entry) {
@@ -974,10 +990,9 @@ public final class Binder {
             if (here == null) {
                 continue;
             }
-            String partKey = here == Fixture.BED ? "part" : "half";
-            String mainValue = here == Fixture.BED ? "head" : "lower";
+            String partKey = here.key;
             // A part left unsaid is the main part, whatever vanilla's default (a bed's is the foot).
-            boolean isMain = mainValue.equals(outcome.props().getOrDefault(partKey, mainValue));
+            boolean isMain = here.main.equals(outcome.props().getOrDefault(partKey, here.main));
             if (main != null && main != isMain) {
                 out.error("fixture_mixed", entry.line(), 1, "'" + entry.glyph() + "' is sometimes the main part of "
                         + "its fixture and sometimes not");
@@ -1001,7 +1016,7 @@ public final class Binder {
         return new Part(kind, main, facing, blocks, props);
     }
 
-    private static @Nullable Fixture fixtureOf(BlockInfo info) {
+    static @Nullable Fixture fixtureOf(BlockInfo info) {
         List<String> part = info.properties().get("part");
         if (part != null && part.containsAll(List.of("head", "foot")) && info.properties().containsKey("facing")) {
             return Fixture.BED;
@@ -1080,10 +1095,17 @@ public final class Binder {
     }
 
     private static Cell partnerOf(Part part, Cell main) {
-        if (part.fixture() == Fixture.TALL) {
+        return partnerOf(part.fixture(), part.facing(), main);
+    }
+
+    /** Where a fixture's other part goes, from its main part's cell. */
+    static Cell partnerOf(Fixture fixture, @Nullable Facing facing, Cell main) {
+        if (fixture == Fixture.TALL) {
             return new Cell(main.layer() + 1, main.x(), main.z());
         }
-        Facing facing = part.facing() == null ? Facing.NORTH : part.facing();
+        if (facing == null) {
+            facing = Facing.NORTH;
+        }
         // A bed's facing points from foot to head, so the foot is one step behind the head.
         return new Cell(main.layer(), main.x() - facing.dx, main.z() - facing.dz);
     }
