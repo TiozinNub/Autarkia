@@ -109,6 +109,15 @@ public final class ComposedBoards implements WorkSource {
         sourceOf(item).claimed(item, ctx);
     }
 
+    /**
+     * A party errand a restored body already holds: its board handed the lease back on load, so the
+     * route is recorded as if it had just been claimed. Without it the item fell to the personal
+     * side, its heartbeats went nowhere, and the lease lapsed under a body still working it.
+     */
+    public void adoptParty(WorkItem item) {
+        offeredBy.put(item, party.get());
+    }
+
     @Override
     public void completed(WorkItem item, BrainContext ctx) {
         WorkSource from = sourceOf(item);

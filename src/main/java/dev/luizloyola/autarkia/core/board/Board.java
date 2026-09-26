@@ -422,6 +422,20 @@ public class Board {
     }
 
     /**
+     * The item {@code who} holds a live lease on, if any. A store hands its holds back when it loads,
+     * before any body ticks; this is how a body restored mid-errand finds which one is its own, since
+     * nothing it saved can name an item.
+     */
+    public Optional<WorkItem> heldBy(AgentId who, long now) {
+        for (Map.Entry<WorkItem, Lease> entry : leases.entrySet()) {
+            if (entry.getValue().liveAt(now) && entry.getValue().who().equals(who)) {
+                return Optional.of(entry.getKey());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Ticks a hold survives past its last heartbeat. Shared with {@code SiteClaims} in v1
      * (decision: Luiz — one semantics, and for the clear-area project the two holds coincide
      * anyway), so the one knob tunes both.

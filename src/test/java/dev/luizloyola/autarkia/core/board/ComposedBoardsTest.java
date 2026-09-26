@@ -165,6 +165,44 @@ class ComposedBoardsTest {
     }
 
     /**
+     * A body restored mid-errand: its party board handed the lease back when it loaded, and the
+     * fresh composite knows nothing of it. Found through the lease and adopted, the errand's
+     * heartbeats keep it alive and its outcome reaches the project. Before, the item fell to the
+     * personal side, the lease lapsed after one TTL, and another member took the same job while
+     * this one was still working it (in-world, 2026-09-23).
+     */
+    @Test
+    void aRestoredBodyFindsItsPartyErrandThroughItsLease() {
+        Minting theirs = new Minting();
+        party.post(theirs);
+        WorkItem item = work.bestAvailable(ctx).orElseThrow();
+        work.claimed(item, ctx);
+
+        ComposedBoards restored =
+                new ComposedBoards(personal.viewFor(() -> me), () -> party.viewFor(() -> me));
+        WorkItem held = party.heldBy(me, ctx.now()).orElseThrow();
+        assertSame(item, held);
+        restored.adoptParty(held);
+
+        for (int i = 0; i < 4; i++) {
+            ctx.advance(Board.ttlTicks() / 2);
+            restored.heartbeat(held, ctx);
+        }
+        assertTrue(party.holds(held, me, ctx.now()), "the heartbeats reached the party board");
+        restored.completed(held, ctx);
+        assertEquals(List.of("claimed", "completed"), theirs.events, "and so did the outcome");
+    }
+
+    @Test
+    void aLapsedLeaseNamesNothing() {
+        party.post(new Minting());
+        WorkItem item = work.bestAvailable(ctx).orElseThrow();
+        work.claimed(item, ctx);
+        ctx.advance(Board.ttlTicks() + 1);
+        assertTrue(party.heldBy(me, ctx.now()).isEmpty());
+    }
+
+    /**
      * Only the personal side has a cadence here. The party board thinks once per board in its
      * host, not once per member — ticking it from every member is the bug this asserts against.
      */

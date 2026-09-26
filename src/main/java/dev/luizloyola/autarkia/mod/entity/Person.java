@@ -299,8 +299,9 @@ public class Person extends Avatar implements AgentBody {
      * the other side of the machine/body split from {@link #inventory}/{@link #metabolism}: it runs
      * the task executor and only ever <em>reads</em> the body.
      */
-    private final BrainDriver brain = new BrainDriver(this, new ComposedBoards(
-            personalBoard.viewFor(this::getAgentId), this::partyWork));
+    private final ComposedBoards work = new ComposedBoards(
+            personalBoard.viewFor(this::getAgentId), this::partyWork);
+    private final BrainDriver brain = new BrainDriver(this, work);
 
     /**
      * The party board view handed to the brain, and the party it was built for — re-checked every
@@ -537,6 +538,18 @@ public class Person extends Avatar implements AgentBody {
                 held = this.personalBoard
                         .restore(board, this.personId, boardLevel.getGameTime())
                         .orElse(null);
+            }
+            if (held == null && brainState != null) {
+                // A party errand: the party's board loaded before any body ticks and handed the
+                // lease back to this body, which is all that names the item. Looked up whether or
+                // not the plan was running — a suspended claim keeps its lease too.
+                PartyId party = PartyData.get(boardLevel.getServer()).partyOf(this.personId);
+                held = PartyBoards.of(boardLevel.getServer(), party)
+                        .heldBy(this.personId, boardLevel.getGameTime())
+                        .orElse(null);
+                if (held != null) {
+                    this.work.adoptParty(held);
+                }
             }
             if (brainState != null) {
                 this.brain.restore(brainState, held);
