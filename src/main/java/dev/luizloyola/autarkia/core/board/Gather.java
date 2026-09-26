@@ -711,7 +711,15 @@ public final class Gather implements PartyProject {
      */
     public record State(String spec, int target, Pos yard, double priority, PartyId party,
                         String split, List<Pos> yardChests, List<Reading> readings,
-                        List<Trip> trips, List<Cooldown> cooldowns) implements ProjectState {
+                        List<Trip> trips, List<Cooldown> cooldowns, long lastTick)
+            implements ProjectState {
+
+        /** A state saved before the clock was: the restore's own tick stands in for it. */
+        public State(String spec, int target, Pos yard, double priority, PartyId party, String split,
+                     List<Pos> yardChests, List<Reading> readings, List<Trip> trips,
+                     List<Cooldown> cooldowns) {
+            this(spec, target, yard, priority, party, split, yardChests, readings, trips, cooldowns, -1L);
+        }
 
         @Override
         public String type() {
@@ -732,7 +740,7 @@ public final class Gather implements PartyProject {
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Cooldown(who, until)));
         return new State(spec.name(), target, yard, priority, party, split.id(),
                 List.copyOf(yardChests), List.copyOf(readings.values()), List.copyOf(trips),
-                List.copyOf(cooldowns));
+                List.copyOf(cooldowns), lastTick);
     }
 
     /**
@@ -762,7 +770,13 @@ public final class Gather implements PartyProject {
             // Rebuilds the offer around the trips just seeded. Nothing is minted: a trip exists
             // only where a claim did, so a reload cannot invent one for a member who never asked.
             // The seeding is provisional — whatever no hold comes back for goes in holdsRestored().
-            project.tick(now);
+            // The clock it had, not the restore's: it paces who may be offered a trip again. And
+            // not a tick, which withdrew a finished gather's seeded trips before its holds were
+            // back — holdsRestored() does that, after them.
+            project.lastTick = state.lastTick() >= 0 ? state.lastTick() : now;
+            if (!project.finished()) {
+                project.rebuildOffer();
+            }
             return project;
         });
     }

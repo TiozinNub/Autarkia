@@ -866,7 +866,10 @@ class GatherTest {
         assertTrue(back.offerableTo(back.open().get(0), SAM, new BoardBrainContext()),
                 "the unaffected member reloads unaffected");
 
-        Gather further = Gather.restore(back.snapshot(), 100L + Gather.FAIL_COOLDOWN).orElseThrow();
+        // Time does not pass across a reload — game time stands still while a server is down — so
+        // the cooldown runs out on the board's own tick, as it would have without one.
+        Gather further = Gather.restore(back.snapshot(), 100L).orElseThrow();
+        further.tick(100L + Gather.FAIL_COOLDOWN);
 
         assertTrue(further.offerableTo(further.open().get(0), KYLE, new BoardBrainContext()),
                 "and it actually expires — a saved cooldown is not a permanent ban");

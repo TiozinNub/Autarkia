@@ -74,11 +74,18 @@ public final class PartyBoard extends Board {
      * <p>Holds travel with the project because a {@link WorkKey} names an item <em>within</em> the
      * project that minted it: two projects clearing overlapping boxes would write the same key.
      */
-    public record Row(ProjectState project, List<Hold> holds) {
+    public record Row(ProjectState project, List<Hold> holds, int handle) {
+        /** A row saved before handles were: numbered afresh on restore. */
+        public Row(ProjectState project, List<Hold> holds) {
+            this(project, holds, 0);
+        }
     }
 
-    /** Who was holding which item when the world stopped. */
-    public record Hold(WorkKey key, AgentId who) {
+    /** Who was holding which item when the world stopped, and until when; 0 is "a fresh TTL". */
+    public record Hold(WorkKey key, AgentId who, long until) {
+        public Hold(WorkKey key, AgentId who) {
+            this(key, who, 0L);
+        }
     }
 
     /**
@@ -96,9 +103,10 @@ public final class PartyBoard extends Board {
             }
             List<Hold> holds = new ArrayList<>();
             for (Map.Entry<WorkItem, AgentId> hold : live) {
-                party.keyOf(hold.getKey()).ifPresent(key -> holds.add(new Hold(key, hold.getValue())));
+                party.keyOf(hold.getKey()).ifPresent(key -> holds.add(
+                        new Hold(key, hold.getValue(), leaseUntil(hold.getKey()))));
             }
-            rows.add(new Row(party.snapshot(), List.copyOf(holds)));
+            rows.add(new Row(party.snapshot(), List.copyOf(holds), handleOf(project).orElse(0)));
         }
         return List.copyOf(rows);
     }
@@ -130,10 +138,18 @@ public final class PartyBoard extends Board {
                 continue;
             }
             PartyProject project = rebuilt.get();
-            post(project);
+            if (row.handle() > 0) {
+                postAt(row.handle(), project);
+            } else {
+                post(project);
+            }
             for (Hold hold : row.holds()) {
                 project.itemFor(hold.key()).ifPresent(item -> {
-                    reclaim(item, hold.who(), now);
+                    if (hold.until() > 0) {
+                        reclaimUntil(item, hold.who(), hold.until());
+                    } else {
+                        reclaim(item, hold.who(), now);
+                    }
                     // `reclaim` skips the bidding `claim` does, and that includes telling the
                     // project — which would otherwise think the errand free and withdraw it out
                     // from under the member still walking to it. WITH the holder: a project that

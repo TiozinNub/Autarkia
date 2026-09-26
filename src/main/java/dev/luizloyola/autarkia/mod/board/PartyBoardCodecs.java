@@ -12,6 +12,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
@@ -20,6 +21,7 @@ import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.WorkKey;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
 import net.minecraft.core.BlockPos;
@@ -214,10 +216,12 @@ public final class PartyBoardCodecs {
                     // A world saved before pacing existed carries none — read as nobody cooling,
                     // never as a decode failure that costs the row.
                     GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
-                            .forGetter(Gather.State::cooldowns)
+                            .forGetter(Gather.State::cooldowns),
+                    // The project's clock, since 2026-09-26; absent, the restore's tick stands in.
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(Gather.State::lastTick)
             ).apply(project, (spec, target, yard, priority, party, split, chests, readings, trips,
-                    cooldowns) -> new Gather.State(spec, target, yard, priority, PartyId.of(party),
-                            split, chests, readings, trips, cooldowns)));
+                    cooldowns, lastTick) -> new Gather.State(spec, target, yard, priority,
+                            PartyId.of(party), split, chests, readings, trips, cooldowns, lastTick)));
 
     /** A station by the place kind it is remembered as and the block that places it. */
     public static final Codec<SetUp.Station> STATION = RecordCodecBuilder.create(station -> station.group(
@@ -236,7 +240,8 @@ public final class PartyBoardCodecs {
                     Codec.DOUBLE.fieldOf("priority").forGetter(SetUp.State::priority),
                     Codec.INT.optionalFieldOf("next", 0).forGetter(SetUp.State::next),
                     GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
-                            .forGetter(SetUp.State::cooldowns)
+                            .forGetter(SetUp.State::cooldowns),
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(SetUp.State::lastTick)
             ).apply(project, SetUp.State::new));
 
     /**
@@ -294,14 +299,28 @@ public final class PartyBoardCodecs {
             .dispatch(key -> key instanceof WorkKey.ForMember ? "for_member" : "at_place",
                     PartyBoardCodecs::workKeyCodecFor);
 
+    /** {@code until} and {@code handle} since 2026-09-26; a save without them reads as before. */
     public static final Codec<PartyBoard.Hold> HOLD = RecordCodecBuilder.create(hold -> hold.group(
             WORK_KEY.fieldOf("item").forGetter(PartyBoard.Hold::key),
-            UUIDUtil.CODEC.fieldOf("who").forGetter(held -> held.who().value())
-    ).apply(hold, (key, who) -> new PartyBoard.Hold(key, AgentId.of(who))));
+            UUIDUtil.CODEC.fieldOf("who").forGetter(held -> held.who().value()),
+            Codec.LONG.optionalFieldOf("until", 0L).forGetter(PartyBoard.Hold::until)
+    ).apply(hold, (key, who, until) -> new PartyBoard.Hold(key, AgentId.of(who), until)));
 
     /** One posted project and every hold on it — the row a party's board is a list of. */
     public static final Codec<PartyBoard.Row> ROW = RecordCodecBuilder.create(row -> row.group(
             PROJECT.fieldOf("project").forGetter(PartyBoard.Row::project),
-            HOLD.listOf().optionalFieldOf("holds", List.of()).forGetter(PartyBoard.Row::holds)
+            HOLD.listOf().optionalFieldOf("holds", List.of()).forGetter(PartyBoard.Row::holds),
+            Codec.INT.optionalFieldOf("handle", 0).forGetter(PartyBoard.Row::handle)
     ).apply(row, PartyBoard.Row::new));
+
+    /** A board's pacing — its next handle, and who is failing and stood down. */
+    public static final Codec<Board.Pacing> PACING = RecordCodecBuilder.create(pacing -> pacing.group(
+            Codec.INT.optionalFieldOf("next_handle", 0).forGetter(Board.Pacing::nextHandle),
+            Codec.unboundedMap(Codec.STRING.xmap(s -> AgentId.of(java.util.UUID.fromString(s)),
+                            who -> who.value().toString()), Codec.INT)
+                    .optionalFieldOf("flailing", Map.of()).forGetter(Board.Pacing::flailing),
+            Codec.unboundedMap(Codec.STRING.xmap(s -> AgentId.of(java.util.UUID.fromString(s)),
+                            who -> who.value().toString()), Codec.LONG)
+                    .optionalFieldOf("benched", Map.of()).forGetter(Board.Pacing::benched)
+    ).apply(pacing, Board.Pacing::new));
 }

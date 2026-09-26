@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.continuity.Ephemeral;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.SiteClaims;
@@ -66,6 +67,50 @@ public class Board {
     public int post(Project project) {
         entries.add(new Entry(nextHandle, project));
         return nextHandle++;
+    }
+
+    /**
+     * Posts a project back under the handle it had, so a restart does not renumber the {@code #n}
+     * an operator refers to.
+     */
+    protected void postAt(int handle, Project project) {
+        entries.add(new Entry(handle, project));
+        nextHandle = Math.max(nextHandle, handle + 1);
+    }
+
+    /** When this item's lease runs out, or 0 when nobody holds it. */
+    protected long leaseUntil(WorkItem item) {
+        Lease lease = leases.get(item);
+        return lease == null ? 0L : lease.untilTick();
+    }
+
+    /**
+     * A board's bookkeeping apart from its projects: the next handle, who is failing and who is
+     * stood down — pacing a restart must not forgive.
+     */
+    public record Pacing(int nextHandle, Map<AgentId, Integer> flailing, Map<AgentId, Long> benched) {
+        public static final Pacing NONE = new Pacing(0, Map.of(), Map.of());
+
+        public boolean isEmpty() {
+            return nextHandle <= 1 && flailing.isEmpty() && benched.isEmpty();
+        }
+    }
+
+    /** This board's pacing, for the save; a bench already over is left out. */
+    public Pacing pacing(long now) {
+        Map<AgentId, Long> standing = new java.util.LinkedHashMap<>();
+        benched.forEach((who, until) -> {
+            if (until > now) {
+                standing.put(who, until);
+            }
+        });
+        return new Pacing(nextHandle, Map.copyOf(flailing), Map.copyOf(standing));
+    }
+
+    public void restorePacing(Pacing pacing) {
+        nextHandle = Math.max(nextHandle, pacing.nextHandle());
+        flailing.putAll(pacing.flailing());
+        benched.putAll(pacing.benched());
     }
 
     /**
@@ -253,6 +298,7 @@ public class Board {
     public static final int PASS_OVER_LOG_INTERVAL = 600;
 
     /** Last passed-over journal line per item, for pacing. Identity-keyed like {@link #leases}. */
+    @Ephemeral("log pacing: a line said again after a reload is one line")
     private final Map<WorkItem, Long> passedOver = new IdentityHashMap<>();
 
     /**
@@ -389,6 +435,7 @@ public class Board {
      * bestFor runs every arbitration tick for every body, so only a CHANGE of reason writes a
      * line — the same dedupe {@code Arbiter.lastGranted} already applies to grants.
      */
+    @Ephemeral("log pacing: a line said again after a reload is one line")
     private final Map<AgentId, String> lastOffer = new java.util.HashMap<>();
 
     /**
@@ -636,5 +683,14 @@ public class Board {
      */
     public void reclaim(WorkItem item, AgentId who, long now) {
         leases.put(item, new Lease(who, now + ttlTicks()));
+    }
+
+    /**
+     * The same, to the tick the lease ran to when it was saved — game time stands still while a
+     * server is down, so that is the lease exactly as it was. A fresh TTL gave every restarted hold
+     * extra time an uninterrupted one would not have had.
+     */
+    public void reclaimUntil(WorkItem item, AgentId who, long until) {
+        leases.put(item, new Lease(who, until));
     }
 }

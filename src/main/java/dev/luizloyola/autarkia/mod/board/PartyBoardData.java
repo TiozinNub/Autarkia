@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.compat.SavedDatas;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.mod.store.StoreGuard;
+import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -44,13 +45,20 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
     /** This store's schema. Bump when the shape below changes incompatibly. */
     private static final int SCHEMA = 1;
 
-    /** One party's whole board. */
-    private record PartyRow(UUID party, List<PartyBoard.Row> projects) {
+    /** One party's whole board: its projects and its pacing. */
+    private record PartyRow(UUID party, List<PartyBoard.Row> projects, Board.Pacing pacing) {
+    }
+
+    /** What was saved for one party. */
+    public record Saved(List<PartyBoard.Row> projects, Board.Pacing pacing) {
+        static final Saved NONE = new Saved(List.of(), Board.Pacing.NONE);
     }
 
     private static final Codec<PartyRow> PARTY_ROW = RecordCodecBuilder.create(row -> row.group(
             UUIDUtil.CODEC.fieldOf("party").forGetter(PartyRow::party),
-            PartyBoardCodecs.ROW.listOf().fieldOf("projects").forGetter(PartyRow::projects)
+            PartyBoardCodecs.ROW.listOf().fieldOf("projects").forGetter(PartyRow::projects),
+            PartyBoardCodecs.PACING.optionalFieldOf("pacing", Board.Pacing.NONE)
+                    .forGetter(PartyRow::pacing)
     ).apply(row, PartyRow::new));
 
     private static final Codec<PartyBoardData> CODEC =
@@ -65,7 +73,7 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
             SavedDatas.type(ID, PartyBoardData::new, CODEC, DataFixTypes.LEVEL);
 
     /** What came off disk, consumed once by {@link PartyBoards} as it builds the boards. */
-    private final Map<PartyId, List<PartyBoard.Row>> loaded;
+    private final Map<PartyId, Saved> loaded;
     private final int loadedVersion;
     private final int declaredRows;
 
@@ -87,7 +95,7 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
         this(new LinkedHashMap<>(), StoreGuard.NEVER_LOADED, StoreGuard.UNCOUNTED);
     }
 
-    private PartyBoardData(Map<PartyId, List<PartyBoard.Row>> loaded, int loadedVersion,
+    private PartyBoardData(Map<PartyId, Saved> loaded, int loadedVersion,
                            int declaredRows) {
         this.loaded = loaded;
         this.loadedVersion = loadedVersion;
@@ -121,9 +129,9 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
     }
 
     /** What was saved for this party, and never twice — a board is restored once, at boot. */
-    public List<PartyBoard.Row> take(PartyId party) {
-        List<PartyBoard.Row> rows = loaded.remove(party);
-        return rows == null ? List.of() : rows;
+    public Saved take(PartyId party) {
+        Saved saved = loaded.remove(party);
+        return saved == null ? Saved.NONE : saved;
     }
 
     /** Every party that had a board on disk. */
@@ -146,24 +154,26 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
     private List<PartyRow> rows() {
         if (live == null) {
             List<PartyRow> pending = new ArrayList<>();
-            loaded.forEach((party, projects) -> pending.add(new PartyRow(party.value(), projects)));
+            loaded.forEach((party, saved) -> pending.add(
+                    new PartyRow(party.value(), saved.projects(), saved.pacing())));
             return pending;
         }
         long now = live.overworld().getGameTime();
         List<PartyRow> rows = new ArrayList<>();
         for (PartyBoard board : PartyBoards.all(live)) {
             List<PartyBoard.Row> projects = board.snapshot(now);
-            if (!projects.isEmpty()) {
-                rows.add(new PartyRow(board.party().value(), projects));
+            Board.Pacing pacing = board.pacing(now);
+            if (!projects.isEmpty() || !pacing.isEmpty()) {
+                rows.add(new PartyRow(board.party().value(), projects, pacing));
             }
         }
         return rows;
     }
 
     private static PartyBoardData fromRows(int version, int declaredRows, List<PartyRow> rows) {
-        Map<PartyId, List<PartyBoard.Row>> loaded = new LinkedHashMap<>();
+        Map<PartyId, Saved> loaded = new LinkedHashMap<>();
         for (PartyRow row : rows) {
-            loaded.put(PartyId.of(row.party()), row.projects());
+            loaded.put(PartyId.of(row.party()), new Saved(row.projects(), row.pacing()));
         }
         return new PartyBoardData(loaded, version, declaredRows);
     }

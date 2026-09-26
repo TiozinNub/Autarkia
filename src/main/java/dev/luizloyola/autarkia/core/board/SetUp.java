@@ -149,7 +149,7 @@ public final class SetUp implements PartyProject {
     public ProjectState snapshot() {
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
-        return new State(stations, near, priority, next, List.copyOf(cooldowns));
+        return new State(stations, near, priority, next, List.copyOf(cooldowns), lastTick);
     }
 
     @Override
@@ -229,7 +229,13 @@ public final class SetUp implements PartyProject {
 
     /** Everything this project is: what to put down, where, how far it got, and who is paced. */
     public record State(List<Station> stations, Pos near, double priority, int next,
-                        List<Gather.Cooldown> cooldowns) implements ProjectState {
+                        List<Gather.Cooldown> cooldowns, long lastTick) implements ProjectState {
+
+        /** A state saved before the clock was: the restore's own tick stands in for it. */
+        public State(List<Station> stations, Pos near, double priority, int next,
+                     List<Gather.Cooldown> cooldowns) {
+            this(stations, near, priority, next, cooldowns, -1L);
+        }
 
         @Override
         public String type() {
@@ -249,7 +255,8 @@ public final class SetUp implements PartyProject {
         for (Gather.Cooldown cooldown : state.cooldowns()) {
             project.cooldownUntil.put(cooldown.who(), cooldown.retryAfter());
         }
-        project.tick(now);
+        // The clock it had: it paces who may be offered the station again.
+        project.lastTick = state.lastTick() >= 0 ? state.lastTick() : now;
         return Optional.of(project);
     }
 

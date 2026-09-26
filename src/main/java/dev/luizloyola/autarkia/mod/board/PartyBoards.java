@@ -92,7 +92,10 @@ public final class PartyBoards {
         PartyBoardData store = PartyBoardData.get(server);
         long now = server.overworld().getGameTime();
         for (PartyId party : store.parties()) {
-            PartyBoardData.refuseUnknown(of(server, party).restore(store.take(party), now), party);
+            PartyBoardData.Saved saved = store.take(party);
+            PartyBoard board = of(server, party);
+            board.restorePacing(saved.pacing());
+            PartyBoardData.refuseUnknown(board.restore(saved.projects(), now), party);
         }
         store.attach(server);
     }
