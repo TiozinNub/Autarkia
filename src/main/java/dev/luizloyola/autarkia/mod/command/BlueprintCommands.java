@@ -1,21 +1,30 @@
 package dev.luizloyola.autarkia.mod.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.anima.mod.command.Replies;
+import dev.luizloyola.autarkia.compat.bp.Placer;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Facing;
 import dev.luizloyola.autarkia.core.bp.Blueprint.SlotInfo;
 import dev.luizloyola.autarkia.core.bp.Blueprint.SlotKind;
 import dev.luizloyola.autarkia.core.bp.BpCompiler.Compiled;
 import dev.luizloyola.autarkia.core.bp.BpText;
+import dev.luizloyola.autarkia.core.bp.BuildPlan;
+import dev.luizloyola.autarkia.core.bp.BuildPlan.BillLine;
+import dev.luizloyola.autarkia.core.bp.Chooser;
 import dev.luizloyola.autarkia.core.bp.Diagnostic;
 import dev.luizloyola.autarkia.core.bp.DiagnosticText;
+import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Dictionary;
 import dev.luizloyola.autarkia.core.bp.Facts;
 import dev.luizloyola.autarkia.core.bp.Ids;
+import dev.luizloyola.autarkia.core.bp.PlanArgs;
+import dev.luizloyola.autarkia.core.bp.Placement;
+import dev.luizloyola.autarkia.core.bp.Planner;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
@@ -30,17 +39,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.IdentifierArgument;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code /autarkia bp}: the blueprint library at the command line. What a blueprint says stays
@@ -65,6 +78,20 @@ public final class BlueprintCommands {
                                 .executes(ctx -> withEntry(ctx, (source, entry) -> showLayer(source, entry,
                                         IntegerArgumentType.getInteger(ctx, "layer")))))))
                 .then(Commands.literal("query").then(id(BlueprintCommands::query)))
+                .then(Commands.literal("bill").then(id((source, entry) -> bill(source, entry, ""))
+                        .then(words((source, entry, words) -> bill(source, entry, words)))))
+                .then(Commands.literal("place").then(id((source, entry) -> place(source, entry, null, ""))
+                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .executes(ctx -> {
+                                    BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+                                    return withEntry(ctx, (source, entry) -> place(source, entry, pos, ""));
+                                })
+                                .then(Commands.argument("words", StringArgumentType.greedyString())
+                                        .executes(ctx -> {
+                                            BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+                                            String words = StringArgumentType.getString(ctx, "words");
+                                            return withEntry(ctx, (source, entry) -> place(source, entry, pos, words));
+                                        })))))
                 .then(Commands.literal("reload").executes(BlueprintCommands::reload))
                 .then(Commands.literal("dictionary").executes(BlueprintCommands::dictionary));
     }
@@ -81,6 +108,18 @@ public final class BlueprintCommands {
             IdCommand command) {
         return Commands.argument("id", IdentifierArgument.id()).suggests(IDS)
                 .executes(ctx -> withEntry(ctx, command));
+    }
+
+    private interface WordsCommand {
+        int run(CommandSourceStack source, Entry entry, String words);
+    }
+
+    /** Pins, a facing and {@code flip}, as one greedy string: {@link PlanArgs} reads them in any order. */
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> words(
+            WordsCommand command) {
+        return Commands.argument("words", StringArgumentType.greedyString())
+                .executes(ctx -> withEntry(ctx, (source, entry) -> command.run(source, entry,
+                        StringArgumentType.getString(ctx, "words"))));
     }
 
     private static int withEntry(CommandContext<CommandSourceStack> ctx, IdCommand command) {
@@ -301,6 +340,112 @@ public final class BlueprintCommands {
                     String.join(" / ", need.nodes()), String.valueOf(need.glyph()))));
         }
         return 1;
+    }
+
+    // ── bill and place ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * The planned bill: every option settled — pinned, or rolled for this reading — and the
+     * bindings printed so the same reading can be asked for again.
+     */
+    private static int bill(CommandSourceStack source, Entry entry, String words) {
+        Blueprint bp = entry.compiled().blueprint();
+        if (bp == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.broken", entry.id()));
+            return 0;
+        }
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse(words, out);
+        if (args.facing() != null || args.flip()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.bill.pins_only"));
+            return 0;
+        }
+        BuildPlan plan = plan(source, entry, bp, args, out);
+        if (plan == null) {
+            return 0;
+        }
+        send(source, Component.translatable("autarkia.command.bp.bill.header", entry.id(), bindings(plan))
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
+        for (BillLine line : plan.bill()) {
+            send(source, indent(line.items().size() == 1
+                    ? Component.translatable("autarkia.command.bp.bill.one", line.count(), brief(line.items()))
+                    : Component.translatable("autarkia.command.bp.bill.any", line.count(), brief(line.items()))));
+        }
+        plan.itemless().forEach((block, count) -> send(source, indent(Component.translatable(
+                "autarkia.command.bp.bill.itemless", count, block).withStyle(ChatFormatting.GRAY))));
+        return 1;
+    }
+
+    /**
+     * Plan and write it at once, anchored at the footprint's centre on layer 0 — the given block, or
+     * the one under the executor's feet. Authoring only: there is no undo, and no record is kept.
+     */
+    private static int place(CommandSourceStack source, Entry entry, @Nullable BlockPos pos, String words) {
+        Blueprint bp = entry.compiled().blueprint();
+        if (bp == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.broken", entry.id()));
+            return 0;
+        }
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse(words, out);
+        Placement placement = out.hasErrors() ? null : args.placement(bp, out);
+        if (placement == null) {
+            failed(source, entry, out);
+            return 0;
+        }
+        BuildPlan plan = plan(source, entry, bp, args, out);
+        if (plan == null) {
+            return 0;
+        }
+        BlockPos anchor = pos != null ? pos : BlockPos.containing(source.getPosition()).below();
+        Placer.Result result = Placer.place(source.getLevel(), anchor, plan, placement);
+        switch (result.status()) {
+            case UNLOADED -> Replies.fail(source, Component.translatable("autarkia.command.bp.place.unloaded"));
+            case OUTSIDE_WORLD -> Replies.fail(source, Component.translatable("autarkia.command.bp.place.outside",
+                    result.detail()));
+            case UNKNOWN_STATE -> Replies.fail(source, Component.translatable("autarkia.command.bp.place.unknown",
+                    result.detail()));
+            case PLACED -> {
+                MutableComponent line = Component.translatable("autarkia.command.bp.place.done", entry.id(),
+                        plan.version(), anchor.getX(), anchor.getY(), anchor.getZ(), placement.north().word(),
+                        result.blocks(), result.cleared(), result.filled());
+                if (placement.flip()) {
+                    line.append(Component.translatable("autarkia.command.bp.place.flipped"));
+                }
+                line.append(Component.literal(" — ")).append(bindings(plan));
+                Replies.send(source, () -> line, true);
+            }
+        }
+        return result.status() == Placer.Status.PLACED ? 1 : 0;
+    }
+
+    /** A command's chooser is random (reader spec): the bindings it prints are what to pin for a repeat. */
+    private static @Nullable BuildPlan plan(CommandSourceStack source, Entry entry, Blueprint bp, PlanArgs args,
+                                            Diagnostics out) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        BuildPlan plan = out.hasErrors() ? null
+                : Planner.plan(bp, Blueprints.dictionary(), args.pins(), Chooser.random(random), random, out);
+        if (plan == null) {
+            failed(source, entry, out);
+        }
+        return plan;
+    }
+
+    private static void failed(CommandSourceStack source, Entry entry, Diagnostics out) {
+        Replies.fail(source, Component.translatable("autarkia.command.bp.plan.failed", entry.id()));
+        for (Diagnostic d : out.list()) {
+            send(source, indent(Component.literal(d.summary()).withStyle(d.isError() ? ChatFormatting.RED
+                    : ChatFormatting.YELLOW)));
+        }
+    }
+
+    /** {@code 1=spruce 2=red}, as a pin would write it back. */
+    private static Component bindings(BuildPlan plan) {
+        if (plan.bindings().isEmpty()) {
+            return Component.translatable("autarkia.command.bp.bindings.none").withStyle(ChatFormatting.GRAY);
+        }
+        return Component.literal(plan.bindings().entrySet().stream().map(e -> e.getKey() + "=" + e.getValue())
+                .collect(Collectors.joining(" "))).withStyle(ChatFormatting.AQUA);
     }
 
     private static String orientation(Blueprint bp) {

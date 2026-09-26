@@ -182,5 +182,17 @@
   "autarkia.command.bp.query.stations": "Stations: %s",
   "autarkia.command.bp.query.nodes": "Nodes %1$s, paths %2$s",
   "autarkia.command.bp.query.ungated": "Nothing in it waits on the tech tree.",
-  "autarkia.command.bp.query.needs": "Needs %1$s before '%2$s' can be built"
+  "autarkia.command.bp.query.needs": "Needs %1$s before '%2$s' can be built",
+  "autarkia.command.bp.bill.header": "Bill for %1$s — %2$s",
+  "autarkia.command.bp.bill.one": "%1$s × %2$s",
+  "autarkia.command.bp.bill.any": "%1$s × any of %2$s",
+  "autarkia.command.bp.bill.itemless": "%1$s × %2$s, placed with no item",
+  "autarkia.command.bp.bill.pins_only": "A bill takes pins only, like 1=spruce; a facing or a flip changes nothing in it.",
+  "autarkia.command.bp.bindings.none": "nothing to choose",
+  "autarkia.command.bp.plan.failed": "Could not plan %s:",
+  "autarkia.command.bp.place.done": "Placed %1$s (version %2$s) at %3$s %4$s %5$s, its north edge facing %6$s: %7$s blocks set, %8$s cleared, %9$s filled with ground",
+  "autarkia.command.bp.place.flipped": ", mirrored west to east",
+  "autarkia.command.bp.place.unloaded": "Part of the site is in chunks that are not loaded; nothing was placed.",
+  "autarkia.command.bp.place.outside": "It would reach past the world's height (y %s); nothing was placed.",
+  "autarkia.command.bp.place.unknown": "This game has no block state %s; nothing was placed."
 }

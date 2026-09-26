@@ -182,5 +182,17 @@
   "autarkia.command.bp.query.stations": "Estações: %s",
   "autarkia.command.bp.query.nodes": "Nós %1$s, caminhos %2$s",
   "autarkia.command.bp.query.ungated": "Nada nela espera pela árvore de tecnologia.",
-  "autarkia.command.bp.query.needs": "Precisa de %1$s antes que '%2$s' possa ser construído"
+  "autarkia.command.bp.query.needs": "Precisa de %1$s antes que '%2$s' possa ser construído",
+  "autarkia.command.bp.bill.header": "Materiais de %1$s — %2$s",
+  "autarkia.command.bp.bill.one": "%1$s × %2$s",
+  "autarkia.command.bp.bill.any": "%1$s × qualquer um de %2$s",
+  "autarkia.command.bp.bill.itemless": "%1$s × %2$s, colocado sem item",
+  "autarkia.command.bp.bill.pins_only": "A lista de materiais aceita só fixações, como 1=spruce; direção ou espelhamento não mudam nada nela.",
+  "autarkia.command.bp.bindings.none": "nada a escolher",
+  "autarkia.command.bp.plan.failed": "Não foi possível planejar %s:",
+  "autarkia.command.bp.place.done": "%1$s (versão %2$s) colocada em %3$s %4$s %5$s, com a borda norte voltada para %6$s: %7$s blocos postos, %8$s limpos, %9$s preenchidos com terreno",
+  "autarkia.command.bp.place.flipped": ", espelhada de oeste para leste",
+  "autarkia.command.bp.place.unloaded": "Parte do local está em chunks não carregados; nada foi colocado.",
+  "autarkia.command.bp.place.outside": "Passaria da altura do mundo (y %s); nada foi colocado.",
+  "autarkia.command.bp.place.unknown": "Este jogo não tem o estado de bloco %s; nada foi colocado."
 }
