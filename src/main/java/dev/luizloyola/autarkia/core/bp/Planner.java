@@ -69,14 +69,16 @@ public final class Planner {
 
     private final Blueprint bp;
     private final Dictionary dict;
+    private final Support support;
     private final RandomGenerator random;
     private final Diagnostics out;
     private final Map<Integer, Union> slots = new LinkedHashMap<>();
     private final Map<Character, Union> entries = new LinkedHashMap<>();
 
-    private Planner(Blueprint bp, Dictionary dict, RandomGenerator random, Diagnostics out) {
+    private Planner(Blueprint bp, Dictionary dict, Support support, RandomGenerator random, Diagnostics out) {
         this.bp = bp;
         this.dict = dict;
+        this.support = support;
         this.random = random;
         this.out = out;
     }
@@ -84,13 +86,14 @@ public final class Planner {
     /**
      * The plan, or null when a pin or an attachment was wrong — every problem reported either way.
      *
+     * @param support what holds a torch or a lantern up
      * @param pins    slot number to a member of its domain, a material or a block as the slot takes
      * @param chooser settles every option not pinned
      * @param random  rolls every mix, per cell
      */
-    public static @Nullable BuildPlan plan(Blueprint bp, Dictionary dict, Map<Integer, String> pins, Chooser chooser,
-                                           RandomGenerator random, Diagnostics out) {
-        return new Planner(bp, dict, random, out).plan(pins, chooser);
+    public static @Nullable BuildPlan plan(Blueprint bp, Dictionary dict, Support support, Map<Integer, String> pins,
+                                           Chooser chooser, RandomGenerator random, Diagnostics out) {
+        return new Planner(bp, dict, support, random, out).plan(pins, chooser);
     }
 
     private @Nullable BuildPlan plan(Map<Integer, String> pins, Chooser chooser) {
@@ -389,8 +392,10 @@ public final class Planner {
     /**
      * Torches, signs, buttons, lanterns: whatever hangs from something takes the first support in a
      * fixed, structure-local order — north, east, south, west, then floor, then ceiling (format
-     * spec) — so a turned building keeps its torches on the same walls. A property the author
-     * wrote that settles it (a lantern's {@code hanging}, a sign's {@code rotation}) is left alone.
+     * spec) — so a turned building keeps its torches on the same walls. A lantern hangs before it
+     * stands (decision: Luiz, 2026-09-26). Only nothing that can hold it refuses the plan. A property
+     * the author wrote that settles it (a lantern's {@code hanging}, a sign's {@code rotation}) is
+     * left alone.
      */
     private void attach(CellKind[] kinds, Outcome[] states) {
         Map<String, String> twins = wallTwins();
@@ -405,7 +410,8 @@ public final class Planner {
                     }
                     String wall = twins.get(info.id());
                     BlockInfo wallInfo = wall == null ? null : dict.block(wall).orElse(null);
-                    boolean twin = wallInfo != null && wallInfo.properties().keySet().containsAll(state.props().keySet());
+                    boolean twin = wallInfo != null
+                            && wallInfo.properties().keySet().containsAll(state.props().keySet());
                     boolean face = info.has("face", "wall") && info.has("face", "floor") && info.has("face", "ceiling")
                             && info.properties().containsKey("facing") && !state.props().containsKey("face");
                     boolean hanging = info.has("hanging", "true") && info.has("hanging", "false")
@@ -414,27 +420,35 @@ public final class Planner {
                         continue;
                     }
                     Outcome attached = null;
-                    if (twin || face) {
+                    if (hanging) {
+                        attached = holds(kinds, states, layer + 1, x, z, Support.Face.DOWN, true)
+                                ? with(state, "hanging", "true")
+                                : holds(kinds, states, layer - 1, x, z, Support.Face.UP, true)
+                                ? with(state, "hanging", "false") : null;
+                    } else {
                         for (Facing side : Facing.values()) {
-                            if (supports(kinds, states, layer, x + side.dx, z + side.dz)) {
+                            Support.Face toward = Support.Face.values()[side.opposite().ordinal()];
+                            if (holds(kinds, states, layer, x + side.dx, z + side.dz, toward, false)) {
                                 attached = twin ? with(new Outcome(wall, state.props()), "facing",
                                         side.opposite().word())
                                         : with(with(state, "face", "wall"), "facing", side.opposite().word());
                                 break;
                             }
                         }
-                    }
-                    if (attached == null && supports(kinds, states, layer - 1, x, z)) {
-                        attached = twin ? state : face ? with(state, "face", "floor") : with(state, "hanging", "false");
-                    }
-                    if (attached == null && !twin && supports(kinds, states, layer + 1, x, z)) {
-                        attached = face ? with(state, "face", "ceiling") : with(state, "hanging", "true");
+                        // A torch stands on the middle of a face; a button covers the whole of it.
+                        if (attached == null && holds(kinds, states, layer - 1, x, z, Support.Face.UP, twin)) {
+                            attached = twin ? state : with(state, "face", "floor");
+                        }
+                        if (attached == null && face
+                                && holds(kinds, states, layer + 1, x, z, Support.Face.DOWN, false)) {
+                            attached = with(state, "face", "ceiling");
+                        }
                     }
                     if (attached == null) {
                         out.cellError("unattached", bp.sourceLine(layer, z), bp.sourceColumn(layer, x, z),
-                                new Cell(layer, x, z), Ids.brief(info.id()) + " has nothing to hang from: no solid "
+                                new Cell(layer, x, z), Ids.brief(info.id()) + " has nothing to hang from: no "
                                         + (twin ? "wall or floor" : face ? "wall, floor or ceiling"
-                                        : "floor or ceiling") + " beside it");
+                                        : "ceiling or floor") + " beside it that can hold it");
                         continue;
                     }
                     states[i] = attached;
@@ -475,11 +489,12 @@ public final class Planner {
     }
 
     /**
-     * A full solid block, or ground: {@code ~}, and outside the drawing or under a {@code ?} at
-     * layer 0 and below, the world's own. {@code ?} above ground might be anything, so it holds
-     * nothing up.
+     * A block whose {@code face} holds, or ground: {@code ~}, and outside the drawing or under a
+     * {@code ?} at layer 0 and below, the world's own. {@code ?} above ground might be anything, so
+     * it holds nothing up.
      */
-    private boolean supports(CellKind[] kinds, Outcome[] states, int layer, int x, int z) {
+    private boolean holds(CellKind[] kinds, Outcome[] states, int layer, int x, int z, Support.Face face,
+                          boolean center) {
         if (!bp.contains(layer, x, z)) {
             return layer <= 0;
         }
@@ -488,7 +503,7 @@ public final class Planner {
             case TERRAIN -> true;
             case KEEP -> layer <= 0;
             case AIR -> false;
-            case BLOCK -> dict.block(states[i].block()).map(BlockInfo::solid).orElse(false);
+            case BLOCK -> support.holds(states[i], face, center);
         };
     }
 

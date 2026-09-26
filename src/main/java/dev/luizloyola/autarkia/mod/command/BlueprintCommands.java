@@ -424,7 +424,8 @@ public final class BlueprintCommands {
                                             Diagnostics out) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         BuildPlan plan = out.hasErrors() ? null
-                : Planner.plan(bp, Blueprints.dictionary(), args.pins(), Chooser.random(random), random, out);
+                : Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, args.pins(), Chooser.random(random),
+                        random, out);
         if (plan == null) {
             failed(source, entry, out);
         }

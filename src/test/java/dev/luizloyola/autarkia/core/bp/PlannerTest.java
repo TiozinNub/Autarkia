@@ -42,16 +42,23 @@ class PlannerTest {
         return compiled.blueprint();
     }
 
+    private static final Support CUBES = Support.solidCubes(DICT);
+
     private static BuildPlan plan(Blueprint bp, Map<Integer, String> pins, Chooser chooser, long seed) {
+        return plan(bp, CUBES, pins, chooser, seed);
+    }
+
+    private static BuildPlan plan(Blueprint bp, Support support, Map<Integer, String> pins, Chooser chooser,
+                                  long seed) {
         Diagnostics out = new Diagnostics();
-        BuildPlan plan = Planner.plan(bp, DICT, pins, chooser, new Random(seed), out);
+        BuildPlan plan = Planner.plan(bp, DICT, support, pins, chooser, new Random(seed), out);
         assertNotNull(plan, () -> "does not plan: " + out.list());
         return plan;
     }
 
     private static List<String> refusals(Blueprint bp, Map<Integer, String> pins) {
         Diagnostics out = new Diagnostics();
-        assertNull(Planner.plan(bp, DICT, pins, Chooser.random(new Random(1)), new Random(1), out));
+        assertNull(Planner.plan(bp, DICT, CUBES, pins, Chooser.random(new Random(1)), new Random(1), out));
         return out.list().stream().map(d -> d.code() + ": " + d.message()).toList();
     }
 
@@ -261,6 +268,10 @@ class PlannerTest {
     // ── attachments ─────────────────────────────────────────────────────────────────────────
 
     private static Outcome single(String legend, String... layers) {
+        return single(CUBES, legend, layers);
+    }
+
+    private static Outcome single(Support support, String legend, String... layers) {
         StringBuilder text = new StringBuilder(HEAD).append("legend\n  # stone\n").append(legend).append('\n');
         for (int i = 0; i < layers.length; i++) {
             text.append("layer ").append(i).append('\n');
@@ -269,7 +280,7 @@ class PlannerTest {
             }
         }
         Blueprint bp = bind(text.toString());
-        BuildPlan plan = plan(bp, Map.of(), NEVER, 1);
+        BuildPlan plan = plan(bp, support, Map.of(), NEVER, 1);
         for (int layer = bp.minLayer(); layer <= bp.maxLayer(); layer++) {
             for (int z = 0; z < bp.depth(); z++) {
                 for (int x = 0; x < bp.width(); x++) {
@@ -304,8 +315,31 @@ class PlannerTest {
         assertTrue(refused.get(0).startsWith("unattached: torch has nothing to hang from"), refused.get(0));
     }
 
+    /** A fence post holds a torch on its top and nothing on its side, as vanilla's shapes say. */
+    private static final Support POSTS = (block, face, center) -> block.block().endsWith("_fence")
+            ? face == Support.Face.UP && center : CUBES.holds(block, face, center);
+
     @Test
-    void aLanternStandsOrHangsAndAButtonFindsItsWall() {
+    void onlyWhatCanHoldItCounts() {
+        assertEquals(block("torch"), single(POSTS, "  T torch\n  f oak_fence", "f", "T"));
+        // Beside a post, over a floor: the post is no wall, so it stands.
+        assertEquals(block("torch"), single(POSTS, "  T torch\n  f oak_fence", "##", "fT"));
+        Blueprint bp = bind(HEAD + """
+                legend
+                  T torch
+                  f oak_fence
+                layer 0
+                  ..
+                layer 1
+                  fT
+                """);
+        assertTrue(refusals(bp, Map.of()).get(0).startsWith("unattached: torch has nothing to hang from: no wall "
+                + "or floor beside it that can hold it"));
+    }
+
+    @Test
+    void aLanternHangsBeforeItStandsAndAButtonFindsItsWall() {
+        assertEquals(block("lantern", "hanging", "true"), single("  T lantern", "#", "T", "#"));
         assertEquals(block("lantern", "hanging", "false"), single("  T lantern", "#", "T"));
         assertEquals(block("lantern", "hanging", "true"), single("  T lantern", ".", "T", "#"));
         assertEquals(block("stone_button", "face", "wall", "facing", "west"), single("  T stone_button", "..", "T#"));

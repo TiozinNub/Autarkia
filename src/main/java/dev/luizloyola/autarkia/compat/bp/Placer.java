@@ -4,20 +4,24 @@ import dev.luizloyola.anima.compat.terrain.GroundReader;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Outcome;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Placement;
+import dev.luizloyola.autarkia.core.bp.Support;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.SupportType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import org.jspecify.annotations.Nullable;
@@ -33,6 +37,16 @@ public final class Placer {
     /** Indexed by {@link Placement#turns()}. */
     private static final Rotation[] TURNS = {Rotation.NONE, Rotation.CLOCKWISE_90, Rotation.CLOCKWISE_180,
             Rotation.COUNTERCLOCKWISE_90};
+
+    /** Indexed by {@link Support.Face}'s ordinal. */
+    private static final Direction[] FACES = {Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST,
+            Direction.UP, Direction.DOWN};
+
+    /** Vanilla's own test, so a fence post holds a torch on top and not on its side. */
+    public static final Support SUPPORT = (block, face, center) -> resolve(block)
+            .map(state -> state.isFaceSturdy(EmptyBlockGetter.INSTANCE, BlockPos.ZERO, FACES[face.ordinal()],
+                    center ? SupportType.CENTER : SupportType.FULL))
+            .orElse(false);
 
     /** As deep as a column is read for the ground a {@code ~} copies; past it, dirt. */
     private static final int GROUND_SEARCH = 48;
