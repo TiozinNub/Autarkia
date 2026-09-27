@@ -167,7 +167,7 @@ class EvolutionTest {
         ClearArea posted = clearingOnTheBoard();
         board.cancel(board.handleOf(posted).orElseThrow());
         ClearArea done = ClearArea.restore(new ClearArea.State("trees", PLOT, 0.5, ClearArea.Phase.DONE,
-                List.of(), List.of(), 0, List.of(), YARD, List.of()), 0L).orElseThrow();
+                List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L).orElseThrow();
         board.post(done);
         assertEquals(List.of(new DirectionId(WOOD, "area")),
                 Evolution.collect(tree, progress, view, board.closeFinished()));

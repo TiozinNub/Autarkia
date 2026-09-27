@@ -117,16 +117,20 @@ public final class PartyBoardCodecs {
                     POS.optionalFieldOf("yard")
                             .forGetter(state -> java.util.Optional.ofNullable(state.yard())),
                     POS.listOf().optionalFieldOf("yard_chests", List.of())
-                            .forGetter(ClearArea.State::yardChests)
+                            .forGetter(ClearArea.State::yardChests),
+                    // Who has worked the box, so the end of the job still knows whose loads to
+                    // bring in after a restart. A save from before 2026-09-27 has no crew yet.
+                    UUIDUtil.CODEC.listOf().optionalFieldOf("crew", List.of())
+                            .forGetter(state -> state.crew().stream().map(AgentId::value).toList())
             ).apply(project, (clearing, bounds, priority, phase, cooldowns, targets, felled,
-                    covered, legacySwept, yard, chests) -> new ClearArea.State(
+                    covered, legacySwept, yard, chests, crew) -> new ClearArea.State(
                             clearing, bounds, priority, phase, cooldowns, targets, felled,
                             covered.isEmpty()
                                     ? legacySwept.stream()
                                             .map(at -> new ClearArea.CellMask(at, CoverageGrid.FULL))
                                             .toList()
                                     : covered,
-                            yard.orElse(null), chests)));
+                            yard.orElse(null), chests, crew.stream().map(AgentId::of).toList())));
 
     /** What one yard chest held when somebody last looked, and when they looked. */
     public static final Codec<Gather.Reading> READING =

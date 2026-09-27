@@ -37,6 +37,9 @@ import org.junit.jupiter.api.Test;
  */
 class PartyBoardCodecsTest {
 
+    /** A member who worked the box, so the end of the job knows whose load to bring in. */
+    private static final AgentId CREW = AgentId.random();
+
     private static PartyBoard.Row roundTrip(PartyBoard.Row row) {
         var encoded = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow();
         return PartyBoardCodecs.ROW.parse(JsonOps.INSTANCE, encoded).getOrThrow();
@@ -49,7 +52,7 @@ class PartyBoardCodecsTest {
                 targets, 7,
                 List.of(new ClearArea.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
                         new ClearArea.CellMask(new Pos(8, 60, 0), 0x00FF)),
-                new Pos(40, 63, 40), List.of(new Pos(41, 63, 40)));
+                new Pos(40, 63, 40), List.of(new Pos(41, 63, 40)), List.of(CREW));
     }
 
     @Test
@@ -79,7 +82,8 @@ class PartyBoardCodecsTest {
     void aBoxWithNoYardRoundTripsWithoutOne() {
         ClearArea.State plain = new ClearArea.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, ClearArea.Phase.WORKING, List.of(), List.of(), 0, List.of(), null, List.of());
+                0.5, ClearArea.Phase.WORKING, List.of(), List.of(), 0, List.of(), null, List.of(),
+                List.of());
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(plain, List.of()));
 
@@ -138,6 +142,14 @@ class PartyBoardCodecsTest {
                     PartyBoardCodecs.TARGET_STATE.encodeStart(JsonOps.INSTANCE, state).getOrThrow();
             assertEquals("\"" + state.name() + "\"", encoded.toString());
         }
+    }
+
+    @Test
+    void theCrewSurvivesTheFile() {
+        PartyBoard.Row after = roundTrip(
+                new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
+
+        assertEquals(List.of(CREW), ((ClearArea.State) after.project()).crew());
     }
 
     @Test

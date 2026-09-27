@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.brain.task.SweepingErrand;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
@@ -238,6 +239,15 @@ public final class ClearArea implements PartyProject {
     /** {@link #open} as the board sees it, rebuilt on change so an ask allocates nothing. */
     private List<WorkItem> offer = List.of();
 
+    /** Members who have taken any errand here: the crew whose loads the end of the job brings in. */
+    private final Set<AgentId> crew = new LinkedHashSet<>();
+
+    /** On offer to the crew while nothing here is unclaimed; {@link #realise} makes it one's own. */
+    private final BringInOffer bringIn = new BringInOffer();
+
+    /** Members whose bring-in failed, and until when they are not asked again. */
+    private final Map<AgentId, Long> bringInCooling = new java.util.HashMap<>();
+
     public ClearArea(Clearing clearing, Region bounds, double priority) {
         this(clearing, bounds, priority, null);
     }
@@ -315,7 +325,9 @@ public final class ClearArea implements PartyProject {
 
     @Override
     public boolean finished() {
-        return phase == Phase.DONE;
+        // Not while a load is on its way in: closing drops every hold, and the haul with it.
+        return phase == Phase.DONE
+                && open.keySet().stream().noneMatch(key -> WorkKey.BRING_IN.equals(key.flavour()));
     }
 
     // ── the beat ─────────────────────────────────────────────────────────────────────────────
@@ -494,6 +506,43 @@ public final class ClearArea implements PartyProject {
         keyOf(item).ifPresent(claimed::add);
     }
 
+    /** A bring-in becomes real at its claim, filed under the member, as a gathering trip does. */
+    @Override
+    public void claimed(WorkItem item, AgentId who) {
+        if (item instanceof BringInItem mine && !open.containsValue(item)) {
+            open.put(mine.key(), item);
+        }
+        crew.add(who);
+        claimed(item);
+        rebuildOffer();
+    }
+
+    /**
+     * The bring-in offer goes to a member of the crew with something to bring; a claimed one only
+     * to its own member. Everything else stays open to whoever gets there first.
+     */
+    @Override
+    public boolean offerableTo(WorkItem item, AgentId asker, BrainContext ctx) {
+        if (item == bringIn) {
+            return crew.contains(asker)
+                    && bringInCooling.getOrDefault(asker, 0L) <= ctx.percepts().time()
+                    && !new PutAwaySurplus(yard, 0).satisfied(ctx);
+        }
+        return !(item instanceof BringInItem mine) || mine.who.equals(asker);
+    }
+
+    @Override
+    public WorkItem realise(WorkItem offer, AgentId asker, BrainContext ctx) {
+        return offer == bringIn ? new BringInItem(asker) : offer;
+    }
+
+    /** A bring-in is minted for one asker and is on offer to nobody, so the scan alone misses it. */
+    @Override
+    public boolean owns(WorkItem item) {
+        return item == bringIn || (item instanceof BringInItem mine && mine.owner() == this)
+                || PartyProject.super.owns(item);
+    }
+
     /**
      * A lapsed hold is not a failure: the worker was pulled away and never came back, which says
      * nothing about whether the errand is doable. The item was already handed back to the pool by
@@ -501,7 +550,13 @@ public final class ClearArea implements PartyProject {
      */
     @Override
     public void lapsed(WorkItem item) {
-        keyOf(item).ifPresent(claimed::remove);
+        keyOf(item).ifPresent(key -> {
+            claimed.remove(key);
+            if (WorkKey.BRING_IN.equals(key.flavour())) {
+                open.remove(key); // a member's own haul; the offer mints another if still due
+                rebuildOffer();
+            }
+        });
     }
 
     @Override
@@ -515,6 +570,11 @@ public final class ClearArea implements PartyProject {
         claimed.remove(key);
         // Whatever the errand was, this worker has been out there and may have opened the yard.
         learnYard(ctx);
+        if (WorkKey.BRING_IN.equals(key.flavour())) {
+            open.remove(key);
+            rebuildOffer();
+            return;
+        }
         int found = harvest(ctx);
         // Every key this project mints is a place — see the two sites in refreshSurvey/refreshClearing.
         if (key instanceof WorkKey.AtPlace place) {
@@ -557,6 +617,14 @@ public final class ClearArea implements PartyProject {
         }
         WorkKey key = named.get();
         claimed.remove(key);
+        if (WorkKey.BRING_IN.equals(key.flavour())) {
+            open.remove(key);
+            if (who != null) {
+                bringInCooling.put(who, now + FAIL_COOLDOWN);
+            }
+            rebuildOffer();
+            return;
+        }
         // A worker who walked there and failed still had their near field running the whole way —
         // the errand's outcome is a different fact from what they saw en route.
         harvest(ctx);
@@ -646,6 +714,10 @@ public final class ClearArea implements PartyProject {
 
     @Override
     public Optional<WorkItem> itemFor(WorkKey key) {
+        if (key instanceof WorkKey.ForMember member && WorkKey.BRING_IN.equals(member.flavour())
+                && yard != null) {
+            return Optional.of(open.computeIfAbsent(key, k -> new BringInItem(member.who())));
+        }
         return Optional.ofNullable(open.get(key));
     }
 
@@ -859,7 +931,11 @@ public final class ClearArea implements PartyProject {
     }
 
     private void rebuildOffer() {
-        this.offer = List.copyOf(open.values());
+        List<WorkItem> items = new ArrayList<>(open.values());
+        if (yard != null && !unclaimedWork()) {
+            items.add(bringIn);
+        }
+        this.offer = List.copyOf(items);
     }
 
     /** The project's own sink: a worker's near field, and cells written off, land here. */
@@ -970,6 +1046,80 @@ public final class ClearArea implements PartyProject {
         }
     }
 
+    /**
+     * Take the load to the yard — the end of the job for a member whose last tree left others still
+     * being felled, so the in-errand check saw work and let the load be. Named by the member: a load
+     * has no place to be keyed by.
+     */
+    private final class BringInItem implements WorkItem {
+        private final AgentId who;
+
+        private BringInItem(AgentId who) {
+            this.who = who;
+        }
+
+        private WorkKey.ForMember key() {
+            return new WorkKey.ForMember(WorkKey.BRING_IN, who);
+        }
+
+        private ClearArea owner() {
+            return ClearArea.this;
+        }
+
+        @Override
+        public double priority() {
+            return priority;
+        }
+
+        @Override
+        public double estimatedCost(BrainContext ctx) {
+            return costOfWalkingTo(yard, ctx);
+        }
+
+        @Override
+        public Task root() {
+            return new PutAwaySurplus(yard, 0);
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.STOWING);
+        }
+
+        @Override
+        public String describe() {
+            return "bring the load in to the yard near " + at(yard);
+        }
+    }
+
+    /** What the crew sees; never itself claimed, since {@link #realise} swaps in a member's own. */
+    private final class BringInOffer implements WorkItem {
+        @Override
+        public double priority() {
+            return priority;
+        }
+
+        @Override
+        public double estimatedCost(BrainContext ctx) {
+            return costOfWalkingTo(yard, ctx);
+        }
+
+        @Override
+        public Task root() {
+            return new PutAwaySurplus(yard, 0);
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.STOWING);
+        }
+
+        @Override
+        public String describe() {
+            return "bring loads in to the yard near " + at(yard);
+        }
+    }
+
     private static Pos centreOf(Region area) {
         return new Pos((area.min().x() + area.max().x()) / 2, area.min().y(),
                 (area.min().z() + area.max().z()) / 2);
@@ -1005,7 +1155,8 @@ public final class ClearArea implements PartyProject {
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<SliceCooldown> sliceCooldowns, List<Target> targets,
                         int felledSinceReopen, List<CellMask> covered,
-                        @Nullable Pos yard, List<Pos> yardChests) implements ProjectState {
+                        @Nullable Pos yard, List<Pos> yardChests, List<AgentId> crew)
+            implements ProjectState {
 
         @Override
         public String type() {
@@ -1031,7 +1182,7 @@ public final class ClearArea implements PartyProject {
         covered.masks().forEach((corner, mask) -> cells.add(new CellMask(corner, mask)));
         return new State(clearing.id(), bounds, priority, phase, List.copyOf(cooldowns),
                 List.copyOf(ledger.values()), felledSinceReopen, List.copyOf(cells), yard,
-                List.copyOf(yardChests));
+                List.copyOf(yardChests), List.copyOf(crew));
     }
 
     /**
@@ -1055,6 +1206,7 @@ public final class ClearArea implements PartyProject {
                 project.covered.markMask(cell.corner(), cell.mask());
             }
             project.yardChests.addAll(state.yardChests());
+            project.crew.addAll(state.crew());
             project.refresh(now);
             return project;
         });

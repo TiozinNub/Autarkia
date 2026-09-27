@@ -113,9 +113,9 @@ class ClearAreaTest {
     // ── who an item is offerable to ─────────────────────────────────────────────────────────
 
     /**
-     * The regression that would hurt most: {@code ClearArea} never overrides
-     * {@link Project#offerableTo}, so a claim-board's items stay open to whoever gets there first —
-     * exactly what a claim-board is for.
+     * The regression that would hurt most: a survey or a tree stays open to whoever gets there
+     * first — exactly what a claim-board is for. Only the bring-in, being about one member's load,
+     * picks its taker.
      */
     @Test
     void anItemIsOfferableToAnybodyByDefault() {
@@ -244,6 +244,47 @@ class ClearAreaTest {
         project.claimed(trees.get(1));
         assertFalse(haul.satisfied(ctx),
                 "asked after the tree, not at the claim: somebody took the last one meanwhile");
+    }
+
+    private static boolean isBringIn(WorkItem item) {
+        return item.describe().startsWith("bring");
+    }
+
+    @Test
+    void aCrewMemberTheLastTreesWentPastIsSentHomeWithTheLoad() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        project.tick(0L);
+        AgentId surveyor = AgentId.random();
+        AgentId feller = AgentId.random();
+        WorkItem survey = project.open().get(0);
+        project.claimed(survey, surveyor);
+        project.completed(survey, ctxThatSaw(new Pos(3, 60, 3)));
+        WorkItem tree = clearItem(project);
+        assertTrue(project.open().stream().noneMatch(ClearAreaTest::isBringIn),
+                "a tree nobody holds is still the next job");
+
+        project.claimed(tree, feller);
+        WorkItem offer = project.open().stream().filter(ClearAreaTest::isBringIn)
+                .findFirst().orElseThrow();
+        BoardBrainContext laden = new BoardBrainContext();
+        laden.inventory().set(0, ItemStack.of("minecraft:oak_log", 6, 64));
+        assertTrue(project.offerableTo(offer, surveyor, laden));
+        assertFalse(project.offerableTo(offer, AgentId.random(), laden),
+                "the crew's loads, not anybody who happens to ask");
+        assertFalse(project.offerableTo(offer, surveyor, new BoardBrainContext()),
+                "an empty pack has nothing to bring");
+
+        WorkItem mine = project.realise(offer, surveyor, laden);
+        project.claimed(mine, surveyor);
+        assertFalse(project.offerableTo(mine, feller, laden), "a load is its carrier's");
+        PutAwaySurplus haul = (PutAwaySurplus) mine.root();
+        assertEquals(YARD, haul.hint());
+        assertEquals(0, haul.haulLine(), "everything goes, whatever the load");
+
+        project.completed(tree, new BoardBrainContext());
+        assertFalse(project.finished(), "closing now would drop the load on its way in");
+        project.completed(mine, laden);
+        assertTrue(project.finished());
     }
 
     @Test
