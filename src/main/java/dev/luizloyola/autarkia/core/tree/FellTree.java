@@ -49,8 +49,9 @@ import org.jspecify.annotations.Nullable;
  * on the ground, saplings and sticks included, nearest first, until none is left (decisions:
  * Luiz, 2026-09-10 and 2026-09-11). Then SUCCESS, with
  * the count, or FAILED with the one reason: a rise refused, nothing carried to rise on, the arm
- * refused a block for long, every side given up on, or wood left standing that the plan knew it
- * could not reach.
+ * refused a block for long, every side given up on, wood left standing that the plan knew it
+ * could not reach, or the tree claimed by somebody else. A tree a look finds already down is
+ * SUCCESS on the spot, with no walk.
  *
  * <p><b>The world holds the progress, the save holds the stage.</b> The survey is re-read every
  * second, the walk is re-ordered when the legs give up, a block is only ever begun on because the
@@ -332,10 +333,19 @@ public final class FellTree implements PrimitiveTask {
 
     @Override
     public TaskStatus tick(BrainContext ctx) {
+        // Heartbeat every tick, so ChopForLogs offers the tree to nobody else. Lost in the
+        // 2026-09-06 rewrite: 359 of 837 empty fells on 2026-09-27 set off for a tree somebody
+        // else was already felling.
+        if (!ctx.claims().claim(Pois.TREE, anchor, ctx.percepts().time())) {
+            return taken(ctx);
+        }
         // The ground around the stump matters until the tree is down; a sweep re-reading it
         // journals a fresh bearing from every cell it walks through.
         if (approach == null || (stage != Stage.COLLECT && ticks % RESURVEY_TICKS == 0)) {
             look(ctx);
+            if (stage == Stage.APPROACH && nothingStands(ctx)) {
+                return alreadyDown(ctx);
+            }
         }
         // A stage that finishes hands straight on to the next, so no tick is spent idle between.
         TaskStatus status = switch (stage) {
@@ -1615,7 +1625,45 @@ public final class FellTree implements PrimitiveTask {
         return TaskStatus.FAILED;
     }
 
+    /** Somebody else's live claim. Theirs to fell, not a tree that beat the chop, so no avoid mark. */
+    private TaskStatus taken(BrainContext ctx) {
+        failure = "somebody else is felling it";
+        phase = "gave up — " + failure;
+        say(ctx, phase);
+        release(ctx);
+        return TaskStatus.FAILED;
+    }
+
+    /**
+     * No trunk where the plan would read one: a party-mate felled it while this body still
+     * remembered it. Ends at the look instead of at the stump — a median 110 ticks of walking
+     * each, 423 times on 2026-09-27.
+     */
+    private boolean nothingStands(BrainContext ctx) {
+        BlockProbe blocks = ctx.percepts().blocks();
+        // An unloaded chunk reads as no log too, and must not wipe a tree nobody has seen go.
+        if (approach.standing()
+                || blocks.at(anchor.x(), anchor.y(), anchor.z()) == BlockKind.UNKNOWN) {
+            return false;
+        }
+        for (Pos column : approach.base()) {
+            if (!Climb.column(column, blocks, COLUMN_GAP).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private TaskStatus alreadyDown(BrainContext ctx) {
+        say(ctx, "the tree at " + where(anchor) + " is already down");
+        phase = "already down";
+        release(ctx);
+        ctx.knowledge().forget(Pois.TREE, anchor);
+        return TaskStatus.SUCCESS;
+    }
+
     private void release(BrainContext ctx) {
+        ctx.claims().release(Pois.TREE, anchor);
         ctx.actuators().mover().stop();
         ctx.actuators().breaker().abort();
         ctx.actuators().riser().abort();

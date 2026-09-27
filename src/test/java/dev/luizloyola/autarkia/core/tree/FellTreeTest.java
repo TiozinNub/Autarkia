@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.act.BreakState;
 import dev.luizloyola.anima.core.brain.act.LeanState;
 import dev.luizloyola.anima.core.brain.act.MoveFailure;
@@ -54,8 +55,12 @@ class FellTreeTest {
 
     /** A birch remembered at {@code anchor}, the way perception notes one. */
     private void remember(Pos anchor) {
-        ctx.knowledge().note(new PoiMemory(Pois.TREE, "minecraft:birch_log", null, anchor,
-                new Region(anchor, new Pos(anchor.x(), anchor.y() + 6, anchor.z())), 7, false, 0), 8);
+        ctx.knowledge().note(birch(anchor), 8);
+    }
+
+    private static PoiMemory birch(Pos anchor) {
+        return new PoiMemory(Pois.TREE, "minecraft:birch_log", null, anchor,
+                new Region(anchor, new Pos(anchor.x(), anchor.y() + 6, anchor.z())), 7, false, 0);
     }
 
     private boolean remembers(Pos anchor) {
@@ -984,6 +989,94 @@ class FellTreeTest {
 
         assertEquals(TaskStatus.SUCCESS, drive(400), "nothing stands, so nothing is left to do");
         assertFalse(remembers(ANCHOR), "and the memory says so, or the next round comes back");
+    }
+
+    @Test
+    void aTreeAlreadyDownEndsAtTheLookWithNoWalk() {
+        standSouth();
+        remember(ANCHOR);
+
+        assertEquals(TaskStatus.SUCCESS, task.tick(ctx));
+        assertEquals(0, ctx.mover.moveToCalls,
+                "423 walks to a party-mate's stump, a median 110 ticks each (2026-09-27)");
+        assertEquals(List.of("the tree at " + at(ANCHOR) + " is already down"), said("the tree at"));
+        assertFalse(remembers(ANCHOR));
+    }
+
+    @Test
+    void aTreeFelledByAnotherMidWalkEndsAtTheNextLook() {
+        trunk();
+        standSouth();
+        task.tick(ctx);
+        assertTrue(ctx.mover.moveToCalls > 0, "on its way");
+        for (int y = BASE; y < BASE + 7; y++) {
+            ctx.percepts.blocks.clear(0, y, 0);
+        }
+
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; status == TaskStatus.RUNNING && i < FellTree.RESURVEY_TICKS; i++) {
+            status = task.tick(ctx);
+        }
+        assertEquals(TaskStatus.SUCCESS, status);
+        assertEquals(1, said("the tree at").size());
+    }
+
+    @Test
+    void aStumpInAnUnloadedChunkIsNotCalledDown() {
+        standSouth();
+        remember(ANCHOR);
+        ctx.percepts.blocks.markUnloaded(ANCHOR.x(), ANCHOR.z());
+
+        assertEquals(TaskStatus.RUNNING, task.tick(ctx));
+        assertTrue(remembers(ANCHOR), "nobody has seen it go");
+    }
+
+    // ── the claim ────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void theTreeIsHeldWhileItIsWorkedAndLetGoAtTheEnd() {
+        trunk();
+        pack(4);
+        standSouth();
+        AgentId other = AgentId.random();
+
+        task.tick(ctx);
+        assertFalse(ctx.siteClaims.availableTo(Pois.TREE, ANCHOR, other, ctx.percepts.time));
+
+        assertEquals(TaskStatus.SUCCESS, drive(400));
+        assertTrue(ctx.siteClaims.availableTo(Pois.TREE, ANCHOR, other, ctx.percepts.time));
+    }
+
+    @Test
+    void aTreeSomebodyElseHoldsIsTheirsAndNotAvoided() {
+        trunk();
+        standSouth();
+        ctx.siteClaims.claim(Pois.TREE, ANCHOR, AgentId.random(), ctx.percepts.time);
+
+        assertEquals(TaskStatus.FAILED, task.tick(ctx));
+        assertEquals(List.of("gave up — somebody else is felling it"), said("gave up"));
+        assertEquals(0, ctx.mover.moveToCalls);
+        assertFalse(ctx.knowledge().isAvoided(Pois.TREE, ANCHOR, ctx.percepts.time),
+                "free again the moment its holder lets go");
+    }
+
+    @Test
+    void aPartyMateSetsOffForAnotherTreeOnceThisOneIsTaken() {
+        trunk();
+        standSouth();
+        remember(ANCHOR);
+        remember(FAR);
+        FakeContext mate = new FakeContext();
+        mate.siteClaims = ctx.siteClaims;
+        mate.percepts.position = ctx.percepts.position;
+        mate.knowledge().note(birch(ANCHOR), 8);
+        mate.knowledge().note(birch(FAR), 8);
+        ChopForLogs chop = new ChopForLogs(Stock.LOGS);
+
+        ((FellTree) chop.decompose(ctx).get(0)).tick(ctx);
+
+        assertEquals(FAR, ((FellTree) chop.decompose(mate).get(0)).anchor(), "359 of 837 empty "
+                + "fells set off for a tree somebody was already felling (2026-09-27)");
     }
 
     @Test
