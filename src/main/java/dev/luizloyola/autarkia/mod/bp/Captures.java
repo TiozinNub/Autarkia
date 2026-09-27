@@ -27,13 +27,14 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.context.UseOnContext;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The blueprint wand and what it marks (capture spec, 2026-09-27): each player's box, painted while
- * the wand is held, and the captures reading the world a slice per tick.
+ * the wand is on the hotbar, and the captures reading the world a slice per tick.
  */
 public final class Captures {
 
@@ -106,14 +107,26 @@ public final class Captures {
         }
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             Marked box = MARKED.get(player.getUUID());
-            boolean holding = player.getMainHandItem().is(WAND) || player.getOffhandItem().is(WAND);
-            if (holding && box != null && box.first() != null) {
+            if (carried(player) && box != null && box.first() != null) {
                 CellOverlays.show(player, paint(player.level(), box));
                 PAINTED.add(player.getUUID());
             } else if (PAINTED.remove(player.getUUID())) {
                 CellOverlays.clear(player, OVERLAY);
             }
         }
+    }
+
+    /** On the hotbar or in the off hand: within a key of the hand, so the box stays in sight while building. */
+    private static boolean carried(ServerPlayer player) {
+        if (player.getOffhandItem().is(WAND)) {
+            return true;
+        }
+        for (int slot = 0; slot < Inventory.getSelectionSize(); slot++) {
+            if (player.getInventory().getItem(slot).is(WAND)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The box's outline, and its ground layer in another colour when the ground can be told. */
