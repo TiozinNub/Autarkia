@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.bp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,8 +13,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 /** Groups of variants: what a selection composes to, which are allowed, and how each is checked. */
@@ -158,6 +162,68 @@ class VariantsTest {
         Diagnostic floating = shelf.diagnostics().stream().filter(d -> d.code().equals("unsupported"))
                 .findFirst().orElseThrow();
         assertTrue(floating.message().endsWith(" — with shelf.high"), floating.message());
+    }
+
+    // ── planning ────────────────────────────────────────────────────────────────────────────
+
+    private static BuildPlan plan(Blueprint bp, Map<String, String> variants, Chooser chooser, Diagnostics out) {
+        return Planner.plan(bp, CorpusTest.DICT, Support.solidCubes(CorpusTest.DICT), Map.of(1, "oak"), variants,
+                chooser, new Random(1), out);
+    }
+
+    @Test
+    void aPinnedVariantBringsWhatItNeedsAndThePlanSaysSo() throws Exception {
+        Diagnostics out = new Diagnostics();
+        List<Chooser.Choice> offered = new ArrayList<>();
+        BuildPlan plan = plan(hut(), Map.of("beds", "three"), (what, choices) -> {
+            assertEquals("variants", what);
+            offered.addAll(choices);
+            return 0;
+        }, out);
+        assertNotNull(plan, out.list()::toString);
+        // beds.three needs the wing, so only the cellar is left to choose: without it, or with it.
+        assertEquals(List.of("wing.east, beds.three", "wing.east, beds.three, cellar.storage"),
+                offered.stream().map(Chooser.Choice::label).toList());
+        assertEquals(Map.of("wing", "east", "beds", "three", "cellar", "none"), plan.variants());
+        assertEquals("wing=east beds=three cellar=none 1=oak", plan.pins());
+        assertEquals(3, plan.bill().stream().filter(line -> line.items().contains("minecraft:red_bed"))
+                .mapToInt(BuildPlan.BillLine::count).sum());
+        assertEquals("minecraft:red_bed", plan.state(1, 6, 2).block());
+    }
+
+    @Test
+    void unpinnedEveryAllowedSelectionIsOffered() throws Exception {
+        List<Chooser.Choice> offered = new ArrayList<>();
+        Diagnostics out = new Diagnostics();
+        BuildPlan plan = plan(hut(), Map.of(), (what, choices) -> {
+            offered.addAll(choices);
+            return choices.size() - 1;
+        }, out);
+        assertNotNull(plan, out.list()::toString);
+        assertEquals(10, offered.size());
+        assertTrue(offered.stream().allMatch(choice -> choice.weight() == 0.1));
+        assertEquals(Map.of("wing", "east", "beds", "three", "cellar", "storage"), plan.variants());
+    }
+
+    @Test
+    void aPinTheFileCannotHonourIsRefusedWithTheReason() throws Exception {
+        Blueprint hut = hut();
+        Chooser never = (what, choices) -> {
+            throw new AssertionError("refused before choosing");
+        };
+        Map<String, String> needsTheWing = new LinkedHashMap<>();
+        needsTheWing.put("beds", "three");
+        needsTheWing.put("wing", "none");
+        Map<Map<String, String>, String> refusals = Map.of(
+                needsTheWing, "pin_needs: no selection has beds=three wing=none: beds.three needs wing.east",
+                Map.of("beds", "none"), "pin_required: group 'beds' is required: pin one of one, two, three",
+                Map.of("bed", "two"), "pin_group: no group 'bed' — did you mean 'beds'?; it has wing, beds, cellar",
+                Map.of("beds", "four"), "pin_variant: group 'beds' has one, two, three — not 'four'");
+        refusals.forEach((pins, said) -> {
+            Diagnostics out = new Diagnostics();
+            assertNull(plan(hut, pins, never, out));
+            assertEquals(List.of(said), out.list().stream().map(d -> d.code() + ": " + d.message()).toList());
+        });
     }
 
     @Test

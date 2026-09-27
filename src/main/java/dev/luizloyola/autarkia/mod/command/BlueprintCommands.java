@@ -25,6 +25,7 @@ import dev.luizloyola.autarkia.core.bp.Ids;
 import dev.luizloyola.autarkia.core.bp.PlanArgs;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Planner;
+import dev.luizloyola.autarkia.core.bp.Variants;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
@@ -259,17 +260,27 @@ public final class BlueprintCommands {
         }
         send(source, Component.translatable("autarkia.command.bp.show.layer", entry.id(), layer, bp.minLayer(),
                 bp.maxLayer()).withStyle(ChatFormatting.LIGHT_PURPLE));
-        send(source, grid("layer " + layer, BpText.rows(bp, layer)));
-        List<String> overlay = BpText.overlayRows(bp, layer);
-        if (!overlay.isEmpty()) {
-            send(source, grid("node layer " + layer, overlay));
-        }
         // The cells only: a row's node ids would otherwise match the glyphs their letters spell.
-        String cells = BpText.rows(bp, layer).stream().map(row -> row.substring(0, bp.width()))
-                .collect(Collectors.joining());
+        StringBuilder cells = new StringBuilder();
+        if (layer >= bp.baseMinLayer() && layer <= bp.baseMaxLayer()) {
+            send(source, grid("layer " + layer, BpText.rows(bp, layer)));
+            List<String> overlay = BpText.overlayRows(bp, layer);
+            if (!overlay.isEmpty()) {
+                send(source, grid("node layer " + layer, overlay));
+            }
+            BpText.rows(bp, layer).forEach(row -> cells.append(row, 0, bp.width()));
+        }
+        // A grid per variant, each its own message: a folding chat would merge two identical ones.
+        for (String key : bp.variants().keys()) {
+            List<String> rows = BpText.variantRows(bp, key, layer);
+            if (!rows.isEmpty()) {
+                send(source, grid("layer " + layer + " " + key, rows));
+                rows.forEach(cells::append);
+            }
+        }
         List<String> used = new ArrayList<>();
         bp.legend().values().forEach(e -> {
-            if (cells.indexOf(e.glyph()) >= 0) {
+            if (cells.indexOf(String.valueOf(e.glyph())) >= 0) {
                 used.add(e.glyph() + " " + e.text());
             }
         });
@@ -311,6 +322,7 @@ public final class BlueprintCommands {
                         brief(dropped), String.join(", ", slot.forms())).withStyle(ChatFormatting.GRAY))));
             }
         }
+        variants(source, bp, dict, facts);
         facts.countsInLegendOrder(bp).forEach((glyph, count) -> send(source, indent(Component.translatable(
                 "autarkia.command.bp.query.entry", String.valueOf(glyph), count,
                 bp.legend().get(glyph).text()))));
@@ -424,8 +436,8 @@ public final class BlueprintCommands {
                                             Diagnostics out) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         BuildPlan plan = out.hasErrors() ? null
-                : Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, args.pins(), Chooser.random(random),
-                        random, out);
+                : Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, args.pins(), args.variants(),
+                        Chooser.random(random), random, out);
         if (plan == null) {
             failed(source, entry, out);
         }
@@ -440,13 +452,53 @@ public final class BlueprintCommands {
         }
     }
 
-    /** {@code 1=spruce 2=red}, as a pin would write it back. */
+    /** {@code beds=two cellar=none 1=spruce}, as the pins would write it back. */
     private static Component bindings(BuildPlan plan) {
-        if (plan.bindings().isEmpty()) {
+        if (plan.pins().isEmpty()) {
             return Component.translatable("autarkia.command.bp.bindings.none").withStyle(ChatFormatting.GRAY);
         }
-        return Component.literal(plan.bindings().entrySet().stream().map(e -> e.getKey() + "=" + e.getValue())
-                .collect(Collectors.joining(" "))).withStyle(ChatFormatting.AQUA);
+        return Component.literal(plan.pins()).withStyle(ChatFormatting.AQUA);
+    }
+
+    /** The groups, what needs what, and what each variant adds to the base, counted as the facts count. */
+    private static void variants(CommandSourceStack source, Blueprint bp, Dictionary dict, Facts base) {
+        Variants variants = bp.variants();
+        if (variants.isEmpty()) {
+            return;
+        }
+        send(source, indent(Component.translatable("autarkia.command.bp.query.selections",
+                variants.selections().size())));
+        for (Variants.Group group : variants.groups()) {
+            send(source, indent(Component.translatable("autarkia.command.bp.query.group", group.name(),
+                    Component.translatable(group.required() ? "autarkia.command.bp.kind.required"
+                            : "autarkia.command.bp.kind.optional"), String.join(", ", group.variants()))));
+        }
+        variants.needs().forEach((key, targets) -> send(source, indent(indent(Component.translatable(
+                "autarkia.command.bp.query.variant_needs", key, String.join(", ", targets))
+                .withStyle(ChatFormatting.GRAY)))));
+        for (String key : variants.keys()) {
+            Facts with = Facts.of(bp.compose(variants.with(key)), dict);
+            MutableComponent changes = Component.empty();
+            int[] deltas = {with.beds() - base.beds(), with.rooms() - base.rooms(), with.lights() - base.lights(),
+                    with.stations().values().stream().mapToInt(Integer::intValue).sum()
+                            - base.stations().values().stream().mapToInt(Integer::intValue).sum(),
+                    with.placed() - base.placed()};
+            String[] names = {"beds", "rooms", "lights", "stations", "blocks"};
+            for (int i = 0; i < deltas.length; i++) {
+                if (deltas[i] == 0) {
+                    continue;
+                }
+                if (!changes.getSiblings().isEmpty()) {
+                    changes.append(Component.literal(", "));
+                }
+                changes.append(Component.translatable("autarkia.command.bp.query.delta." + names[i],
+                        (deltas[i] > 0 ? "+" : "") + deltas[i]));
+            }
+            if (changes.getSiblings().isEmpty()) {
+                changes.append(Component.translatable("autarkia.command.bp.query.delta.none"));
+            }
+            send(source, indent(indent(Component.translatable("autarkia.command.bp.query.variant", key, changes))));
+        }
     }
 
     private static String orientation(Blueprint bp) {

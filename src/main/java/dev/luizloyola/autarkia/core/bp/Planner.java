@@ -14,6 +14,8 @@ import dev.luizloyola.autarkia.core.bp.BuildPlan.CellKind;
 import dev.luizloyola.autarkia.core.bp.Chooser.Choice;
 import dev.luizloyola.autarkia.core.bp.Diagnostic.Cell;
 import dev.luizloyola.autarkia.core.bp.Dictionary.BlockInfo;
+import dev.luizloyola.autarkia.core.bp.Variants.Group;
+import dev.luizloyola.autarkia.core.bp.Variants.Selection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -67,7 +69,9 @@ public final class Planner {
         }
     }
 
+    /** The selection being planned, composed; {@code file} is the blueprint as read, with its groups. */
     private final Blueprint bp;
+    private final Blueprint file;
     private final Dictionary dict;
     private final Support support;
     private final RandomGenerator random;
@@ -75,7 +79,9 @@ public final class Planner {
     private final Map<Integer, Union> slots = new LinkedHashMap<>();
     private final Map<Character, Union> entries = new LinkedHashMap<>();
 
-    private Planner(Blueprint bp, Dictionary dict, Support support, RandomGenerator random, Diagnostics out) {
+    private Planner(Blueprint file, Blueprint bp, Dictionary dict, Support support, RandomGenerator random,
+                    Diagnostics out) {
+        this.file = file;
         this.bp = bp;
         this.dict = dict;
         this.support = support;
@@ -93,7 +99,118 @@ public final class Planner {
      */
     public static @Nullable BuildPlan plan(Blueprint bp, Dictionary dict, Support support, Map<Integer, String> pins,
                                            Chooser chooser, RandomGenerator random, Diagnostics out) {
-        return new Planner(bp, dict, support, random, out).plan(pins, chooser);
+        return plan(bp, dict, support, pins, Map.of(), chooser, random, out);
+    }
+
+    /**
+     * @param variants group to variant, or {@code none}; a group left unpinned is chosen with the
+     *                 rest, among the selections the pins allow
+     */
+    public static @Nullable BuildPlan plan(Blueprint bp, Dictionary dict, Support support, Map<Integer, String> pins,
+                                           Map<String, String> variants, Chooser chooser, RandomGenerator random,
+                                           Diagnostics out) {
+        Selection selection = select(bp, variants, chooser, out);
+        if (selection == null) {
+            return null;
+        }
+        return new Planner(bp, bp.compose(selection), dict, support, random, out).plan(pins, chooser);
+    }
+
+    // ── variants ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The selection the pins leave, or one of those they allow, picked by the chooser like an
+     * option — each allowed selection equally likely, as the variants spec asks of a command.
+     */
+    private static @Nullable Selection select(Blueprint bp, Map<String, String> pins, Chooser chooser,
+                                              Diagnostics out) {
+        Map<String, Group> groups = new LinkedHashMap<>();
+        bp.variants().groups().forEach(group -> groups.put(group.name(), group));
+        boolean refused = false;
+        for (Map.Entry<String, String> pin : pins.entrySet()) {
+            Group group = groups.get(pin.getKey());
+            String value = pin.getValue();
+            if (group == null) {
+                out.error("pin_group", 0, 0, "no group '" + pin.getKey() + "'" + (groups.isEmpty()
+                        ? "; this blueprint has no variants" : Suggest.hint(pin.getKey(), groups.keySet())
+                        + "; it has " + String.join(", ", groups.keySet())));
+                refused = true;
+            } else if (value.equals(PlanArgs.NONE_VARIANT)) {
+                if (group.required()) {
+                    out.error("pin_required", 0, 0, "group '" + group.name() + "' is required: pin one of "
+                            + String.join(", ", group.variants()));
+                    refused = true;
+                }
+            } else if (!group.variants().contains(value)) {
+                out.error("pin_variant", 0, 0, "group '" + group.name() + "' has " + String.join(", ", group.variants())
+                        + (group.required() ? "" : " or none") + " — not '" + value + "'"
+                        + Suggest.hint(value, group.variants()));
+                refused = true;
+            }
+        }
+        if (refused) {
+            return null;
+        }
+        List<Selection> allowed = bp.variants().selections().stream().filter(s -> agrees(s, pins)).toList();
+        if (allowed.isEmpty()) {
+            out.error("pin_needs", 0, 0, "no selection has " + pins.entrySet().stream()
+                    .map(e -> e.getKey() + "=" + e.getValue()).collect(Collectors.joining(" ")) + ": "
+                    + broken(bp.variants(), pins));
+            return null;
+        }
+        if (allowed.size() == 1) {
+            return allowed.get(0);
+        }
+        List<Choice> choices = new ArrayList<>();
+        for (Selection selection : allowed) {
+            Set<String> blocks = new LinkedHashSet<>();
+            Blueprint composed = bp.compose(selection);
+            for (int layer = composed.minLayer(); layer <= composed.maxLayer(); layer++) {
+                for (int z = 0; z < composed.depth(); z++) {
+                    for (int x = 0; x < composed.width(); x++) {
+                        EntryInfo entry = composed.entryAt(layer, x, z);
+                        if (entry != null) {
+                            entry.outcomes().forEach(outcome -> blocks.add(outcome.block()));
+                        }
+                    }
+                }
+            }
+            choices.add(new Choice(selection.describe(), blocks, 1.0 / allowed.size()));
+        }
+        int picked = chooser.choose("variants", choices);
+        return allowed.get(Math.max(0, Math.min(picked, allowed.size() - 1)));
+    }
+
+    private static boolean agrees(Selection selection, Map<String, String> pins) {
+        for (Map.Entry<String, String> pin : pins.entrySet()) {
+            String chosen = selection.chosen().get(pin.getKey());
+            boolean none = pin.getValue().equals(PlanArgs.NONE_VARIANT);
+            if (none ? chosen != null : !pin.getValue().equals(chosen)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Which pinned variant needs what the pins leave out. */
+    private static String broken(Variants variants, Map<String, String> pins) {
+        for (Map.Entry<String, String> pin : pins.entrySet()) {
+            String key = pin.getKey() + "." + pin.getValue();
+            for (String other : variants.needs().keySet()) {
+                // Every variant this pin reaches through its needs.
+                if (!other.equals(key) && !variants.reaches(key, other)) {
+                    continue;
+                }
+                for (String needed : variants.needs().getOrDefault(other, Set.of())) {
+                    String group = needed.substring(0, needed.indexOf('.'));
+                    String pinned = pins.get(group);
+                    if (pinned != null && !needed.equals(group + "." + pinned)) {
+                        return other + " needs " + needed;
+                    }
+                }
+            }
+        }
+        return "the pins leave out something a pinned variant needs";
     }
 
     private @Nullable BuildPlan plan(Map<Integer, String> pins, Chooser chooser) {
@@ -150,8 +267,12 @@ public final class Planner {
         }
         Map<String, Integer> itemless = new TreeMap<>();
         List<BillLine> bill = bill(kinds, states, partner, itemless);
+        Map<String, String> variants = new LinkedHashMap<>();
+        for (Group group : file.variants().groups()) {
+            variants.put(group.name(), bp.selection().chosen().getOrDefault(group.name(), PlanArgs.NONE_VARIANT));
+        }
         return new BuildPlan(bp.id(), bp.headers().version(), bp.width(), bp.depth(), bp.minLayer(), bp.layers(),
-                kinds, states, bindings, bill, itemless);
+                kinds, states, bindings, variants, bill, itemless);
     }
 
     private int index(int layer, int x, int z) {

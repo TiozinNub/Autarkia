@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.bp;
 
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Outcome;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,12 +61,13 @@ public final class BuildPlan {
     private final CellKind[] kinds;
     private final @Nullable Outcome[] states;
     private final Map<Integer, String> bindings;
+    private final Map<String, String> variants;
     private final List<BillLine> bill;
     private final SortedMap<String, Integer> itemless;
 
     BuildPlan(String id, int version, int width, int depth, int minLayer, int layers, CellKind[] kinds,
-              @Nullable Outcome[] states, Map<Integer, String> bindings, List<BillLine> bill,
-              Map<String, Integer> itemless) {
+              @Nullable Outcome[] states, Map<Integer, String> bindings, Map<String, String> variants,
+              List<BillLine> bill, Map<String, Integer> itemless) {
         this.id = id;
         this.version = version;
         this.width = width;
@@ -75,6 +77,7 @@ public final class BuildPlan {
         this.kinds = kinds;
         this.states = states;
         this.bindings = Collections.unmodifiableMap(new LinkedHashMap<>(bindings));
+        this.variants = Collections.unmodifiableMap(new LinkedHashMap<>(variants));
         this.bill = List.copyOf(bill);
         this.itemless = Collections.unmodifiableSortedMap(new TreeMap<>(itemless));
     }
@@ -119,6 +122,22 @@ public final class BuildPlan {
      */
     public Map<Integer, String> bindings() {
         return bindings;
+    }
+
+    /**
+     * Each group's variant, or {@code none} for an optional group left out, in the order the file
+     * lists its groups — what a builder records, and what a pin would say to plan it again.
+     */
+    public Map<String, String> variants() {
+        return variants;
+    }
+
+    /** The plan's choices as the pins that ask for them again: variants first, then slots. */
+    public String pins() {
+        List<String> words = new ArrayList<>();
+        variants.forEach((group, variant) -> words.add(group + "=" + variant));
+        bindings.forEach((slot, value) -> words.add(slot + "=" + value));
+        return String.join(" ", words);
     }
 
     /** The planned bill, largest first. */

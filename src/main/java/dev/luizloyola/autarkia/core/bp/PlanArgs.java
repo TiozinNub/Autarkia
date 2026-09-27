@@ -12,19 +12,27 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The words after a blueprint's id in {@code bp place} and {@code bp bill}, in any order: pins
- * ({@code 1=spruce}, commas or spaces between), a facing for the drawing's north edge, and
- * {@code flip}.
+ * ({@code 1=spruce}, commas or spaces between), variant pins ({@code beds=three},
+ * {@code cellar=none}), a facing for the drawing's north edge, and {@code flip}.
+ *
+ * @param variants group to variant, or to {@code none} for an optional group left out
  */
-public record PlanArgs(Map<Integer, String> pins, @Nullable Facing facing, boolean flip) {
+public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, @Nullable Facing facing,
+                       boolean flip) {
 
-    public static final PlanArgs NONE = new PlanArgs(Map.of(), null, false);
+    public static final PlanArgs NONE = new PlanArgs(Map.of(), Map.of(), null, false);
+
+    /** What a pin says to leave an optional group out. */
+    public static final String NONE_VARIANT = "none";
 
     public PlanArgs {
         pins = Collections.unmodifiableMap(new LinkedHashMap<>(pins));
+        variants = Collections.unmodifiableMap(new LinkedHashMap<>(variants));
     }
 
     public static PlanArgs parse(String words, Diagnostics out) {
         Map<Integer, String> pins = new LinkedHashMap<>();
+        Map<String, String> variants = new LinkedHashMap<>();
         Facing facing = null;
         boolean flip = false;
         for (String word : words.strip().split("[\\s,]+")) {
@@ -48,12 +56,19 @@ public record PlanArgs(Map<Integer, String> pins, @Nullable Facing facing, boole
                 if (was != null && !was.equals(value)) {
                     out.error("pin_twice", 0, 0, "slot " + slot + " is pinned to " + was + " and to " + value);
                 }
+            } else if (equals > 0 && word.matches("[a-z][a-z0-9_]*=[a-z0-9_]+")) {
+                String group = word.substring(0, equals);
+                String value = word.substring(equals + 1);
+                String was = variants.putIfAbsent(group, value);
+                if (was != null && !was.equals(value)) {
+                    out.error("pin_twice", 0, 0, "group " + group + " is pinned to " + was + " and to " + value);
+                }
             } else {
-                out.error("arg_unknown", 0, 0, "'" + word + "' is not a pin like 1=spruce, a facing (north, east, "
-                        + "south, west) or flip");
+                out.error("arg_unknown", 0, 0, "'" + word + "' is not a pin like 1=spruce or beds=two, a facing "
+                        + "(north, east, south, west) or flip");
             }
         }
-        return new PlanArgs(pins, facing, flip);
+        return new PlanArgs(pins, variants, facing, flip);
     }
 
     /**

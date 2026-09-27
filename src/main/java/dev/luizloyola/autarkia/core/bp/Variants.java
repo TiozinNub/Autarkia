@@ -88,6 +88,27 @@ public final class Variants {
         return groups;
     }
 
+    /** Every variant as {@code group.variant}, in the order the groups list them. */
+    public List<String> keys() {
+        List<String> keys = new ArrayList<>();
+        groups.forEach(group -> group.variants().forEach(variant -> keys.add(group.name() + "." + variant)));
+        return keys;
+    }
+
+    /** A variant and everything it needs, directly or through others: the least it is chosen with. */
+    public Selection with(String key) {
+        Map<String, String> chosen = new LinkedHashMap<>();
+        Deque<String> todo = new ArrayDeque<>(List.of(key));
+        while (!todo.isEmpty()) {
+            String next = todo.poll();
+            String group = next.substring(0, next.indexOf('.'));
+            if (chosen.putIfAbsent(group, next.substring(group.length() + 1)) == null) {
+                todo.addAll(needs.getOrDefault(next, Set.of()));
+            }
+        }
+        return canonical(new Selection(chosen));
+    }
+
     /** What each variant needs, directly, by {@code group.variant}. */
     public Map<String, Set<String>> needs() {
         return needs;

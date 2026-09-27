@@ -44,6 +44,17 @@ class PlanArgsTest {
     }
 
     @Test
+    void aGroupIsPinnedToAVariantOrToNone() {
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse("beds=three cellar=none 1=spruce east", out);
+        assertTrue(out.list().isEmpty(), out.list()::toString);
+        assertEquals(Map.of("beds", "three", "cellar", "none"), args.variants());
+        assertEquals(Map.of(1, "spruce"), args.pins());
+        PlanArgs.parse("beds=two beds=three", out);
+        assertEquals(List.of("pin_twice"), codes(out));
+    }
+
+    @Test
     void anythingElseIsNamed() {
         Diagnostics out = new Diagnostics();
         PlanArgs.parse("up 1= =3 1=oak 1=spruce north south", out);
@@ -61,8 +72,8 @@ class PlanArgsTest {
     @Test
     void theHeadersRefuseWhatTheyForbid() {
         Diagnostics out = new Diagnostics();
-        assertNull(new PlanArgs(Map.of(), Facing.WEST, false).placement(bp("north east", true), out));
-        assertNull(new PlanArgs(Map.of(), null, true).placement(bp("all", false), out));
+        assertNull(new PlanArgs(Map.of(), Map.of(), Facing.WEST, false).placement(bp("north east", true), out));
+        assertNull(new PlanArgs(Map.of(), Map.of(), null, true).placement(bp("all", false), out));
         assertEquals(List.of("facing_refused", "flip_refused"), codes(out));
         assertFalse(out.list().get(0).message().contains("west,"), out.list().get(0).message());
     }
