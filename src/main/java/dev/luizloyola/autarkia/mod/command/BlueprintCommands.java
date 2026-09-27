@@ -337,7 +337,12 @@ public final class BlueprintCommands {
         facts.countsInLegendOrder(bp).forEach((glyph, count) -> send(source, indent(Component.translatable(
                 "autarkia.command.bp.query.entry", String.valueOf(glyph), count,
                 bp.legend().get(glyph).text()))));
-        inside(source, facts);
+        send(source, indent(Component.translatable("autarkia.command.bp.query.entrances",
+                facts.entrances().isEmpty() ? Component.translatable("autarkia.command.bp.query.none")
+                        : Component.literal(facts.entrances().stream().map(e -> e.outward().word())
+                                .collect(Collectors.joining(", "))))));
+        send(source, indent(Component.translatable("autarkia.command.bp.query.inside", facts.beds(), facts.rooms(),
+                facts.roomCells(), facts.roofed(), facts.lights())));
         if (!facts.stations().isEmpty()) {
             send(source, indent(Component.translatable("autarkia.command.bp.query.stations",
                     facts.stations().entrySet().stream().map(e -> e.getKey() + " ×" + e.getValue())
@@ -464,16 +469,6 @@ public final class BlueprintCommands {
             return Component.translatable("autarkia.command.bp.bindings.none").withStyle(ChatFormatting.GRAY);
         }
         return Component.literal(plan.pins()).withStyle(ChatFormatting.AQUA);
-    }
-
-    /** Its entrances and rooms: what a designer checks first, so a capture shows them too. */
-    private static void inside(CommandSourceStack source, Facts facts) {
-        send(source, indent(Component.translatable("autarkia.command.bp.query.entrances",
-                facts.entrances().isEmpty() ? Component.translatable("autarkia.command.bp.query.none")
-                        : Component.literal(facts.entrances().stream().map(e -> e.outward().word())
-                                .collect(Collectors.joining(", "))))));
-        send(source, indent(Component.translatable("autarkia.command.bp.query.inside", facts.beds(), facts.rooms(),
-                facts.roomCells(), facts.roofed(), facts.lights())));
     }
 
     /** The groups, what needs what, and what each variant adds to the base, counted as the facts count. */
@@ -633,11 +628,9 @@ public final class BlueprintCommands {
                     send(source, indent(indent(pointed(lines.get(d.line() - 1), d.column()))));
                 }
             }
-            Blueprint bp = now.compiled().blueprint();
-            if (bp != null) {
-                Blueprint captured = args.group() == null ? bp
-                        : bp.compose(bp.variants().with(args.group() + "." + args.variant()));
-                inside(source, Facts.of(captured, Blueprints.dictionary()));
+            // What bp query says, so a house with no way in shows before anyone places it.
+            if (now.compiled().blueprint() != null) {
+                query(source, now);
             }
             // Beside the file, so the designer's hand edits check offline against this game.
             try {
