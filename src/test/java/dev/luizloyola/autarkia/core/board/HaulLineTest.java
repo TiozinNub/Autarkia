@@ -1,38 +1,65 @@
 package dev.luizloyola.autarkia.core.board;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.luizloyola.anima.core.agent.ProfileAspect;
+import dev.luizloyola.anima.core.brain.instinct.UnburdenInstinct;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.FakeContext;
+import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.person.PersonSpecies;
 import org.junit.jupiter.api.Test;
 
 /**
- * The one number in 3a that is only correct relative to another one, in different units — so it is
- * asserted against the real profile rather than a literal anybody could re-tune in isolation.
+ * A woodcutter's haul to the yard, against a Person's real profile: carried by the load, and
+ * always gone before unburden would take the pack to the NEAREST store instead.
  */
 class HaulLineTest {
 
-    @Test
-    void aHaulerReachesTheYardBeforeTheSafeguardReachesForTheNearestChest() {
-        int haulLine = ClearArea.HAUL_LINE;                       // cargo slots HELD
-        int slack = PersonSpecies.PROFILE.fixed().i(ProfileAspect.UNBURDEN_SLACK_SLOTS); // slots still EMPTY
+    private static final Pos YARD = new Pos(0, 64, 0);
 
-        assertTrue(haulLine + slack < Inventory.ARMOR_START,
-                "a settler must cross the haul line while there is still room to spare: if the "
-                        + "pack fills first, Unburden takes the wheel and stows at the NEAREST "
-                        + "store, so the wood scatters and the yard stays empty — the one thing "
-                        + "3a exists to prevent. haulLine=" + haulLine + " slack=" + slack
-                        + " storage=" + Inventory.ARMOR_START);
+    private static FakeContext person() {
+        FakeContext ctx = new FakeContext();
+        ctx.profile = PersonSpecies.PROFILE.fixed();
+        return ctx;
     }
 
     @Test
-    void andWithRoomToSpareForTheKitAndFoodAPackKeeps() {
-        int haulLine = ClearArea.HAUL_LINE;
-        int slack = PersonSpecies.PROFILE.fixed().i(ProfileAspect.UNBURDEN_SLACK_SLOTS);
+    void oneTreeInAMixedWoodIsNotALoad() {
+        FakeContext ctx = person();
+        Inventory pack = ctx.percepts.inventory();
+        pack.set(0, ItemStack.of("minecraft:oak_log", 5, 64));
+        pack.set(1, ItemStack.of("minecraft:birch_log", 4, 64));
+        pack.set(2, ItemStack.of("minecraft:oak_sapling", 2, 64));
+        pack.set(3, ItemStack.of("minecraft:stick", 3, 64));
+        pack.set(4, ItemStack.of("minecraft:leaf_litter", 2, 64));
 
-        assertTrue(haulLine + slack + 6 <= Inventory.ARMOR_START,
-                "six slots of headroom for the tools, torches and food the keep-list holds back — "
-                        + "cargo is what crosses the line, and kit does not count toward it");
+        assertTrue(new PutAwaySurplus(YARD, ClearArea.HAUL_LINE).satisfied(ctx),
+                "five kinds of sixteen items sent a settler to the yard after every tree");
+    }
+
+    @Test
+    void threeStacksOfLogsAre() {
+        FakeContext ctx = person();
+        for (int slot = 0; slot < 3; slot++) {
+            ctx.percepts.inventory().set(slot, ItemStack.of("minecraft:oak_log", 64, 64));
+        }
+        assertFalse(new PutAwaySurplus(YARD, ClearArea.HAUL_LINE).satisfied(ctx));
+    }
+
+    @Test
+    void wheneverUnburdenWouldBidTheHaulHasAlreadyGone() {
+        for (int empty = 0; empty <= Inventory.ARMOR_START; empty++) {
+            FakeContext ctx = person();
+            for (int slot = 0; slot < Inventory.ARMOR_START - empty; slot++) {
+                ctx.percepts.inventory().set(slot, ItemStack.of("minecraft:kind_" + slot, 1, 64));
+            }
+            if (new UnburdenInstinct().pressure(ctx) > 0.0) {
+                assertFalse(new PutAwaySurplus(YARD, ClearArea.HAUL_LINE).satisfied(ctx),
+                        "a pack of odds and ends with " + empty + " slots free");
+            }
+        }
     }
 }

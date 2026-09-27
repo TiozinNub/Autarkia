@@ -196,21 +196,17 @@ public final class ClearArea implements PartyProject {
     private final Coverage ground = new Ground();
 
     /**
-     * Cargo slots that make the walk to the yard worth taking.
+     * Cargo, in full stacks, that makes the walk to the yard worth taking: three is about 192 logs,
+     * two dozen trees with their saplings and sticks.
      *
-     * <p><b>Three, not twelve.</b> The first cut borrowed {@code StowSurplus.SURPLUS_SLOTS}, which
-     * was calibrated against a pack somebody had HANDED fourteen stacks. Felling does not work like
-     * that: logs stack to 64, so twelve occupied slots is about 768 logs — a hundred trees — and a
-     * settler clearing an ordinary box would finish it having never once walked to the yard. Three
-     * slots is an armful, up to ~192 logs, and it is what a woodcutter carries over (in-world,
-     * 2026-08-20).
+     * <p><b>Stacks, not slots.</b> It was three SLOTS from 2026-08-20, when a woodcutter carried
+     * only logs and a slot was a stack of them. Once the chop swept up its drops (2026-09-10), one
+     * tree in a mixed wood filled three slots with two kinds of log, saplings and sticks, and
+     * settlers walked to the yard after every tree with about fifteen items (in-world, 2026-09-27).
+     * The first cut, twelve slots, would have cleared a box without once walking to the yard.
      *
-     * <p><b>It must leave room under the unburden line, and that is load-bearing.</b> The two
-     * numbers are in different units: this counts slots HELD, {@code instincts.unburden_slack_slots}
-     * counts slots still EMPTY. If a pack fills before this is reached, layer 1 takes the wheel and
-     * stows at the NEAREST store — so the wood scatters and the yard stays empty, which is the one
-     * thing this piece exists to prevent. {@code HaulLineTest} pins the sum against the real
-     * profile rather than a repeated literal.
+     * <p>A pack of odds and ends that runs out of room goes whatever its load, above the line
+     * where unburden would take it to the NEAREST store instead ({@code PutAwaySurplus}).
      */
     public static final int HAUL_LINE = 3;
 
