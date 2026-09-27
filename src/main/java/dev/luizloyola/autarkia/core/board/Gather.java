@@ -450,13 +450,14 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * Learns what a returning worker knows about the yard: every store they remember near enough to
-     * the hint to BE the yard. Called from {@link #completed} because that is the one moment this
-     * project holds a worker and their knowledge — the board itself never reads a mind.
+     * Learns what a returning worker knows about the yard: every one of the party's stores near
+     * enough to the hint to BE the yard — a chest nobody may fill is no part of it. Called from
+     * {@link #completed} because that is the one moment this project holds a worker and their
+     * knowledge — the board itself never reads a mind.
      */
     private void learnYard(BrainContext ctx) {
         double radius = ctx.profile().i(ProfileAspect.STORES_FOUND_RADIUS);
-        for (PoiMemory memory : ctx.knowledge().all(Store.POI)) {
+        for (PoiMemory memory : Store.ours(ctx)) {
             if (Store.distance(memory.anchor(), yard) <= radius) {
                 yardChests.add(memory.anchor());
             }

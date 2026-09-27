@@ -775,18 +775,17 @@ public final class ClearArea implements PartyProject {
     }
 
     /**
-     * Learns what a returning worker knows about the yard: the nearest store to the hint that they
-     * remember, if it is close enough to BE the yard. Called from {@code completed} because that is
-     * the one moment the project holds both a worker and their knowledge — the board itself never
-     * reads a mind, and this is the same "people bring knowledge to the board" rule layer 3 has had
-     * since it was written.
+     * Learns what a returning worker knows about the yard: the party's stores close enough to the
+     * hint to BE the yard. Called from {@code completed} because that is the one moment the project
+     * holds both a worker and their knowledge — the board itself never reads a mind, and this is the
+     * same "people bring knowledge to the board" rule layer 3 has had since it was written.
      */
     private void learnYard(BrainContext ctx) {
         if (yard == null) {
             return;
         }
         double radius = ctx.profile().i(ProfileAspect.STORES_FOUND_RADIUS);
-        for (PoiMemory memory : ctx.knowledge().all(Store.POI)) {
+        for (PoiMemory memory : Store.ours(ctx)) {
             if (Store.distance(memory.anchor(), yard) <= radius) {
                 yardChests.add(memory.anchor());
             }

@@ -145,7 +145,7 @@ class GatherTest {
 
     /** Gives this member a memory of that chest, and of what was in it when they looked. */
     private static void saw(BoardBrainContext ctx, Pos chest, int held, long when) {
-        ctx.remember(Store.POI, chest);
+        ctx.claim(Store.POI, chest);
         ctx.knowledge().sawInside(chest, List.of(ItemStack.of("minecraft:oak_log", held, 64)),
                 when, AgentKnowledge.maxPerKind(ctx.profile()));
     }
@@ -463,6 +463,21 @@ class GatherTest {
     }
 
     @Test
+    void somebodyElsesChestAtTheYardIsNotThisProjectsYard() {
+        Gather project = posted(64);
+        WorkItem trip = claims(project, KYLE, new BoardBrainContext());
+        BoardBrainContext passerBy = new BoardBrainContext();
+        passerBy.remember(Store.POI, CHEST);
+        passerBy.knowledge().sawInside(CHEST, List.of(ItemStack.of("minecraft:oak_log", 64, 64)),
+                passerBy.now(), AgentKnowledge.maxPerKind(passerBy.profile()));
+
+        project.completed(trip, passerBy);
+
+        assertTrue(project.yardChests().isEmpty(), "logs nobody in the party may take are not stock");
+        assertEquals(0, project.stored());
+    }
+
+    @Test
     void aChestTheReporterNoLongerRemembersDropsItsReading() {
         Gather project = posted(64);
         WorkItem first = claims(project, KYLE, new BoardBrainContext());
@@ -521,7 +536,7 @@ class GatherTest {
         Pos second = new Pos(12, 64, 10);
         WorkItem trip = claims(project, KYLE, new BoardBrainContext());
         BoardBrainContext ctx = depositor(CHEST, 64);
-        ctx.remember(Store.POI, second);
+        ctx.claim(Store.POI, second);
         ctx.knowledge().sawInside(second, List.of(ItemStack.of("minecraft:oak_log", 32, 64)),
                 ctx.now(), AgentKnowledge.maxPerKind(ctx.profile()));
 

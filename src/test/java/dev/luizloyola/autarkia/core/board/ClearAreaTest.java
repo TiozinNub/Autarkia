@@ -176,7 +176,7 @@ class ClearAreaTest {
         project.tick(0L);
         BoardBrainContext ctx = new BoardBrainContext();
         // The hauler built it a block off the hint, because the hint was a hint.
-        ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(7, 60, 6));
+        ctx.claim(dev.luizloyola.anima.core.store.Store.POI, new Pos(7, 60, 6));
 
         project.completed(project.open().get(0), ctx);
 
@@ -190,12 +190,24 @@ class ClearAreaTest {
         ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         BoardBrainContext ctx = new BoardBrainContext();
-        ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(900, 60, 900));
+        ctx.claim(dev.luizloyola.anima.core.store.Store.POI, new Pos(900, 60, 900));
 
         project.completed(project.open().get(0), ctx);
 
         assertTrue(project.yardChests().isEmpty(),
                 "a worker's own chest across the map is not the project's yard");
+    }
+
+    @Test
+    void somebodyElsesChestAtTheHintIsNotThisProjectsYard() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        project.tick(0L);
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(7, 60, 6));
+
+        project.completed(project.open().get(0), ctx);
+
+        assertTrue(project.yardChests().isEmpty(), "seen, but not the party's to fill");
     }
 
     @Test

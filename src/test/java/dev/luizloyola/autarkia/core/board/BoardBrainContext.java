@@ -201,6 +201,32 @@ final class BoardBrainContext implements BrainContext {
                 AgentKnowledge.maxPerKind(profile()));
     }
 
+    /** This member's party's claims, made on first {@link #claim}. */
+    private dev.luizloyola.anima.core.social.Places places;
+    private final AgentId self = AgentId.random();
+
+    /** Claims {@code anchor} for this member's party — a store they may fill, as a placed chest is. */
+    void claim(PoiKind kind, Pos anchor) {
+        if (places == null) {
+            places = new dev.luizloyola.anima.core.social.Places();
+            dev.luizloyola.anima.core.social.PartyId party =
+                    dev.luizloyola.anima.core.social.PartyId.random();
+            places.asks(new dev.luizloyola.anima.core.social.Places.Parties() {
+                @Override
+                public java.util.Optional<dev.luizloyola.anima.core.social.PartyId> current(AgentId who) {
+                    return java.util.Optional.of(party);
+                }
+
+                @Override
+                public dev.luizloyola.anima.core.social.PartyId of(AgentId who) {
+                    return party;
+                }
+            });
+            knowledge.sees(places.viewFor(self), () -> now);
+        }
+        places.viewFor(self).foundCommunal(kind, anchor, now);
+    }
+
     @Override
     public double costTolerance() {
         return Double.POSITIVE_INFINITY;
