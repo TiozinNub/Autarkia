@@ -107,7 +107,6 @@ public class AutarkiaMod implements ModInitializer {
         // Layer 3's shared half: one board per party, ticked here rather than by anybody's body.
         PartyBoards.init();
         dev.luizloyola.anima.mod.brain.BeingViewer.init();
-        dev.luizloyola.anima.mod.brain.BeingVoices.init();
         KnowledgeViewer.init();
         // The tree-split survey — needs the cell overlay channel initialized above.
         dev.luizloyola.autarkia.mod.debug.TreeSplitViewer.init();
