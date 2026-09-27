@@ -15,7 +15,6 @@ import dev.luizloyola.anima.mod.item.AnimaItems;
 import dev.luizloyola.anima.mod.item.WandActions;
 import dev.luizloyola.autarkia.mod.item.ChopWandAction;
 import dev.luizloyola.anima.mod.brain.Claims;
-import dev.luizloyola.anima.mod.brain.DamageMarks;
 import dev.luizloyola.anima.mod.brain.KnowledgeViewer;
 import dev.luizloyola.anima.mod.debug.DebugView;
 import dev.luizloyola.anima.mod.log.Journals;
@@ -107,8 +106,6 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.anima.mod.craft.VanillaRecipeSource.install();
         // Layer 3's shared half: one board per party, ticked here rather than by anybody's body.
         PartyBoards.init();
-        DamageMarks.init();
-        dev.luizloyola.anima.mod.brain.PlaceMarks.init();
         dev.luizloyola.anima.mod.brain.BeingViewer.init();
         dev.luizloyola.anima.mod.brain.BeingVoices.init();
         KnowledgeViewer.init();
