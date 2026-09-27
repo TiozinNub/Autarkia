@@ -111,6 +111,7 @@ jobs:
       - name: Wait out a running Anima build
         env:
           CI_TOKEN: ${{ secrets.CI_TOKEN }}
+          NODE: ${{ matrix.version }}
         run: |
           set -euo pipefail
           pin=$(awk '/^\[/{exit} /^deps\.anima/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)
@@ -120,12 +121,13 @@ jobs:
           esac
 
           # A push is the only event that publishes, so a nightly or a dispatch over there is
-          # none of this build's business. Anima's matrix reports one row per node against the
-          # same run, hence "is ANY of them still going".
+          # none of this build's business. Only Anima's job for THIS node counts: each node
+          # publishes its own coordinate and this job resolves only that one. Reading the newest
+          # row of any node failed every node here when a lagging 26.3.x went red (2026-09-27).
           state() {
             curl -fsS -H "Authorization: token $CI_TOKEN" \
               "${{ github.server_url }}/api/v1/repos/${{ github.repository_owner }}/Anima/actions/tasks?limit=20" \
-            | python3 -c 'import sys,json; rows=[r for r in json.load(sys.stdin).get("workflow_runs",[]) if r["head_branch"]=="main" and r["event"]=="push"]; live=[r for r in rows if r["status"] in ("waiting","running","in_progress")]; print("live "+live[0]["head_sha"][:8] if live else (rows[0]["status"]+" "+rows[0]["head_sha"][:8] if rows else "idle -"))'
+            | python3 -c 'import os,sys,json; job="build (%s)" % os.environ["NODE"]; rows=[r for r in json.load(sys.stdin).get("workflow_runs",[]) if r["head_branch"]=="main" and r["event"]=="push" and r["name"]==job]; live=[r for r in rows if r["status"] in ("waiting","running","in_progress")]; print("live "+live[0]["head_sha"][:8] if live else (rows[0]["status"]+" "+rows[0]["head_sha"][:8] if rows else "idle -"))'
           }
 
           waited=0
