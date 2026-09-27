@@ -5,12 +5,10 @@ import dev.luizloyola.anima.mod.debug.CellOverlays;
 import dev.luizloyola.anima.mod.net.CellOverlayPayload;
 import dev.luizloyola.autarkia.compat.bp.BoxReader;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -39,7 +37,8 @@ import org.jspecify.annotations.Nullable;
 public final class Captures {
 
     private static final String OVERLAY = "autarkia:blueprint_wand";
-    private static final int PAINT_EVERY_TICKS = 10;
+    /** A box that has not changed is sent again this often, only so the client's frame does not expire. */
+    private static final int REFRESH_TICKS = 10;
     private static final int PAINT_TTL_TICKS = 30;
     private static final int BOX_STROKE = 0xFF40E0FF;
     private static final int GROUND_STROKE = 0xFF60FF60;
@@ -64,8 +63,12 @@ public final class Captures {
     private record Job(BoxReader reader, Consumer<BoxReader> done) {
     }
 
+    /** What a player was last sent, so a change goes out the tick it happens and nothing else is redrawn. */
+    private record Shown(Marked box, CellOverlayPayload frame) {
+    }
+
     private static final Map<UUID, Marked> MARKED = new ConcurrentHashMap<>();
-    private static final Set<UUID> PAINTED = new HashSet<>();
+    private static final Map<UUID, Shown> SHOWN = new ConcurrentHashMap<>();
     private static final List<Job> JOBS = new ArrayList<>();
 
     private Captures() {
@@ -75,7 +78,7 @@ public final class Captures {
         ServerTickEvents.END_SERVER_TICK.register(Captures::tick);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             MARKED.clear();
-            PAINTED.clear();
+            SHOWN.clear();
             JOBS.clear();
         });
     }
@@ -102,15 +105,22 @@ public final class Captures {
                 job.done().accept(job.reader());
             }
         }
-        if (server.getTickCount() % PAINT_EVERY_TICKS != 0) {
-            return;
-        }
+        // Every tick, so a corner, a clear or the wand leaving the hotbar shows at once; a box that
+        // has not changed is only sent again to keep it alive, and its ground is never read twice.
+        boolean refresh = server.getTickCount() % REFRESH_TICKS == 0;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            Marked box = MARKED.get(player.getUUID());
+            UUID id = player.getUUID();
+            Marked box = MARKED.get(id);
             if (carried(player) && box != null && box.first() != null) {
-                CellOverlays.show(player, paint(player.level(), box));
-                PAINTED.add(player.getUUID());
-            } else if (PAINTED.remove(player.getUUID())) {
+                Shown was = SHOWN.get(id);
+                if (was == null || !was.box().equals(box)) {
+                    Shown now = new Shown(box, paint(player.level(), box));
+                    SHOWN.put(id, now);
+                    CellOverlays.show(player, now.frame());
+                } else if (refresh) {
+                    CellOverlays.show(player, was.frame());
+                }
+            } else if (SHOWN.remove(id) != null) {
                 CellOverlays.clear(player, OVERLAY);
             }
         }
