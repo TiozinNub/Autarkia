@@ -206,5 +206,18 @@
   "autarkia.command.bp.place.flipped": ", mirrored west to east",
   "autarkia.command.bp.place.unloaded": "Part of the site is in chunks that are not loaded; nothing was placed.",
   "autarkia.command.bp.place.outside": "It would reach past the world's height (y %s); nothing was placed.",
-  "autarkia.command.bp.place.unknown": "This game has no block state %s; nothing was placed."
+  "autarkia.command.bp.place.unknown": "This game has no block state %s; nothing was placed.",
+  "item.autarkia.blueprint_wand": "Blueprint Wand",
+  "autarkia.wand.first": "Corner at %1$s %2$s %3$s; now click the opposite one",
+  "autarkia.wand.box": "Box %1$s×%2$s, %3$s high; /autarkia bp capture <name> saves it",
+  "autarkia.wand.cleared": "Box cleared",
+  "autarkia.command.bp.capture.player": "Capture reads your blueprint wand's box, so a player runs it.",
+  "autarkia.command.bp.capture.no_box": "Mark two corners with the blueprint wand first (/give @s autarkia:blueprint_wand).",
+  "autarkia.command.bp.capture.no_ground": "Could not tell the ground around the box; say ground <y>.",
+  "autarkia.command.bp.capture.exists": "%s exists; add replace to capture over it (its version goes up).",
+  "autarkia.command.bp.capture.has_variants": "%s has variants; capturing its base again would misalign them.",
+  "autarkia.command.bp.capture.missing": "No local blueprint %s to add a variant to; capture its base first.",
+  "autarkia.command.bp.capture.started": "Capturing %1$s: %2$s cells, layer 0 at y %3$s…",
+  "autarkia.command.bp.capture.failed": "Could not capture %1$s: %2$s",
+  "autarkia.command.bp.capture.done": "Captured %1$s into %2$s: %3$s error(s), %4$s note(s)"
 }

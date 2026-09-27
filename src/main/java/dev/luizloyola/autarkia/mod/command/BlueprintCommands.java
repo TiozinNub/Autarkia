@@ -6,6 +6,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.anima.mod.command.Replies;
+import dev.luizloyola.autarkia.compat.bp.BoxReader;
 import dev.luizloyola.autarkia.compat.bp.Placer;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Facing;
@@ -15,6 +16,7 @@ import dev.luizloyola.autarkia.core.bp.BpCompiler.Compiled;
 import dev.luizloyola.autarkia.core.bp.BpText;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.BuildPlan.BillLine;
+import dev.luizloyola.autarkia.core.bp.Capture;
 import dev.luizloyola.autarkia.core.bp.Chooser;
 import dev.luizloyola.autarkia.core.bp.Diagnostic;
 import dev.luizloyola.autarkia.core.bp.DiagnosticText;
@@ -29,9 +31,12 @@ import dev.luizloyola.autarkia.core.bp.Variants;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
+import dev.luizloyola.autarkia.mod.bp.Captures;
 import dev.luizloyola.autarkia.mod.bp.Blueprints.Entry;
 import dev.luizloyola.autarkia.mod.direction.Directions;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,6 +59,8 @@ import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -93,6 +100,10 @@ public final class BlueprintCommands {
                                             String words = StringArgumentType.getString(ctx, "words");
                                             return withEntry(ctx, (source, entry) -> place(source, entry, pos, words));
                                         })))))
+                .then(Commands.literal("capture").then(Commands.argument("name", IdentifierArgument.id())
+                        .executes(ctx -> capture(ctx, ""))
+                        .then(Commands.argument("words", StringArgumentType.greedyString())
+                                .executes(ctx -> capture(ctx, StringArgumentType.getString(ctx, "words"))))))
                 .then(Commands.literal("reload").executes(BlueprintCommands::reload))
                 .then(Commands.literal("dictionary").executes(BlueprintCommands::dictionary));
     }
@@ -499,6 +510,126 @@ public final class BlueprintCommands {
             }
             send(source, indent(indent(Component.translatable("autarkia.command.bp.query.variant", key, changes))));
         }
+    }
+
+    // ── capture ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The holder's wand box to a file (capture spec): a new blueprint, the same one again with
+     * {@code replace}, or a variant of it with {@code as group.variant}. The box is read a slice per
+     * tick, and the reply comes when the file is written and loaded.
+     */
+    private static int capture(CommandContext<CommandSourceStack> ctx, String words) {
+        CommandSourceStack source = ctx.getSource();
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.capture.player"));
+            return 0;
+        }
+        Identifier named = IdentifierArgument.getId(ctx, "name");
+        String namespace = named.getNamespace().equals("minecraft") ? "autarkia" : named.getNamespace();
+        String id = namespace + ":" + named.getPath();
+        // A top-level file is autarkia's; anything else sits in a folder named for its namespace.
+        Path file = namespace.equals("autarkia") && !named.getPath().contains("/")
+                ? Blueprints.configDirectory().resolve(named.getPath() + ".bp")
+                : Blueprints.configDirectory().resolve(namespace).resolve(named.getPath() + ".bp");
+        Diagnostics out = new Diagnostics();
+        Capture.Args args = Capture.Args.parse(words, out);
+        if (out.hasErrors()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.capture.failed", id, out.list().stream()
+                    .map(Diagnostic::message).collect(Collectors.joining("; "))));
+            return 0;
+        }
+        Captures.Marked box = Captures.marked(player);
+        if (box == null || !box.complete()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.capture.no_box"));
+            return 0;
+        }
+        ServerLevel level = player.level();
+        Integer ground = args.ground() != null ? args.ground() : box.ground() != null ? box.ground()
+                : BoxReader.groundAround(level, box.first(), box.second()).stream().boxed().findFirst().orElse(null);
+        if (ground == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.capture.no_ground"));
+            return 0;
+        }
+        Entry existing = Blueprints.library().get(id);
+        boolean exists = Files.exists(file);
+        if (args.group() != null) {
+            if (!exists || existing == null) {
+                Replies.fail(source, Component.translatable("autarkia.command.bp.capture.missing", id));
+                return 0;
+            }
+            if (existing.compiled().blueprint() == null) {
+                Replies.fail(source, Component.translatable("autarkia.command.bp.broken", id));
+                return 0;
+            }
+        } else if (exists && !args.replace()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.capture.exists", id));
+            return 0;
+        } else if (exists && existing != null && existing.compiled().blueprint() != null
+                && !existing.compiled().blueprint().variants().isEmpty()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.capture.has_variants", id));
+            return 0;
+        }
+        Dictionary dict = Blueprints.dictionary();
+        BoxReader.Started started = BoxReader.start(level, dict, box.first(), box.second(), ground);
+        if (started.reader() == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.capture.failed", id, started.reason()));
+            return 0;
+        }
+        Capture.Headers headers;
+        Blueprint was = existing == null ? null : existing.compiled().blueprint();
+        if (exists && was != null && args.group() == null) {
+            headers = new Capture.Headers(was.headers().name(), was.headers().author(), was.headers().version() + 1,
+                    orientation(was), was.headers().flippable(), false);
+        } else {
+            String leaf = named.getPath().substring(named.getPath().lastIndexOf('/') + 1);
+            headers = Capture.Headers.fresh(leaf.replace('_', ' '), player.getName().getString());
+        }
+        int layerZero = ground;
+        send(source, Component.translatable("autarkia.command.bp.capture.started", id, started.reader().cellCount(),
+                layerZero).withStyle(ChatFormatting.GRAY));
+        Captures.read(started.reader(), reader -> {
+            if (reader.failure() != null) {
+                Replies.fail(source, Component.translatable("autarkia.command.bp.capture.failed", id,
+                        reader.failure()));
+                return;
+            }
+            Capture.Written written = args.group() != null
+                    ? Capture.variant(existing.text(), was, reader.box(), args.group(), args.variant(), dict,
+                            Placer.SUPPORT)
+                    : Capture.write(reader.box(), dict, Placer.SUPPORT, headers);
+            if (written.text() == null) {
+                Replies.fail(source, Component.translatable("autarkia.command.bp.capture.failed", id,
+                        String.join("; ", written.problems())));
+                return;
+            }
+            try {
+                Files.createDirectories(file.getParent());
+                Files.writeString(file, written.text(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                Replies.fail(source, Component.translatable("autarkia.command.bp.capture.failed", id,
+                        String.valueOf(e.getMessage())));
+                return;
+            }
+            Blueprints.reloadConfig();
+            Captures.rememberGround(player, layerZero);
+            Entry now = Blueprints.library().get(id);
+            if (now == null) {
+                return;
+            }
+            Replies.send(source, () -> Component.translatable("autarkia.command.bp.capture.done", id,
+                    Blueprints.configDirectory().relativize(file).toString(), now.compiled().errors(),
+                    now.compiled().reports()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+            List<String> lines = DiagnosticText.lines(now.text());
+            for (Diagnostic d : now.compiled().diagnostics()) {
+                send(source, indent(Component.literal(d.summary())
+                        .withStyle(d.isError() ? ChatFormatting.RED : ChatFormatting.YELLOW)));
+                if (d.line() >= 1 && d.line() <= lines.size()) {
+                    send(source, indent(indent(pointed(lines.get(d.line() - 1), d.column()))));
+                }
+            }
+        });
+        return 1;
     }
 
     private static String orientation(Blueprint bp) {

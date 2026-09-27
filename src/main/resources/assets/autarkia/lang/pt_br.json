@@ -206,5 +206,18 @@
   "autarkia.command.bp.place.flipped": ", espelhada de oeste para leste",
   "autarkia.command.bp.place.unloaded": "Parte do local está em chunks não carregados; nada foi colocado.",
   "autarkia.command.bp.place.outside": "Passaria da altura do mundo (y %s); nada foi colocado.",
-  "autarkia.command.bp.place.unknown": "Este jogo não tem o estado de bloco %s; nada foi colocado."
+  "autarkia.command.bp.place.unknown": "Este jogo não tem o estado de bloco %s; nada foi colocado.",
+  "item.autarkia.blueprint_wand": "Varinha de Planta",
+  "autarkia.wand.first": "Canto em %1$s %2$s %3$s; agora clique no oposto",
+  "autarkia.wand.box": "Caixa %1$s×%2$s, %3$s de altura; /autarkia bp capture <nome> a salva",
+  "autarkia.wand.cleared": "Caixa desfeita",
+  "autarkia.command.bp.capture.player": "A captura lê a caixa da sua varinha de planta, então um jogador a executa.",
+  "autarkia.command.bp.capture.no_box": "Marque dois cantos com a varinha de planta primeiro (/give @s autarkia:blueprint_wand).",
+  "autarkia.command.bp.capture.no_ground": "Não deu para saber o chão em volta da caixa; diga ground <y>.",
+  "autarkia.command.bp.capture.exists": "%s já existe; acrescente replace para capturar por cima (a versão sobe).",
+  "autarkia.command.bp.capture.has_variants": "%s tem variantes; capturar a base de novo as desalinharia.",
+  "autarkia.command.bp.capture.missing": "Nenhuma planta local %s para receber uma variante; capture a base primeiro.",
+  "autarkia.command.bp.capture.started": "Capturando %1$s: %2$s células, camada 0 em y %3$s…",
+  "autarkia.command.bp.capture.failed": "Não foi possível capturar %1$s: %2$s",
+  "autarkia.command.bp.capture.done": "%1$s capturada em %2$s: %3$s erro(s), %4$s nota(s)"
 }
