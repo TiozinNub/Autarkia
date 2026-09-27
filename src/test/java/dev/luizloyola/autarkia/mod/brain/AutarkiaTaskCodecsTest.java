@@ -101,7 +101,7 @@ class AutarkiaTaskCodecsTest {
 
     @Test
     void aHaulingErrandSurvivesTheFile() {
-        HaulingErrand before = new HaulingErrand(new Idle(7), new Pos(10, 64, 10), 3);
+        HaulingErrand before = HaulingErrand.restored(new Idle(7), new Pos(10, 64, 10), 3);
 
         HaulingErrand after = assertInstanceOf(HaulingErrand.class, roundTrip(before));
 

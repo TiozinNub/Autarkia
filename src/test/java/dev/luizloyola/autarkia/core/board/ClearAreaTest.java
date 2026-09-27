@@ -13,7 +13,9 @@ import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.brain.task.Idle;
+import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.brain.task.SweepingErrand;
 import dev.luizloyola.anima.core.brain.task.Task;
 import java.util.List;
@@ -215,6 +217,33 @@ class ClearAreaTest {
 
         assertTrue(hauling instanceof HaulingErrand,
                 "with one, felling is followed by taking the load over when laden");
+    }
+
+    /** The yard haul a clear item's errand ends with, as the executor reaches it. */
+    private static PutAwaySurplus haulOf(WorkItem tree, BoardBrainContext ctx) {
+        HaulingErrand errand = (HaulingErrand) ((SweepingErrand) tree.root()).work();
+        return (PutAwaySurplus) errand.methods().get(0).decompose(ctx).get(1);
+    }
+
+    @Test
+    void theLastTreeTakesTheWholeLoadToTheYard() {
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        project.tick(0L);
+        BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
+        ctx.remember(THING, new Pos(8, 60, 8));
+        project.completed(project.open().get(0), ctx);
+        List<WorkItem> trees = project.open().stream()
+                .filter(item -> item.describe().startsWith("clear")).toList();
+        assertEquals(2, trees.size());
+        ctx.inventory().set(0, ItemStack.of("minecraft:oak_log", 6, 64));
+
+        project.claimed(trees.get(0));
+        PutAwaySurplus haul = haulOf(trees.get(0), ctx);
+        assertTrue(haul.satisfied(ctx), "a tree still unheld: six logs wait for the line");
+
+        project.claimed(trees.get(1));
+        assertFalse(haul.satisfied(ctx),
+                "asked after the tree, not at the claim: somebody took the last one meanwhile");
     }
 
     @Test

@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
 import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.brain.task.Task;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 /**
  * Do the work, then take the load over if you are carrying enough to be worth the walk — what a
@@ -21,19 +22,33 @@ import java.util.List;
  * <p><b>Below the line it costs nothing.</b> {@link PutAwaySurplus} is an achieve-goal, so with a
  * light pack it is satisfied on the spot and the tree is simply the whole errand. That is what makes
  * "haul when laden" fall out of the executor re-asking, instead of anything scheduling it.
+ *
+ * <p><b>The last tree takes everything.</b> When the project has nothing left to hand out, the load
+ * goes to the yard whatever its size, or it would stay in the pack for good.
  */
 public final class HaulingErrand implements CompoundTask {
 
     private final Task work;
     private final Pos yard;
     private final int haulLine;
+    /** Whether the project has more to hand out; asked after the work, not when the errand starts. */
+    private final BooleanSupplier workLeft;
     private final List<Method> methods;
 
-    public HaulingErrand(Task work, Pos yard, int haulLine) {
+    public HaulingErrand(Task work, Pos yard, int haulLine, BooleanSupplier workLeft) {
         this.work = work;
         this.yard = yard;
         this.haulLine = haulLine;
+        this.workLeft = workLeft;
         this.methods = List.of(new WorkThenHaul());
+    }
+
+    /**
+     * What a save hands back: the project's live answer is not data, so until it re-grants the
+     * errand the job is taken to go on, and the load waits for the line.
+     */
+    public static HaulingErrand restored(Task work, Pos yard, int haulLine) {
+        return new HaulingErrand(work, yard, haulLine, () -> true);
     }
 
     @Override
@@ -87,7 +102,7 @@ public final class HaulingErrand implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
-            return List.of(work, new PutAwaySurplus(yard, haulLine));
+            return List.of(work, new PutAwaySurplus(yard, haulLine, workLeft));
         }
 
         @Override

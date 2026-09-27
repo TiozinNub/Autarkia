@@ -91,7 +91,7 @@ public final class AutarkiaTasks {
                         TaskCodecs.codec().fieldOf("work").forGetter(HaulingErrand::work),
                         POS.fieldOf("yard").forGetter(HaulingErrand::yard),
                         Codec.INT.fieldOf("haul_line").forGetter(HaulingErrand::haulLine)
-                ).apply(t, HaulingErrand::new)));
+                ).apply(t, HaulingErrand::restored)));
         // A gather's whole trip. Same rule as the wrapper above: registered the day it was
         // written, because an unregistered task takes the server down at the next autosave.
         TaskCodecs.register("autarkia:gather_errand", GatheringErrand.class,

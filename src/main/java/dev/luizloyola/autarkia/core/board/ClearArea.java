@@ -672,6 +672,19 @@ public final class ClearArea implements PartyProject {
         return " · yard: " + chests + " near " + at(yard);
     }
 
+    /**
+     * Whether anything on offer is still unheld — what a woodcutter asks after each tree. Asked then
+     * rather than at claim, because a crew takes the last trees while each is still felling one.
+     */
+    private boolean unclaimedWork() {
+        for (WorkKey key : open.keySet()) {
+            if (!claimed.contains(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Where the operator asked the wood to go, if anywhere. */
     public Optional<Pos> yard() {
         return Optional.ofNullable(yard);
@@ -928,7 +941,8 @@ public final class ClearArea implements PartyProject {
             Task felling = clearing.clear(key.at());
             // Without a yard the inner errand is byte-for-byte what it has always been — the haul
             // is additive, and a box posted the old way behaves the old way.
-            Task work = yard == null ? felling : new HaulingErrand(felling, yard, HAUL_LINE);
+            Task work = yard == null ? felling
+                    : new HaulingErrand(felling, yard, HAUL_LINE, ClearArea.this::unclaimedWork);
             // Outermost, so the walk out, the felling and the walk to the yard all count.
             return new SweepingErrand(work, ground);
         }
