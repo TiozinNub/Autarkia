@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.core.agent.TestSpecies;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.act.ActuatorAccess;
+import dev.luizloyola.anima.core.brain.board.AgentClaims;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
@@ -48,6 +49,8 @@ final class BoardBrainContext implements BrainContext {
     private Pos position = new Pos(0, 0, 0);
     /** The clock every hold is measured against; tests move it to make a lease lapse. */
     private long now;
+    /** Whose work sites this body sees — a group of one unless a test shares a registry. */
+    AgentClaims claims = AgentClaims.SOLO;
 
     Inventory inventory() {
         return inventory;
@@ -170,6 +173,11 @@ final class BoardBrainContext implements BrainContext {
     @Override
     public AgentKnowledge knowledge() {
         return knowledge;
+    }
+
+    @Override
+    public AgentClaims claims() {
+        return claims;
     }
 
     /**

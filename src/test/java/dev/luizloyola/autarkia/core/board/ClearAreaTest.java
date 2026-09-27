@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.anima.core.brain.history.Slot;
 import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.board.SiteClaims;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.CoverageGrid;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
@@ -248,6 +249,28 @@ class ClearAreaTest {
 
     private static boolean isBringIn(WorkItem item) {
         return item.describe().startsWith("bring");
+    }
+
+    /**
+     * A gatherer's felling holds its tree outside the board. Offered anyway, the clearer failed on
+     * the first tick and the failure counted against a tree with nothing wrong with it.
+     */
+    @Test
+    void aTargetSomebodyElseIsRemovingWaitsUntilTheyLetGo() {
+        ClearArea project = posted(ABLE, oneSlice());
+        project.completed(surveyItem(project), ctxThatSaw(new Pos(3, 60, 3)));
+        WorkItem tree = clearItem(project);
+        SiteClaims sites = new SiteClaims();
+        AgentId gatherer = AgentId.random();
+        AgentId clearer = AgentId.random();
+        BoardBrainContext asking = new BoardBrainContext();
+        asking.claims = sites.forPerson(clearer);
+
+        sites.claim(THING, new Pos(3, 60, 3), gatherer, asking.now());
+        assertFalse(project.offerableTo(tree, clearer, asking));
+
+        sites.release(THING, new Pos(3, 60, 3), gatherer);
+        assertTrue(project.offerableTo(tree, clearer, asking));
     }
 
     @Test

@@ -519,7 +519,10 @@ public final class ClearArea implements PartyProject {
 
     /**
      * The bring-in offer goes to a member of the crew with something to bring; a claimed one only
-     * to its own member. Everything else stays open to whoever gets there first.
+     * to its own member. A target somebody outside the board is already removing (a gatherer's
+     * felling) waits until they let go: offered, it failed on its first tick, and the failure was
+     * booked against a target with nothing wrong with it. Everything else stays open to whoever
+     * gets there first.
      */
     @Override
     public boolean offerableTo(WorkItem item, AgentId asker, BrainContext ctx) {
@@ -527,6 +530,10 @@ public final class ClearArea implements PartyProject {
             return crew.contains(asker)
                     && bringInCooling.getOrDefault(asker, 0L) <= ctx.percepts().time()
                     && !new PutAwaySurplus(yard, 0).satisfied(ctx);
+        }
+        if (item instanceof ClearItem target && !ctx.claims()
+                .availableTo(clearing.kind(), target.key.at(), ctx.percepts().time())) {
+            return false;
         }
         return !(item instanceof BringInItem mine) || mine.who.equals(asker);
     }
