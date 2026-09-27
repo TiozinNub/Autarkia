@@ -35,6 +35,13 @@ final class TestBlocks {
     private static final Map<String, String> ITEM_OF = Map.of("wall_torch", "torch", "oak_wall_sign", "oak_sign",
             "oak_wall_hanging_sign", "oak_hanging_sign");
 
+    /**
+     * What vanilla's shapes stand half a block or taller, beyond the full cubes: a trapdoor, a carpet,
+     * a torch, a button, a ladder and a sign do not.
+     */
+    private static final List<String> OBSTRUCTING = List.of("_stairs", "_slab", "_fence", "_fence_gate", "_wall",
+            "_door", "_bed", "chest", "lantern", "_leaves", "dirt_path");
+
     private static final Map<String, BlockInfo> BLOCKS = new LinkedHashMap<>();
 
     static {
@@ -146,7 +153,8 @@ final class TestBlocks {
         }
         String qualified = "minecraft:" + id;
         String item = id.equals("air") ? "" : "minecraft:" + ITEM_OF.getOrDefault(id, id);
-        BLOCKS.put(qualified, new BlockInfo(qualified, properties, defaults, solid, light, falls, item));
+        BLOCKS.put(qualified, new BlockInfo(qualified, properties, defaults, solid,
+                solid || OBSTRUCTING.stream().anyMatch(id::endsWith), light, falls, item));
     }
 
     static Map<String, BlockInfo> blocks() {

@@ -87,7 +87,7 @@ class DictionaryRulesTest {
     void aModdedWoodJoinsByTheSameRules() {
         List<Dictionary.BlockInfo> blocks = new java.util.ArrayList<>(TestBlocks.blocks().values());
         for (String path : List.of("redwood_planks", "redwood_log", "redwood_stairs")) {
-            blocks.add(new Dictionary.BlockInfo("mymod:" + path, java.util.Map.of(), java.util.Map.of(), true, 0,
+            blocks.add(new Dictionary.BlockInfo("mymod:" + path, java.util.Map.of(), java.util.Map.of(), true, true, 0,
                     false, "mymod:" + path));
         }
         Dictionary modded = DictionaryRules.derive(blocks, Set.of()).dictionary();

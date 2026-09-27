@@ -17,7 +17,7 @@ import java.util.TreeMap;
  *
  * <pre>
  * bpdict 1
- * block minecraft:oak_door solid=false light=0 falls=false item=minecraft:oak_door
+ * block minecraft:oak_door solid=false obstructs=true light=0 falls=false item=minecraft:oak_door
  *   prop facing north* south west east
  * material minecraft:oak block=minecraft:oak_planks log=minecraft:oak_log
  * composite minecraft:overworld_wood minecraft:acacia minecraft:birch
@@ -36,7 +36,8 @@ public final class DictionaryFile {
             out.append("// ").append(line).append('\n');
         }
         for (BlockInfo block : dict.blocks().values()) {
-            out.append("block ").append(block.id()).append(" solid=").append(block.solid()).append(" light=")
+            out.append("block ").append(block.id()).append(" solid=").append(block.solid()).append(" obstructs=")
+                    .append(block.obstructs()).append(" light=")
                     .append(block.light()).append(" falls=").append(block.falls()).append(" item=")
                     .append(block.item()).append('\n');
             block.properties().forEach((key, values) -> {
@@ -140,8 +141,11 @@ public final class DictionaryFile {
         }
 
         BlockInfo build() {
-            return new BlockInfo(id, new TreeMap<>(properties), defaults,
-                    Boolean.parseBoolean(fields.get("solid")), Integer.parseInt(fields.getOrDefault("light", "0")),
+            boolean solid = Boolean.parseBoolean(fields.get("solid"));
+            // A file exported before obstructs was written reads it as solid, as the checks once did.
+            return new BlockInfo(id, new TreeMap<>(properties), defaults, solid,
+                    Boolean.parseBoolean(fields.getOrDefault("obstructs", String.valueOf(solid))),
+                    Integer.parseInt(fields.getOrDefault("light", "0")),
                     Boolean.parseBoolean(fields.get("falls")), fields.getOrDefault("item", ""));
         }
     }

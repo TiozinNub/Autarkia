@@ -47,6 +47,55 @@ class ChecksAndFactsTest {
         return compiled.diagnostics().stream().map(Diagnostic::code).sorted().toList();
     }
 
+    /**
+     * Fence windows, a stair roof and an eave over the doorstep, on any ground: still one room, a
+     * front door, and the room and the porch roofed.
+     */
+    @Test
+    void aStairRoofAndFenceWindowsCloseTheRoomAndAPorchKeepsTheDoor() {
+        Compiled compiled = compile(HEAD + """
+                legend
+                  # stone
+                  S oak_stairs
+                  s oak_stairs[facing=south]
+                  F oak_fence
+                  D oak_door[hinge=right]
+                layer 0
+                  ~~~~~
+                  ~~~~~
+                  ~~~~~
+                  ~~~~~
+                  ~~~~~
+                  ~~~~~
+                layer 1
+                  #####
+                  #...#
+                  #...#
+                  #...#
+                  ##D##
+                  .....
+                layer 2
+                  #####
+                  #...#
+                  F...F
+                  #...#
+                  ##.##
+                  .....
+                layer 3
+                  SSSSS
+                  SSSSS
+                  SSSSS
+                  sssss
+                  sssss
+                  sssss
+                """);
+        assertTrue(compiled.ok(), compiled.diagnostics()::toString);
+        Facts facts = Facts.of(compiled.blueprint(), DICT);
+        assertEquals(1, facts.rooms());
+        assertEquals(List.of(new Entrance(new Diagnostic.Cell(1, 2, 4), Facing.SOUTH)), facts.entrances());
+        assertEquals(2 * (9 + 5), facts.roofed());
+    }
+
     @Test
     void theHouseKnowsItsFrontDoorBedAndTorch() throws IOException {
         Compiled compiled = compile(house());

@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.bp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.autarkia.core.bp.BpCompiler.Compiled;
@@ -50,6 +51,18 @@ class RoundTripTest {
         assertEquals(DICT.blocks(), back.blocks());
         assertEquals(DICT.materials(), back.materials());
         assertEquals(Optional.of("minecraft:crimson_stem"), back.lookup("minecraft:crimson", "log"));
+    }
+
+    @Test
+    void aDictionaryFromBeforeObstructsReadsItAsSolid() {
+        Dictionary old = DictionaryFile.read("""
+                bpdict 1
+                block minecraft:stone solid=true light=0 falls=false item=minecraft:stone
+                block minecraft:oak_fence solid=false light=0 falls=false item=minecraft:oak_fence
+                """);
+        assertTrue(old.blocks().get("minecraft:stone").obstructs());
+        assertFalse(old.blocks().get("minecraft:oak_fence").obstructs());
+        assertTrue(DICT.blocks().get("minecraft:oak_fence").obstructs());
     }
 
     @Test

@@ -23,6 +23,7 @@ final class Shape {
     private final int layers;
     /** Index = (layer - min) * depth * width + z * width + x. */
     private final boolean[] solid;
+    private final boolean[] obstructs;
     private final boolean[] placed;
     private final boolean[] closable;
     private final boolean[] exterior;
@@ -33,6 +34,7 @@ final class Shape {
         this.layers = bp.layers();
         int cells = layers * bp.depth() * bp.width();
         solid = new boolean[cells];
+        obstructs = new boolean[cells];
         placed = new boolean[cells];
         closable = new boolean[cells];
         for (int layer = bp.minLayer(); layer <= bp.maxLayer(); layer++) {
@@ -43,6 +45,7 @@ final class Shape {
                     EntryInfo entry = bp.entryAt(layer, x, z);
                     placed[i] = entry != null;
                     solid[i] = glyph == Blueprint.TERRAIN || entry != null && all(entry, BlockInfo::solid);
+                    obstructs[i] = solid[i] || entry != null && all(entry, BlockInfo::obstructs);
                     closable[i] = entry != null && all(entry, Shape::isClosable);
                 }
             }
@@ -86,8 +89,10 @@ final class Shape {
 
     /**
      * Air a body could move through: air, {@code @}, {@code ?} above ground (it might be anything,
-     * so assume open), and blocks with no collision that are not doors. Outside the box, and
-     * {@code ?} in it, open above the ground and earth below it — the world as it stands.
+     * so assume open), and blocks that neither obstruct nor close — a torch, a carpet, a ladder.
+     * Stairs, fences and slabs close a room as a wall does, so a stair roof and fence windows keep
+     * the outside out. Outside the box, and {@code ?} in it, open above the ground and earth below
+     * it — the world as it stands.
      */
     boolean passable(int layer, int x, int z) {
         if (!inside(layer, x, z)) {
@@ -97,7 +102,12 @@ final class Shape {
             return false;
         }
         int i = index(layer, x, z);
-        return !solid[i] && !closable[i];
+        return !obstructs[i] && !closable[i];
+    }
+
+    /** Stands half a block tall or more: a wall, stairs, a fence, a slab — what covers a cell from above. */
+    boolean obstructs(int layer, int x, int z) {
+        return inside(layer, x, z) && obstructs[index(layer, x, z)];
     }
 
     /** Reached from outside the box through passable cells, with every door shut. */

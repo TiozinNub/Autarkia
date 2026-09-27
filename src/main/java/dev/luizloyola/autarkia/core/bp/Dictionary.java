@@ -35,11 +35,14 @@ public final class Dictionary {
      *
      * @param properties every property and its values, in the block's order
      * @param solid      a full cube you cannot walk through — a wall, not a door or a torch
+     * @param obstructs  stands half a block tall or more, so nobody walks through it and the outside air
+     *                   does not reach past it — stairs, a fence, a slab, a bed; not a carpet, a torch, or
+     *                   a ladder, which is climbed
      * @param falls      sand, gravel: needs a block under it
      * @param item       the item that places it, empty when nothing does
      */
     public record BlockInfo(String id, Map<String, List<String>> properties, Map<String, String> defaults,
-                            boolean solid, int light, boolean falls, String item) {
+                            boolean solid, boolean obstructs, int light, boolean falls, String item) {
         public BlockInfo {
             Objects.requireNonNull(id, "id");
             properties = Collections.unmodifiableSortedMap(new TreeMap<>(properties));

@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @param counts   placed cells per legend glyph — the unplanned bill, before materials are chosen
  * @param rooms    enclosed spaces with room to stand, doors shut
- * @param roofed   open cells at or above layer 1 with a solid block somewhere over them
+ * @param roofed   open cells at or above layer 1 with a roof somewhere over them — a block, stairs, a slab
  * @param stations the Anima place kinds among its blocks, by count
  */
 public record Facts(int width, int depth, int minLayer, int maxLayer, int placed, Map<Character, Integer> counts,
@@ -40,8 +40,9 @@ public record Facts(int width, int depth, int minLayer, int maxLayer, int placed
     }
 
     /**
-     * A door with a roof over one face and open sky over the other; {@code outward} is the open side.
-     * Read off the roof rather than the air, so a window left open does not stop a front door being one.
+     * A door with the outside air on one face and a room on the other; {@code outward} is the
+     * outside. A porch's eave over the doorstep changes nothing. When an open window lets the air
+     * reach both faces, the roof says which side is in.
      */
     public record Entrance(Cell cell, Facing outward) {
     }
@@ -158,7 +159,7 @@ public record Facts(int width, int depth, int minLayer, int maxLayer, int placed
             return false;
         }
         for (int above = layer + 1; above <= shape.bp.maxLayer(); above++) {
-            if (shape.solid(above, x, z)) {
+            if (shape.obstructs(above, x, z)) {
                 return true;
             }
         }
@@ -178,6 +179,16 @@ public record Facts(int width, int depth, int minLayer, int maxLayer, int placed
         if (facing == null) {
             return null;
         }
+        // Outside air on one face, a room on the other — under a porch's eave too.
+        boolean frontOut = shape.exterior(layer, x + facing.dx, z + facing.dz);
+        boolean backOut = shape.exterior(layer, x - facing.dx, z - facing.dz);
+        if (frontOut != backOut) {
+            return new Entrance(new Cell(layer, x, z), frontOut ? facing : facing.opposite());
+        }
+        if (!frontOut) {
+            return null;
+        }
+        // Both faces reach the outside, through an open window: the roof says which side is in.
         boolean frontCovered = covered(shape, layer, x + facing.dx, z + facing.dz);
         boolean backCovered = covered(shape, layer, x - facing.dx, z - facing.dz);
         if (frontCovered == backCovered) {
