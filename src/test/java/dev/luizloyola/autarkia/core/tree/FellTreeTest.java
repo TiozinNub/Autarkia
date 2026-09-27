@@ -1079,6 +1079,53 @@ class FellTreeTest {
                 + "fells set off for a tree somebody was already felling (2026-09-27)");
     }
 
+    /** Each body remembers a giant by the base cell nearest it, so the claim covers all four. */
+    @Test
+    void aGiantIsHeldUnderEveryCellOfItsBase() {
+        giant(12);
+        standSouth();
+        AgentId other = AgentId.random();
+
+        task.tick(ctx);
+
+        for (Pos cell : List.of(ANCHOR, new Pos(1, BASE, 0), new Pos(1, BASE, 1), new Pos(0, BASE, 1))) {
+            assertFalse(ctx.siteClaims.availableTo(Pois.TREE, cell, other, ctx.percepts.time),
+                    "held at " + at(cell));
+        }
+    }
+
+    @Test
+    void aGiantRememberedByAnotherCornerIsStillTaken() {
+        giant(12);
+        standSouth();
+        FakeContext mate = new FakeContext();
+        mate.siteClaims = ctx.siteClaims;
+        giant(mate.percepts.blocks, 12);
+        mate.percepts.position = new Pos(1, BASE, -10);
+        task.tick(ctx);
+
+        assertEquals(TaskStatus.FAILED, new FellTree(new Pos(1, BASE, 0)).tick(mate),
+                "the north-east corner is the same giant");
+    }
+
+    @Test
+    void theGroundItsDropsLandOnIsLeftToTheFeller() {
+        trunk();
+        pack(4);
+        standSouth();
+        FakeContext mate = new FakeContext();
+        mate.siteClaims = ctx.siteClaims;
+        Pos besideTheStump = new Pos(4, BASE, -3);
+
+        task.tick(ctx);
+        assertTrue(mate.claims().claimedByOther(besideTheStump, ctx.percepts.time));
+        assertFalse(mate.claims().claimedByOther(FAR, ctx.percepts.time), "another tree's ground");
+
+        assertEquals(TaskStatus.SUCCESS, drive(400));
+        assertFalse(mate.claims().claimedByOther(besideTheStump, ctx.percepts.time),
+                "and anybody's once the felling ends");
+    }
+
     @Test
     void aTreeWithNoWayInIsAvoidedForAWhile() {
         trunk();
@@ -1443,10 +1490,14 @@ class FellTreeTest {
 
     /** A 2×2 trunk on the anchor's square, {@code logs} tall, of spruce. */
     private void giant(int logs) {
+        giant(ctx.percepts.blocks, logs);
+    }
+
+    private static void giant(FakeProbe blocks, int logs) {
         for (int y = BASE; y < BASE + logs; y++) {
             for (int[] d : new int[][] {{0, 0}, {1, 0}, {1, 1}, {0, 1}}) {
-                ctx.percepts.blocks.set(d[0], y, d[1], BlockKind.LOG);
-                ctx.percepts.blocks.setId(d[0], y, d[1], "minecraft:spruce_log");
+                blocks.set(d[0], y, d[1], BlockKind.LOG);
+                blocks.setId(d[0], y, d[1], "minecraft:spruce_log");
             }
         }
     }

@@ -158,6 +158,12 @@ public final class FellTree implements PrimitiveTask {
     public static final int DROP_SPREAD = BRANCH_SCAN + 2;
 
     /**
+     * How far above and below the stump the claimed ground reaches. {@link #nearTheTree} asks
+     * nothing of height; this is only a box's need for one, past any tree and the slope beside it.
+     */
+    public static final int DROP_HEIGHT = 64;
+
+    /**
      * How long the body stands at an item that is not picked up before it is given up — two
      * seconds, past any pickup delay. A full pack, or an item on a ledge the legs called arrived
      * beside, is what is left.
@@ -201,6 +207,8 @@ public final class FellTree implements PrimitiveTask {
     private static final double BODY_HALF_WIDTH = 0.3;
 
     private final Pos anchor;
+    /** Every base cell this has claimed the tree under, so an exit lets go of all of them. */
+    private final Set<Pos> held = new LinkedHashSet<>();
     private Stage stage = Stage.APPROACH;
     private @Nullable Approach approach;
     private @Nullable Climb climb;
@@ -333,19 +341,20 @@ public final class FellTree implements PrimitiveTask {
 
     @Override
     public TaskStatus tick(BrainContext ctx) {
-        // Heartbeat every tick, so ChopForLogs offers the tree to nobody else. Lost in the
-        // 2026-09-06 rewrite: 359 of 837 empty fells on 2026-09-27 set off for a tree somebody
-        // else was already felling.
-        if (!ctx.claims().claim(Pois.TREE, anchor, ctx.percepts().time())) {
-            return taken(ctx);
-        }
         // The ground around the stump matters until the tree is down; a sweep re-reading it
-        // journals a fresh bearing from every cell it walks through.
+        // journals a fresh bearing from every cell it walks through. Read before the claim, which
+        // is keyed on the base this finds.
         if (approach == null || (stage != Stage.COLLECT && ticks % RESURVEY_TICKS == 0)) {
             look(ctx);
             if (stage == Stage.APPROACH && nothingStands(ctx)) {
                 return alreadyDown(ctx);
             }
+        }
+        // Heartbeat every tick, so ChopForLogs offers the tree to nobody else. Lost in the
+        // 2026-09-06 rewrite: 359 of 837 empty fells on 2026-09-27 set off for a tree somebody
+        // else was already felling.
+        if (!holdTree(ctx)) {
+            return taken(ctx);
         }
         // A stage that finishes hands straight on to the next, so no tick is spent idle between.
         TaskStatus status = switch (stage) {
@@ -1625,6 +1634,37 @@ public final class FellTree implements PrimitiveTask {
         return TaskStatus.FAILED;
     }
 
+    /**
+     * Claims the tree under every cell of its base, all or none. Each body remembers a 2×2 giant by
+     * whichever base cell was nearest it ({@code Anchors.choose}), so a claim on the anchor alone let
+     * two bodies climb one giant. The area is the ground its drops land on, which the sweep here
+     * and Anima's {@code Flocks} then leave to whoever is felling it.
+     */
+    private boolean holdTree(BrainContext ctx) {
+        long now = ctx.percepts().time();
+        List<Pos> cells = new ArrayList<>(approach == null ? List.of() : approach.base());
+        if (!cells.contains(anchor)) {
+            cells.add(anchor);
+        }
+        for (Pos cell : cells) {
+            if (!ctx.claims().availableTo(Pois.TREE, cell, now)) {
+                return false;
+            }
+        }
+        for (Pos cell : cells) {
+            ctx.claims().claim(Pois.TREE, cell, dropGround(), now);
+            held.add(cell);
+        }
+        return true;
+    }
+
+    /** {@link #nearTheTree} as a box, at any height a tree's drops land at. */
+    private Region dropGround() {
+        return new Region(
+                new Pos(anchor.x() - DROP_SPREAD, anchor.y() - DROP_HEIGHT, anchor.z() - DROP_SPREAD),
+                new Pos(anchor.x() + DROP_SPREAD, anchor.y() + DROP_HEIGHT, anchor.z() + DROP_SPREAD));
+    }
+
     /** Somebody else's live claim. Theirs to fell, not a tree that beat the chop, so no avoid mark. */
     private TaskStatus taken(BrainContext ctx) {
         failure = "somebody else is felling it";
@@ -1663,7 +1703,10 @@ public final class FellTree implements PrimitiveTask {
     }
 
     private void release(BrainContext ctx) {
-        ctx.claims().release(Pois.TREE, anchor);
+        for (Pos cell : held) {
+            ctx.claims().release(Pois.TREE, cell);
+        }
+        held.clear();
         ctx.actuators().mover().stop();
         ctx.actuators().breaker().abort();
         ctx.actuators().riser().abort();
