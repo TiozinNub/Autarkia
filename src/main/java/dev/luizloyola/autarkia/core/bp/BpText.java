@@ -62,6 +62,7 @@ public final class BpText {
         header(out, "size", bp.width() + " " + bp.depth() + " " + bp.layers());
         section(out, "materials", bp.slots().stream().filter(s -> s.kind() == SlotKind.MATERIAL).toList());
         section(out, "palette", bp.slots().stream().filter(s -> s.kind() == SlotKind.PALETTE).toList());
+        groups(out, bp.variants());
         if (!bp.legend().isEmpty()) {
             out.append("\nlegend\n");
             for (EntryInfo entry : bp.legend().values()) {
@@ -71,6 +72,16 @@ public final class BpText {
         for (List<Integer> group : layerGroups(bp)) {
             out.append("\nlayer ").append(indexSet(group)).append('\n');
             rows(bp, group.get(0)).forEach(row -> out.append("  ").append(row).append('\n'));
+        }
+        for (Variants.Overlay overlay : bp.variants().overlays().values()) {
+            Map<String, List<Integer>> folded = new LinkedHashMap<>();
+            for (int layer : overlay.layers()) {
+                folded.computeIfAbsent(String.join("\n", variantRows(bp, overlay.key(), layer)),
+                        k -> new ArrayList<>()).add(layer);
+            }
+            folded.forEach((rows, layers) -> out.append("\nlayer ").append(indexSet(layers)).append(' ')
+                    .append(overlay.key()).append('\n').append(rows.lines().map(row -> "  " + row + "\n")
+                            .collect(Collectors.joining())));
         }
         for (int layer = bp.minLayer(); layer <= bp.maxLayer(); layer++) {
             if (hasOverlay(bp, layer)) {
@@ -106,6 +117,27 @@ public final class BpText {
         return rows;
     }
 
+    /**
+     * A variant's grid for one layer, {@code ?} where it leaves the base alone; empty when the
+     * variant draws nothing there.
+     */
+    public static List<String> variantRows(Blueprint bp, String key, int layer) {
+        Variants.Overlay overlay = bp.variants().overlays().get(key);
+        if (overlay == null || !overlay.layers().contains(layer)) {
+            return List.of();
+        }
+        List<String> rows = new ArrayList<>();
+        for (int z = 0; z < bp.depth(); z++) {
+            StringBuilder row = new StringBuilder();
+            for (int x = 0; x < bp.width(); x++) {
+                char glyph = overlay.cells()[layer - bp.minLayer()][z][x];
+                row.append(glyph == Variants.UNCHANGED ? Blueprint.ANY : glyph);
+            }
+            rows.add(row.toString());
+        }
+        return rows;
+    }
+
     /** The node grid drawn over a layer, or nothing when no node sits on a block there. */
     public static List<String> overlayRows(Blueprint bp, int layer) {
         if (!hasOverlay(bp, layer)) {
@@ -137,6 +169,21 @@ public final class BpText {
                 .collect(Collectors.joining(" "));
     }
 
+    private static void groups(StringBuilder out, Variants variants) {
+        if (variants.isEmpty()) {
+            return;
+        }
+        out.append("\ngroups\n");
+        int width = variants.groups().stream().mapToInt(group -> group.name().length()).max().orElse(0);
+        for (Variants.Group group : variants.groups()) {
+            out.append("  ").append(pad(group.name(), width)).append(' ')
+                    .append(group.required() ? "required" : "optional").append(' ')
+                    .append(String.join(" ", group.variants())).append('\n');
+        }
+        variants.needs().forEach((key, targets) -> out.append("  ").append(key).append(" needs ")
+                .append(String.join(" ", targets)).append('\n'));
+    }
+
     private static void section(StringBuilder out, String name, List<SlotInfo> slots) {
         if (slots.isEmpty()) {
             return;
@@ -150,7 +197,7 @@ public final class BpText {
     /** Identical layers share one grid — except a layer with inline nodes, whose ids are its own. */
     private static List<List<Integer>> layerGroups(Blueprint bp) {
         Map<String, List<Integer>> groups = new LinkedHashMap<>();
-        for (int layer = bp.minLayer(); layer <= bp.maxLayer(); layer++) {
+        for (int layer = bp.baseMinLayer(); layer <= bp.baseMaxLayer(); layer++) {
             StringBuilder key = new StringBuilder();
             boolean nodes = false;
             for (int z = 0; z < bp.depth(); z++) {

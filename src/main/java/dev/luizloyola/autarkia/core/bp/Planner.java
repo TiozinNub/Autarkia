@@ -445,7 +445,7 @@ public final class Planner {
                         }
                     }
                     if (attached == null) {
-                        out.cellError("unattached", bp.sourceLine(layer, z), bp.sourceColumn(layer, x, z),
+                        out.cellError("unattached", bp.sourceLine(layer, x, z), bp.sourceColumn(layer, x, z),
                                 new Cell(layer, x, z), Ids.brief(info.id()) + " has nothing to hang from: no "
                                         + (twin ? "wall or floor" : face ? "wall, floor or ceiling"
                                         : "ceiling or floor") + " beside it that can hold it");

@@ -10,8 +10,10 @@ import dev.luizloyola.autarkia.core.bp.Blueprint.SlotInfo;
 import dev.luizloyola.autarkia.core.bp.Blueprint.SlotKind;
 import dev.luizloyola.autarkia.core.bp.BpSource.Entry;
 import dev.luizloyola.autarkia.core.bp.BpSource.Grid;
+import dev.luizloyola.autarkia.core.bp.BpSource.GroupDecl;
 import dev.luizloyola.autarkia.core.bp.BpSource.Header;
 import dev.luizloyola.autarkia.core.bp.BpSource.Named;
+import dev.luizloyola.autarkia.core.bp.BpSource.NeedDecl;
 import dev.luizloyola.autarkia.core.bp.BpSource.NodeDecl;
 import dev.luizloyola.autarkia.core.bp.BpSource.PathChain;
 import dev.luizloyola.autarkia.core.bp.BpSource.Row;
@@ -20,7 +22,10 @@ import dev.luizloyola.autarkia.core.bp.BpSource.SlotRef;
 import dev.luizloyola.autarkia.core.bp.BpSource.Term;
 import dev.luizloyola.autarkia.core.bp.Diagnostic.Cell;
 import dev.luizloyola.autarkia.core.bp.Dictionary.BlockInfo;
+import dev.luizloyola.autarkia.core.bp.Variants.Overlay;
+import dev.luizloyola.autarkia.core.bp.Variants.Selection;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -47,6 +52,9 @@ public final class Binder {
 
     /** Every entry costs a glyph; raising it is a bp 2 question (Luiz). */
     public static final int LEGEND_CAP = 64;
+
+    /** Every allowed selection is checked in full, so past this many a file is refused, not half-checked. */
+    public static final int SELECTION_CAP = 256;
 
     private static final List<String> REQUIRED = List.of("name", "author", "version", "orientation", "flippable");
     private static final Set<String> KNOWN_HEADERS = Set.of("name", "author", "version", "orientation",
@@ -98,11 +106,17 @@ public final class Binder {
         Headers headers = headers();
         slots();
         legend();
-        GridResult grids = grids();
+        GroupModel groups = groups();
+        GridResult grids = grids(groups);
         Map<String, Node> nodes = grids == null ? Map.of() : nodes(grids);
         List<Edge> edges = paths(nodes);
+        List<Selection> selections = List.of();
         if (grids != null) {
-            fixtures(grids);
+            selections = selections(groups, grids);
+            Map<Character, Part> parts = fixtureParts();
+            Variants model = new Variants(groups.list, groups.needs, grids.overlays, selections);
+            Variants.acrossSelections(selections, (selection, each) -> fixtures(parts, Variants.compose(grids.cells,
+                    grids.line, grids.column, model.ordered(selection)), grids, each), out);
             size(grids);
         }
         unused(grids);
@@ -117,8 +131,10 @@ public final class Binder {
                     state.demands.stream().map(Demand::form).collect(Collectors.toCollection(TreeSet::new)),
                     state.outcomes, state.slot.line()));
         }
-        return new Blueprint(id, headers, grids.width, grids.depth, grids.minLayer, grids.cells, grids.rowLine,
-                grids.rowColumn, slotInfos, legend, nodes, edges);
+        Variants variants = groups.list.isEmpty() ? Variants.NONE
+                : new Variants(groups.list, groups.needs, grids.overlays, selections);
+        return new Blueprint(id, headers, grids.width, grids.depth, grids.minLayer, grids.cells, grids.line,
+                grids.column, grids.baseMin, grids.baseMax, slotInfos, legend, nodes, edges, variants, Selection.BASE);
     }
 
     // ── headers ─────────────────────────────────────────────────────────────────────────────
@@ -282,6 +298,13 @@ public final class Binder {
         }
         if (grids != null) {
             unusedGlyphs(grids);
+            grids.overlays.forEach((key, overlay) -> {
+                if (changesNothing(overlay)) {
+                    int[] at = grids.declared.get(key);
+                    out.report("variant_empty", at[0], at[1], "'" + key + "' draws nothing, so choosing it changes "
+                            + "nothing");
+                }
+            });
         }
     }
 
@@ -638,6 +661,164 @@ public final class Binder {
         return state != null && state.slot.binding() == Binding.MIX;
     }
 
+    // ── groups ──────────────────────────────────────────────────────────────────────────────
+
+    /** The groups as declared, what each variant needs, and where each variant was named. */
+    private static final class GroupModel {
+        final List<Variants.Group> list = new ArrayList<>();
+        final Map<String, Set<String>> needs = new LinkedHashMap<>();
+        /** {@code group.variant} to its {line, column} in 'groups'. */
+        final Map<String, int[]> declared = new LinkedHashMap<>();
+        /** Every {@code group.variant} written in 'groups', broken lines included, so none is reported twice. */
+        final Set<String> named = new HashSet<>();
+        boolean broken;
+    }
+
+    private GroupModel groups() {
+        GroupModel model = new GroupModel();
+        Set<String> names = new HashSet<>();
+        for (GroupDecl decl : src.groups()) {
+            decl.variants().forEach(variant -> model.named.add(decl.name() + "." + variant));
+            if (!names.add(decl.name())) {
+                out.error("group_twice", decl.line(), decl.column(), "group '" + decl.name() + "' is already declared");
+                model.broken = true;
+                continue;
+            }
+            List<String> variants = new ArrayList<>();
+            for (int i = 0; i < decl.variants().size(); i++) {
+                String variant = decl.variants().get(i);
+                if (variants.contains(variant)) {
+                    out.error("variant_twice", decl.line(), decl.columns().get(i), "'" + variant + "' is listed twice "
+                            + "in group '" + decl.name() + "'");
+                    model.broken = true;
+                    continue;
+                }
+                variants.add(variant);
+                model.declared.put(decl.name() + "." + variant, new int[] {decl.line(), decl.columns().get(i)});
+            }
+            model.list.add(new Variants.Group(decl.name(), decl.required(), variants, decl.line()));
+        }
+        Map<String, NeedDecl> firstNeed = new HashMap<>();
+        for (NeedDecl need : src.needs()) {
+            if (!model.declared.containsKey(need.variant())) {
+                out.error("unknown_variant", need.line(), need.column(), "no variant '" + need.variant() + "' in "
+                        + "'groups'" + Suggest.hint(need.variant(), model.declared.keySet()));
+                model.broken = true;
+                continue;
+            }
+            firstNeed.putIfAbsent(need.variant(), need);
+            for (int i = 0; i < need.targets().size(); i++) {
+                String target = need.targets().get(i);
+                if (!model.declared.containsKey(target)) {
+                    out.error("unknown_variant", need.line(), need.columns().get(i), "no variant '" + target + "' in "
+                            + "'groups'" + Suggest.hint(target, model.declared.keySet()));
+                    model.broken = true;
+                } else if (groupOf(target).equals(groupOf(need.variant()))) {
+                    out.error("needs_own_group", need.line(), need.columns().get(i), "'" + need.variant() + "' and '"
+                            + target + "' are variants of one group, which are never chosen together");
+                    model.broken = true;
+                } else {
+                    model.needs.computeIfAbsent(need.variant(), key -> new LinkedHashSet<>()).add(target);
+                }
+            }
+        }
+        for (String key : model.needs.keySet()) {
+            if (Variants.reaches(model.needs, key, key)) {
+                NeedDecl need = firstNeed.get(key);
+                out.error("needs_cycle", need.line(), need.column(), "'" + key + "' needs itself, through what it "
+                        + "needs; one of them has to come first");
+                model.broken = true;
+                break;
+            }
+        }
+        return model;
+    }
+
+    private static String groupOf(String key) {
+        return key.substring(0, key.indexOf('.'));
+    }
+
+    /**
+     * Every selection the groups allow — the file's only one, the base, when it has none. Refuses a
+     * variant no selection can hold, and two variants that change one cell with no need between
+     * them, whose result would hang on an order nobody wrote.
+     */
+    private List<Selection> selections(GroupModel groups, GridResult grids) {
+        if (groups.list.isEmpty()) {
+            return List.of(Selection.BASE);
+        }
+        if (groups.broken) {
+            return List.of();
+        }
+        int line = src.groups().get(0).line();
+        Optional<List<Selection>> all = Variants.enumerate(groups.list, groups.needs, 16 * SELECTION_CAP);
+        if (all.isEmpty() || all.get().size() > SELECTION_CAP) {
+            out.error("variants_too_many", line, 1, "these groups allow more than " + SELECTION_CAP + " selections, "
+                    + "and every one is checked; split the blueprint, or tie variants together with needs");
+            return List.of();
+        }
+        List<Selection> allowed = all.get();
+        if (allowed.isEmpty()) {
+            out.error("no_selection", line, 1, "no selection keeps every need: a required group's variants all need "
+                    + "something that cannot be chosen with them");
+            return List.of();
+        }
+        Set<String> chosenSomewhere = new HashSet<>();
+        allowed.forEach(selection -> chosenSomewhere.addAll(selection.keys()));
+        boolean unreachable = false;
+        for (Map.Entry<String, int[]> declared : groups.declared.entrySet()) {
+            if (!chosenSomewhere.contains(declared.getKey())) {
+                out.error("variant_unreachable", declared.getValue()[0], declared.getValue()[1], "'"
+                        + declared.getKey() + "' is in no selection: what it needs cannot be chosen with it");
+                unreachable = true;
+            }
+        }
+        List<String> keys = new ArrayList<>(groups.declared.keySet());
+        for (int i = 0; i < keys.size(); i++) {
+            for (int j = i + 1; j < keys.size(); j++) {
+                String a = keys.get(i);
+                String b = keys.get(j);
+                if (groupOf(a).equals(groupOf(b)) || Variants.reaches(groups.needs, a, b)
+                        || Variants.reaches(groups.needs, b, a)
+                        || allowed.stream().noneMatch(s -> s.keys().contains(a) && s.keys().contains(b))) {
+                    continue;
+                }
+                overlap(grids.overlays.get(a), grids.overlays.get(b), grids);
+            }
+        }
+        return unreachable ? List.of() : allowed;
+    }
+
+    /** The first cell both change, reported where the second drew it. */
+    private void overlap(Overlay a, Overlay b, GridResult box) {
+        for (int l = 0; l < box.cells.length; l++) {
+            for (int z = 0; z < box.depth; z++) {
+                for (int x = 0; x < box.width; x++) {
+                    if (a.cells()[l][z][x] != Variants.UNCHANGED && b.cells()[l][z][x] != Variants.UNCHANGED) {
+                        out.cellError("variant_overlap", b.line()[l][z][x], b.column()[l][z][x],
+                                new Cell(l + box.minLayer, x, z), "'" + a.key() + "' and '" + b.key() + "' both "
+                                        + "change this cell and neither needs the other; a need says which is laid "
+                                        + "over which");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean changesNothing(Overlay overlay) {
+        for (char[][] layer : overlay.cells()) {
+            for (char[] row : layer) {
+                for (char glyph : row) {
+                    if (glyph != Variants.UNCHANGED) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     // ── the legend ──────────────────────────────────────────────────────────────────────────
 
     private void legend() {
@@ -665,26 +846,36 @@ public final class Binder {
     private static final class GridResult {
         int width;
         int depth;
+        /** The box's first layer: the base's, or lower where a variant draws below it. */
         int minLayer;
+        int baseMin;
+        int baseMax;
+        /** The base over the whole box, {@code ?} on a layer only variants draw. */
         char[][][] cells = new char[0][0][0];
-        /** Each drawn row's source line and first-cell column, by [layer - min][z], for diagnostics. */
-        int[][] rowLine = new int[0][0];
-        int[][] rowColumn = new int[0][0];
+        /** Where each cell was drawn, by [layer - min][z][x], for diagnostics. */
+        int[][][] line = new int[0][0][0];
+        int[][][] column = new int[0][0][0];
+        /** Every declared variant's overlay, in the order the groups list them, drawn or not. */
+        final Map<String, Overlay> overlays = new LinkedHashMap<>();
+        Map<String, int[]> declared = Map.of();
         final List<PlacedNode> placed = new ArrayList<>();
     }
 
     private record PlacedNode(String id, int layer, int x, int z, boolean inline, int line, int column) {
     }
 
-    private @Nullable GridResult grids() {
+    private @Nullable GridResult grids(GroupModel groups) {
         List<Grid> blockGrids = src.grids().stream().filter(grid -> !grid.nodes()).toList();
-        if (blockGrids.isEmpty() || blockGrids.get(0).rows().isEmpty()) {
+        List<Grid> baseGrids = blockGrids.stream().filter(grid -> grid.variant() == null).toList();
+        if (baseGrids.isEmpty() || blockGrids.get(0).rows().isEmpty()) {
             if (src.format() != 0) {
-                out.error("no_layers", 0, 0, "a blueprint needs at least one 'layer' grid");
+                out.error("no_layers", 0, 0, "a blueprint needs at least one 'layer' grid of its own; variants only "
+                        + "draw over it");
             }
             return null;
         }
         GridResult result = new GridResult();
+        result.declared = groups.declared;
         result.width = blockGrids.get(0).rows().get(0).cells().length();
         result.depth = blockGrids.get(0).rows().size();
         for (Grid grid : blockGrids) {
@@ -695,7 +886,7 @@ public final class Binder {
             shaped &= shape(grid, result.width, result.depth);
         }
         TreeMap<Integer, Integer> claimed = new TreeMap<>();
-        for (Grid grid : blockGrids) {
+        for (Grid grid : baseGrids) {
             for (int index : grid.indices()) {
                 Integer was = claimed.putIfAbsent(index, grid.line());
                 if (was != null) {
@@ -721,14 +912,50 @@ public final class Binder {
                     + " never drawn; every layer from " + min + " to " + max + " needs a grid");
             shaped = false;
         }
+        // A variant may draw past the base — a storey above, a cellar below — so the box is every layer drawn.
+        int boxMin = min;
+        int boxMax = max;
+        Map<String, Map<Integer, Integer>> variantClaims = new HashMap<>();
+        for (Grid grid : blockGrids) {
+            if (grid.variant() == null) {
+                continue;
+            }
+            if (!groups.declared.containsKey(grid.variant())) {
+                if (!groups.named.contains(grid.variant())) {
+                    out.error("unknown_variant", grid.line(), grid.variantColumn(), "no variant '" + grid.variant()
+                            + "' in 'groups'" + Suggest.hint(grid.variant(), groups.declared.keySet()));
+                }
+                shaped = false;
+                continue;
+            }
+            Map<Integer, Integer> mine = variantClaims.computeIfAbsent(grid.variant(), key -> new HashMap<>());
+            for (int index : grid.indices()) {
+                Integer was = mine.putIfAbsent(index, grid.line());
+                if (was != null) {
+                    out.error("layer_twice", grid.line(), 1, "layer " + index + " of " + grid.variant()
+                            + " is already drawn by the grid on line " + was);
+                    shaped = false;
+                }
+                boxMin = Math.min(boxMin, index);
+                boxMax = Math.max(boxMax, index);
+            }
+        }
         if (!shaped) {
             return null;
         }
-        result.minLayer = min;
-        result.cells = new char[max - min + 1][result.depth][result.width];
-        result.rowLine = new int[max - min + 1][result.depth];
-        result.rowColumn = new int[max - min + 1][result.depth];
-        for (Grid grid : blockGrids) {
+        int span = boxMax - boxMin + 1;
+        result.minLayer = boxMin;
+        result.baseMin = min;
+        result.baseMax = max;
+        result.cells = new char[span][result.depth][result.width];
+        result.line = new int[span][result.depth][result.width];
+        result.column = new int[span][result.depth][result.width];
+        for (char[][] layer : result.cells) {
+            for (char[] row : layer) {
+                Arrays.fill(row, Blueprint.ANY);
+            }
+        }
+        for (Grid grid : baseGrids) {
             boolean shared = grid.indices().size() > 1;
             for (int z = 0; z < result.depth; z++) {
                 Row row = grid.rows().get(z);
@@ -742,22 +969,25 @@ public final class Binder {
                         nodeColumns.add(x);
                     }
                     for (int index : grid.indices()) {
-                        result.cells[index - min][z][x] = glyph;
-                        result.rowLine[index - min][z] = row.line();
-                        result.rowColumn[index - min][z] = row.column();
+                        result.cells[index - boxMin][z][x] = glyph;
+                        result.line[index - boxMin][z][x] = row.line();
+                        result.column[index - boxMin][z][x] = row.column() + x;
                     }
                 }
                 placeIds(row, nodeColumns, grid.indices().get(0), z, true, result, shared);
             }
+        }
+        for (String key : groups.declared.keySet()) {
+            result.overlays.put(key, overlay(key, blockGrids, result));
         }
         for (Grid grid : src.grids()) {
             if (!grid.nodes() || grid.indices().size() != 1) {
                 continue;
             }
             int layer = grid.indices().get(0);
-            if (layer < min || layer > max) {
+            if (layer < boxMin || layer > boxMax) {
                 out.error("node_layer_range", grid.line(), 1, "node layer " + layer + " is outside the structure, "
-                        + "which spans layers " + min + " to " + max);
+                        + "which spans layers " + boxMin + " to " + boxMax);
                 continue;
             }
             for (int z = 0; z < result.depth; z++) {
@@ -775,19 +1005,62 @@ public final class Binder {
         return result;
     }
 
-    /** Every cell's glyph declared, and no {@code @} in a shared grid — whatever the grid's shape. */
+    /** A variant's grids as one overlay on the box: its glyph where it draws one, unchanged at {@code ?}. */
+    private static Overlay overlay(String key, List<Grid> grids, GridResult box) {
+        int span = box.cells.length;
+        char[][][] cells = new char[span][box.depth][box.width];
+        int[][][] line = new int[span][box.depth][box.width];
+        int[][][] column = new int[span][box.depth][box.width];
+        Set<Integer> layers = new TreeSet<>();
+        for (Grid grid : grids) {
+            if (!key.equals(grid.variant())) {
+                continue;
+            }
+            for (int index : grid.indices()) {
+                layers.add(index);
+                for (int z = 0; z < box.depth; z++) {
+                    Row row = grid.rows().get(z);
+                    for (int x = 0; x < box.width; x++) {
+                        char glyph = row.cells().charAt(x);
+                        if (glyph == Blueprint.ANY) {
+                            continue;
+                        }
+                        cells[index - box.minLayer][z][x] = glyph == ' ' ? Blueprint.AIR : glyph;
+                        line[index - box.minLayer][z][x] = row.line();
+                        column[index - box.minLayer][z][x] = row.column() + x;
+                    }
+                }
+            }
+        }
+        return new Overlay(key, cells, line, column, Variants.sorted(layers));
+    }
+
+    /**
+     * Every cell's glyph declared, no {@code @} in a shared grid, and no node in a variant's grid —
+     * whatever the grid's shape.
+     */
     private void glyphs(Grid grid) {
         boolean shared = grid.indices().size() > 1;
-        boolean sharedReported = false;
+        boolean variant = grid.variant() != null;
+        boolean nodeReported = false;
         for (int z = 0; z < grid.rows().size(); z++) {
             Row row = grid.rows().get(z);
+            if (variant && !row.ids().isEmpty() && !nodeReported) {
+                out.error("variant_nodes", row.line(), row.column(), "node ids belong to the base; a variant "
+                        + "carries no nodes yet");
+                nodeReported = true;
+            }
             for (int x = 0; x < row.cells().length(); x++) {
                 char glyph = row.cells().charAt(x);
                 Cell cell = new Cell(grid.indices().isEmpty() ? 0 : grid.indices().get(0), x, z);
-                if (glyph == Blueprint.NODE_AIR && shared && !sharedReported) {
+                if (glyph == Blueprint.NODE_AIR && variant && !nodeReported) {
+                    out.cellError("variant_nodes", row.line(), row.column() + x, cell, "'@' marks a node, and a "
+                            + "variant carries no nodes yet");
+                    nodeReported = true;
+                } else if (glyph == Blueprint.NODE_AIR && shared && !variant && !nodeReported) {
                     out.cellError("node_in_shared_layer", row.line(), row.column() + x, cell, "'@' in a grid drawn "
                             + "over several layers would mint each node id again; give this layer its own header");
-                    sharedReported = true;
+                    nodeReported = true;
                 } else if (glyph != ' ' && glyph != Blueprint.AIR && glyph != Blueprint.ANY
                         && glyph != Blueprint.TERRAIN && glyph != Blueprint.NODE_AIR && !legend.containsKey(glyph)
                         && !legendDeclares(glyph)) {
@@ -806,7 +1079,7 @@ public final class Binder {
     private boolean shape(Grid grid, int width, int depth) {
         boolean fine = true;
         String what = (grid.nodes() ? "node layer " : "layer ") + grid.indices().stream().map(String::valueOf)
-                .collect(Collectors.joining(" "));
+                .collect(Collectors.joining(" ")) + (grid.variant() == null ? "" : " " + grid.variant());
         if (grid.rows().size() != depth) {
             out.error("grid_depth", grid.line(), 1, what + ": " + grid.rows().size() + " rows, expected " + depth
                     + " — every grid has as many rows as the first");
@@ -848,10 +1121,15 @@ public final class Binder {
 
     private void unusedGlyphs(GridResult result) {
         Set<Character> drawn = new HashSet<>();
-        for (char[][] layer : result.cells) {
-            for (char[] row : layer) {
-                for (char glyph : row) {
-                    drawn.add(glyph);
+        List<char[][][]> grids = new ArrayList<>();
+        grids.add(result.cells);
+        result.overlays.values().forEach(overlay -> grids.add(overlay.cells()));
+        for (char[][][] cells : grids) {
+            for (char[][] layer : cells) {
+                for (char[] row : layer) {
+                    for (char glyph : row) {
+                        drawn.add(glyph);
+                    }
                 }
             }
         }
@@ -1028,11 +1306,7 @@ public final class Binder {
         return null;
     }
 
-    /**
-     * The local rule: a main part's partner cell holds its matching other part or air, and every
-     * other part lands on some main part's partner cell.
-     */
-    private void fixtures(GridResult grids) {
+    private Map<Character, Part> fixtureParts() {
         Map<Character, Part> parts = new HashMap<>();
         for (EntryInfo entry : legend.values()) {
             Part part = part(entry);
@@ -1040,30 +1314,40 @@ public final class Binder {
                 parts.put(entry.glyph(), part);
             }
         }
+        return parts;
+    }
+
+    /**
+     * The local rule: a main part's partner cell holds its matching other part or air, and every
+     * other part lands on some main part's partner cell. Run on each selection's cells.
+     */
+    private static void fixtures(Map<Character, Part> parts, Variants.Composed composed, GridResult box,
+                                 Diagnostics out) {
         if (parts.isEmpty()) {
             return;
         }
-        int layers = grids.cells.length;
+        char[][][] cells = composed.cells();
+        int layers = cells.length;
         Set<Cell> claimedPartners = new HashSet<>();
         for (int li = 0; li < layers; li++) {
-            for (int z = 0; z < grids.depth; z++) {
-                for (int x = 0; x < grids.width; x++) {
-                    Part part = parts.get(grids.cells[li][z][x]);
+            for (int z = 0; z < box.depth; z++) {
+                for (int x = 0; x < box.width; x++) {
+                    Part part = parts.get(cells[li][z][x]);
                     if (part == null || !part.main()) {
                         continue;
                     }
-                    int layer = li + grids.minLayer;
+                    int layer = li + box.minLayer;
                     Cell here = new Cell(layer, x, z);
-                    int[] origin = {grids.rowLine[li][z], grids.rowColumn[li][z] + x};
+                    int[] origin = {composed.line()[li][z][x], composed.column()[li][z][x]};
                     Cell partner = partnerOf(part, here);
                     String partName = part.fixture() == Fixture.BED ? "foot" : "upper half";
-                    if (partner.layer() - grids.minLayer >= layers || partner.x() < 0 || partner.x() >= grids.width
-                            || partner.z() < 0 || partner.z() >= grids.depth) {
+                    if (partner.layer() - box.minLayer >= layers || partner.x() < 0 || partner.x() >= box.width
+                            || partner.z() < 0 || partner.z() >= box.depth) {
                         out.cellError("fixture_outside", origin[0], origin[1], here, "its " + partName + " falls "
                                 + "outside the structure");
                         continue;
                     }
-                    char there = grids.cells[partner.layer() - grids.minLayer][partner.z()][partner.x()];
+                    char there = cells[partner.layer() - box.minLayer][partner.z()][partner.x()];
                     Part other = parts.get(there);
                     if (there == Blueprint.AIR || there == Blueprint.ANY || there == Blueprint.NODE_AIR) {
                         claimedPartners.add(partner);
@@ -1078,16 +1362,16 @@ public final class Binder {
             }
         }
         for (int li = 0; li < layers; li++) {
-            for (int z = 0; z < grids.depth; z++) {
-                for (int x = 0; x < grids.width; x++) {
-                    char glyph = grids.cells[li][z][x];
+            for (int z = 0; z < box.depth; z++) {
+                for (int x = 0; x < box.width; x++) {
+                    char glyph = cells[li][z][x];
                     Part part = parts.get(glyph);
-                    Cell here = new Cell(li + grids.minLayer, x, z);
+                    Cell here = new Cell(li + box.minLayer, x, z);
                     if (part != null && !part.main() && !claimedPartners.contains(here)) {
-                        int[] origin = {grids.rowLine[li][z], grids.rowColumn[li][z] + x};
-                        out.cellError("fixture_lonely", origin[0], origin[1], here, "'" + glyph + "' is the "
-                                + (part.fixture() == Fixture.BED ? "foot of a bed" : "upper half of a fixture")
-                                + " with no main part where it would infer this cell");
+                        out.cellError("fixture_lonely", composed.line()[li][z][x], composed.column()[li][z][x], here,
+                                "'" + glyph + "' is the " + (part.fixture() == Fixture.BED ? "foot of a bed"
+                                        : "upper half of a fixture") + " with no main part where it would infer "
+                                        + "this cell");
                     }
                 }
             }

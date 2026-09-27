@@ -2,8 +2,10 @@ package dev.luizloyola.autarkia.core.bp;
 
 import dev.luizloyola.autarkia.core.bp.BpSource.Entry;
 import dev.luizloyola.autarkia.core.bp.BpSource.Grid;
+import dev.luizloyola.autarkia.core.bp.BpSource.GroupDecl;
 import dev.luizloyola.autarkia.core.bp.BpSource.Header;
 import dev.luizloyola.autarkia.core.bp.BpSource.Named;
+import dev.luizloyola.autarkia.core.bp.BpSource.NeedDecl;
 import dev.luizloyola.autarkia.core.bp.BpSource.NodeDecl;
 import dev.luizloyola.autarkia.core.bp.BpSource.PathChain;
 import dev.luizloyola.autarkia.core.bp.BpSource.Row;
@@ -33,8 +35,11 @@ public final class BpParser {
     private static final Pattern ID = Pattern.compile("[a-z0-9_.\\-/]+(:[a-z0-9_.\\-/]+)?");
     private static final Pattern WORD = Pattern.compile("[a-z0-9_]+");
     private static final Pattern NUMBER = Pattern.compile("-?[0-9]+");
+    private static final Pattern GROUP = Pattern.compile("[a-z][a-z0-9_]*");
+    /** {@code beds.two}: a group, which starts with a letter so {@code 1.3} is a mistyped range. */
+    private static final Pattern VARIANT = Pattern.compile("[a-z][a-z0-9_]*\\.[a-z0-9_]+");
 
-    private enum Section { NONE, MATERIALS, PALETTE, LEGEND, GRID, NODES, PATH }
+    private enum Section { NONE, MATERIALS, PALETTE, LEGEND, GROUPS, GRID, NODES, PATH }
 
     private final Diagnostics out;
     private int format;
@@ -44,6 +49,8 @@ public final class BpParser {
     private final List<Slot> materials = new ArrayList<>();
     private final List<Slot> palette = new ArrayList<>();
     private final List<Entry> legend = new ArrayList<>();
+    private final List<GroupDecl> groups = new ArrayList<>();
+    private final List<NeedDecl> needs = new ArrayList<>();
     private final List<Grid> grids = new ArrayList<>();
     private final List<NodeDecl> nodes = new ArrayList<>();
     private final List<PathChain> paths = new ArrayList<>();
@@ -53,6 +60,8 @@ public final class BpParser {
     // The grid being read: its rows are sliced at the margin only once all are in.
     private boolean gridNodes;
     private List<Integer> gridIndices = List.of();
+    private @Nullable String gridVariant;
+    private int gridVariantColumn;
     private int gridLine;
     private final List<RawRow> gridRows = new ArrayList<>();
 
@@ -76,7 +85,7 @@ public final class BpParser {
             out.error("missing_format", 0, 0, "the file is empty; it starts with 'bp 1'");
         }
         return new BpSource(parser.format, parser.headers, parser.materials, parser.palette, parser.legend,
-                parser.grids, parser.nodes, parser.paths, parser.brokenSlots,
+                parser.groups, parser.needs, parser.grids, parser.nodes, parser.paths, parser.brokenSlots,
                 parser.brokenGlyphs);
     }
 
@@ -111,6 +120,7 @@ public final class BpParser {
             case MATERIALS -> slot(code, line, materials, false);
             case PALETTE -> slot(code, line, palette, true);
             case LEGEND -> entry(code, line);
+            case GROUPS -> groupLine(code, line);
             case GRID -> row(code, line);
             case NODES -> nodeDecl(code, line);
             case PATH -> path(code, line);
@@ -135,6 +145,7 @@ public final class BpParser {
             case "materials" -> openList(Section.MATERIALS, words, line);
             case "palette" -> openList(Section.PALETTE, words, line);
             case "legend" -> openList(Section.LEGEND, words, line);
+            case "groups" -> openList(Section.GROUPS, words, line);
             case "nodes" -> openList(Section.NODES, words, line);
             case "path" -> openList(Section.PATH, words, line);
             case "layer" -> openGrid(false, code, "layer".length(), line);
@@ -172,6 +183,8 @@ public final class BpParser {
 
     private void openGrid(boolean nodeGrid, String code, int from, int line) {
         List<Integer> indices = new ArrayList<>();
+        String variant = null;
+        int variantColumn = 0;
         String rest = code.substring(from);
         int offset = from;
         for (String token : rest.split("\\s+")) {
@@ -196,12 +209,25 @@ public final class BpParser {
                 }
             } else if (NUMBER.matcher(token).matches()) {
                 indices.add(Integer.parseInt(token));
+            } else if (VARIANT.matcher(token).matches()) {
+                if (variant != null) {
+                    out.error("layer_variant", line, column, "a grid belongs to one variant, and this one already "
+                            + "names '" + variant + "'");
+                } else {
+                    variant = token;
+                    variantColumn = column;
+                }
             } else {
                 out.error("layer_index", line, column, "'" + token + "' is not a layer index or an a..b range");
             }
         }
         if (indices.isEmpty()) {
             out.error("layer_index", line, 1, (nodeGrid ? "'node layer'" : "'layer'") + " needs an index");
+        }
+        if (nodeGrid && variant != null) {
+            out.error("variant_nodes", line, variantColumn, "node layers belong to the base; a variant carries no "
+                    + "nodes yet");
+            variant = null;
         }
         if (nodeGrid && indices.size() > 1) {
             out.error("node_layer_single", line, 1,
@@ -211,6 +237,8 @@ public final class BpParser {
         section = Section.GRID;
         gridNodes = nodeGrid;
         gridIndices = indices;
+        gridVariant = variant;
+        gridVariantColumn = variantColumn;
         gridLine = line;
         gridRows.clear();
     }
@@ -254,7 +282,7 @@ public final class BpParser {
         for (RawRow raw : gridRows) {
             rows.add(new Row(raw.text().substring(margin), raw.ids(), raw.line(), margin + 1));
         }
-        grids.add(new Grid(gridNodes, gridIndices, rows, gridLine));
+        grids.add(new Grid(gridNodes, gridIndices, gridVariant, gridVariantColumn, rows, gridLine));
         gridRows.clear();
     }
 
@@ -442,6 +470,57 @@ public final class BpParser {
             }
         }
         return props;
+    }
+
+    // ── groups ──────────────────────────────────────────────────────────────────────────────
+
+    /** {@code beds required one two three four}, or {@code beds.four needs wing.east}. */
+    private void groupLine(String code, int line) {
+        List<String> words = new ArrayList<>();
+        List<Integer> columns = new ArrayList<>();
+        for (int i = indent(code); i < code.length(); i = skipSpace(code, wordEnd(code, i))) {
+            words.add(code.substring(i, wordEnd(code, i)));
+            columns.add(i + 1);
+        }
+        String first = words.get(0);
+        if (first.indexOf('.') >= 0) {
+            if (!VARIANT.matcher(first).matches() || words.size() < 3 || !words.get(1).equals("needs")) {
+                out.error("needs_syntax", line, columns.get(0), "a need is '<group>.<variant> needs "
+                        + "<group>.<variant> …'");
+                return;
+            }
+            for (int i = 2; i < words.size(); i++) {
+                if (!VARIANT.matcher(words.get(i)).matches()) {
+                    out.error("needs_syntax", line, columns.get(i), "'" + words.get(i) + "' is not a "
+                            + "<group>.<variant>");
+                    return;
+                }
+            }
+            needs.add(new NeedDecl(first, words.subList(2, words.size()), columns.subList(2, columns.size()), line,
+                    columns.get(0)));
+            return;
+        }
+        if (!GROUP.matcher(first).matches() || words.size() < 3
+                || !words.get(1).equals("required") && !words.get(1).equals("optional")) {
+            out.error("group_syntax", line, columns.get(0), "a group is '<name> required|optional <variant> …', "
+                    + "the name a lowercase word");
+            return;
+        }
+        for (int i = 2; i < words.size(); i++) {
+            String variant = words.get(i);
+            if (!WORD.matcher(variant).matches()) {
+                out.error("group_syntax", line, columns.get(i), "'" + variant + "' is not a variant name: a lowercase "
+                        + "word");
+                return;
+            }
+            if (variant.equals("none")) {
+                out.error("variant_none", line, columns.get(i), "'none' is what a pin says to leave an optional "
+                        + "group out; call the variant something else");
+                return;
+            }
+        }
+        groups.add(new GroupDecl(first, words.get(1).equals("required"), words.subList(2, words.size()),
+                columns.subList(2, columns.size()), line, columns.get(0)));
     }
 
     // ── nodes and paths ─────────────────────────────────────────────────────────────────────

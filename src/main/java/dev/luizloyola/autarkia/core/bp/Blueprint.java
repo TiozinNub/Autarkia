@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.bp;
 
 import dev.luizloyola.autarkia.core.bp.BpSource.Term;
+import dev.luizloyola.autarkia.core.bp.Variants.Selection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -110,28 +111,55 @@ public final class Blueprint {
     private final int depth;
     private final int minLayer;
     private final char[][][] cells;
-    private final int[][] rowLine;
-    private final int[][] rowColumn;
+    private final int[][][] cellLine;
+    private final int[][][] cellColumn;
+    private final int baseMin;
+    private final int baseMax;
     private final List<SlotInfo> slots;
     private final Map<Character, EntryInfo> legend;
     private final Map<String, Node> nodes;
     private final List<Edge> edges;
+    private final Variants variants;
+    private final Selection selection;
 
-    Blueprint(String id, Headers headers, int width, int depth, int minLayer, char[][][] cells, int[][] rowLine,
-              int[][] rowColumn, List<SlotInfo> slots, Map<Character, EntryInfo> legend, Map<String, Node> nodes,
-              List<Edge> edges) {
+    /**
+     * @param cellLine   where each cell was drawn, by {@code [layer - min][z][x]}; 0 for a layer no
+     *                   base grid draws
+     * @param baseMin    the base's own first layer; the box may reach past it where variants draw
+     */
+    Blueprint(String id, Headers headers, int width, int depth, int minLayer, char[][][] cells, int[][][] cellLine,
+              int[][][] cellColumn, int baseMin, int baseMax, List<SlotInfo> slots, Map<Character, EntryInfo> legend,
+              Map<String, Node> nodes, List<Edge> edges, Variants variants, Selection selection) {
         this.id = Objects.requireNonNull(id, "id");
         this.headers = headers;
         this.width = width;
         this.depth = depth;
         this.minLayer = minLayer;
         this.cells = cells;
-        this.rowLine = rowLine;
-        this.rowColumn = rowColumn;
+        this.cellLine = cellLine;
+        this.cellColumn = cellColumn;
+        this.baseMin = baseMin;
+        this.baseMax = baseMax;
         this.slots = List.copyOf(slots);
         this.legend = Collections.unmodifiableMap(new LinkedHashMap<>(legend));
         this.nodes = Collections.unmodifiableMap(new LinkedHashMap<>(nodes));
         this.edges = List.copyOf(edges);
+        this.variants = variants;
+        this.selection = selection;
+    }
+
+    /**
+     * This blueprint with a selection's variants laid over its base: an ordinary blueprint, with no
+     * variants left, that planning and the checks read as they read any other.
+     */
+    public Blueprint compose(Selection chosen) {
+        if (variants.isEmpty()) {
+            return this;
+        }
+        Selection canonical = variants.canonical(chosen);
+        Variants.Composed composed = Variants.compose(cells, cellLine, cellColumn, variants.ordered(canonical));
+        return new Blueprint(id, headers, width, depth, minLayer, composed.cells(), composed.line(),
+                composed.column(), minLayer, maxLayer(), slots, legend, nodes, edges, Variants.NONE, canonical);
     }
 
     public String id() {
@@ -176,13 +204,35 @@ public final class Blueprint {
         return legend.get(glyph(layer, x, z));
     }
 
-    /** The source line of the row that drew a cell — a layer drawn by a shared grid shares its lines. */
-    public int sourceLine(int layer, int z) {
-        return rowLine[layer - minLayer][z];
+    /**
+     * The source line that drew a cell — a variant's grid where the variant changed it, and 0 where
+     * nothing drew it.
+     */
+    public int sourceLine(int layer, int x, int z) {
+        return cellLine[layer - minLayer][z][x];
     }
 
     public int sourceColumn(int layer, int x, int z) {
-        return rowColumn[layer - minLayer][z] + x;
+        return cellColumn[layer - minLayer][z][x];
+    }
+
+    /** The layers the base itself draws; the box reaches past them only where a variant draws. */
+    public int baseMinLayer() {
+        return baseMin;
+    }
+
+    public int baseMaxLayer() {
+        return baseMax;
+    }
+
+    /** The file's groups; none once composed. */
+    public Variants variants() {
+        return variants;
+    }
+
+    /** The selection this was composed from; {@link Selection#BASE} for the file itself. */
+    public Selection selection() {
+        return selection;
     }
 
     public List<SlotInfo> slots() {

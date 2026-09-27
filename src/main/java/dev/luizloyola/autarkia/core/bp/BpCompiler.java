@@ -36,7 +36,8 @@ public final class BpCompiler {
         BpSource source = BpParser.parse(text, out);
         Blueprint blueprint = Binder.bind(id, source, dict, out);
         if (blueprint != null) {
-            Checks.run(blueprint, dict, out);
+            Variants.acrossSelections(blueprint.variants().selections(),
+                    (selection, each) -> Checks.run(blueprint.compose(selection), dict, each), out);
         }
         return new Compiled(id, blueprint, out.list());
     }

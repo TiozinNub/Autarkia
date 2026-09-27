@@ -28,6 +28,10 @@ public final class Diagnostics {
         found.add(new Diagnostic(Severity.REPORT, code, message, line, column, cell));
     }
 
+    public void add(Diagnostic diagnostic) {
+        found.add(diagnostic);
+    }
+
     public boolean hasErrors() {
         return found.stream().anyMatch(Diagnostic::isError);
     }

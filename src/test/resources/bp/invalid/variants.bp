@@ -1,0 +1,43 @@
+// Groups declared wrong, and variant grids that name what the groups do not hold.
+bp 1
+
+name        bad groups
+author      test
+version     1
+orientation all
+flippable   false
+
+groups
+  beds   required  one two one          // expect error variant_twice
+  beds   optional  three                // expect error group_twice
+  roof   maybe     flat                 // expect error group_syntax
+  loft   optional  none                 // expect error variant_none
+  beds.two needs beds.one               // expect error needs_own_group
+  beds.one needs roof.flat              // expect error unknown_variant
+  cellar optional  deep
+  wing   optional  east
+  cellar.deep needs wing.east           // expect error needs_cycle
+  wing.east needs cellar.deep
+
+legend
+  # stone
+
+layer 0
+  ###
+  ###
+
+layer 1 beds.tow                        // expect error unknown_variant
+  ???
+  ???
+
+layer 1 beds.one
+  ?@?                                   // expect error variant_nodes
+  ???
+
+layer 1 beds.two
+  ???
+  ???
+
+layer 1 beds.two                        // expect error layer_twice
+  ???
+  ???

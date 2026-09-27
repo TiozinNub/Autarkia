@@ -85,13 +85,16 @@ final class Shape {
     }
 
     /**
-     * Air a body could move through: air, {@code @}, {@code ?} (it might be anything, so assume
-     * open), and blocks with no collision that are not doors. Outside the box, open above the
-     * ground and earth below it.
+     * Air a body could move through: air, {@code @}, {@code ?} above ground (it might be anything,
+     * so assume open), and blocks with no collision that are not doors. Outside the box, and
+     * {@code ?} in it, open above the ground and earth below it — the world as it stands.
      */
     boolean passable(int layer, int x, int z) {
         if (!inside(layer, x, z)) {
             return layer >= 1;
+        }
+        if (layer <= 0 && bp.glyph(layer, x, z) == Blueprint.ANY) {
+            return false;
         }
         int i = index(layer, x, z);
         return !solid[i] && !closable[i];

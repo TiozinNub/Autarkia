@@ -59,7 +59,7 @@ public final class Checks {
                             && !shape.solid(layer, x - across.dx, z - across.dz);
                     String fix = crossOpen ? "; facing=" + across.word() + " or " + across.opposite().word()
                             + " fits the gap" : "";
-                    out.cellReport("door_across_wall", bp.sourceLine(layer, z), bp.sourceColumn(layer, x, z),
+                    out.cellReport("door_across_wall", bp.sourceLine(layer, x, z), bp.sourceColumn(layer, x, z),
                             new Cell(layer, x, z), "the door faces "
                             + facing.word() + ", so it opens onto a solid block " + (front && back ? "on both sides"
                             : front ? "in front" : "behind") + fix);
@@ -115,7 +115,7 @@ public final class Checks {
                             count++;
                         }
                     }
-                    out.cellReport("unsupported", bp.sourceLine(layer, z), bp.sourceColumn(layer, x, z),
+                    out.cellReport("unsupported", bp.sourceLine(layer, x, z), bp.sourceColumn(layer, x, z),
                             new Cell(layer, x, z),
                             count + " block" + (count == 1 ? "" : "s") + " here touch nothing that reaches the "
                                     + "ground; the builder will refuse to place them");
@@ -146,7 +146,7 @@ public final class Checks {
                 }
             }
             if (first != null) {
-                out.cellReport("falls", bp.sourceLine(first[0], first[2]), bp.sourceColumn(first[0], first[1],
+                out.cellReport("falls", bp.sourceLine(first[0], first[1], first[2]), bp.sourceColumn(first[0], first[1],
                         first[2]), new Cell(first[0], first[1], first[2]), "'" + entry.glyph() + "' falls, and "
                         + count + " of its cells stand over air");
             }
@@ -161,7 +161,7 @@ public final class Checks {
             }
             int[] first = room.get(0);
             Blueprint bp = shape.bp;
-            out.cellReport("no_way_in", bp.sourceLine(first[0], first[2]), bp.sourceColumn(first[0], first[1],
+            out.cellReport("no_way_in", bp.sourceLine(first[0], first[1], first[2]), bp.sourceColumn(first[0], first[1],
                     first[2]), new Cell(first[0], first[1], first[2]), "an enclosed space of "
                     + room.size() + " cells with room to stand and no door, gate or trapdoor");
         }
@@ -217,7 +217,7 @@ public final class Checks {
         }
         if (!open.isEmpty()) {
             Cell first = open.get(0);
-            out.cellReport("clears_open_column", bp.sourceLine(first.layer(), first.z()),
+            out.cellReport("clears_open_column", bp.sourceLine(first.layer(), first.x(), first.z()),
                     bp.sourceColumn(first.layer(), first.x(), first.z()), first, open.size() + " column"
                     + (open.size() == 1 ? " places" : "s place") + " nothing but clear the air; '?' leaves the "
                     + "world as it is");

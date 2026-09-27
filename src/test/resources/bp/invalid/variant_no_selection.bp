@@ -1,0 +1,21 @@
+// A required group whose only variant needs two variants of one group: nothing can be chosen.
+bp 1
+
+name        no selection
+author      test
+version     1
+orientation all
+flippable   false
+
+groups
+  p   required  one                     // expect error no_selection
+  q   optional  a c
+  r   optional  b
+  p.one needs q.a r.b
+  r.b needs q.c
+
+legend
+  # stone
+
+layer 0
+  ###
