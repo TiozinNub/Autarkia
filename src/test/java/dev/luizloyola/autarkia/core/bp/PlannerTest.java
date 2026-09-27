@@ -83,7 +83,7 @@ class PlannerTest {
         assertEquals(CellKind.TERRAIN, plan.kind(-1, 0, 2));
         assertEquals(CellKind.AIR, plan.kind(2, 0, 2));
         assertEquals(Map.of(1, "spruce", 2, "red", 3, "gravel"), plan.bindings());
-        assertEquals(1, plan.version());
+        assertEquals(2, plan.version());
     }
 
     @Test
@@ -91,8 +91,8 @@ class PlannerTest {
         BuildPlan plan = plan(bind(ChecksAndFactsTest.house()), Map.of(1, "oak", 2, "blue", 3, "dirt"), NEVER, 1);
 
         // Unsaid, a bed is its head — vanilla's default is the foot, so the plan must say so.
-        assertEquals(block("blue_bed", "facing", "south", "part", "head"), plan.state(1, 1, 2));
-        assertEquals(block("blue_bed", "facing", "south", "part", "foot"), plan.state(1, 1, 1));
+        assertEquals(block("blue_bed", "facing", "north", "part", "head"), plan.state(1, 1, 1));
+        assertEquals(block("blue_bed", "facing", "north", "part", "foot"), plan.state(1, 1, 2));
         assertEquals(block("oak_door", "facing", "north", "half", "lower", "hinge", "right"), plan.state(1, 2, 4));
         // Drawn as air: the upper half is inferred, and written.
         assertEquals(block("oak_door", "facing", "north", "half", "upper", "hinge", "right"), plan.state(2, 2, 4));

@@ -2,7 +2,7 @@ bp 1
 
 name        basic wooden house
 author      TiozinNub
-version     1
+version     2
 orientation all
 flippable   true
 
@@ -19,8 +19,8 @@ legend
   | $1 log[axis=z]
   o $1 log[axis=y]
   D $1 door[facing=north,hinge=right]
-  B $2 bed[facing=south]
-  b $2 bed[facing=south,part=foot]
+  B $2 bed[facing=north]
+  b $2 bed[facing=north,part=foot]
   T torch
   g $3
 
@@ -40,8 +40,8 @@ layer 0
 
 layer 1
   o###o
+  #B..#               // head, facing north: against the wall
   #b..#               // foot: optional, and must match what the head infers
-  #B..#               // head, facing south
   #...#
   o#D#o               // lower half only; the upper half is inferred
 
