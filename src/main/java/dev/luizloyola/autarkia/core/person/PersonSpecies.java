@@ -135,6 +135,9 @@ public final class PersonSpecies {
             // when this was written. That chop went on 2026-09-06; nothing about a full chest
             // argued for a different number.
             .set(ProfileAspect.STORES_FULL_AVOID_TICKS, 2400)
+            // A minute: long enough that a hungry settler does not reopen an empty HOME chest on
+            // every retry, short enough to find what the party's gatherers put in it since.
+            .set(ProfileAspect.STORES_RECHECK_TICKS, 1200)
             // Three chunks: far enough to reach the bench a settler already walks to, short
             // enough that a camp two valleys over is a different settlement and gets its own
             // chest rather than dragging this one across the map.
