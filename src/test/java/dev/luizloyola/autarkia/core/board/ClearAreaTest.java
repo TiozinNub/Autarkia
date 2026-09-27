@@ -1162,6 +1162,40 @@ class ClearAreaTest {
     }
 
     @Test
+    void theBoardHandsALadenCrewMemberTheirOwnWayHomeAndKeepsItAcrossAReload() {
+        Clearings.register(ABLE);
+        PartyProjects.register(ClearArea.TYPE);
+        PartyBoard board = new PartyBoard(
+                dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
+        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        board.post(project);
+        board.tick(0L);
+        AgentId surveyor = AgentId.random();
+        AgentId feller = AgentId.random();
+        WorkItem survey = project.open().get(0);
+        assertTrue(board.claim(survey, surveyor, 0L));
+        board.completed(survey, surveyor, ctxThatSaw(new Pos(3, 60, 3)));
+        assertTrue(board.claim(clearItem(project), feller, 0L), "the last tree, taken");
+        BoardBrainContext laden = new BoardBrainContext();
+        laden.inventory().set(0, ItemStack.of("minecraft:oak_log", 6, 64));
+
+        assertTrue(board.bestFor(AgentId.random(), laden, 0L).isEmpty(),
+                "nothing for somebody who never worked the box");
+        WorkItem mine = board.bestFor(surveyor, laden, 0L).orElseThrow();
+        assertTrue(isBringIn(mine));
+        assertTrue(board.claim(mine, surveyor, 0L));
+        WorkKey key = project.keyOf(mine).orElseThrow();
+        assertEquals(new WorkKey.ForMember(WorkKey.BRING_IN, surveyor), key);
+
+        List<PartyBoard.Row> saved = board.snapshot(0L);
+        PartyBoard reloaded = new PartyBoard(board.party());
+        assertEquals(0, reloaded.restore(saved, 0L));
+        ClearArea back = (ClearArea) reloaded.projects().get(0);
+        assertTrue(reloaded.holds(back.itemFor(key).orElseThrow(), surveyor, 0L),
+                "the walk home survives a restart");
+    }
+
+    @Test
     void aFinishedProjectIsClosedByItsBoardsOwnBeat() {
         Clearings.register(ABLE);
         PartyBoard board = new PartyBoard(
