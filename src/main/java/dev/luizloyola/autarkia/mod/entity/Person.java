@@ -49,6 +49,7 @@ import dev.luizloyola.autarkia.core.board.StandingWants;
 import dev.luizloyola.autarkia.core.board.StowSurplus;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
+import dev.luizloyola.anima.mod.brain.AgentStriker;
 import dev.luizloyola.anima.mod.brain.AgentLeaner;
 import dev.luizloyola.anima.mod.brain.AgentRiser;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
@@ -177,6 +178,8 @@ public class Person extends Avatar implements AgentBody {
     /** A swing and a climb in flight — paired with the task flags that say one is under way. */
     private static final String TAG_SWING = "Swing";
     private static final String TAG_STEP = "Step";
+    /** The fighting arm's charge: a reload must not cost a fighter its warmup, nor grant one. */
+    private static final String TAG_STRIKE_CHARGE = "StrikeCharge";
     private static final String TAG_SETBACKS = "Setbacks";
     /** Ground this body has already surveyed, so it does not walk it all again. */
     private static final String TAG_SURVEY = "Survey";
@@ -370,6 +373,7 @@ public class Person extends Avatar implements AgentBody {
      * actuator port by the {@link #brain} driver.
      */
     private final AgentBlockBreaker blockBreaker = new AgentBlockBreaker(this);
+    private final AgentStriker striker = new AgentStriker(this);
     private final AgentRiser riser = new AgentRiser(this);
     private final AgentLeaner leaner = new AgentLeaner(this);
     /**
@@ -657,6 +661,9 @@ public class Person extends Avatar implements AgentBody {
         // their knowledge; the brain (below) reads memory, never the world.
         this.poiSensor.tick();
         this.beingSense.tick();
+        // The charge counts before the brain reads it, and on every tick whether or not anything
+        // is fighting — a player's does.
+        this.striker.tick();
         // The brain decides first, then the Navigator (below) executes locomotion the same tick.
         this.brain.tick();
         // The working arm advances after the brain, so a break begun this tick gains its first
@@ -762,6 +769,12 @@ public class Person extends Avatar implements AgentBody {
     /** This person's working arm — the break machinery the brain drives as a port. See {@link AgentBlockBreaker}. */
     public AgentBlockBreaker blockBreaker() {
         return this.blockBreaker;
+    }
+
+    /** This person's fighting arm. See {@link AgentStriker}. */
+    @Override
+    public AgentStriker striker() {
+        return this.striker;
     }
 
     /** This person's rise-one machinery — jump-and-place-underfoot, brain-driven as a port. */
@@ -1411,6 +1424,7 @@ public class Person extends Avatar implements AgentBody {
         // that came back "breaking" while its breaker rested waited on a swing nobody was swinging.
         output.store(TAG_SWING, BrainState.SWING, this.blockBreaker.snapshot());
         output.store(TAG_STEP, BrainState.STEP, this.riser.snapshot());
+        output.putInt(TAG_STRIKE_CHARGE, this.striker.snapshot());
         if (!this.setbacks.isEmpty()) {
             output.store(TAG_SETBACKS, BrainState.SETBACKS, this.setbacks.snapshot());
         }
@@ -1464,6 +1478,7 @@ public class Person extends Avatar implements AgentBody {
         this.pendingJournal = input.read(TAG_JOURNAL, BrainState.JOURNAL).orElse(null);
         input.read(TAG_SWING, BrainState.SWING).ifPresent(this.blockBreaker::restore);
         input.read(TAG_STEP, BrainState.STEP).ifPresent(this.riser::restore);
+        this.striker.restore(input.getIntOr(TAG_STRIKE_CHARGE, 0));
         input.read(TAG_SETBACKS, BrainState.SETBACKS).ifPresent(this.setbacks::restore);
         input.read(TAG_SURVEY, BrainState.SURVEY).ifPresent(this.poiSensor::restore);
         // NaN is the "never moved yet" marker the field initializer uses, and the right default:
