@@ -38,6 +38,12 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Planner {
 
+    /**
+     * The reader's word, not a block's: {@code torch[attach=floor]} stands though a wall is beside
+     * it (decision: Luiz, 2026-09-27). It settles the cell and never reaches the world.
+     */
+    public static final String ATTACH = "attach";
+
     /** Properties that count items into one block: two slabs make a double, four candles share one. */
     private static final List<String> COUNTS = List.of("candles", "pickles", "eggs", "flower_amount",
             "segment_amount", "layers");
@@ -515,16 +521,28 @@ public final class Planner {
      * fixed, structure-local order — north, east, south, west, then floor, then ceiling (format
      * spec) — so a turned building keeps its torches on the same walls. A lantern hangs before it
      * stands (decision: Luiz, 2026-09-26). Only nothing that can hold it refuses the plan. A property
-     * the author wrote that settles it (a lantern's {@code hanging}, a sign's {@code rotation}) is
-     * left alone.
+     * the author wrote that settles it (a lantern's {@code hanging}, a sign's {@code rotation},
+     * {@link #ATTACH}) is left alone.
      */
     private void attach(CellKind[] kinds, Outcome[] states) {
-        Map<String, String> twins = wallTwins();
+        Map<String, String> twins = dict.wallTwins();
+        boolean[] settled = new boolean[states.length];
+        for (int i = 0; i < states.length; i++) {
+            if (states[i] != null && states[i].props().containsKey(ATTACH)) {
+                settled[i] = true;
+                Map<String, String> props = new TreeMap<>(states[i].props());
+                props.remove(ATTACH);
+                states[i] = new Outcome(states[i].block(), props);
+            }
+        }
         for (int layer = bp.minLayer(); layer <= bp.maxLayer(); layer++) {
             for (int z = 0; z < bp.depth(); z++) {
                 for (int x = 0; x < bp.width(); x++) {
                     int i = index(layer, x, z);
                     Outcome state = states[i];
+                    if (settled[i]) {
+                        continue;
+                    }
                     BlockInfo info = state == null ? null : dict.block(state.block()).orElse(null);
                     if (info == null) {
                         continue;
@@ -576,37 +594,6 @@ public final class Planner {
                 }
             }
         }
-    }
-
-    /**
-     * A standing block to its wall-hung twin — {@code torch} to {@code wall_torch}, a sign to its
-     * wall sign — found as the two blocks one item places. Hanging signs are left out: theirs
-     * hangs from above, and the wall one is a bracket, not the same thing turned.
-     */
-    private Map<String, String> wallTwins() {
-        Map<String, List<BlockInfo>> byItem = new HashMap<>();
-        for (BlockInfo info : dict.blocks().values()) {
-            if (!info.item().isEmpty()) {
-                byItem.computeIfAbsent(info.item(), item -> new ArrayList<>()).add(info);
-            }
-        }
-        Map<String, String> twins = new HashMap<>();
-        for (List<BlockInfo> placed : byItem.values()) {
-            if (placed.size() != 2) {
-                continue;
-            }
-            for (int k = 0; k < 2; k++) {
-                BlockInfo standing = placed.get(k);
-                BlockInfo wall = placed.get(1 - k);
-                List<String> facings = wall.properties().get("facing");
-                if (Ids.path(wall.id()).contains("wall") && facings != null && facings.size() == 4
-                        && !standing.properties().containsKey("facing")
-                        && !standing.properties().containsKey("attached")) {
-                    twins.put(standing.id(), wall.id());
-                }
-            }
-        }
-        return twins;
     }
 
     /**

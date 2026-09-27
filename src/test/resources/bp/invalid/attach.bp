@@ -1,0 +1,19 @@
+// attach settles a standing block beside a wall, and says nothing else.
+bp 1
+
+name        attach
+author      test
+version     1
+orientation all
+flippable   false
+
+legend
+  # stone
+  a torch[attach=wall]                  // expect error attach_value
+  b lantern[attach=floor]               // expect error attach_block
+
+layer 0
+  ###
+
+layer 1
+  #ab

@@ -1,8 +1,10 @@
 package dev.luizloyola.autarkia.core.bp;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,6 +16,7 @@ import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Materials, their forms, and the blocks a blueprint may name. A leaf material maps each form to
@@ -65,6 +68,7 @@ public final class Dictionary {
     private final SortedMap<String, BlockInfo> blocks;
     private final SortedMap<String, Material> materials;
     private final SortedSet<String> forms;
+    private volatile @Nullable Map<String, String> wallTwins;
 
     public Dictionary(Map<String, BlockInfo> blocks, Map<String, Material> materials) {
         this.blocks = Collections.unmodifiableSortedMap(new TreeMap<>(blocks));
@@ -104,6 +108,46 @@ public final class Dictionary {
     public Optional<String> lookup(String material, String form) {
         Material found = materials.get(material);
         return found == null ? Optional.empty() : Optional.ofNullable(found.forms().get(form));
+    }
+
+    /**
+     * A standing block to its wall-hung twin — {@code torch} to {@code wall_torch}, a sign to its
+     * wall sign — found as the two blocks one item places. Hanging signs are left out: theirs
+     * hangs from above, and the wall one is a bracket, not the same thing turned.
+     */
+    public Map<String, String> wallTwins() {
+        Map<String, String> twins = wallTwins;
+        if (twins == null) {
+            twins = findWallTwins();
+            wallTwins = twins;
+        }
+        return twins;
+    }
+
+    private Map<String, String> findWallTwins() {
+        Map<String, List<BlockInfo>> byItem = new HashMap<>();
+        for (BlockInfo info : blocks.values()) {
+            if (!info.item().isEmpty()) {
+                byItem.computeIfAbsent(info.item(), item -> new ArrayList<>()).add(info);
+            }
+        }
+        Map<String, String> twins = new HashMap<>();
+        for (List<BlockInfo> placed : byItem.values()) {
+            if (placed.size() != 2) {
+                continue;
+            }
+            for (int k = 0; k < 2; k++) {
+                BlockInfo standing = placed.get(k);
+                BlockInfo wall = placed.get(1 - k);
+                List<String> facings = wall.properties().get("facing");
+                if (Ids.path(wall.id()).contains("wall") && facings != null && facings.size() == 4
+                        && !standing.properties().containsKey("facing")
+                        && !standing.properties().containsKey("attached")) {
+                    twins.put(standing.id(), wall.id());
+                }
+            }
+        }
+        return Collections.unmodifiableMap(twins);
     }
 
     /** Every leaf a material stands for — itself when it is one. A cycle is walked once. */

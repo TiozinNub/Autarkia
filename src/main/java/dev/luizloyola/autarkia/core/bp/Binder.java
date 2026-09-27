@@ -572,6 +572,10 @@ public final class Binder {
         for (Map.Entry<String, String> prop : new TreeMap<>(term.props()).entrySet()) {
             String key = prop.getKey();
             String value = prop.getValue();
+            if (key.equals(Planner.ATTACH)) {
+                checkAttach(blocks, term, value);
+                continue;
+            }
             for (BlockInfo block : blocks) {
                 List<String> values = block.properties().get(key);
                 if (values == null) {
@@ -589,6 +593,24 @@ public final class Binder {
             if (!blocks.isEmpty() && computed(blocks.get(0).id(), key, value)) {
                 out.report("computed_property", term.line(), term.column(), key + "=" + value + " is recomputed by "
                         + "the world from the neighbours; leave it out");
+            }
+        }
+    }
+
+    /** {@code attach=floor} settles a block that would otherwise hang on a wall beside it, and only that. */
+    private void checkAttach(List<BlockInfo> blocks, Term term, String value) {
+        if (!value.equals("floor")) {
+            out.error("attach_value", term.line(), term.column(), "attach is 'floor', the one thing a wall-hung "
+                    + "twin cannot say; a wall is said by naming the wall block, like wall_torch[facing=south]");
+            return;
+        }
+        for (BlockInfo block : blocks) {
+            if (!dict.wallTwins().containsKey(block.id())) {
+                out.error("attach_block", term.line(), term.column(), Ids.brief(block.id()) + " never hangs on a "
+                        + "wall, so attach settles nothing" + (block.properties().containsKey("hanging")
+                        ? "; a lantern says hanging=true or hanging=false" : block.properties().containsKey("face")
+                        ? "; a button or lever says face=floor, wall or ceiling" : ""));
+                return;
             }
         }
     }
