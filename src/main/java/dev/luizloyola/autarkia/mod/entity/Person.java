@@ -31,7 +31,6 @@ import dev.luizloyola.anima.core.agent.need.NeedLevel;
 import dev.luizloyola.anima.core.agent.need.Needs;
 import dev.luizloyola.anima.core.agent.need.Vigor;
 import dev.luizloyola.anima.core.agent.AgentId;
-import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.Setbacks;
 import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.autarkia.core.person.PersonDanger;
@@ -965,14 +964,7 @@ public class Person extends Avatar implements AgentBody {
             return 0;
         }
         ContactData contacts = ContactData.get(((ServerLevel) level()).getServer());
-        int count = 0;
-        for (Being being : this.beingSense.beings()) {
-            if (being.kind().minded() && being.identified() == Being.Identified.INDIVIDUAL
-                    && contacts.knows(me, being.id().asPerson())) {
-                count++;
-            }
-        }
-        return count;
+        return this.beingSense.countPeers(id -> contacts.knows(me, id.asPerson()));
     }
 
     /**
