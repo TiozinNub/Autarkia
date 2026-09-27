@@ -165,15 +165,19 @@ public final class Blueprints {
         return sources;
     }
 
-    /** Writes the live dictionary where the offline checker can read it; returns the file. */
+    /** Writes the live dictionary where the offline checker can read it, if it changed; returns the file. */
     public static Path exportDictionary() throws IOException {
         String minecraft = FabricLoader.getInstance().getModContainer("minecraft")
                 .map(mod -> mod.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
         Path file = configDirectory().resolve("dictionary-" + minecraft + ".bpdict");
         Files.createDirectories(file.getParent());
-        String header = "The blueprint dictionary of Minecraft " + minecraft + ", written by /autarkia bp dictionary.\n"
+        String header = "The blueprint dictionary of Minecraft " + minecraft
+                + ", written by /autarkia bp dictionary and by every bp capture.\n"
                 + "Not read by the game; scripts/bp-check.sh checks .bp files against it.";
-        Files.writeString(file, DictionaryFile.write(dictionary, header), StandardCharsets.UTF_8);
+        String text = DictionaryFile.write(dictionary, header);
+        if (!Files.exists(file) || !Files.readString(file, StandardCharsets.UTF_8).equals(text)) {
+            Files.writeString(file, text, StandardCharsets.UTF_8);
+        }
         return file;
     }
 
