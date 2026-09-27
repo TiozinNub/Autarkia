@@ -16,6 +16,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -46,8 +47,9 @@ public final class Captures {
     /** Cells read per tick: a 40³ house in one, the backstop's 128³ in a few seconds. */
     private static final int CELLS_PER_TICK = 65_536;
 
-    /** Right-click a block for a corner, twice; sneak and right-click to clear. */
-    public static final Item WAND = register("blueprint_wand", Wand::new);
+    /** Right-click a block for a corner, twice; sneak and right-click to clear. Glints, as Anima's debug wand does. */
+    public static final Item WAND = register("blueprint_wand",
+            props -> new Wand(props.component(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)));
 
     /**
      * A player's marked box.
