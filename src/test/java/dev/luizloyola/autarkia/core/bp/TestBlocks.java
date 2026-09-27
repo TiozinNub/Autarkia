@@ -103,6 +103,7 @@ final class TestBlocks {
         put("torch", false, 14, false, "");
         put("wall_torch", false, 14, false, FACING);
         put("lantern", false, 15, false, "hanging:true,false*;" + WATER);
+        open("ladder", FACING + ";" + WATER);
         open("oak_sign", "rotation:0*,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15;" + WATER);
         open("oak_wall_sign", FACING + ";" + WATER);
         open("oak_hanging_sign", "rotation:0*,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15;attached:true,false*;" + WATER);
