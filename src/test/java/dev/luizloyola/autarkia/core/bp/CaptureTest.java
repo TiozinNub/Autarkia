@@ -81,7 +81,7 @@ class CaptureTest {
 
     @Test
     void theHouseComesBackAsItStood() throws IOException {
-        BuildPlan stood = plan(bind(shipped("basic_wooden_house.bp")), Map.of(),
+        BuildPlan stood = plan(bind(ChecksAndFactsTest.house()), Map.of(),
                 Map.of(1, "spruce", 2, "red", 3, "gravel"));
         Box world = world(stood);
         Written written = Capture.write(world, DICT, CUBES, Headers.fresh("house", "test"));
@@ -240,9 +240,9 @@ class CaptureTest {
 
     @Test
     void aVariantOverADifferentBoxIsRefused() throws IOException {
-        Blueprint house = bind(shipped("basic_wooden_house.bp"));
+        Blueprint house = bind(ChecksAndFactsTest.house());
         Box narrow = new Box(3, 5, 0, new Outcome[1][5][3]);
-        Written refused = Capture.variant(shipped("basic_wooden_house.bp"), house, narrow, "beds", "two", DICT, CUBES);
+        Written refused = Capture.variant(ChecksAndFactsTest.house(), house, narrow, "beds", "two", DICT, CUBES);
         assertNull(refused.text());
         assertTrue(refused.problems().get(0).contains("a variant is captured over the same box"));
     }

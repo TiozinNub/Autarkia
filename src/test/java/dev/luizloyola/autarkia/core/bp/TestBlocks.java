@@ -102,6 +102,7 @@ final class TestBlocks {
         for (String ground : List.of("dirt", "coarse_dirt", "glass", "obsidian", "crafting_table")) {
             solid(ground, "");
         }
+        solid("furnace", FACING + ";lit:true,false*");
         solid("grass_block", "snowy:true,false*");
         solid("podzol", "snowy:true,false*");
         open("dirt_path", "");

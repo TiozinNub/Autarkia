@@ -32,8 +32,7 @@ class ChecksAndFactsTest {
             """;
 
     static String house() throws IOException {
-        try (InputStream in = ChecksAndFactsTest.class.getResourceAsStream(
-                "/data/autarkia/autarkia/blueprint/basic_wooden_house.bp")) {
+        try (InputStream in = ChecksAndFactsTest.class.getResourceAsStream("/bp/worked_house.bp")) {
             assertNotNull(in);
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
