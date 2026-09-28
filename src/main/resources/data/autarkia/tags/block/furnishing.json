@@ -1,0 +1,29 @@
+{
+  "values": [
+    "minecraft:crafting_table",
+    "minecraft:chest",
+    "minecraft:trapped_chest",
+    "minecraft:ender_chest",
+    "minecraft:barrel",
+    "minecraft:furnace",
+    "minecraft:blast_furnace",
+    "minecraft:smoker",
+    "minecraft:enchanting_table",
+    "minecraft:brewing_stand",
+    "minecraft:lectern",
+    "minecraft:loom",
+    "minecraft:stonecutter",
+    "minecraft:grindstone",
+    "minecraft:cartography_table",
+    "minecraft:fletching_table",
+    "minecraft:smithing_table",
+    "minecraft:composter",
+    "minecraft:jukebox",
+    "minecraft:crafter",
+    "minecraft:decorated_pot",
+    "#minecraft:anvil",
+    "#minecraft:cauldrons",
+    "#minecraft:shulker_boxes",
+    "#minecraft:campfires"
+  ]
+}

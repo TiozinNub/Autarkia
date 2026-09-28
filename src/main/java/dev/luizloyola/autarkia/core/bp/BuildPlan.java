@@ -107,6 +107,10 @@ public final class BuildPlan {
         return minLayer + layers - 1;
     }
 
+    public boolean contains(int layer, int x, int z) {
+        return layer >= minLayer && layer <= maxLayer() && x >= 0 && x < width && z >= 0 && z < depth;
+    }
+
     public CellKind kind(int layer, int x, int z) {
         return kinds[index(layer, x, z)];
     }

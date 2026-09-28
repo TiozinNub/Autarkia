@@ -88,7 +88,7 @@ class DictionaryRulesTest {
         List<Dictionary.BlockInfo> blocks = new java.util.ArrayList<>(TestBlocks.blocks().values());
         for (String path : List.of("redwood_planks", "redwood_log", "redwood_stairs")) {
             blocks.add(new Dictionary.BlockInfo("mymod:" + path, java.util.Map.of(), java.util.Map.of(), true, true, 0,
-                    false, "mymod:" + path));
+                    false, "mymod:" + path, java.util.Set.of()));
         }
         Dictionary modded = DictionaryRules.derive(blocks, Set.of()).dictionary();
         assertEquals(Optional.of("mymod:redwood_log"), modded.lookup("mymod:redwood", "log"));

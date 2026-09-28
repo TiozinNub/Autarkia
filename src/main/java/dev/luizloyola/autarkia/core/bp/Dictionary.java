@@ -31,6 +31,15 @@ public final class Dictionary {
     public static final Dictionary EMPTY = new Dictionary(Map.of(), Map.of());
 
     /**
+     * The block tags core asks about, each block carrying the ones it is in: vanilla's where vanilla
+     * has one, {@code autarkia:furnishing} for what stands in a room without being part of it — a
+     * crafting table, a chest, a furnace.
+     */
+    public static final List<String> TAGS = List.of("minecraft:doors", "minecraft:trapdoors",
+            "minecraft:fence_gates", "minecraft:climbable", "minecraft:wall_hanging_signs",
+            "minecraft:ceiling_hanging_signs", "autarkia:furnishing");
+
+    /**
      * What a check needs to know about a block, read from its default state.
      *
      * @param properties every property and its values, in the block's order
@@ -40,13 +49,20 @@ public final class Dictionary {
      *                   a ladder, which is climbed
      * @param falls      sand, gravel: needs a block under it
      * @param item       the item that places it, empty when nothing does
+     * @param tags       which of {@link #TAGS} it is in
      */
     public record BlockInfo(String id, Map<String, List<String>> properties, Map<String, String> defaults,
-                            boolean solid, boolean obstructs, int light, boolean falls, String item) {
+                            boolean solid, boolean obstructs, int light, boolean falls, String item,
+                            Set<String> tags) {
         public BlockInfo {
             Objects.requireNonNull(id, "id");
             properties = Collections.unmodifiableSortedMap(new TreeMap<>(properties));
             defaults = Map.copyOf(defaults);
+            tags = Collections.unmodifiableSortedSet(new TreeSet<>(tags));
+        }
+
+        public boolean is(String tag) {
+            return tags.contains(tag);
         }
 
         public boolean has(String property, String value) {

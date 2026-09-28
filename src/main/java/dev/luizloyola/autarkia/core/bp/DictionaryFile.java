@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -17,7 +18,7 @@ import java.util.TreeMap;
  *
  * <pre>
  * bpdict 1
- * block minecraft:oak_door solid=false obstructs=true light=0 falls=false item=minecraft:oak_door
+ * block minecraft:oak_door solid=false obstructs=true light=0 falls=false item=minecraft:oak_door tags=minecraft:doors
  *   prop facing north* south west east
  * material minecraft:oak block=minecraft:oak_planks log=minecraft:oak_log
  * composite minecraft:overworld_wood minecraft:acacia minecraft:birch
@@ -39,7 +40,11 @@ public final class DictionaryFile {
             out.append("block ").append(block.id()).append(" solid=").append(block.solid()).append(" obstructs=")
                     .append(block.obstructs()).append(" light=")
                     .append(block.light()).append(" falls=").append(block.falls()).append(" item=")
-                    .append(block.item()).append('\n');
+                    .append(block.item());
+            if (!block.tags().isEmpty()) {
+                out.append(" tags=").append(String.join(",", block.tags()));
+            }
+            out.append('\n');
             block.properties().forEach((key, values) -> {
                 out.append("  prop ").append(key);
                 for (String value : values) {
@@ -146,7 +151,8 @@ public final class DictionaryFile {
             return new BlockInfo(id, new TreeMap<>(properties), defaults, solid,
                     Boolean.parseBoolean(fields.getOrDefault("obstructs", String.valueOf(solid))),
                     Integer.parseInt(fields.getOrDefault("light", "0")),
-                    Boolean.parseBoolean(fields.get("falls")), fields.getOrDefault("item", ""));
+                    Boolean.parseBoolean(fields.get("falls")), fields.getOrDefault("item", ""),
+                    fields.containsKey("tags") ? Set.of(fields.get("tags").split(",")) : Set.of());
         }
     }
 }

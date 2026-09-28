@@ -7,12 +7,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * A slice of vanilla's block registry, with the properties its default states really have, run
  * through {@link DictionaryRules} — so every binder test also exercises the derivation.
  */
-final class TestBlocks {
+public final class TestBlocks {
 
     private static final String AXIS = "axis:x,y*,z";
     private static final String WATER = "waterlogged:true,false*";
@@ -41,6 +42,13 @@ final class TestBlocks {
      */
     private static final List<String> OBSTRUCTING = List.of("_stairs", "_slab", "_fence", "_fence_gate", "_wall",
             "_door", "_bed", "chest", "lantern", "_leaves", "dirt_path");
+
+    /** Which of {@link Dictionary#TAGS} a block is in, by the end of its id. */
+    private static final Map<String, List<String>> TAGGED = Map.of("minecraft:doors", List.of("_door"),
+            "minecraft:trapdoors", List.of("_trapdoor"), "minecraft:fence_gates", List.of("_fence_gate"),
+            "minecraft:climbable", List.of("ladder"), "minecraft:wall_hanging_signs", List.of("_wall_hanging_sign"),
+            "minecraft:ceiling_hanging_signs", List.of("oak_hanging_sign"),
+            "autarkia:furnishing", List.of("chest", "crafting_table", "furnace"));
 
     private static final Map<String, BlockInfo> BLOCKS = new LinkedHashMap<>();
 
@@ -154,8 +162,14 @@ final class TestBlocks {
         }
         String qualified = "minecraft:" + id;
         String item = id.equals("air") ? "" : "minecraft:" + ITEM_OF.getOrDefault(id, id);
+        Set<String> tags = new TreeSet<>();
+        TAGGED.forEach((tag, ends) -> {
+            if (ends.stream().anyMatch(id::endsWith)) {
+                tags.add(tag);
+            }
+        });
         BLOCKS.put(qualified, new BlockInfo(qualified, properties, defaults, solid,
-                solid || OBSTRUCTING.stream().anyMatch(id::endsWith), light, falls, item));
+                solid || OBSTRUCTING.stream().anyMatch(id::endsWith), light, falls, item, tags));
     }
 
     static Map<String, BlockInfo> blocks() {
@@ -166,7 +180,7 @@ final class TestBlocks {
         return DictionaryRules.derive(BLOCKS.values(), Set.of("minecraft:crimson_planks"));
     }
 
-    static Dictionary dictionary() {
+    public static Dictionary dictionary() {
         return derived().dictionary();
     }
 }

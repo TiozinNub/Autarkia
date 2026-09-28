@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.compat.bp;
 
 import dev.luizloyola.autarkia.compat.inv.ItemIds;
+import dev.luizloyola.autarkia.core.bp.Dictionary;
 import dev.luizloyola.autarkia.core.bp.Dictionary.BlockInfo;
 import dev.luizloyola.autarkia.core.bp.DictionaryRules;
 import java.util.ArrayList;
@@ -9,10 +10,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.EmptyBlockGetter;
@@ -60,9 +65,15 @@ public final class RegistryDictionary {
         // Half a block or taller stops a body and the air; a ladder is collision you climb, not a wall.
         boolean obstructs = !collision.isEmpty() && collision.max(Direction.Axis.Y) >= 0.5
                 && !state.is(BlockTags.CLIMBABLE);
+        Set<String> tags = new TreeSet<>();
+        for (String tag : Dictionary.TAGS) {
+            if (state.is(TagKey.create(Registries.BLOCK, Identifier.parse(tag)))) {
+                tags.add(tag);
+            }
+        }
         return new BlockInfo(BuiltInRegistries.BLOCK.getKey(block).toString(), properties, defaults,
                 state.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO), obstructs,
-                state.getLightEmission(), block instanceof FallingBlock, itemId);
+                state.getLightEmission(), block instanceof FallingBlock, itemId, tags);
     }
 
     @SuppressWarnings("unchecked")
