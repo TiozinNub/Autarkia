@@ -31,10 +31,11 @@ public final class PersonSpecies {
             .set(ProfileAspect.FIGHT_QUIT_RATIO, 1.0)
             .set(ProfileAspect.FIGHT_CORNERED_RATIO, 0.5)
             .set(ProfileAspect.FIGHT_BLAST_LINE, 0.3)
-            // A blow waits 0.2–0.5 s once it is possible, and is swung from up to 0.6 blocks inside
-            // full reach: a player's timing, not a machine's (Luiz, 2026-09-28).
-            .set(ProfileAspect.COMBAT_REACTION_MIN_TICKS, 4)
-            .set(ProfileAspect.COMBAT_REACTION_MAX_TICKS, 10)
+            // A blow lands 5 ticks after a target comes into reach, counted while the weapon
+            // charges, with the last 2 always after it has: a player's timing, not a machine's.
+            // A skill will set these (Luiz, 2026-09-28).
+            .set(ProfileAspect.COMBAT_REACTION_TICKS, 5)
+            .set(ProfileAspect.COMBAT_REACTION_HOLD_TICKS, 2)
             .set(ProfileAspect.COMBAT_REACH_INSET, 0.6)
             .set(ProfileAspect.WANDER_IDLE_PRESSURE, 0.15)
             // The last four slots, not a tidiness line: routine clearing is StowSurplus's job on
