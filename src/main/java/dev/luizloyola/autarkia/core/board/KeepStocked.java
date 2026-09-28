@@ -143,6 +143,11 @@ public final class KeepStocked implements PersonalProject {
     /** The one item shape this project mints. */
     private final class StockItem implements WorkItem {
         @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
+        @Override
         public double priority() {
             return priority;
         }

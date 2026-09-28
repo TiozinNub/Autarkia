@@ -605,6 +605,11 @@ public final class Gather implements PartyProject {
         }
 
         @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
+        @Override
         public double priority() {
             return priority;
         }
@@ -652,6 +657,11 @@ public final class Gather implements PartyProject {
         /** Which gather minted this — see {@link Gather#owns}. */
         private Gather owner() {
             return Gather.this;
+        }
+
+        @Override
+        public boolean buildsOnTheWay() {
+            return true;
         }
 
         @Override

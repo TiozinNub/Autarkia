@@ -18,7 +18,9 @@ import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.nav.MoveCapabilities;
+import dev.luizloyola.anima.core.nav.WalkLevel;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -1456,7 +1458,7 @@ public final class FellTree implements PrimitiveTask {
         }
         if (!feet.equals(walkingTo)) {
             walkFailures = 0;
-            order(mover, feet);
+            order(ctx, feet);
             return false;
         }
         if (ticks == walkOrderedAt) {
@@ -1503,13 +1505,15 @@ public final class FellTree implements PrimitiveTask {
             }
             walkRetryAt = ticks + WALK_RETRY_TICKS;
         } else if (ticks >= walkRetryAt) {
-            order(mover, feet);
+            order(ctx, feet);
         }
         return false;
     }
 
-    private void order(Mover mover, Pos feet) {
-        mover.moveTo(feet.x(), feet.y(), feet.z());
+    private void order(BrainContext ctx, Pos feet) {
+        // A fell's walks are its errand's: a clearing lets them build, a command-issued chop not.
+        ctx.actuators().mover().moveTo(feet.x(), feet.y(), feet.z(), Gait.WALK,
+                WalkLevel.SCALE.underWork(ctx.walksMayBuild()));
         walkingTo = feet;
         walkOrderedAt = ticks;
         walkRetryAt = 0;

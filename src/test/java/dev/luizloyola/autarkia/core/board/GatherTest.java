@@ -152,6 +152,15 @@ class GatherTest {
 
     // ── the arithmetic ───────────────────────────────────────────────────────────────────────
 
+    /** A gathering trip goes out past HOME, and its walks may bridge with what the body carries. */
+    @Test
+    void aTripsWalksMayBuild() {
+        Gather project = posted(16);
+        assertTrue(project.open().get(0).buildsOnTheWay());
+        assertTrue(project.realise(project.open().get(0), KYLE, new BoardBrainContext())
+                .buildsOnTheWay());
+    }
+
     @Test
     void theRemainderIsTheTargetLessWhatIsBankedAndWhatIsOut() {
         Gather project = posted(256);

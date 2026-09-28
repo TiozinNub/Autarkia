@@ -189,6 +189,11 @@ public final class SetUp implements PartyProject {
         }
 
         @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
+        @Override
         public double priority() {
             return priority;
         }

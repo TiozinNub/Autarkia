@@ -968,6 +968,11 @@ public final class ClearArea implements PartyProject {
         }
 
         @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
+        @Override
         public double priority() {
             return priority;
         }
@@ -1006,6 +1011,11 @@ public final class ClearArea implements PartyProject {
 
         private ClearItem(WorkKey.AtPlace key) {
             this.key = key;
+        }
+
+        @Override
+        public boolean buildsOnTheWay() {
+            return true;
         }
 
         @Override
@@ -1073,6 +1083,11 @@ public final class ClearArea implements PartyProject {
         }
 
         @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
+        @Override
         public double priority() {
             return priority;
         }
@@ -1100,6 +1115,11 @@ public final class ClearArea implements PartyProject {
 
     /** What the crew sees; never itself claimed, since {@link #realise} swaps in a member's own. */
     private final class BringInOffer implements WorkItem {
+        @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
         @Override
         public double priority() {
             return priority;

@@ -143,6 +143,11 @@ public final class StowSurplus implements PersonalProject {
     /** The errand itself — the same goal the unburden instinct roots. */
     private static final class StowItem implements WorkItem {
         @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
+        @Override
         public double priority() {
             return PRIORITY;
         }
