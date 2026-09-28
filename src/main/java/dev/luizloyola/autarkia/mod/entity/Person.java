@@ -99,6 +99,7 @@ import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
 import dev.luizloyola.anima.core.agent.Pronouns;
 import dev.luizloyola.anima.core.brain.act.Gazer;
+import dev.luizloyola.anima.core.nav.StickInput;
 import dev.luizloyola.anima.mod.body.AgentAttributes;
 import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.body.Gaze;
@@ -1120,15 +1121,31 @@ public class Person extends Avatar implements AgentBody {
         // MOVEMENT_SPEED (0.1), and the 0.98 damping keeps it exact versus a walking player.
         setSpeed((float) getAttributeValue(Attributes.MOVEMENT_SPEED));
         this.zza = PLAYER_INPUT_DAMPING * throttle; // forward along the current yRot; no strafe
+        this.xxa = 0.0F;
         // jumping is a HELD input on LivingEntity — aiStep only clears it for immobile entities
         // (26.1.2 bytecode). Left set, one press would auto-jump every landing, so inputs here are
         // per-tick: forward clears it, driveJump() re-presses it.
         setJumping(false);
     }
 
+    /**
+     * As {@link #driveForward(float, float)}, but squared to {@code facing} and strafing toward
+     * {@code heading}, as a player on a ladder sidesteps without letting go of it.
+     */
+    @Override
+    public void driveFacing(float facing, float heading, float throttle) {
+        face(facing);
+        setSpeed((float) getAttributeValue(Attributes.MOVEMENT_SPEED));
+        StickInput stick = StickInput.toward(facing, heading, throttle);
+        this.zza = PLAYER_INPUT_DAMPING * stick.forward();
+        this.xxa = PLAYER_INPUT_DAMPING * stick.left();
+        setJumping(false);
+    }
+
     /** Movement control: hold still this tick — no forward input, no jump, walk gait. */
     public void stopMoving() {
         this.zza = 0.0F;
+        this.xxa = 0.0F;
         this.yya = 0.0F;
         setJumping(false);
         // A navigator that stops mid-sprint must not leave the ×1.3 modifier latched for its
