@@ -60,6 +60,11 @@ public final class PersonContainer implements Container {
         return person.metabolism().foodLevel();
     }
 
+    /** The Person's saturation ({@code 0..foodLevel}), for the hunger row's outline. Server-side only. */
+    public float saturation() {
+        return person.metabolism().saturation();
+    }
+
     /**
      * The Person's selected hotbar slot ({@code 0..8}) — the one {@link Inventory#mainHand()} reads,
      * for {@link PersonInventoryMenu}'s selection sync. Server-side only, like {@link #foodLevel()}.

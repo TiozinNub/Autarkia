@@ -73,6 +73,15 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     private int syncedFood = Metabolism.MAX_FOOD;
     /** Live food source: the Person's needs on the server, the {@link #syncedFood} cache on the client. */
     private final IntSupplier foodSource;
+    /**
+     * Saturation crosses the wire in hundredths: a {@link DataSlot} carries a short, and 20.00
+     * saturation is 2000 of them.
+     */
+    private static final int SATURATION_SCALE = 100;
+    /** Last saturation the server broadcast, in hundredths; the {@link #saturation} slot reads it back on the client. */
+    private int syncedSaturation = 0;
+    /** Live saturation source, in hundredths: the Person's needs on the server, {@link #syncedSaturation} on the client. */
+    private final IntSupplier saturationSource;
     /** Last selected slot the server broadcast; the {@link #selectedSlot} slot reads it back on the client. */
     private int syncedSelected = 0;
     /** Live selection source: the core inventory on the server, {@link #syncedSelected} on the client. */
@@ -92,6 +101,18 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         @Override
         public void set(int value) {
             syncedFood = value;
+        }
+    };
+    /** The Person's saturation in hundredths, for the hunger row's outline and its shake. Polled like {@link #foodLevel}. */
+    private final DataSlot saturation = new DataSlot() {
+        @Override
+        public int get() {
+            return saturationSource.getAsInt();
+        }
+
+        @Override
+        public void set(int value) {
+            syncedSaturation = value;
         }
     };
     /**
@@ -125,6 +146,10 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         this.personContainer = personContainer;
         // The client's container is a dummy SimpleContainer, so it falls back to the broadcast value.
         this.foodSource = (personContainer instanceof PersonContainer pc) ? pc::foodLevel : () -> syncedFood;
+        // Rounded up: a sliver of saturation must still read as some on the client, or the
+        // drumsticks shake early — the HUD shakes only at exactly zero.
+        this.saturationSource = (personContainer instanceof PersonContainer pc)
+                ? () -> Mth.ceil(pc.saturation() * SATURATION_SCALE) : () -> syncedSaturation;
         this.selectedSource =
                 (personContainer instanceof PersonContainer live) ? live::selectedSlot : () -> syncedSelected;
         this.personIdLow.set(entityId & 0xFFFF);
@@ -132,6 +157,7 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
         addDataSlot(this.personIdLow);
         addDataSlot(this.personIdHigh);
         addDataSlot(this.foodLevel);
+        addDataSlot(this.saturation);
         addDataSlot(this.selectedSlot);
 
         // Vanilla's own player-inventory layout: 3 main rows (container 9..35) at (GRID_X, GRID_Y),
@@ -162,6 +188,11 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
     /** The Person's food level ({@code 0..20}, synced), for the screen's hunger row. */
     public int foodLevel() {
         return this.foodLevel.get();
+    }
+
+    /** The Person's saturation ({@code 0..foodLevel}, synced), for the hunger row's outline. */
+    public float saturation() {
+        return this.saturation.get() / (float) SATURATION_SCALE;
     }
 
     /**

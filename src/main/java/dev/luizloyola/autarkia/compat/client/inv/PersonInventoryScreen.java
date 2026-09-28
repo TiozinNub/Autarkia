@@ -14,6 +14,8 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -28,7 +30,8 @@ import net.minecraft.world.entity.player.Inventory;
  *
  * <p>Reuses the vanilla HUD <em>sprites</em> but not its renderer — {@code Gui}'s heart/armor/food
  * draws are private and welded to the live HUD — so the static read (full/half/empty, effect tints)
- * is reproduced and the animation (damage blink, regen bounce) is not.
+ * and the hunger shake are reproduced, and the heart animations (damage blink, regen bounce) are
+ * not. Over the drumsticks goes a gold saturation outline, as AppleSkin draws on the HUD.
  */
 @Environment(EnvType.CLIENT)
 public class PersonInventoryScreen extends AbstractContainerScreen<PersonInventoryMenu> {
@@ -55,6 +58,13 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
             Identifier.withDefaultNamespace("hud/food_half"), Identifier.withDefaultNamespace("hud/food_empty")};
     private static final Identifier[] FOOD_HUNGER = {Identifier.withDefaultNamespace("hud/food_full_hunger"),
             Identifier.withDefaultNamespace("hud/food_half_hunger"), Identifier.withDefaultNamespace("hud/food_empty_hunger")};
+    // The saturation outline, traced from the drumstick's own edge; each drumstick holds two points,
+    // drawn in quarters from the bone end.
+    private static final Identifier SATURATION_QUARTER = Identifier.fromNamespaceAndPath("autarkia", "hud/saturation_quarter");
+    private static final Identifier SATURATION_HALF = Identifier.fromNamespaceAndPath("autarkia", "hud/saturation_half");
+    private static final Identifier SATURATION_THREE_QUARTERS =
+            Identifier.fromNamespaceAndPath("autarkia", "hud/saturation_three_quarters");
+    private static final Identifier SATURATION_FULL = Identifier.fromNamespaceAndPath("autarkia", "hud/saturation_full");
     /** The HUD's hotbar selection frame, here marking the Person's selected slot. Its native 24×23. */
     private static final Identifier HOTBAR_SELECTION = Identifier.withDefaultNamespace("hud/hotbar_selection");
     private static final int SELECTION_W = 24;
@@ -72,6 +82,8 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
     private static final int ARMOR_Y = 25;
     private static final int HEALTH_Y = 36;
     private static final int HUNGER_Y = 47;
+
+    private final RandomSource shakeRandom = RandomSource.create();
 
     /** The armor foreground for the {@code index}-th slot ({@code armor} points, 2 each), or null if empty. */
     private static Identifier armorForeground(int index, int armor) {
@@ -105,6 +117,16 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
         return null;
     }
 
+    /** The saturation outline over the {@code index}-th drumstick, at AppleSkin's thresholds, or null if none. */
+    private static Identifier saturationOutline(int index, float saturation) {
+        float covered = saturation / 2.0F - index;
+        if (covered <= 0.0F) return null;
+        if (covered >= 1.0F) return SATURATION_FULL;
+        if (covered > 0.5F) return SATURATION_THREE_QUARTERS;
+        if (covered > 0.25F) return SATURATION_HALF;
+        return SATURATION_QUARTER;
+    }
+
     /** A version-neutral sprite blit — the only per-MC-version bit of the stat rows and the hand frame. */
     @FunctionalInterface
     private interface SpriteBlitter {
@@ -130,7 +152,7 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
 
     /**
      * The armor / health / hunger rows at panel origin {@code (originX, originY)}: health off the
-     * entity, hunger off the menu's food slot, hearts and drumsticks effect-tinted.
+     * entity, hunger and saturation off the menu's synced slots, hearts and drumsticks effect-tinted.
      */
     private void drawVitals(SpriteBlitter blit, int originX, int originY, LivingEntity person) {
         int armor = person.getArmorValue();
@@ -144,21 +166,38 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
 
         Identifier[] foodVariant = person.hasEffect(MobEffects.HUNGER) ? FOOD_HUNGER : FOOD_NORMAL;
         int food = getMenu().foodLevel();
+        float saturation = getMenu().saturation();
+        // The HUD's hunger shake: once saturation is spent, every (food * 3 + 1) ticks each
+        // drumstick hops a pixel — every tick on an empty bar. Seeded per tick like the HUD, so
+        // every frame of a tick agrees.
+        boolean shake = saturation <= 0.0F && person.tickCount % (food * 3 + 1) == 0;
+        this.shakeRandom.setSeed(person.tickCount * 312871L);
         drawRow(blit, originX, originY + HUNGER_Y, VITAL_ICONS, foodVariant[2],
-                i -> foodForeground(i, food, foodVariant));
+                i -> foodForeground(i, food, foodVariant), i -> saturationOutline(i, saturation),
+                i -> shake ? this.shakeRandom.nextInt(3) - 1 : 0);
+    }
+
+    private static void drawRow(SpriteBlitter blit, int originX, int rowY, int count,
+                                Identifier background, IntFunction<Identifier> foreground) {
+        drawRow(blit, originX, rowY, count, background, foreground, i -> null, i -> 0);
     }
 
     /**
-     * One row, the HUD's two passes: the empty {@code background} under every slot first, so half
-     * icons composite over their own backing, then {@code foreground} on top wherever non-null.
+     * One row, the HUD's layering: the empty {@code background} under every slot first, so half
+     * icons composite over their own backing, then {@code foreground} and {@code overlay} on top
+     * wherever non-null, all three moved by the slot's {@code dy}.
      */
-    private static void drawRow(SpriteBlitter blit, int originX, int rowY, int count,
-                                Identifier background, IntFunction<Identifier> foreground) {
+    private static void drawRow(SpriteBlitter blit, int originX, int rowY, int count, Identifier background,
+                                IntFunction<Identifier> foreground, IntFunction<Identifier> overlay,
+                                IntUnaryOperator dy) {
         for (int i = 0; i < count; i++) {
             int px = originX + VITALS_X + i * VITAL_PITCH;
-            blit.blit(background, px, rowY, VITAL_ICON, VITAL_ICON);
+            int py = rowY + dy.applyAsInt(i);
+            blit.blit(background, px, py, VITAL_ICON, VITAL_ICON);
             Identifier fg = foreground.apply(i);
-            if (fg != null) blit.blit(fg, px, rowY, VITAL_ICON, VITAL_ICON);
+            if (fg != null) blit.blit(fg, px, py, VITAL_ICON, VITAL_ICON);
+            Identifier over = overlay.apply(i);
+            if (over != null) blit.blit(over, px, py, VITAL_ICON, VITAL_ICON);
         }
     }
 
