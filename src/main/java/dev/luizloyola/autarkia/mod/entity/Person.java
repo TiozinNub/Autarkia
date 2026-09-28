@@ -1064,10 +1064,10 @@ public class Person extends Avatar implements AgentBody {
      * Opens this Person's inventory as a container screen (all 41 slots) for {@code player}, backed
      * by a live {@link PersonContainer} over the core inventory. Server-authoritative.
      *
-     * <p>Anima's {@code AgentBody} hook, driven by {@code /anima inv see} and by a spectator's
-     * right-click, which vanilla keeps look-only. A player's empty-handed right-click is the tap
-     * since social rung 7, and a screen that can move items stays behind the op-gated
-     * {@code /anima} tree.
+     * <p>Anima's {@code AgentBody} hook, driven by {@code /anima inv see}, by a spectator's
+     * right-click (look-only: vanilla refuses a spectator's slot clicks) and by a creative player's
+     * empty-handed sneak-right-click. A survival player's empty-handed right-click is the tap since
+     * social rung 7.
      */
     @Override
     public boolean showInventory(ServerPlayer player) {
