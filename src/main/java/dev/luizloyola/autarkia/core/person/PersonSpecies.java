@@ -25,6 +25,8 @@ public final class PersonSpecies {
             .set(ProfileAspect.FLEE_RANGE, 16.0)
             .set(ProfileAspect.FLEE_RAMP, 12.0)
             .set(ProfileAspect.FLEE_APPROACH_BONUS, 1.3)
+            // A look back of 8 ticks: four to whip round at a startle's 48° a tick, four to see.
+            .set(ProfileAspect.FLEE_LOOK_TICKS, 8)
             // Takes a fight it would last one and a half times as long as, keeps it down to even,
             // and fights at half that when nothing can be outrun (combat spec, 2026-09-27).
             .set(ProfileAspect.FIGHT_START_RATIO, 1.5)
