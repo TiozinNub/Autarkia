@@ -24,6 +24,21 @@ public final class Stock {
     public static final ItemSpec AXES =
             ItemSpec.register(new ItemSpec("axes", id -> id.endsWith("_axe")));
 
+    /**
+     * Blocks a walk may lay to bridge or pillar — Anima's {@code #anima:bridging_blocks}, which only
+     * the mod layer can read, so it installs the rule ({@link #layableBy}). A settler keeps a stack
+     * of them ({@link StandingWants}).
+     */
+    public static final ItemSpec BRIDGING =
+            ItemSpec.register(new ItemSpec("bridging_blocks", id -> Stock.layable.test(id)));
+
+    private static volatile java.util.function.Predicate<String> layable = id -> false;
+
+    /** Sets what {@link #BRIDGING} matches. */
+    public static void layableBy(java.util.function.Predicate<String> rule) {
+        layable = rule;
+    }
+
     private Stock() {
     }
 }

@@ -43,7 +43,9 @@ public final class StandingWants implements PersonalProject {
                 ItemCall.need(family("shovel"), 1),
                 ItemCall.need(ItemSpec.anyOf(Set.of("minecraft:torch")), 64),
                 ItemCall.want(ItemSpec.anyOf(Set.of("minecraft:shears")), 1),
-                ItemCall.want(ItemSpec.anyOf(Set.of("minecraft:flint_and_steel")), 1)));
+                ItemCall.want(ItemSpec.anyOf(Set.of("minecraft:flint_and_steel")), 1),
+                // Kept, never sought: what a carve or a cut put in the pack is a walk's next bridge.
+                ItemCall.want(Stock.BRIDGING, 16)));
     }
 
     /** Every material a vanilla tool of this kind comes in — netherite included, cheaply. */

@@ -68,4 +68,17 @@ class StandingWantsTest {
         assertTrue(torches.count() > 1,
                 "torches are spent, not carried — one is not a supply");
     }
+
+    /** Last, so it is the first thing a full pack gives up; kept, never sought. */
+    @Test
+    void aStackToBridgeWithIsKeptBelowEveryTool() {
+        Stock.layableBy(id -> id.equals("minecraft:dirt"));
+        try {
+            List<ItemCall> calls = StandingWants.settlerDefaults().reserved();
+            assertEquals(calls.size() - 1, rankOf(calls, "minecraft:dirt"));
+            assertEquals(16, calls.get(calls.size() - 1).count());
+        } finally {
+            Stock.layableBy(id -> false);
+        }
+    }
 }

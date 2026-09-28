@@ -133,6 +133,11 @@ public class AutarkiaMod implements ModInitializer {
         // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
         // this world, not about having a mind, so it belongs here rather than in the library.
         Producers.register(Stock.LOGS, ChopForLogs::new);
+        // What a walk may lay is Anima's tag; which of it a settler keeps is ours to spell.
+        Stock.layableBy(dev.luizloyola.anima.mod.nav.Laying::layable);
+        // And where no walk may lay or cut: a party's HOME and the places it keeps.
+        dev.luizloyola.anima.mod.nav.WorkFence.rule(
+                dev.luizloyola.autarkia.mod.direction.SettledGround::around);
         // And where ready food comes from before anybody farms: a berry or melon patch. The act is
         // declared here, not on first use, because the node table names it as it loads.
         dev.luizloyola.autarkia.core.patch.Forage.ACT.key();
