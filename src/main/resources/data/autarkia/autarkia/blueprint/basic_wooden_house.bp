@@ -12,7 +12,7 @@ materials
   3 option any_color
 
 groups
-  beds required  1 2 4 6
+  beds optional  1 2 4 6
   base optional  lv1 lv2 lv3
   attic optional  has
   beds.4 needs attic.has
