@@ -68,6 +68,8 @@ public final class BuildOrder {
     private final boolean[] climb;
     /** A ladder the plan will place. */
     private final boolean[] ladder;
+    /** A cell of the floor section: standing on it is standing low, as on the ground. */
+    private final boolean[] floor;
     /** While flooding, count the plan's ladders as up. */
     private boolean assumeLadders;
     private final List<Step> steps;
@@ -91,6 +93,7 @@ public final class BuildOrder {
         passes = new boolean[size];
         climb = new boolean[size];
         ladder = new boolean[size];
+        floor = new boolean[size];
         for (int i = 0; i < size; i++) {
             int layer = layerOf(i);
             int x = xOf(i);
@@ -121,6 +124,7 @@ public final class BuildOrder {
             climbable[s] = info != null && info.is(Sections.CLIMBABLE);
             for (int c : cells[s]) {
                 ladder[c] = climbable[s];
+                floor[c] = step.section() == Section.FLOOR;
             }
         }
     }
@@ -144,17 +148,29 @@ public final class BuildOrder {
             seen[s] = search(s, access);
         }
         List<Placed> order = new ArrayList<>();
+        int last = -1;
+        int stand = -1;
         while (true) {
             int chosen = -1;
             boolean[] chosenAccess = null;
             int[] chosenSeen = null;
-            int fallback = -1;
-            for (int s = 0; s < count && chosen < 0; s++) {
-                if (done[s] || witness[s] < 0 || !supported(s)) {
-                    continue;
+            List<Integer> ready = new ArrayList<>();
+            for (int s = 0; s < count; s++) {
+                if (!done[s] && witness[s] >= 0 && supported(s)) {
+                    ready.add(s);
                 }
-                if (fallback < 0) {
-                    fallback = s;
+            }
+            // Within a section's layer, the block nearest the last one: a floor goes up in a snake,
+            // a ring of walls round and round (Luiz, 2026-09-28).
+            int from = last;
+            ready.sort(Comparator.comparingInt((Integer s) -> steps.get(s).section().rank())
+                    .thenComparingInt(s -> steps.get(s).cell().layer())
+                    .thenComparingInt(s -> from < 0 ? 0 : distance2(from, cells[s][0]))
+                    .thenComparingInt(s -> s));
+            int fallback = ready.isEmpty() ? -1 : ready.get(0);
+            for (int s : ready) {
+                if (chosen >= 0) {
+                    break;
                 }
                 set(s, true);
                 boolean[] after = flood(true);
@@ -178,7 +194,13 @@ public final class BuildOrder {
             if (chosen < 0) {
                 break;
             }
-            order.add(new Placed(steps.get(chosen), cellOf(witness[chosen])));
+            // The builder stays where it stands while that reaches; when it must move, it goes where
+            // it reaches the most of what is left of the section — the middle of a room.
+            if (stand < 0 || !reach[stand] || sees(stand, chosen) == Double.MAX_VALUE) {
+                stand = bestStand(chosen, stand, done, reach);
+            }
+            order.add(new Placed(steps.get(chosen), cellOf(stand)));
+            last = cells[chosen][0];
             set(chosen, true);
             done[chosen] = true;
             boolean[] after = flood(false);
@@ -241,6 +263,65 @@ public final class BuildOrder {
                 }
             }
         }
+    }
+
+    /**
+     * Of the reachable stands that reach and see step {@code s}: one on the ground or the floor
+     * before one up on the work — eaves are laid from the ground, not leaning out of the attic
+     * (Luiz, 2026-09-28); then the one within reach of the most steps still to place in its
+     * section; then the nearest to where the builder was.
+     */
+    private int bestStand(int s, int was, boolean[] done, boolean[] reach) {
+        int target = cells[s][0];
+        Section section = steps.get(s).section();
+        int span = (int) Math.ceil(REACH);
+        int best = -1;
+        boolean bestLow = false;
+        int bestCover = -1;
+        int bestWalk = Integer.MAX_VALUE;
+        for (int layer = layerOf(target) - span - 1; layer <= layerOf(target) + span; layer++) {
+            for (int z = zOf(target) - span; z <= zOf(target) + span; z++) {
+                for (int x = xOf(target) - span; x <= xOf(target) + span; x++) {
+                    int candidate = indexOrMinus(layer, x, z);
+                    if (candidate < 0 || !reach[candidate] || sees(candidate, s) == Double.MAX_VALUE) {
+                        continue;
+                    }
+                    int cover = 0;
+                    for (int r = 0; r < steps.size(); r++) {
+                        if (!done[r] && r != s && steps.get(r).section() == section && within(candidate, cells[r][0])) {
+                            cover++;
+                        }
+                    }
+                    int walk = distance2(candidate, was >= 0 ? was : target);
+                    int below = indexOrMinus(layer - 1, x, z);
+                    boolean low = below < 0 || ground[below] || placed[below] && floor[below];
+                    boolean better = low != bestLow ? low
+                            : cover != bestCover ? cover > bestCover : walk < bestWalk;
+                    if (best < 0 || better) {
+                        best = candidate;
+                        bestLow = low;
+                        bestCover = cover;
+                        bestWalk = walk;
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    /** The cell's middle within reach of the stand's eye; sight is not asked. */
+    private boolean within(int stand, int cell) {
+        double dx = xOf(cell) - xOf(stand);
+        double dy = layerOf(cell) + 0.5 - (layerOf(stand) + EYE);
+        double dz = zOf(cell) - zOf(stand);
+        return dx * dx + dy * dy + dz * dz <= REACH * REACH;
+    }
+
+    private int distance2(int a, int b) {
+        int dx = xOf(a) - xOf(b);
+        int dy = layerOf(a) - layerOf(b);
+        int dz = zOf(a) - zOf(b);
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private boolean stillSees(int stand, int r, boolean[] reach) {

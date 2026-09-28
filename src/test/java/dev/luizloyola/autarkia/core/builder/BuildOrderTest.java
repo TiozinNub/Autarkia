@@ -124,6 +124,36 @@ class BuildOrderTest {
                 runs::toString);
     }
 
+    /**
+     * The basic house goes up as a builder would put it up (Luiz, 2026-09-28): from few stands, the
+     * walls round and round with no jump from one side to the other, and the eaves laid from the
+     * ground or the floor rather than leaning out of the attic.
+     */
+    @Test
+    void theBasicHouseGoesUpFromFewStandsRoundAndRound() throws IOException {
+        Blueprint bp = bind(read(SHIPPED.get(0)));
+        BuildPlan plan = plan(bp, Map.of("beds", "2", "base", "lv1", "attic", "has"));
+        List<BuildOrder.Placed> order = BuildOrder.prove(plan, DICT).order();
+        int moves = 0;
+        for (int k = 0; k < order.size(); k++) {
+            Step step = order.get(k).step();
+            Cell cell = step.cell();
+            Cell stand = order.get(k).stand();
+            boolean eave = step.section() == Section.CEILING && cell.layer() == 5
+                    && (cell.x() == 0 || cell.x() == 8 || cell.z() == 0 || cell.z() == 9);
+            assertTrue(!eave || stand.layer() <= 2, "eave " + cell + " from " + stand);
+            if (k == 0) {
+                continue;
+            }
+            moves += stand.equals(order.get(k - 1).stand()) ? 0 : 1;
+            Cell was = order.get(k - 1).step().cell();
+            boolean jump = Math.abs(was.x() - cell.x()) > 1 || Math.abs(was.z() - cell.z()) > 1
+                    || Math.abs(was.layer() - cell.layer()) > 1;
+            assertTrue(!jump || step.section() != Section.WALLS, "a wall jumps from " + was + " to " + cell);
+        }
+        assertTrue(moves * 4 < order.size(), moves + " stand moves for " + order.size() + " steps");
+    }
+
     /** Whatever hangs goes up after what holds it, and every block from a stand that reaches it. */
     static void assertHeldAndInReach(BuildPlan plan, BuildOrder.Result result, String what) {
         Set<Cell> up = new HashSet<>();
