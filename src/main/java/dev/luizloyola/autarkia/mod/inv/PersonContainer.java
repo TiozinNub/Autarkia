@@ -154,8 +154,10 @@ public final class PersonContainer implements Container {
 
     @Override
     public boolean stillValid(Player player) {
-        // A menu shouldn't stay open across the world.
-        return person.isAlive() && person.distanceToSqr(player) <= 64.0;
+        // Creative and spectator watch from wherever they fly; anyone else hands items over at arm's
+        // length. An unloaded Person is removed, so no menu outlives its body.
+        return person.isAlive()
+                && (player.isCreative() || player.isSpectator() || person.distanceToSqr(player) <= 64.0);
     }
 
     @Override
