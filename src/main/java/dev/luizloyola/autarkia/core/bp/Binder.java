@@ -591,8 +591,8 @@ public final class Binder {
                 }
             }
             if (!blocks.isEmpty() && computed(blocks.get(0).id(), key, value)) {
-                out.report("computed_property", term.line(), term.column(), key + "=" + value + " is recomputed by "
-                        + "the world from the neighbours; leave it out");
+                out.report("computed_property", term.line(), term.column(), key + "=" + value + " is the world's "
+                        + "to set, not the builder's; leave it out");
             }
         }
     }
@@ -615,27 +615,37 @@ public final class Binder {
         }
     }
 
-    /** The connective properties a placed block recomputes — authoring them is noise. */
+    /** Set by the world on every block that has them: joins from the neighbours, power, growth, use. */
+    private static final Set<String> WORLD_STATE = Set.of("snowy", "in_wall", "side_chain", "leaves", "tip",
+            "thickness", "bottom", "distance", "signal_fire", "drag", "power", "enabled", "locked", "triggered",
+            "extended", "crafting", "moisture", "age", "stage", "berries", "hatch", "honey_level", "occupied",
+            "disarmed", "tilt", "dusted", "bloom", "sculk_sensor_phase", "shrieking", "can_summon", "natural",
+            "unstable", "vault_state", "trial_spawner_state", "creaking_heart_state", "hydration");
+
+    /**
+     * What the world sets rather than the builder, so a file need not say it and a capture does not:
+     * joins recomputed from the neighbours, and state the game changes on its own. What a builder can
+     * set stays — a door left open, a lever thrown, a candle lit (Luiz, 2026-09-27).
+     */
     static boolean computed(String block, String key, String value) {
         String path = Ids.path(block);
-        if (key.equals("waterlogged")) {
-            return value.equals("false");
-        }
-        if (key.equals("snowy")) {
+        if (WORLD_STATE.contains(key)) {
             return true;
         }
-        if (Set.of("north", "east", "south", "west", "up").contains(key)) {
-            return path.endsWith("_fence") || path.endsWith("_wall") || path.endsWith("_pane")
-                    || path.endsWith("_bars") || path.equals("iron_bars") || path.equals("redstone_wire")
-                    || path.equals("tripwire");
-        }
-        if (key.equals("shape")) {
-            return path.endsWith("_stairs");
-        }
-        if (key.equals("distance") || key.equals("persistent")) {
-            return path.endsWith("_leaves");
-        }
-        return key.equals("power") && path.equals("redstone_wire");
+        return switch (key) {
+            case "waterlogged" -> value.equals("false");
+            case "north", "east", "south", "west", "up" -> path.endsWith("_fence") || path.endsWith("_wall")
+                    || path.endsWith("_pane") || path.endsWith("_bars") || path.equals("iron_bars")
+                    || path.equals("redstone_wire") || path.equals("tripwire");
+            case "shape" -> path.endsWith("_stairs");
+            case "persistent" -> path.endsWith("_leaves");
+            case "powered" -> !path.equals("lever");
+            case "attached" -> path.startsWith("tripwire");
+            case "level" -> path.equals("water") || path.equals("lava");
+            case "lit" -> path.equals("furnace") || path.equals("blast_furnace") || path.equals("smoker")
+                    || path.startsWith("redstone_") || path.endsWith("redstone_ore") || path.endsWith("copper_bulb");
+            default -> false;
+        };
     }
 
     /**

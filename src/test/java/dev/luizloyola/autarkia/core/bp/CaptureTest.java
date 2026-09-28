@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.bp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -132,6 +133,31 @@ class CaptureTest {
                         "waterlogged", "false"), DICT));
         assertEquals(new Outcome("minecraft:lantern", Map.of("hanging", "false")), Capture.normalise(
                 "minecraft:lantern", Map.of("hanging", "false", "waterlogged", "false"), DICT));
+    }
+
+    /** A hatch left open is the builder's call; the redstone that holds it open is the world's. */
+    @Test
+    void whatTheWorldSetsIsLeftOutAndWhatABuilderSetsStays() {
+        assertEquals(new Outcome("minecraft:oak_trapdoor", Map.of("facing", "east", "open", "true")),
+                Capture.normalise("minecraft:oak_trapdoor", Map.of("facing", "east", "half", "bottom", "open", "true",
+                        "powered", "true"), DICT));
+        String[][] world = {{"red_bed", "occupied", "true"}, {"oak_door", "powered", "true"},
+                {"oak_fence_gate", "in_wall", "true"}, {"wheat", "age", "7"}, {"oak_sapling", "stage", "1"},
+                {"farmland", "moisture", "7"}, {"furnace", "lit", "true"}, {"redstone_lamp", "lit", "true"},
+                {"deepslate_redstone_ore", "lit", "true"}, {"waxed_copper_bulb", "lit", "true"},
+                {"tripwire_hook", "attached", "true"}, {"water", "level", "3"}, {"scaffolding", "distance", "2"},
+                {"piston", "extended", "true"}, {"dispenser", "triggered", "true"},
+                {"oak_shelf", "side_chain", "left"}};
+        for (String[] state : world) {
+            assertTrue(Binder.computed("minecraft:" + state[0], state[1], state[2]), String.join(" ", state));
+        }
+        String[][] builder = {{"oak_door", "open", "true"}, {"lever", "powered", "true"}, {"candle", "lit", "true"},
+                {"campfire", "lit", "false"}, {"oak_hanging_sign", "attached", "true"},
+                {"water_cauldron", "level", "2"}, {"composter", "level", "4"}, {"oak_fence_gate", "open", "true"},
+                {"oak_stairs", "waterlogged", "true"}};
+        for (String[] state : builder) {
+            assertFalse(Binder.computed("minecraft:" + state[0], state[1], state[2]), String.join(" ", state));
+        }
     }
 
     @Test
