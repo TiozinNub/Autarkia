@@ -167,6 +167,8 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_RANDOM = "BrainRandom";
     /** Drives sitting out a fail-cooldown, by name, with the ticks they have left. */
     private static final String TAG_BRAIN_COOLDOWNS = "BrainCooldowns";
+    /** What fight or flight remembers: the gear each target has shown, the fights it gave up. */
+    private static final String TAG_FIGHT_MEMORY = "FightMemory";
     private static final String TAG_BRAIN_HISTORY = "BrainHistory";
     /** The plan in progress and the grant that owns it — one tag, never two. */
     private static final String TAG_BRAIN_PLAN = "BrainPlan";
@@ -1419,6 +1421,7 @@ public class Person extends Avatar implements AgentBody {
         if (!cooldowns.isEmpty()) {
             output.store(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS, cooldowns);
         }
+        output.store(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY, this.brain.fightMemory());
         // What they did lately — what they talk about. Losing it on a restart would leave a whole
         // settlement with nothing to say about the day it just had.
         List<History.Entry> history = this.brain.history();
@@ -1486,6 +1489,8 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_BRAIN_RANDOM, Codec.LONG).ifPresent(this.brain.random()::restore);
         input.read(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS)
                 .ifPresent(this.brain::restoreCooldowns);
+        input.read(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY)
+                .ifPresent(this.brain::restoreFightMemory);
         input.read(TAG_BRAIN_HISTORY, BrainState.HISTORY).ifPresent(this.brain::restoreHistory);
         this.pendingBrain = input.read(TAG_BRAIN_PLAN, BrainState.brain()).orElse(null);
         this.pendingBoard = input.read(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD).orElse(null);
