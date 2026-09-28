@@ -25,6 +25,12 @@ public final class PersonSpecies {
             .set(ProfileAspect.FLEE_RANGE, 16.0)
             .set(ProfileAspect.FLEE_RAMP, 12.0)
             .set(ProfileAspect.FLEE_APPROACH_BONUS, 1.3)
+            // Takes a fight it would last one and a half times as long as, keeps it down to even,
+            // and fights at half that when nothing can be outrun (combat spec, 2026-09-27).
+            .set(ProfileAspect.FIGHT_START_RATIO, 1.5)
+            .set(ProfileAspect.FIGHT_QUIT_RATIO, 1.0)
+            .set(ProfileAspect.FIGHT_CORNERED_RATIO, 0.5)
+            .set(ProfileAspect.FIGHT_BLAST_LINE, 0.3)
             .set(ProfileAspect.WANDER_IDLE_PRESSURE, 0.15)
             // The last four slots, not a tidiness line: routine clearing is StowSurplus's job on
             // the personal board, and this only catches the single act that fills the rest.
