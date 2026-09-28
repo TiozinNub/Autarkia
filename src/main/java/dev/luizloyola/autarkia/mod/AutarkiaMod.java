@@ -172,6 +172,8 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.direction.BaseLine.INSTANCE);
         dev.luizloyola.autarkia.core.direction.Lines.register(
                 dev.luizloyola.autarkia.core.direction.StorageLine.INSTANCE);
+        dev.luizloyola.autarkia.core.direction.Lines.register(
+                dev.luizloyola.autarkia.core.direction.FoodLine.INSTANCE);
         // What the base and storage lines post: stations put down one at a time, as a party's job.
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.SetUp.TYPE);

@@ -5,9 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonParser;
+import dev.luizloyola.anima.core.agent.FoodValue;
+import dev.luizloyola.anima.core.brain.sense.FoodLookup;
+import dev.luizloyola.anima.core.brain.task.ReadyFood;
+import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.direction.AreaLine;
 import dev.luizloyola.autarkia.core.direction.BaseLine;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
+import dev.luizloyola.autarkia.core.direction.FoodLine;
 import dev.luizloyola.autarkia.core.direction.Lines;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.NodeKind;
@@ -19,6 +24,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,11 +42,13 @@ class NodeFilesTest {
         Lines.register(WoodLine.INSTANCE);
         Lines.register(BaseLine.INSTANCE);
         Lines.register(StorageLine.INSTANCE);
+        Lines.register(FoodLine.INSTANCE);
     }
 
     @AfterEach
     void clear() {
         Lines.clear();
+        ReadyFood.install(null);
     }
 
     private static NodeFiles.NodeFile shipped(String path) throws IOException {
@@ -66,7 +74,21 @@ class NodeFilesTest {
         assertEquals(new DirectionId("autarkia:wood", "wood"), stone.requirements().key());
 
         List<Node> nodes = new ArrayList<>(List.of(unresolved(wood), unresolved(stone)));
-        Tree.Built built = Tree.build(nodes, Set.of("minecraft:oak_log"), key -> false);
+        // A server installs what is food as it starts, before the tree is built; this is that.
+        ReadyFood.install(new FoodLookup() {
+            @Override
+            public Optional<FoodValue> of(ItemStack stack) {
+                return stack.id().equals("minecraft:sweet_berries")
+                        ? Optional.of(new FoodValue(2, 0.4F, false)) : Optional.empty();
+            }
+
+            @Override
+            public Optional<FoodValue> cookedForm(ItemStack stack) {
+                return Optional.empty();
+            }
+        });
+        Tree.Built built = Tree.build(nodes, Set.of("minecraft:oak_log", "minecraft:sweet_berries"),
+                key -> false);
         assertTrue(built.errors().isEmpty(), () -> "the shipped tree is refused: " + built.errors());
         assertEquals(Set.of("autarkia:wood"), built.tree().roots());
         assertEquals(NodeKind.CORE, built.tree().node("autarkia:stone").orElseThrow().kind());

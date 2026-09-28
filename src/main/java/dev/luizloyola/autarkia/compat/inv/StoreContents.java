@@ -5,9 +5,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
+import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -22,8 +24,11 @@ public final class StoreContents {
     private StoreContents() {
     }
 
-    /** What one store held when read: how many items the predicate accepted, and empty slots. */
-    public record Reading(int matching, int free) {
+    /**
+     * What one store held when read: how many items the predicate accepted, the hunger points
+     * those items are worth eaten, and empty slots.
+     */
+    public record Reading(int matching, int free, int nutrition) {
     }
 
     /**
@@ -41,7 +46,7 @@ public final class StoreContents {
             return Optional.empty();
         }
         if (!counted.add(pos)) {
-            return Optional.of(new Reading(0, 0));
+            return Optional.of(new Reading(0, 0, 0));
         }
         BlockState state = level.getBlockState(pos);
         Container container;
@@ -55,18 +60,23 @@ public final class StoreContents {
             container = level.getBlockEntity(pos) instanceof Container found ? found : null;
         }
         if (container == null) {
-            return Optional.of(new Reading(0, 0));
+            return Optional.of(new Reading(0, 0, 0));
         }
         int matching = 0;
         int free = 0;
+        int nutrition = 0;
         for (int slot = 0; slot < container.getContainerSize(); slot++) {
             ItemStack held = container.getItem(slot);
             if (held.isEmpty()) {
                 free++;
             } else if (ids.test(BuiltInRegistries.ITEM.getKey(held.getItem()).toString())) {
                 matching += held.getCount();
+                FoodProperties food = held.get(DataComponents.FOOD);
+                if (food != null) {
+                    nutrition += food.nutrition() * held.getCount();
+                }
             }
         }
-        return Optional.of(new Reading(matching, free));
+        return Optional.of(new Reading(matching, free, nutrition));
     }
 }

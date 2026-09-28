@@ -76,6 +76,11 @@ class EvolutionTest {
         public OptionalInt freeSlotsAtHome() {
             return OptionalInt.of(27);
         }
+
+        @Override
+        public OptionalInt readyFoodAtHome() {
+            return OptionalInt.of(0);
+        }
     }
 
     @BeforeEach

@@ -75,6 +75,11 @@ class BaseAndStorageTest {
         public OptionalInt freeSlotsAtHome() {
             return free;
         }
+
+        @Override
+        public OptionalInt readyFoodAtHome() {
+            return OptionalInt.of(0);
+        }
     }
 
     @BeforeEach

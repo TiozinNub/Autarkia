@@ -26,6 +26,13 @@ public interface PartyView {
      */
     OptionalInt storedAtHome(ItemSpec spec);
 
+    /**
+     * How many hunger points of ready food HOME's stores hold between them — what the food is
+     * worth eaten, not how many items. Empty when one of them could not be read this beat, or there
+     * is no HOME.
+     */
+    OptionalInt readyFoodAtHome();
+
     /** Whether the party claims a place of this kind at HOME — on the plot or at its yard. */
     boolean hasAtHome(PoiKind kind);
 

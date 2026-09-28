@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.direction;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.ReadyFood;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.PlaceRow;
@@ -61,6 +62,11 @@ final class HomeView implements PartyView {
     @Override
     public OptionalInt storedAtHome(ItemSpec spec) {
         return readHome(spec::matches, StoreContents.Reading::matching);
+    }
+
+    @Override
+    public OptionalInt readyFoodAtHome() {
+        return readHome(ReadyFood.SPEC::matches, StoreContents.Reading::nutrition);
     }
 
     @Override
