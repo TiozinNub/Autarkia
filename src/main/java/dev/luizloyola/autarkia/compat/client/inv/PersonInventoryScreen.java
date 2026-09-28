@@ -15,6 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import java.util.function.IntFunction;
 import java.util.function.IntUnaryOperator;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
@@ -30,7 +31,7 @@ import net.minecraft.world.entity.player.Inventory;
  *
  * <p>Reuses the vanilla HUD <em>sprites</em> but not its renderer — {@code Gui}'s heart/armor/food
  * draws are private and welded to the live HUD — so the static read (full/half/empty, effect tints)
- * and the hunger shake are reproduced, and the heart animations (damage blink, regen bounce) are
+ * and the low-health and hunger shakes are reproduced, and the damage blink and regen bounce are
  * not. Over the drumsticks goes a gold saturation outline, as AppleSkin draws on the HUD.
  */
 @Environment(EnvType.CLIENT)
@@ -161,20 +162,24 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
         float health = person.getHealth();
         int hearts = Math.min(VITAL_ICONS, (int) Math.ceil(person.getMaxHealth() / 2.0F));
         Identifier[] heartVariant = heartVariant(person);
+        // The HUD's two shakes, seeded per tick like the HUD so every frame of a tick agrees. At 4
+        // health or less each heart drops a pixel at random, every tick. The HUD counts absorption
+        // in that 4; this screen draws none, and a non-player's absorption never reaches the client.
+        this.shakeRandom.setSeed(person.tickCount * 312871L);
+        boolean heartsShake = Mth.ceil(health) <= 4;
         drawRow(blit, originX, originY + HEALTH_Y, hearts, HEART_CONTAINER,
-                i -> heartForeground(i, health, heartVariant));
+                i -> heartForeground(i, health, heartVariant), i -> null,
+                i -> heartsShake ? this.shakeRandom.nextInt(2) : 0);
 
         Identifier[] foodVariant = person.hasEffect(MobEffects.HUNGER) ? FOOD_HUNGER : FOOD_NORMAL;
         int food = getMenu().foodLevel();
         float saturation = getMenu().saturation();
-        // The HUD's hunger shake: once saturation is spent, every (food * 3 + 1) ticks each
-        // drumstick hops a pixel — every tick on an empty bar. Seeded per tick like the HUD, so
-        // every frame of a tick agrees.
-        boolean shake = saturation <= 0.0F && person.tickCount % (food * 3 + 1) == 0;
-        this.shakeRandom.setSeed(person.tickCount * 312871L);
+        // Once saturation is spent, every (food * 3 + 1) ticks each drumstick hops a pixel up or
+        // down — every tick on an empty bar.
+        boolean foodShakes = saturation <= 0.0F && person.tickCount % (food * 3 + 1) == 0;
         drawRow(blit, originX, originY + HUNGER_Y, VITAL_ICONS, foodVariant[2],
                 i -> foodForeground(i, food, foodVariant), i -> saturationOutline(i, saturation),
-                i -> shake ? this.shakeRandom.nextInt(3) - 1 : 0);
+                i -> foodShakes ? this.shakeRandom.nextInt(3) - 1 : 0);
     }
 
     private static void drawRow(SpriteBlitter blit, int originX, int rowY, int count,
