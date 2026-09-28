@@ -55,6 +55,18 @@ class PlanArgsTest {
     }
 
     @Test
+    void slowPlacesBlockByBlockAtFourTicksOrAsAsked() {
+        Diagnostics out = new Diagnostics();
+        assertEquals(0, PlanArgs.parse("east", out).slow());
+        assertEquals(PlanArgs.SLOW_TICKS, PlanArgs.parse("east slow", out).slow());
+        assertEquals(10, PlanArgs.parse("slow=10 beds=two", out).slow());
+        assertTrue(out.list().isEmpty(), out.list()::toString);
+        PlanArgs.parse("slow=0", out);
+        PlanArgs.parse("slow=fast", out);
+        assertEquals(List.of("slow_ticks", "slow_ticks"), codes(out));
+    }
+
+    @Test
     void anythingElseIsNamed() {
         Diagnostics out = new Diagnostics();
         PlanArgs.parse("up 1= =3 1=oak 1=spruce north south", out);
@@ -72,8 +84,8 @@ class PlanArgsTest {
     @Test
     void theHeadersRefuseWhatTheyForbid() {
         Diagnostics out = new Diagnostics();
-        assertNull(new PlanArgs(Map.of(), Map.of(), Facing.WEST, false).placement(bp("north east", true), out));
-        assertNull(new PlanArgs(Map.of(), Map.of(), null, true).placement(bp("all", false), out));
+        assertNull(new PlanArgs(Map.of(), Map.of(), Facing.WEST, false, 0).placement(bp("north east", true), out));
+        assertNull(new PlanArgs(Map.of(), Map.of(), null, true, 0).placement(bp("all", false), out));
         assertEquals(List.of("facing_refused", "flip_refused"), codes(out));
         assertFalse(out.list().get(0).message().contains("west,"), out.list().get(0).message());
     }

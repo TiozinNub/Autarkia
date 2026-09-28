@@ -28,10 +28,12 @@ import dev.luizloyola.autarkia.core.bp.PlanArgs;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Planner;
 import dev.luizloyola.autarkia.core.bp.Variants;
+import dev.luizloyola.autarkia.core.builder.BuildOrder;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
 import dev.luizloyola.autarkia.mod.bp.Captures;
+import dev.luizloyola.autarkia.mod.bp.SlowPlacements;
 import dev.luizloyola.autarkia.mod.bp.Blueprints.Entry;
 import dev.luizloyola.autarkia.mod.direction.Directions;
 import java.io.IOException;
@@ -104,6 +106,7 @@ public final class BlueprintCommands {
                         .executes(ctx -> capture(ctx, ""))
                         .then(Commands.argument("words", StringArgumentType.greedyString())
                                 .executes(ctx -> capture(ctx, StringArgumentType.getString(ctx, "words"))))))
+                .then(Commands.literal("stop").executes(BlueprintCommands::stop))
                 .then(Commands.literal("reload").executes(BlueprintCommands::reload))
                 .then(Commands.literal("dictionary").executes(BlueprintCommands::dictionary));
     }
@@ -379,7 +382,7 @@ public final class BlueprintCommands {
         }
         Diagnostics out = new Diagnostics();
         PlanArgs args = PlanArgs.parse(words, out);
-        if (args.facing() != null || args.flip()) {
+        if (args.facing() != null || args.flip() || args.slow() > 0) {
             Replies.fail(source, Component.translatable("autarkia.command.bp.bill.pins_only"));
             return 0;
         }
@@ -421,7 +424,51 @@ public final class BlueprintCommands {
             return 0;
         }
         BlockPos anchor = pos != null ? pos : BlockPos.containing(source.getPosition()).below();
+        if (args.slow() > 0) {
+            return placeSlowly(source, entry, anchor, plan, placement, args.slow());
+        }
         Placer.Result result = Placer.place(source.getLevel(), anchor, plan, placement);
+        if (refused(source, result)) {
+            return 0;
+        }
+        MutableComponent line = Component.translatable("autarkia.command.bp.place.done", entry.id(),
+                plan.version(), anchor.getX(), anchor.getY(), anchor.getZ(), placement.north().word(),
+                result.blocks(), result.cleared(), result.filled());
+        if (placement.flip()) {
+            line.append(Component.translatable("autarkia.command.bp.place.flipped"));
+        }
+        line.append(Component.literal(" — ")).append(bindings(plan));
+        Replies.send(source, () -> line, true);
+        return 1;
+    }
+
+    /**
+     * The ground at once, then the blocks a step at a time in the builder's proved order, so the
+     * order can be watched; the stand of each is painted beside it.
+     */
+    private static int placeSlowly(CommandSourceStack source, Entry entry, BlockPos anchor, BuildPlan plan,
+                                   Placement placement, int ticks) {
+        Placer.Result ground = Placer.groundwork(source.getLevel(), anchor, plan, placement);
+        if (refused(source, ground)) {
+            return 0;
+        }
+        BuildOrder.Result order = BuildOrder.prove(plan, Blueprints.dictionary());
+        SlowPlacements.start(source, entry.id().toString(), anchor, plan, placement, order.order(), ticks);
+        MutableComponent line = Component.translatable("autarkia.command.bp.place.slow.start", entry.id(),
+                anchor.getX(), anchor.getY(), anchor.getZ(), placement.north().word(), order.order().size(), ticks);
+        if (placement.flip()) {
+            line.append(Component.translatable("autarkia.command.bp.place.flipped"));
+        }
+        line.append(Component.literal(" — ")).append(bindings(plan));
+        Replies.send(source, () -> line, true);
+        if (!order.complete()) {
+            send(source, indent(Component.translatable("autarkia.command.bp.place.slow.unplaced",
+                    order.unplaced().size()).withStyle(ChatFormatting.YELLOW)));
+        }
+        return 1;
+    }
+
+    private static boolean refused(CommandSourceStack source, Placer.Result result) {
         switch (result.status()) {
             case UNLOADED -> Replies.fail(source, Component.translatable("autarkia.command.bp.place.unloaded"));
             case OUTSIDE_WORLD -> Replies.fail(source, Component.translatable("autarkia.command.bp.place.outside",
@@ -429,17 +476,16 @@ public final class BlueprintCommands {
             case UNKNOWN_STATE -> Replies.fail(source, Component.translatable("autarkia.command.bp.place.unknown",
                     result.detail()));
             case PLACED -> {
-                MutableComponent line = Component.translatable("autarkia.command.bp.place.done", entry.id(),
-                        plan.version(), anchor.getX(), anchor.getY(), anchor.getZ(), placement.north().word(),
-                        result.blocks(), result.cleared(), result.filled());
-                if (placement.flip()) {
-                    line.append(Component.translatable("autarkia.command.bp.place.flipped"));
-                }
-                line.append(Component.literal(" — ")).append(bindings(plan));
-                Replies.send(source, () -> line, true);
+                return false;
             }
         }
-        return result.status() == Placer.Status.PLACED ? 1 : 0;
+        return true;
+    }
+
+    private static int stop(CommandContext<CommandSourceStack> ctx) {
+        int stopped = SlowPlacements.stop();
+        Replies.send(ctx.getSource(), () -> Component.translatable("autarkia.command.bp.stop", stopped), true);
+        return stopped;
     }
 
     /** A command's chooser is random (reader spec): the bindings it prints are what to pin for a repeat. */

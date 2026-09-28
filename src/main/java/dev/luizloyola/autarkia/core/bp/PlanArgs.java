@@ -13,14 +13,20 @@ import org.jspecify.annotations.Nullable;
 /**
  * The words after a blueprint's id in {@code bp place} and {@code bp bill}, in any order: pins
  * ({@code 1=spruce}, commas or spaces between), variant pins ({@code beds=three},
- * {@code cellar=none}), a facing for the drawing's north edge, and {@code flip}.
+ * {@code cellar=none}), a facing for the drawing's north edge, {@code flip}, and {@code slow} or
+ * {@code slow=<ticks>} to place block by block in the builder's order.
  *
  * @param variants group to variant, or to {@code none} for an optional group left out
+ * @param slow     ticks between blocks, 0 to place at once
  */
 public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, @Nullable Facing facing,
-                       boolean flip) {
+                       boolean flip, int slow) {
 
-    public static final PlanArgs NONE = new PlanArgs(Map.of(), Map.of(), null, false);
+    public static final PlanArgs NONE = new PlanArgs(Map.of(), Map.of(), null, false, 0);
+
+    /** Five blocks a second: slow enough to follow, quick enough to watch a house go up. */
+    public static final int SLOW_TICKS = 4;
+    private static final int SLOWEST = 200;
 
     /** What a pin says to leave an optional group out. */
     public static final String NONE_VARIANT = "none";
@@ -35,6 +41,7 @@ public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, 
         Map<String, String> variants = new LinkedHashMap<>();
         Facing facing = null;
         boolean flip = false;
+        int slow = 0;
         for (String word : words.strip().split("[\\s,]+")) {
             if (word.isEmpty()) {
                 continue;
@@ -49,6 +56,15 @@ public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, 
                 facing = named;
             } else if (word.equals("flip")) {
                 flip = true;
+            } else if (word.equals("slow")) {
+                slow = SLOW_TICKS;
+            } else if (word.startsWith("slow=")) {
+                String ticks = word.substring("slow=".length());
+                slow = ticks.matches("[0-9]{1,3}") ? Integer.parseInt(ticks) : 0;
+                if (slow < 1 || slow > SLOWEST) {
+                    out.error("slow_ticks", 0, 0, "slow= takes the ticks between blocks, 1 to " + SLOWEST + ", not '"
+                            + ticks + "'");
+                }
             } else if (equals > 0 && word.substring(0, equals).matches("[0-9]+") && equals < word.length() - 1) {
                 int slot = Integer.parseInt(word.substring(0, equals));
                 String value = word.substring(equals + 1);
@@ -65,10 +81,10 @@ public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, 
                 }
             } else {
                 out.error("arg_unknown", 0, 0, "'" + word + "' is not a pin like 1=spruce or beds=two, a facing "
-                        + "(north, east, south, west) or flip");
+                        + "(north, east, south, west), flip or slow");
             }
         }
-        return new PlanArgs(pins, variants, facing, flip);
+        return new PlanArgs(pins, variants, facing, flip, slow);
     }
 
     /**

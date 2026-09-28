@@ -5,6 +5,8 @@ import dev.luizloyola.autarkia.core.bp.Blueprint.Outcome;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Support;
+import dev.luizloyola.autarkia.core.builder.Cell;
+import dev.luizloyola.autarkia.core.builder.Step;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -27,10 +29,10 @@ import net.minecraft.world.level.block.state.properties.Property;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Writes a {@link BuildPlan} into a level at once — {@code bp place}, for authoring. The builder
- * will place block by block instead. Every block turns by vanilla's own {@code mirror} then
- * {@code rotate}, in the order {@code StructureTemplate} uses; {@code ?} is left alone and
- * {@code ~} filled from the ground under it.
+ * Writes a {@link BuildPlan} into a level — {@code bp place}, for authoring: at once, or its ground
+ * first and then {@link #step} by step in the builder's order. Every block turns by vanilla's own
+ * {@code mirror} then {@code rotate}, in the order {@code StructureTemplate} uses; {@code ?} is left
+ * alone and {@code ~} filled from the ground under it.
  */
 public final class Placer {
 
@@ -70,6 +72,54 @@ public final class Placer {
 
     /** Nothing is written unless all of it can be: every chunk loaded, every state known. */
     public static Result place(ServerLevel level, BlockPos anchor, BuildPlan plan, Placement placement) {
+        return place(level, anchor, plan, placement, true);
+    }
+
+    /**
+     * What a slow placement starts from: every check {@link #place} makes, then the plan's clearing
+     * and its {@code ~} ground at once. The blocks follow, one {@link #step} at a time.
+     */
+    public static Result groundwork(ServerLevel level, BlockPos anchor, BuildPlan plan, Placement placement) {
+        return place(level, anchor, plan, placement, false);
+    }
+
+    /**
+     * One of the builder's steps, set as a player's placing sets it: a block, or a door's or a bed's
+     * two halves together. False, with nothing written, when a chunk it needs is unloaded.
+     */
+    public static boolean step(ServerLevel level, BlockPos anchor, BuildPlan plan, Placement placement, Step step) {
+        Mirror mirror = placement.flip() ? Mirror.FRONT_BACK : Mirror.NONE;
+        Rotation rotation = TURNS[placement.turns()];
+        List<Write> writes = new ArrayList<>();
+        for (int k = 0; k < step.cells().size(); k++) {
+            BlockPos pos = at(anchor, plan, placement, step.cells().get(k));
+            Optional<BlockState> state = resolve(step.states().get(k));
+            if (!level.isLoaded(pos) || state.isEmpty()) {
+                return false;
+            }
+            writes.add(new Write(pos, state.get().mirror(mirror).rotate(rotation)));
+        }
+        // As place's two passes, a step long: the neighbours reshape to what is set, then what is set
+        // to them. Both halves go in before either is shaped — a door's lower half alone shapes
+        // itself to air.
+        for (Write write : writes) {
+            level.setBlock(write.pos(), write.state(), Block.UPDATE_CLIENTS);
+        }
+        for (Write write : writes) {
+            shape(level, write.pos());
+        }
+        return true;
+    }
+
+    /** Where a cell of the drawing lands, the plan turned and mirrored as placed; cells outside it too. */
+    public static BlockPos at(BlockPos anchor, BuildPlan plan, Placement placement, Cell cell) {
+        int[] turned = placement.cell(cell.x(), cell.z(), plan.width(), plan.depth());
+        return anchor.offset(Placement.offset(turned[0], placement.width(plan.width(), plan.depth())), cell.layer(),
+                Placement.offset(turned[1], placement.depth(plan.width(), plan.depth())));
+    }
+
+    private static Result place(ServerLevel level, BlockPos anchor, BuildPlan plan, Placement placement,
+                                boolean blocks) {
         int width = placement.width(plan.width(), plan.depth());
         int depth = placement.depth(plan.width(), plan.depth());
         int minX = anchor.getX() + Placement.offset(0, width);
@@ -114,7 +164,7 @@ public final class Placer {
                     Optional<BlockState> block = resolved.computeIfAbsent(state, Placer::resolve);
                     if (block.isEmpty()) {
                         unknown[0] = state.block() + state.props();
-                    } else {
+                    } else if (blocks) {
                         writes.add(new Write(pos, block.get().mirror(mirror).rotate(rotation)));
                         counts[0]++;
                     }
@@ -127,16 +177,20 @@ public final class Placer {
         for (Write write : writes) {
             level.setBlock(write.pos(), write.state(), Block.UPDATE_CLIENTS);
         }
-        // StructureTemplate's second pass: fences join, stairs corner, and neighbours hear of it.
         for (Write write : writes) {
-            BlockState was = level.getBlockState(write.pos());
-            BlockState shaped = Block.updateFromNeighbourShapes(was, level, write.pos());
-            if (shaped != was) {
-                level.setBlock(write.pos(), shaped, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
-            }
-            level.updateNeighborsAt(write.pos(), shaped.getBlock());
+            shape(level, write.pos());
         }
         return new Result(Status.PLACED, counts[0], counts[1], counts[2], "");
+    }
+
+    /** StructureTemplate's second pass: fences join, stairs corner, and neighbours hear of it. */
+    private static void shape(ServerLevel level, BlockPos pos) {
+        BlockState was = level.getBlockState(pos);
+        BlockState shaped = Block.updateFromNeighbourShapes(was, level, pos);
+        if (shaped != was) {
+            level.setBlock(pos, shaped, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+        }
+        level.updateNeighborsAt(pos, shaped.getBlock());
     }
 
     private static Optional<BlockState> resolve(Outcome outcome) {
