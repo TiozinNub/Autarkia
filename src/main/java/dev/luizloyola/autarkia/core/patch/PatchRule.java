@@ -7,6 +7,7 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Recognises a clump of one scattered ground crop — one rule per crop, since a pumpkin's shape does
@@ -21,20 +22,21 @@ import java.util.Map;
  */
 public final class PatchRule implements GrowthRule {
 
-    public static final PatchRule PUMPKINS = new PatchRule(Patches.PUMPKIN, Patches.PUMPKINS);
-    public static final PatchRule MELONS = new PatchRule(Patches.MELON, Patches.MELONS);
-    public static final PatchRule CACTI = new PatchRule(Patches.CACTUS, Patches.CACTI);
-    public static final PatchRule CANE = new PatchRule(Patches.SUGAR_CANE, Patches.CANE);
-    public static final PatchRule BERRIES = new PatchRule(Patches.SWEET_BERRIES, Patches.BERRIES);
+    public static final PatchRule PUMPKINS = new PatchRule(Set.of(Patches.PUMPKIN), Patches.PUMPKINS);
+    public static final PatchRule MELONS = new PatchRule(Set.of(Patches.MELON), Patches.MELONS);
+    public static final PatchRule CACTI = new PatchRule(Set.of(Patches.CACTUS), Patches.CACTI);
+    public static final PatchRule CANE = new PatchRule(Set.of(Patches.SUGAR_CANE), Patches.CANE);
+    public static final PatchRule BERRIES = new PatchRule(
+            Set.of(Patches.SWEET_BERRIES, Patches.RIPE_SWEET_BERRIES), Patches.BERRIES);
 
     /** Every crop a settler knows to look for, in one list for the registrations to walk. */
     public static final List<PatchRule> ALL = List.of(PUMPKINS, MELONS, CACTI, CANE, BERRIES);
 
-    private final BlockKind seed;
+    private final Set<BlockKind> seeds;
     private final PoiKind kind;
 
-    private PatchRule(BlockKind seed, PoiKind kind) {
-        this.seed = seed;
+    private PatchRule(Set<BlockKind> seeds, PoiKind kind) {
+        this.seeds = seeds;
         this.kind = kind;
     }
 
@@ -43,14 +45,14 @@ public final class PatchRule implements GrowthRule {
         return this.kind;
     }
 
-    /** The block this one is about, for the registration that pairs the two. */
-    public BlockKind seed() {
-        return this.seed;
+    /** The blocks this one is about, for the registration that pairs them — a bush ripe or not. */
+    public Set<BlockKind> seeds() {
+        return this.seeds;
     }
 
     @Override
     public boolean joins(Pos p, BlockKind kind, BlockProbe probe) {
-        return kind == this.seed;
+        return this.seeds.contains(kind);
     }
 
     @Override

@@ -133,6 +133,14 @@ public class AutarkiaMod implements ModInitializer {
         // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
         // this world, not about having a mind, so it belongs here rather than in the library.
         Producers.register(Stock.LOGS, ChopForLogs::new);
+        // And where ready food comes from before anybody farms: a berry or melon patch. The act is
+        // declared here, not on first use, because the node table names it as it loads.
+        dev.luizloyola.autarkia.core.patch.Forage.ACT.key();
+        Producers.register(dev.luizloyola.anima.core.brain.task.ReadyFood.SPEC,
+                dev.luizloyola.autarkia.core.patch.Forage::new);
+        // Picking a bush is Autarkia's to know; Anima only lends the empty hand that does it.
+        dev.luizloyola.anima.mod.brain.BlockUses.register(
+                dev.luizloyola.autarkia.compat.forage.BerryPicking::pick);
         // And how Autarkia's own tasks write themselves down.
         dev.luizloyola.autarkia.mod.brain.AutarkiaTasks.install();
         // What "clear this area" means when the things in it are trees. The project knows only
@@ -189,7 +197,7 @@ public class AutarkiaMod implements ModInitializer {
         Patches.init();
         PatchBlocks.register();
         for (PatchRule rule : PatchRule.ALL) {
-            GrowthRules.register(rule.seed(), rule);
+            rule.seeds().forEach(seed -> GrowthRules.register(seed, rule));
             KnowledgeViewer.particle(rule.kind(), ParticleTypes.COMPOSTER);
         }
         // No right-click handler here any more: an empty-handed click is Anima's targeted hail

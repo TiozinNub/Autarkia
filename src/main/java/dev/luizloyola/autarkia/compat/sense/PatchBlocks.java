@@ -5,6 +5,7 @@ import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.autarkia.core.patch.Patches;
 import java.util.Optional;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.SweetBerryBushBlock;
 
 /**
  * How a settler tells a pumpkin from the rest of the world — the recognising half of
@@ -42,7 +43,9 @@ public final class PatchBlocks {
                 return Optional.of(Patches.SUGAR_CANE);
             }
             if (state.is(Blocks.SWEET_BERRY_BUSH)) {
-                return Optional.of(Patches.SWEET_BERRIES);
+                // Ripe is what a pick takes, and the berries are there to be seen.
+                return Optional.of(state.getValue(SweetBerryBushBlock.AGE) >= 2
+                        ? Patches.RIPE_SWEET_BERRIES : Patches.SWEET_BERRIES);
             }
             return Optional.empty();
         });

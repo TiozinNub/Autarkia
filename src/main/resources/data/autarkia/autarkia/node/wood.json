@@ -9,5 +9,5 @@
     {"line": "storage", "count": 9}
   ],
   "items": ["#autarkia:node/wood"],
-  "acts": []
+  "acts": ["autarkia:forage"]
 }

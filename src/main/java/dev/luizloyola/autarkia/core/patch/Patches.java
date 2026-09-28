@@ -42,6 +42,12 @@ public final class Patches {
     public static final BlockKind SWEET_BERRIES = BlockKind.register("sweet_berries");
 
     /**
+     * A sweet berry bush with berries on it — age 2 or more, what a pick takes. The same patch as
+     * {@link #SWEET_BERRIES}, told apart because the berries are there to be seen.
+     */
+    public static final BlockKind RIPE_SWEET_BERRIES = BlockKind.register("ripe_sweet_berries");
+
+    /**
      * Somewhere pumpkins grow. Merge radius 12 — wide enough that one worldgen patch is one
      * memory however its blocks are strewn (the spread is 7 either way from a centre, so two
      * blocks of the same patch are at most 14 apart, and a clump met from either end lands

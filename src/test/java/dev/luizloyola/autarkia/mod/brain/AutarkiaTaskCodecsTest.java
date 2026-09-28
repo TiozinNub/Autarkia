@@ -111,6 +111,18 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void aTripToAPatchSurvivesTheFile() {
+        var before = new dev.luizloyola.autarkia.core.patch.PickPatch(
+                dev.luizloyola.autarkia.core.patch.Patches.MELONS, new Pos(40, 70, -12));
+
+        var after = assertInstanceOf(dev.luizloyola.autarkia.core.patch.PickPatch.class,
+                roundTrip(before));
+
+        assertEquals(dev.luizloyola.autarkia.core.patch.Patches.MELONS, after.kind());
+        assertEquals(before.anchor(), after.anchor());
+    }
+
+    @Test
     void aGatheringErrandSurvivesTheFile() {
         // A declared spec travels as its registry NAME: its matcher is a lambda, and a trip
         // reloaded against the wrong one would fetch nothing and never satisfy.

@@ -4,12 +4,14 @@ import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
 import dev.luizloyola.autarkia.core.board.GatheringErrand;
-import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
+import dev.luizloyola.autarkia.core.board.KeepStocked;
+import dev.luizloyola.autarkia.core.patch.PickPatch;
 import dev.luizloyola.autarkia.core.tree.Climb;
 import dev.luizloyola.autarkia.core.tree.FellTree;
 import java.util.HashSet;
@@ -100,7 +102,19 @@ public final class AutarkiaTasks {
                         Codec.INT.fieldOf("count").forGetter(GatheringErrand::count),
                         POS.fieldOf("yard").forGetter(GatheringErrand::yard)
                 ).apply(t, GatheringErrand::new)));
+        // A forage trip's work at the patch. Registered the day it was written, like the rest.
+        TaskCodecs.register("autarkia:pick_patch", PickPatch.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POI_KIND.fieldOf("kind").forGetter(PickPatch::kind),
+                        POS.fieldOf("anchor").forGetter(PickPatch::anchor)
+                ).apply(t, PickPatch::new)));
     }
+
+    /** By key, guarded like the stage: a kind nobody registered is an error, never a new kind. */
+    private static final Codec<PoiKind> POI_KIND = Codec.STRING.comapFlatMap(
+            key -> PoiKind.byKey(key).map(DataResult::success)
+                    .orElseGet(() -> DataResult.error(() -> "no place kind is keyed \"" + key + "\"")),
+            PoiKind::key);
 
     /**
      * A class of items, in the two shapes a spec can have — the same fork {@code AnimaTasks} uses,

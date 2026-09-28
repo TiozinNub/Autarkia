@@ -41,7 +41,7 @@ class PatchRuleTest {
     @BeforeEach
     void registerWhatGrows() {
         for (PatchRule rule : PatchRule.ALL) {
-            GrowthRules.register(rule.seed(), rule);
+            rule.seeds().forEach(seed -> GrowthRules.register(seed, rule));
         }
     }
 
@@ -59,6 +59,18 @@ class PatchRuleTest {
         assertFalse(PatchRule.PUMPKINS.joins(HERE, Patches.CACTUS, probe));
         assertFalse(PatchRule.PUMPKINS.joins(HERE, BlockKind.OTHER, probe));
         assertEquals(Patches.PUMPKINS, PatchRule.PUMPKINS.kind());
+    }
+
+    @Test
+    @DisplayName("a ripe bush and a bare one are the same patch")
+    void aRipeBushAndABareOneAreOnePatch() {
+        FakeProbe probe = new FakeProbe();
+
+        assertTrue(PatchRule.BERRIES.joins(HERE, Patches.SWEET_BERRIES, probe));
+        assertTrue(PatchRule.BERRIES.joins(HERE, Patches.RIPE_SWEET_BERRIES, probe),
+                "berries on a bush do not make it a different patch");
+        assertEquals(PatchRule.BERRIES, GrowthRules.forSeed(Patches.RIPE_SWEET_BERRIES).orElseThrow(),
+                "and a ripe bush seen alone starts one");
     }
 
     @Test
