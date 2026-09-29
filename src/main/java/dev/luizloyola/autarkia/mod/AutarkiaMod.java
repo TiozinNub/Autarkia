@@ -186,6 +186,7 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.mod.bp.Blueprints.init();
         dev.luizloyola.autarkia.mod.bp.Captures.init();
         dev.luizloyola.autarkia.mod.bp.SlowPlacements.init();
+        dev.luizloyola.autarkia.mod.bp.SectionViews.init();
         StoreGuard.guard("directions", dev.luizloyola.autarkia.mod.direction.DirectionsData.ID,
                 dev.luizloyola.autarkia.mod.direction.DirectionsData::get);
         // Teach the debug wand what a block MEANS to a settler — Anima's wand can point at

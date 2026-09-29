@@ -29,10 +29,14 @@ import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Planner;
 import dev.luizloyola.autarkia.core.bp.Variants;
 import dev.luizloyola.autarkia.core.builder.BuildOrder;
+import dev.luizloyola.autarkia.core.builder.Section;
+import dev.luizloyola.autarkia.core.builder.Sections;
+import dev.luizloyola.autarkia.core.builder.Step;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
 import dev.luizloyola.autarkia.mod.bp.Captures;
+import dev.luizloyola.autarkia.mod.bp.SectionViews;
 import dev.luizloyola.autarkia.mod.bp.SlowPlacements;
 import dev.luizloyola.autarkia.mod.bp.Blueprints.Entry;
 import dev.luizloyola.autarkia.mod.direction.Directions;
@@ -42,8 +46,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -101,6 +107,19 @@ public final class BlueprintCommands {
                                             BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
                                             String words = StringArgumentType.getString(ctx, "words");
                                             return withEntry(ctx, (source, entry) -> place(source, entry, pos, words));
+                                        })))))
+                .then(Commands.literal("sections").then(id((source, entry) -> sections(source, entry, null, ""))
+                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .executes(ctx -> {
+                                    BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+                                    return withEntry(ctx, (source, entry) -> sections(source, entry, pos, ""));
+                                })
+                                .then(Commands.argument("words", StringArgumentType.greedyString())
+                                        .executes(ctx -> {
+                                            BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+                                            String words = StringArgumentType.getString(ctx, "words");
+                                            return withEntry(ctx, (source, entry) -> sections(source, entry, pos,
+                                                    words));
                                         })))))
                 .then(Commands.literal("capture").then(Commands.argument("name", IdentifierArgument.id())
                         .executes(ctx -> capture(ctx, ""))
@@ -484,8 +503,73 @@ public final class BlueprintCommands {
 
     private static int stop(CommandContext<CommandSourceStack> ctx) {
         int stopped = SlowPlacements.stop();
-        Replies.send(ctx.getSource(), () -> Component.translatable("autarkia.command.bp.stop", stopped), true);
-        return stopped;
+        int cleared = SectionViews.clear(ctx.getSource().getServer());
+        Replies.send(ctx.getSource(), () -> Component.translatable("autarkia.command.bp.stop", stopped, cleared),
+                true);
+        return stopped + cleared;
+    }
+
+    /**
+     * The plan's sections painted where {@code bp place} would put it, a colour each, for a minute;
+     * section names among the words show only those, through whatever stands in front of them.
+     */
+    private static int sections(CommandSourceStack source, Entry entry, @Nullable BlockPos pos, String words) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.sections.player"));
+            return 0;
+        }
+        Blueprint bp = entry.compiled().blueprint();
+        if (bp == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.broken", entry.id()));
+            return 0;
+        }
+        Set<Section> only = EnumSet.noneOf(Section.class);
+        List<String> rest = new ArrayList<>();
+        for (String word : words.strip().split("\\s+")) {
+            Section named = Arrays.stream(Section.values()).filter(s -> s.name().equalsIgnoreCase(word)).findFirst()
+                    .orElse(null);
+            if (named != null) {
+                only.add(named);
+            } else {
+                rest.add(word);
+            }
+        }
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse(String.join(" ", rest), out);
+        Placement placement = out.hasErrors() ? null : args.placement(bp, out);
+        if (placement == null) {
+            failed(source, entry, out);
+            return 0;
+        }
+        BuildPlan plan = plan(source, entry, bp, args, out);
+        if (plan == null) {
+            return 0;
+        }
+        BlockPos anchor = pos != null ? pos : BlockPos.containing(source.getPosition()).below();
+        Map<Section, List<BlockPos>> cells = new EnumMap<>(Section.class);
+        for (Step step : Sections.of(plan, Blueprints.dictionary())) {
+            if (only.isEmpty() || only.contains(step.section())) {
+                for (dev.luizloyola.autarkia.core.builder.Cell cell : step.cells()) {
+                    cells.computeIfAbsent(step.section(), s -> new ArrayList<>())
+                            .add(Placer.at(anchor, plan, placement, cell));
+                }
+            }
+        }
+        SectionViews.show(player, cells, !only.isEmpty());
+        send(source, Component.translatable("autarkia.command.bp.sections.header", entry.id(), anchor.getX(),
+                anchor.getY(), anchor.getZ(), placement.north().word()).withStyle(ChatFormatting.LIGHT_PURPLE));
+        MutableComponent legend = Component.empty();
+        cells.forEach((section, at) -> {
+            if (!legend.getSiblings().isEmpty()) {
+                legend.append(Component.literal(" · ").withStyle(ChatFormatting.GRAY));
+            }
+            int colour = SectionViews.colour(section) & 0xFFFFFF;
+            legend.append(Component.translatable("autarkia.command.bp.sections.entry",
+                    Component.translatable("autarkia.builder.section." + section.name().toLowerCase(Locale.ROOT)),
+                    at.size()).withStyle(style -> style.withColor(colour)));
+        });
+        send(source, indent(legend));
+        return 1;
     }
 
     /** A command's chooser is random (reader spec): the bindings it prints are what to pin for a repeat. */
