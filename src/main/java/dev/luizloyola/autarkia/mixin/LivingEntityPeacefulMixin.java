@@ -1,8 +1,9 @@
 package dev.luizloyola.autarkia.mixin;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import com.llamalad7.mixinextras.sugar.Local;
 import dev.luizloyola.autarkia.mod.entity.Person;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -14,9 +15,10 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityPeacefulMixin {
 
-    @WrapOperation(method = "canAttack(Lnet/minecraft/world/entity/LivingEntity;)Z",
-            at = @At(value = "CONSTANT", args = "classValue=net/minecraft/world/entity/player/Player"))
-    private boolean autarkia$aPersonToo(Object target, Operation<Boolean> original) {
-        return original.call(target) || target instanceof Person;
+    @ModifyReturnValue(method = "canAttack(Lnet/minecraft/world/entity/LivingEntity;)Z", at = @At("RETURN"))
+    private boolean autarkia$sparedOnPeaceful(boolean original,
+                                              @Local(argsOnly = true) LivingEntity target) {
+        return original && !(target instanceof Person
+                && ((LivingEntity) (Object) this).level().getDifficulty() == Difficulty.PEACEFUL);
     }
 }
