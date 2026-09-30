@@ -11,5 +11,5 @@
     {"line": "food", "count": 32}
   ],
   "items": ["#autarkia:node/wood"],
-  "acts": ["autarkia:forage"]
+  "acts": ["autarkia:forage", "autarkia:hunt"]
 }

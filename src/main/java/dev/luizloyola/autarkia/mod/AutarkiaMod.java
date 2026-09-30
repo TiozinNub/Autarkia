@@ -147,6 +147,10 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.core.patch.Forage.ACT.key();
         Producers.register(dev.luizloyola.anima.core.brain.task.ReadyFood.SPEC,
                 dev.luizloyola.autarkia.core.patch.Forage::new);
+        // And by hunting, which competes with foraging on price (directions spec, decision 17).
+        dev.luizloyola.autarkia.core.person.Hunting.ACT.key();
+        Producers.register(dev.luizloyola.anima.core.brain.task.ReadyFood.SPEC,
+                dev.luizloyola.autarkia.core.person.Hunting::create);
         // Picking a bush is Autarkia's to know; Anima only lends the empty hand that does it.
         dev.luizloyola.anima.mod.brain.BlockUses.register(
                 dev.luizloyola.autarkia.compat.forage.BerryPicking::pick);
