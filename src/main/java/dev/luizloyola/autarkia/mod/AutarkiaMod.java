@@ -145,11 +145,16 @@ public class AutarkiaMod implements ModInitializer {
         // And where ready food comes from before anybody farms: a berry or melon patch. The act is
         // declared here, not on first use, because the node table names it as it loads.
         dev.luizloyola.autarkia.core.patch.Forage.ACT.key();
+        // Under both specs: berries are ready, so a hungry body forages for a meal as well as for
+        // the party's stores.
         Producers.register(dev.luizloyola.anima.core.brain.task.ReadyFood.SPEC,
                 dev.luizloyola.autarkia.core.patch.Forage::new);
-        // And by hunting, which competes with foraging on price (directions spec, decision 17).
+        Producers.register(dev.luizloyola.anima.core.brain.task.Food.SPEC,
+                dev.luizloyola.autarkia.core.patch.Forage::new);
+        // And by hunting, under food alone: raw meat is not a meal, so the party's need for food is
+        // what sends a Person hunting — or starving (directions spec, decisions 16 and 17).
         dev.luizloyola.autarkia.core.person.Hunting.ACT.key();
-        Producers.register(dev.luizloyola.anima.core.brain.task.ReadyFood.SPEC,
+        Producers.register(dev.luizloyola.anima.core.brain.task.Food.SPEC,
                 dev.luizloyola.autarkia.core.person.Hunting::create);
         // Picking a bush is Autarkia's to know; Anima only lends the empty hand that does it.
         dev.luizloyola.anima.mod.brain.BlockUses.register(

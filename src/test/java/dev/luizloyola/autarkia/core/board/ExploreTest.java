@@ -224,7 +224,7 @@ class ExploreTest {
             }
 
             @Override
-            public OptionalInt readyFoodAtHome() {
+            public OptionalInt foodAtHome() {
                 return OptionalInt.empty();
             }
         };

@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
-import dev.luizloyola.anima.core.brain.task.ReadyFood;
+import dev.luizloyola.anima.core.brain.task.Food;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.CarrySplit;
@@ -56,7 +56,7 @@ class FoodLineTest {
         }
 
         @Override
-        public OptionalInt readyFoodAtHome() {
+        public OptionalInt foodAtHome() {
             return points;
         }
 
@@ -106,7 +106,7 @@ class FoodLineTest {
 
         Gather gather = assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4));
 
-        assertEquals(ReadyFood.SPEC, gather.spec());
+        assertEquals(Food.SPEC, gather.spec());
         assertEquals(YARD, gather.yard());
         assertEquals(10 + 28, gather.target(),
                 "56 points short at two a berry is 28 more items on top of the 10 there");

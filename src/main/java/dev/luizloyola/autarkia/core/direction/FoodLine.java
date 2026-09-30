@@ -1,6 +1,6 @@
 package dev.luizloyola.autarkia.core.direction;
 
-import dev.luizloyola.anima.core.brain.task.ReadyFood;
+import dev.luizloyola.anima.core.brain.task.Food;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.CarrySplit;
 import dev.luizloyola.autarkia.core.board.Gather;
@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * {@code food}: HOME's stores hold ready food worth at least {@code count} hunger points a member —
+ * {@code food}: HOME's stores hold food, raw or ready (decision 16), worth at least {@code count} hunger points a member —
  * 32 (four steaks, seven bread) by decision 13 of {@code 2026-09-24-directions-design.md}. Per
  * member, so a party of twenty is not fed by a goal meant for three.
  *
@@ -34,7 +34,7 @@ public final class FoodLine implements DirectionLine {
 
     @Override
     public Optional<ItemSpec> seeks() {
-        return Optional.of(ReadyFood.SPEC);
+        return Optional.of(Food.SPEC);
     }
 
     @Override
@@ -50,7 +50,7 @@ public final class FoodLine implements DirectionLine {
         if (!party.baseReady()) {
             return Status.NO_BASE;
         }
-        OptionalInt points = party.readyFoodAtHome();
+        OptionalInt points = party.foodAtHome();
         if (points.isEmpty()) {
             return Status.UNREAD;
         }
@@ -61,16 +61,16 @@ public final class FoodLine implements DirectionLine {
 
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        return project instanceof Gather gather && gather.spec() == ReadyFood.SPEC
+        return project instanceof Gather gather && gather.spec() == Food.SPEC
                 && party.home().map(home -> home.yard().equals(gather.yard())).orElse(false);
     }
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        int shortfall = Math.max(0, wanted(direction, party) - party.readyFoodAtHome().orElse(0));
-        int target = party.storedAtHome(ReadyFood.SPEC).orElse(0)
+        int shortfall = Math.max(0, wanted(direction, party) - party.foodAtHome().orElse(0));
+        int target = party.storedAtHome(Food.SPEC).orElse(0)
                 + (shortfall + POINTS_PER_ITEM - 1) / POINTS_PER_ITEM;
-        return new Gather(ReadyFood.SPEC, Math.max(1, target), party.home().orElseThrow().yard(),
+        return new Gather(Food.SPEC, Math.max(1, target), party.home().orElseThrow().yard(),
                 priority, party.party(), CarrySplit.INSTANCE);
     }
 

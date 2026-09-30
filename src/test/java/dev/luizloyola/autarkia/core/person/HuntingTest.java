@@ -14,6 +14,7 @@ import dev.luizloyola.anima.core.brain.sense.Yields;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.FakePercepts;
 import dev.luizloyola.anima.core.brain.task.Fight;
+import dev.luizloyola.anima.core.brain.task.Food;
 import dev.luizloyola.anima.core.brain.task.ReadyFood;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import java.util.List;
@@ -68,7 +69,7 @@ class HuntingTest {
         BeingId cow = BeingId.of(UUID.randomUUID());
         ctx.percepts.beings = List.of(FakePercepts.animalAt(cow, "cow", new Pos(6, 64, 0), 6.0));
 
-        assertInstanceOf(Fight.class, Hunting.create(ReadyFood.SPEC).decompose(ctx).get(0));
+        assertInstanceOf(Fight.class, Hunting.create(Food.SPEC).decompose(ctx).get(0));
     }
 
     @Test
@@ -82,7 +83,7 @@ class HuntingTest {
 
     @Test
     void aBodyTheGateKeepsFromHuntingDoesNot() {
-        assertTrue(Hunting.create(ReadyFood.SPEC).applicable(ctx), "nothing known: it would go looking");
+        assertTrue(Hunting.create(Food.SPEC).applicable(ctx), "nothing known: it would go looking");
         Gate.install(new Gate.Policy() {
             @Override
             public Optional<String> refuseItem(AgentId body, String itemId) {
@@ -96,6 +97,6 @@ class HuntingTest {
         });
         ctx.gate = Gate.viewFor(ctx.self, ctx.journal());
 
-        assertFalse(Hunting.create(ReadyFood.SPEC).applicable(ctx));
+        assertFalse(Hunting.create(Food.SPEC).applicable(ctx));
     }
 }

@@ -77,7 +77,7 @@ class BaseAndStorageTest {
         }
 
         @Override
-        public OptionalInt readyFoodAtHome() {
+        public OptionalInt foodAtHome() {
             return OptionalInt.of(0);
         }
     }

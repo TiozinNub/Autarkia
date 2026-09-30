@@ -18,8 +18,8 @@ import java.util.Optional;
 
 /**
  * Where ready food comes from before anybody farms: a remembered patch of berries or melons.
- * Registered under {@code ReadyFood.SPEC}, so a meal and a gather for HOME's stores both reach it
- * through {@code ObtainItem}.
+ * Registered under {@code ReadyFood.SPEC} and {@code Food.SPEC}, so a meal and a gather for HOME's
+ * stores both reach it through {@code ObtainItem}.
  *
  * <p>A trip goes to the nearest patch that yields what is wanted, that nobody else is working and
  * this body has not been to lately, and picks what is ripe there — {@link PickPatch} looks on
