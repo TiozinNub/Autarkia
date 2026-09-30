@@ -110,7 +110,7 @@ public final class TreeShape {
         for (Pos log : logs) {
             Pos below = new Pos(log.x(), log.y() - 1, log.z());
             if (logs.contains(below)
-                    || probe.at(below.x(), below.y(), below.z()) != BlockKind.OTHER) {
+                    || !probe.at(below.x(), below.y(), below.z()).ground()) {
                 continue; // not standing on real ground: no stump candidate
             }
             grounded.add(log);
@@ -322,7 +322,7 @@ public final class TreeShape {
         while (logs.contains(below)) {
             below = new Pos(below.x(), below.y() - 1, below.z());
         }
-        return probe.at(below.x(), below.y(), below.z()) == BlockKind.OTHER;
+        return probe.at(below.x(), below.y(), below.z()).ground();
     }
 
     /**

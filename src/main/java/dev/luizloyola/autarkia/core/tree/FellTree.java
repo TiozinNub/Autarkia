@@ -1249,7 +1249,7 @@ public final class FellTree implements PrimitiveTask {
         int floor = box.min().y() - 1;
         for (int x = box.min().x(); x <= box.max().x(); x++) {
             for (int z = box.min().z(); z <= box.max().z(); z++) {
-                if (blocks.at(x, floor, z) == BlockKind.OTHER && !leaf(blocks, x, floor, z)) {
+                if (blocks.at(x, floor, z).ground() && !leaf(blocks, x, floor, z)) {
                     return true;
                 }
             }

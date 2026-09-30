@@ -19,6 +19,7 @@ import dev.luizloyola.autarkia.core.direction.HomeJudge.Keep;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.KeepColumns;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Refusal;
 import dev.luizloyola.autarkia.core.direction.HomeKnob;
+import dev.luizloyola.autarkia.core.patch.Landmarks;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Known;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Table;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Want;
@@ -26,7 +27,6 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -39,8 +39,9 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  */
 public final class HomeChooser {
 
-    /** Where each want the eyes supply is remembered, by the kind's key. */
-    private static final Map<Want, String> KINDS = Map.of(Want.STONE, "stone", Want.BEE, "bee");
+    /** Where each want the eyes supply is remembered. */
+    private static final Map<Want, PoiKind> KINDS =
+            Map.of(Want.STONE, Landmarks.STONE_POI, Want.BEE, Landmarks.BEES);
 
     /** Every allowed plot within the read radius of the centre, best first, and the table used. */
     public record Choice(Table table, Judgement judgement) {
@@ -116,16 +117,12 @@ public final class HomeChooser {
     /** What the settler remembers or has glimpsed of each want its eyes supply. */
     static Map<Want, List<Known>> known(AgentKnowledge knowledge) {
         Map<Want, List<Known>> out = new EnumMap<>(Want.class);
-        KINDS.forEach((want, key) -> {
-            Optional<PoiKind> kind = PoiKind.byKey(key);
-            if (kind.isEmpty()) {
-                return;
-            }
+        KINDS.forEach((want, kind) -> {
             List<Known> each = new ArrayList<>();
-            for (PoiMemory memory : knowledge.all(kind.get())) {
+            for (PoiMemory memory : knowledge.all(kind)) {
                 each.add(new Known(memory.anchor().x(), memory.anchor().z(), memory.units()));
             }
-            for (Sighting sighting : knowledge.glimpses(kind.get())) {
+            for (Sighting sighting : knowledge.glimpses(kind)) {
                 each.add(new Known(sighting.at().x(), sighting.at().z(), Known.GLIMPSED));
             }
             out.put(want, each);

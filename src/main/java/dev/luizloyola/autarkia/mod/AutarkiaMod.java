@@ -39,6 +39,10 @@ import dev.luizloyola.autarkia.core.tree.Pois;
 import dev.luizloyola.autarkia.core.tree.TreeClearing;
 import dev.luizloyola.autarkia.core.tree.TreeRule;
 import dev.luizloyola.autarkia.core.tree.WaterRule;
+import dev.luizloyola.autarkia.core.patch.Landmarks;
+import dev.luizloyola.autarkia.core.patch.NestRule;
+import dev.luizloyola.autarkia.core.patch.StoneRule;
+import dev.luizloyola.autarkia.compat.sense.LandmarkBlocks;
 import net.minecraft.core.particles.ParticleTypes;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
 import dev.luizloyola.autarkia.mod.person.PersonAppearance;
@@ -210,6 +214,13 @@ public class AutarkiaMod implements ModInitializer {
             rule.seeds().forEach(seed -> GrowthRules.register(seed, rule));
             KnowledgeViewer.particle(rule.kind(), ParticleTypes.COMPOSTER);
         }
+        // And what makes a place worth living in, for the HOME search: stone and bee nests.
+        Landmarks.init();
+        LandmarkBlocks.register();
+        GrowthRules.register(Landmarks.STONE, StoneRule.INSTANCE);
+        GrowthRules.register(Landmarks.BEE_NEST, NestRule.INSTANCE);
+        KnowledgeViewer.particle(Landmarks.STONE_POI, ParticleTypes.CRIT);
+        KnowledgeViewer.particle(Landmarks.BEES, ParticleTypes.WAX_ON);
         // No right-click handler here any more: an empty-handed click is Anima's targeted hail
         // since social rung 7, and the inventory it used to open moved to `/anima inv see`
         // (decision: Luiz, 2026-08-04). What is left for us is Person.showInventory, the screen

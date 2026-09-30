@@ -304,7 +304,7 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
 
     /** Whether a body's feet can rest on this — leaves deliberately not: they are cleared, not stood on. */
     static boolean holds(BlockKind kind) {
-        return kind == BlockKind.OTHER || kind == BlockKind.LOG;
+        return kind.ground() || kind == BlockKind.LOG;
     }
 
     /** One side's verdict: the vertical look described on the class. */
@@ -317,11 +317,11 @@ public record Approach(Pos anchor, boolean standing, List<Pos> base, List<Side> 
             return refused(cell, here, farther);
         }
         int feetY;
-        if (here == BlockKind.OTHER) {
+        if (here.ground()) {
             // Solid: climb until the column opens, or it is a wall.
             int y = ground + 1;
             BlockKind top;
-            while ((top = probe.at(x, y, z)) == BlockKind.OTHER) {
+            while ((top = probe.at(x, y, z)).ground()) {
                 if (y - ground >= REACH) {
                     return new Side(cell, Verdict.TOO_HIGH, null, List.of(), false, farther);
                 }
