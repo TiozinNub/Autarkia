@@ -166,7 +166,8 @@ public final class AutarkiaCommands {
                         // and a work ledger are facts about being a settler, not about thinking.
                         List.of(AgentCommands::select, AgentCommands::contacts, AgentCommands::party,
                                 AgentCommands::places, AgentCommands::nav, AgentCommands::follow,
-                                () -> AgentCommands.brain().then(chop()).then(obtain(registryAccess)),
+                                () -> AgentCommands.brain().then(AgentCommands.place(registryAccess)).then(chop())
+                                        .then(obtain(registryAccess)),
                                 AgentCommands::think, AgentCommands::log, AgentCommands::knowledge,
                                 AgentCommands::horizon, AgentCommands::survey, AgentCommands::claims,
                                 AgentCommands::peers, AgentCommands::needs, AgentCommands::history,
