@@ -69,6 +69,17 @@ class StandingWantsTest {
                 "torches are spent, not carried — one is not a supply");
     }
 
+    @Test
+    void oneSwordIsKeptOfAnyMaterialBelowTheWorkingTools() {
+        List<ItemCall> calls = StandingWants.settlerDefaults().reserved();
+        int sword = rankOf(calls, "minecraft:iron_sword");
+
+        assertEquals(sword, rankOf(calls, "minecraft:wooden_sword"));
+        assertEquals(1, calls.get(sword).count());
+        assertTrue(rankOf(calls, "minecraft:stone_shovel") < sword, "work before a fight");
+        assertTrue(sword < rankOf(calls, "minecraft:torch"));
+    }
+
     /** Last, so it is the first thing a full pack gives up; kept, never sought. */
     @Test
     void aStackToBridgeWithIsKeptBelowEveryTool() {

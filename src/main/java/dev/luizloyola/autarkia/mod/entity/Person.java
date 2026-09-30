@@ -51,6 +51,7 @@ import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentStriker;
+import dev.luizloyola.anima.mod.brain.AgentWardrobe;
 import dev.luizloyola.anima.mod.brain.AgentLeaner;
 import dev.luizloyola.anima.mod.brain.AgentRiser;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
@@ -381,6 +382,7 @@ public class Person extends Avatar implements AgentBody {
      */
     private final AgentBlockBreaker blockBreaker = new AgentBlockBreaker(this);
     private final AgentStriker striker = new AgentStriker(this);
+    private final AgentWardrobe wardrobe = new AgentWardrobe(this);
     private final AgentRiser riser = new AgentRiser(this);
     private final AgentLeaner leaner = new AgentLeaner(this);
     /**
@@ -673,6 +675,8 @@ public class Person extends Avatar implements AgentBody {
         this.striker.tick();
         // The brain decides first, then the Navigator (below) executes locomotion the same tick.
         this.brain.tick();
+        // Armour after the brain: a hand change it asked for this tick comes first.
+        this.wardrobe.tick();
         // The working arm advances after the brain, so a break begun this tick gains its first
         // progress this tick — same-tick actuation, like the navigator below.
         this.blockBreaker.tick();

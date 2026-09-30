@@ -41,6 +41,9 @@ public final class StandingWants implements PersonalProject {
                 ItemCall.need(family("axe"), 1),
                 ItemCall.need(family("pickaxe"), 1),
                 ItemCall.need(family("shovel"), 1),
+                // Kept, never sought, whatever the age: a sword found is a sword carried. Armour
+                // needs no call — worn, it is not in the pack for the stow machinery to take.
+                ItemCall.want(family("sword"), 1),
                 ItemCall.need(ItemSpec.anyOf(Set.of("minecraft:torch")), 64),
                 ItemCall.want(ItemSpec.anyOf(Set.of("minecraft:shears")), 1),
                 ItemCall.want(ItemSpec.anyOf(Set.of("minecraft:flint_and_steel")), 1),
