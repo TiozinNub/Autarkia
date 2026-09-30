@@ -3,10 +3,23 @@
   "package": "dev.luizloyola.autarkia.mixin",
   "compatibilityLevel": "${java}",
   "mixins": [
+    "BreezeMixin",
+    "CreakingAiMixin",
+    "CreakingMixin",
+    "CubeMobContactMixin",
+    "GuardianSelectorMixin",
+    "HoglinAiMixin",
+    "LivingEntityPeacefulMixin",
     "LivingEntitySwingAccess",
+    "MobTargetSelectorAccessor",
     "NearestAttackableTargetGoalMixin",
+    "PhantomGoalsMixin",
+    "PiglinAiMixin",
+    "PiglinBruteAiMixin",
     "ServerLevelCrackMixin",
-    "TargetGoalAccessor"
+    "TargetGoalAccessor",
+    "WardenAngerSorterMixin",
+    "WardenMixin"
   ],
   "injectors": {
     "defaultRequire": 1
