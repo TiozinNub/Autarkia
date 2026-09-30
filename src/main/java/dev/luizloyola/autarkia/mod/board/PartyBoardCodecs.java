@@ -314,12 +314,15 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(Explore.State::lastTick),
                     UUIDUtil.CODEC.listOf().optionalFieldOf("companions", List.of())
                             .forGetter(state -> state.companions().stream().map(AgentId::value).toList()),
+                    UUIDUtil.CODEC.listOf().optionalFieldOf("accompanying", List.of())
+                            .forGetter(state -> state.accompanying().stream().map(AgentId::value).toList()),
                     Codec.BOOL.optionalFieldOf("gathered", false).forGetter(Explore.State::gathered),
                     Codec.LONG.optionalFieldOf("step_since", 0L).forGetter(Explore.State::stepSince)
-            ).apply(project, (party, priority, search, scout, cooldowns, lastTick, companions, gathered,
-                    stepSince) -> new Explore.State(PartyId.of(party), priority, search,
-                    scout.map(AgentId::of), cooldowns, lastTick,
-                    companions.stream().map(AgentId::of).toList(), gathered, stepSince)));
+            ).apply(project, (party, priority, search, scout, cooldowns, lastTick, companions,
+                    accompanying, gathered, stepSince) -> new Explore.State(PartyId.of(party), priority,
+                    search, scout.map(AgentId::of), cooldowns, lastTick,
+                    companions.stream().map(AgentId::of).toList(),
+                    accompanying.stream().map(AgentId::of).toList(), gathered, stepSince)));
 
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this

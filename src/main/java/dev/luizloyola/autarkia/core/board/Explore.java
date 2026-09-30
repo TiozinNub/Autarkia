@@ -67,6 +67,13 @@ public final class Explore implements PartyProject {
     /** Each companion's own item, minted when they take the offer to keep with the scout. */
     private final Map<AgentId, Accompany> accompanying = new LinkedHashMap<>();
 
+    /**
+     * Who has come along, whether or not they hold an item this moment: a companion's item ends
+     * each time the scout stops beside it, and it takes the offer again when the scout sets off.
+     * The stop's wait is for these. Only a failure or a lapsed hold drops one.
+     */
+    private final Set<AgentId> companions = new LinkedHashSet<>();
+
     /** Whether the party has gathered at the current stop, so the scout may look round. */
     private boolean gathered;
 
@@ -92,7 +99,7 @@ public final class Explore implements PartyProject {
 
     /** The step the search is at: at a stop, the wait for the party comes before the look. */
     private Step step() {
-        boolean waiting = search.phase() == Phase.LOOK && !gathered && !accompanying.isEmpty();
+        boolean waiting = search.phase() == Phase.LOOK && !gathered && !companions.isEmpty();
         return new Step(search.phase(), waiting);
     }
 
@@ -188,11 +195,13 @@ public final class Explore implements PartyProject {
         if (item == current) {
             if (!who.equals(scout)) {
                 accompanying.remove(who); // a companion who takes over the search leads it
+                companions.remove(who);
             }
             scout = who;
             stepSince = lastTick;
         } else if (item instanceof Accompany accompany) {
             accompanying.put(who, accompany);
+            companions.add(who);
         }
     }
 
@@ -202,6 +211,7 @@ public final class Explore implements PartyProject {
             stepSince = lastTick;
         } else if (item instanceof Accompany accompany) {
             accompanying.remove(accompany.who());
+            companions.remove(accompany.who());
         }
     }
 
@@ -255,6 +265,7 @@ public final class Explore implements PartyProject {
     public void failed(WorkItem item, AgentId who, BrainContext ctx) {
         if (item instanceof Accompany accompany) {
             accompanying.remove(accompany.who());
+            companions.remove(accompany.who());
             cooldownUntil.put(who, ctx.percepts().time() + FAIL_COOLDOWN);
             return;
         }
@@ -278,8 +289,8 @@ public final class Explore implements PartyProject {
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
         return new State(party, priority, search.snapshot(), Optional.ofNullable(scout),
-                List.copyOf(cooldowns), lastTick, List.copyOf(accompanying.keySet()), gathered,
-                stepSince);
+                List.copyOf(cooldowns), lastTick, List.copyOf(companions),
+                List.copyOf(accompanying.keySet()), gathered, stepSince);
     }
 
     /** The scout's own step, named by the scout: nobody else is handed it back after a restart. */
@@ -381,7 +392,7 @@ public final class Explore implements PartyProject {
         public Task root() {
             if (waiting) {
                 Set<BeingId> whom = new LinkedHashSet<>();
-                accompanying.keySet().forEach(who -> whom.add(BeingId.of(who)));
+                companions.forEach(who -> whom.add(BeingId.of(who)));
                 return new WaitForCompany(whom, HomeKnob.GATHER_RADIUS.i(), HomeKnob.GATHER_WAIT.i());
             }
             Pos to = target();
@@ -481,11 +492,12 @@ public final class Explore implements PartyProject {
     /** Everything the search is, down to the leg being walked (decision 15). */
     public record State(PartyId party, double priority, HomeSearch.State search,
                         Optional<AgentId> scout, List<Gather.Cooldown> cooldowns, long lastTick,
-                        List<AgentId> companions, boolean gathered, long stepSince)
-            implements ProjectState {
+                        List<AgentId> companions, List<AgentId> accompanying, boolean gathered,
+                        long stepSince) implements ProjectState {
 
         public State {
             companions = List.copyOf(companions);
+            accompanying = List.copyOf(accompanying);
         }
 
         @Override
@@ -501,7 +513,8 @@ public final class Explore implements PartyProject {
             project.cooldownUntil.put(cooldown.who(), cooldown.retryAfter());
         }
         project.lastTick = state.lastTick() >= 0 ? state.lastTick() : now;
-        for (AgentId who : state.companions()) {
+        project.companions.addAll(state.companions());
+        for (AgentId who : state.accompanying()) {
             project.accompanying.put(who, project.new Accompany(who));
         }
         project.gathered = state.gathered();

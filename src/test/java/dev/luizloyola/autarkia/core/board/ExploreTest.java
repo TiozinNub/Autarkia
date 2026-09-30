@@ -264,6 +264,9 @@ class ExploreTest {
         assertEquals(new WorkKey.ForMember(WorkKey.ACCOMPANY, companion.self),
                 explore.keyOf(mine).orElseThrow());
 
+        explore.completed(mine, companion);
+        assertEquals(2, explore.open().size(), "together at a stop, the companion takes the offer again");
+
         GoTo leg = (GoTo) open.get(0).root();
         scout.percepts.position = new Pos(leg.x(), leg.y(), leg.z());
         explore.completed(open.get(0), scout);
@@ -275,9 +278,7 @@ class ExploreTest {
         assertInstanceOf(LookRound.class, explore.open().get(0).root(), "then it looks round");
 
         Explore restored = Explore.restore((Explore.State) explore.snapshot(), 0).orElseThrow();
-        assertTrue(restored.itemFor(new WorkKey.ForMember(WorkKey.ACCOMPANY, companion.self)).isPresent(),
-                "a restored companion keeps its own item");
-        assertInstanceOf(LookRound.class, restored.open().get(0).root(), "and the party stays gathered");
+        assertInstanceOf(LookRound.class, restored.open().get(0).root(), "the party stays gathered");
     }
 
     @Test
