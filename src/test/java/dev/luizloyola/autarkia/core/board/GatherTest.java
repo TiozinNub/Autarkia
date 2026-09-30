@@ -665,6 +665,8 @@ class GatherTest {
         assertFalse(back.methods().get(0).applicable(ctx), "nothing got: no walk to the yard");
         ctx.percepts.inventory.set(0, dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 9, 64));
         assertTrue(back.methods().get(0).applicable(ctx), "nine of sixty-four still go home");
+        ctx.percepts.position = new dev.luizloyola.anima.core.brain.sense.Pos(140, 64, 10);
+        assertEquals(0.0, back.methods().get(0).estimateCost(ctx), "however far out the fetch ended");
     }
 
     /** A slice is scored and shown, never run: {@code realise} replaces it before it is leased. */

@@ -8,7 +8,6 @@ import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.PutItems;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.ItemSpec;
-import dev.luizloyola.anima.core.store.Store;
 import java.util.List;
 
 /**
@@ -59,9 +58,13 @@ public final class BringBack implements CompoundTask {
             return ctx.percepts().inventory().count(spec.matcher()) > 0;
         }
 
+        /**
+         * Free: the load is the party's once got, and a hunt that ran 128 blocks out after a herd
+         * would otherwise be priced out of coming home with it.
+         */
         @Override
         public double estimateCost(BrainContext ctx) {
-            return Store.distance(yard, ctx.percepts().position());
+            return 0.0;
         }
 
         @Override
