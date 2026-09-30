@@ -9,7 +9,12 @@ import dev.luizloyola.anima.core.terrain.GroundSample;
 import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
 import dev.luizloyola.anima.core.terrain.TerrainRules;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Avoid;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Judgement;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Keep;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.KeepColumns;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Refusal;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Known;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Table;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Terms;
@@ -54,8 +59,12 @@ class HomeJudgeTest {
     }
 
     private static List<Candidate> judge(GroundSample sample, Map<Want, List<Known>> known) {
+        return judge(sample, known, Avoid.NONE).ranked();
+    }
+
+    private static Judgement judge(GroundSample sample, Map<Want, List<Known>> known, Avoid avoid) {
         Terrain terrain = Terrain.analyse(sample, TABLE.rules(TerrainRules.configured()));
-        return HomeJudge.judge(new Landscape(terrain), MID, MID, TABLE, known);
+        return HomeJudge.judge(new Landscape(terrain), MID, MID, TABLE, known, avoid);
     }
 
     private static Optional<Candidate> at(List<Candidate> all, int x, int z) {
@@ -97,6 +106,7 @@ class HomeJudgeTest {
 
         // Centred 12 west, the plot's edge is 4 from the lava: refused. 13 west, 5: allowed.
         assertTrue(at(all, MID + 8, MID).isEmpty());
+        assertTrue(judge(sample, Map.of(), Avoid.NONE).refused().get(Refusal.LAVA) > 0);
         assertEquals(15, points(at(all, MID + 7, MID).orElseThrow(), Want.LAVA), 1e-6);
         // 30 west, 22 from the edge: 15 · (48 − 22) / 40.
         assertEquals(15 * 26 / 40.0, points(at(all, MID - 10, MID).orElseThrow(), Want.LAVA), 1e-6);
@@ -162,6 +172,42 @@ class HomeJudgeTest {
                 TABLE.bee(), 30, 32, 3000, 4);
 
         assertThrows(IllegalArgumentException.class,
-                () -> HomeJudge.judge(new Landscape(terrain), MID, MID, wider, Map.of()));
+                () -> HomeJudge.judge(new Landscape(terrain), MID, MID, wider, Map.of(), Avoid.NONE));
+    }
+
+    @Test
+    void anotherPartysHomeKeepsAHomeAway() {
+        // Another party's 17-wide plot, its west edge 40 east of here.
+        Keep party = new Keep(Refusal.PARTY, MID + 40, MID - 8, MID + 56, MID + 8, 30);
+        Judgement judged = judge(level(), Map.of(), new Avoid(List.of(party), List.of()));
+
+        // Centred 2 east, the plot's edge is 30 from theirs: refused. 1 east, 31: allowed.
+        assertTrue(at(judged.ranked(), MID + 2, MID).isEmpty());
+        assertTrue(at(judged.ranked(), MID + 1, MID).isPresent());
+        assertTrue(judged.refused().get(Refusal.PARTY) > 0);
+    }
+
+    @Test
+    void aVillageKeepsAHomeFromItsBuildings() {
+        GroundSample sample = level();
+        sample.set(MID + 30, MID, LEVEL + 1, GroundSample.USED); // a house, 30 east
+        KeepColumns village = new KeepColumns(Refusal.VILLAGE,
+                (x, z) -> x == MID + 30 && z == MID, 10);
+        Judgement judged = judge(sample, Map.of(), new Avoid(List.of(), List.of(village)));
+
+        // Centred 18 west of the house, the plot's edge is 10 from it: refused; 19 west, 11: not.
+        // Used ground reaches 4 past the house, so the ground itself refuses nearer plots first.
+        assertTrue(at(judged.ranked(), MID + 12, MID).isEmpty());
+        assertTrue(at(judged.ranked(), MID + 11, MID).isPresent());
+        assertEquals(List.of(Refusal.VILLAGE), List.copyOf(judged.refused().keySet()));
+    }
+
+    @Test
+    void aPlotMayNotTouchARefusedBiome() {
+        KeepColumns mushrooms = new KeepColumns(Refusal.BIOME, (x, z) -> z < MID - 10, 0);
+        Judgement judged = judge(level(), Map.of(), new Avoid(List.of(), List.of(mushrooms)));
+
+        assertTrue(at(judged.ranked(), MID, MID - 3).isEmpty(), "its north edge in the biome");
+        assertTrue(at(judged.ranked(), MID, MID - 2).isPresent(), "its north edge beside it");
     }
 }

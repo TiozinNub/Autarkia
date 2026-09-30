@@ -57,7 +57,20 @@ public enum HomeKnob implements KnobSpec {
     BEE_WORTH("home.want.bee.worth", Kind.DOUBLE, 10, 0, 1000, "A bee nest or hive nearby."),
     BEE_NEAR("home.want.bee.near", Kind.INT, 8, 0, 256, "Full worth within this of the plot's edge."),
     BEE_FAR("home.want.bee.far", Kind.INT, 48, 1, 256, "No worth this far or further."),
-    BEE_MIN("home.want.bee.min", Kind.INT, 1, 1, 64, "The fewest nests that count.");
+    BEE_MIN("home.want.bee.min", Kind.INT, 1, 1, 64, "The fewest nests that count."),
+
+    AVOID_PARTY("home.avoid.party", Kind.INT, 128, 0, 1024,
+            "No home within this of another party's plot, edge to edge: close-by settlements are "
+                    + "no case a settler allows."),
+    AVOID_VILLAGE("home.avoid.village", Kind.INT, 64, 0, 256,
+            "No home within this of a village's buildings: expanding later would be a pain."),
+    AVOID_MONSTERS("home.avoid.monsters", Kind.INT, 64, 0, 256,
+            "No home within this of what keeps spawning monsters: a pillager outpost, a witch hut, "
+                    + "a woodland mansion, an ocean monument (#autarkia:home_monsters)."),
+    AVOID_TEMPLE("home.avoid.temple", Kind.INT, 8, 0, 256,
+            "No home within this of a temple or an igloo (#autarkia:home_temples)."),
+    AVOID_PORTAL("home.avoid.portal", Kind.INT, 4, 0, 256,
+            "No home within this of a ruined portal, which is used ground.");
 
     private final String key;
     private final Kind kind;

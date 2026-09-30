@@ -9,8 +9,16 @@ import dev.luizloyola.anima.core.terrain.GroundSample;
 import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
 import dev.luizloyola.anima.core.terrain.TerrainRules;
+import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.autarkia.compat.home.HomeRecords;
+import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.HomeJudge;
-import dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Avoid;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Judgement;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Keep;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.KeepColumns;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Refusal;
+import dev.luizloyola.autarkia.core.direction.HomeKnob;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Known;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Table;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Want;
@@ -21,11 +29,13 @@ import java.util.Map;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
- * The judge pointed at a place in the world: the ground read around it, and what one settler knows
- * of the wants its eyes supply. The ground is read directly, as the terrain view reads it; stone and
- * bee nests are only what this settler has seen (docs/superpowers/specs/2026-09-25-home-search-design.md).
+ * The judge pointed at a place in the world: the ground read around it, what one settler knows of
+ * the wants its eyes supply, and what keeps a home away. The ground and the structures are read
+ * directly; stone and bee nests are only what this settler has seen
+ * (docs/superpowers/specs/2026-09-25-home-search-design.md).
  */
 public final class HomeChooser {
 
@@ -33,21 +43,74 @@ public final class HomeChooser {
     private static final Map<Want, String> KINDS = Map.of(Want.STONE, "stone", Want.BEE, "bee");
 
     /** Every allowed plot within the read radius of the centre, best first, and the table used. */
-    public record Choice(Table table, List<Candidate> ranked) {
+    public record Choice(Table table, Judgement judgement) {
     }
+
+    /** How far past a structure's start its record may reach: a village's streets. */
+    private static final int STRUCTURE_REACH = 128;
 
     private HomeChooser() {
     }
 
-    public static Choice choose(ServerLevel level, BlockPos centre, int radius,
+    /**
+     * The plots around {@code centre} as a member of {@code party} would judge them, knowing what
+     * {@code knowledge} knows.
+     */
+    public static Choice choose(ServerLevel level, BlockPos centre, int radius, PartyId party,
                                 AgentKnowledge knowledge) {
         Table table = Table.configured().withReadRadius(radius);
         TerrainRules rules = table.rules(TerrainRules.configured());
-        int reach = radius + table.margin() + Terrain.reach(rules);
+        int h = table.size() / 2;
+        int reach = radius + Math.max(table.margin(), h + HomeKnob.AVOID_VILLAGE.i())
+                + Terrain.reach(rules);
         GroundSample sample = GroundReader.read(level, centre.getX() - reach, centre.getZ() - reach,
                 centre.getX() + reach, centre.getZ() + reach);
-        Landscape land = new Landscape(Terrain.analyse(sample, rules));
-        return new Choice(table, HomeJudge.judge(land, centre.getX(), centre.getZ(), table, known(knowledge)));
+        Terrain terrain = Terrain.analyse(sample, rules);
+        Avoid avoid = avoid(level, centre, radius + h, party, terrain);
+        return new Choice(table, HomeJudge.judge(new Landscape(terrain), centre.getX(), centre.getZ(),
+                table, known(knowledge), avoid));
+    }
+
+    /**
+     * What keeps a home away from plots reaching {@code reach} from {@code centre}: other parties'
+     * plots, the structures the server recorded, and refused biomes.
+     */
+    private static Avoid avoid(ServerLevel level, BlockPos centre, int reach, PartyId party,
+                               Terrain terrain) {
+        List<Keep> boxes = new ArrayList<>();
+        int partyAway = HomeKnob.AVOID_PARTY.i();
+        DirectionsData.get(level.getServer()).parties().forEach((other, progress) -> {
+            Home home = progress.home();
+            if (home != null && !other.equals(party)) {
+                boxes.add(new Keep(Refusal.PARTY, home.plot().min().x(), home.plot().min().z(),
+                        home.plot().max().x(), home.plot().max().z(), partyAway));
+            }
+        });
+        int far = reach + Math.max(Math.max(HomeKnob.AVOID_MONSTERS.i(), HomeKnob.AVOID_VILLAGE.i()),
+                Math.max(HomeKnob.AVOID_TEMPLE.i(), HomeKnob.AVOID_PORTAL.i())) + STRUCTURE_REACH;
+        HomeRecords.Structures structures = HomeRecords.structures(level, centre.getX() - far,
+                centre.getZ() - far, centre.getX() + far, centre.getZ() + far, why -> switch (why) {
+                    case MONSTERS -> HomeKnob.AVOID_MONSTERS.i();
+                    case TEMPLE -> HomeKnob.AVOID_TEMPLE.i();
+                    default -> HomeKnob.AVOID_PORTAL.i();
+                });
+        boxes.addAll(structures.keeps());
+        List<KeepColumns> columns = new ArrayList<>();
+        if (!structures.villages().isEmpty()) {
+            // Measured from its buildings — the used ground in its record — not the record's box,
+            // which takes in every road and field.
+            List<BoundingBox> villages = structures.villages();
+            columns.add(new KeepColumns(Refusal.VILLAGE, (x, z) -> terrain.kind(x, z) == Terrain.Kind.USED
+                    && villages.stream().anyMatch(box -> x >= box.minX() && x <= box.maxX()
+                            && z >= box.minZ() && z <= box.maxZ()),
+                    HomeKnob.AVOID_VILLAGE.i()));
+        }
+        int sea = level.getSeaLevel();
+        columns.add(new KeepColumns(Refusal.BIOME, HomeRecords.refusedBiome(level, (x, z) -> {
+            int ground = terrain.ground(x, z);
+            return ground == GroundSample.UNKNOWN ? sea : ground;
+        }), 0));
+        return new Avoid(boxes, columns);
     }
 
     /** What the settler remembers or has glimpsed of each want its eyes supply. */

@@ -112,6 +112,59 @@ public final class HomeJudge {
     public record Line(Want want, double measure, double points) {
     }
 
+    /** Why a plot the ground allows is refused as a home (decisions 8, 11–13). */
+    public enum Refusal {
+        /** Another party's HOME. */
+        PARTY,
+        VILLAGE,
+        /** Something that keeps spawning monsters: an outpost, a witch hut, a mansion, a monument. */
+        MONSTERS,
+        /** A temple or an igloo, large enough to be a hassle to clear. */
+        TEMPLE,
+        /** A ruined portal, which is used ground. */
+        PORTAL,
+        /** A biome nobody settles in, mushroom fields first. */
+        BIOME,
+        /** Lava close enough to set the house alight. */
+        LAVA;
+
+        public String key() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /** A box of columns a plot must keep more than {@code distance} from, edge to edge. */
+    public record Keep(Refusal why, int minX, int minZ, int maxX, int maxZ, int distance) {
+
+        /** How far the plot's closest column lies from the box's. */
+        double from(int x, int z, int h) {
+            int gapX = Math.max(0, Math.max(minX - (x + h), (x - h) - maxX));
+            int gapZ = Math.max(0, Math.max(minZ - (z + h), (z - h) - maxZ));
+            return Math.hypot(gapX, gapZ);
+        }
+    }
+
+    /**
+     * Columns a plot must keep more than {@code distance} from: a village's buildings, a refused
+     * biome. Marked over the whole read, once per refusal.
+     */
+    public record KeepColumns(Refusal why, Landscape.Columns columns, int distance) {
+    }
+
+    /** Everything that keeps a home away. */
+    public record Avoid(List<Keep> boxes, List<KeepColumns> columns) {
+        public static final Avoid NONE = new Avoid(List.of(), List.of());
+
+        public Avoid {
+            boxes = List.copyOf(boxes);
+            columns = List.copyOf(columns);
+        }
+    }
+
+    /** Every allowed plot best first, and how many the ground allowed but something refused, why. */
+    public record Judgement(List<Candidate> ranked, Map<Refusal, Integer> refused) {
+    }
+
     /** An allowed plot, centred on {@code (x, z)}, with {@code y} the ground at its centre. */
     public record Candidate(int x, int z, int y, int size, double value, List<Line> lines) {
 
@@ -130,11 +183,11 @@ public final class HomeJudge {
     }
 
     /**
-     * Every plot the ground allows with its centre within the read radius of {@code (x, z)}, best
-     * first; between equals, the nearer. Lava too close refuses a plot (decision 8).
+     * Every plot the ground allows with its centre within the read radius of {@code (x, z)} and
+     * nothing refuses, best first; between equals, the nearer.
      */
-    public static List<Candidate> judge(Landscape land, int x, int z, Table table,
-                                        Map<Want, List<Known>> known) {
+    public static Judgement judge(Landscape land, int x, int z, Table table,
+                                  Map<Want, List<Known>> known, Avoid avoid) {
         Terrain terrain = land.terrain();
         if (terrain.footprint() != table.size()) {
             throw new IllegalArgumentException("terrain judged " + terrain.footprint()
@@ -143,6 +196,7 @@ public final class HomeJudge {
         int r = table.readRadius();
         int h = table.size() / 2;
         List<Ranked> found = new ArrayList<>();
+        Map<Refusal, Integer> refused = new EnumMap<>(Refusal.class);
         for (int cz = z - r; cz <= z + r; cz++) {
             for (int cx = x - r; cx <= x + r; cx++) {
                 long dx = cx - x;
@@ -152,7 +206,9 @@ public final class HomeJudge {
                     continue;
                 }
                 double lava = land.toFluid(Landscape.Fluid.LAVA, table.lava().min(), table.size(), cx, cz);
-                if (lava <= table.lavaRefuse()) {
+                Refusal why = lava <= table.lavaRefuse() ? Refusal.LAVA : refusal(land, avoid, cx, cz, table.size());
+                if (why != null) {
+                    refused.merge(why, 1, Integer::sum);
                     continue;
                 }
                 List<Line> lines = new ArrayList<>(Want.values().length);
@@ -178,7 +234,23 @@ public final class HomeJudge {
         for (Ranked each : found) {
             out.add(each.candidate());
         }
-        return out;
+        return new Judgement(out, refused);
+    }
+
+    /** The first thing that keeps a home off this plot, or null. */
+    private static Refusal refusal(Landscape land, Avoid avoid, int x, int z, int size) {
+        int h = size / 2;
+        for (Keep keep : avoid.boxes()) {
+            if (keep.from(x, z, h) <= keep.distance()) {
+                return keep.why();
+            }
+        }
+        for (KeepColumns keep : avoid.columns()) {
+            if (land.toMarked(keep.why().key(), keep.columns(), size, x, z) <= keep.distance()) {
+                return keep.why();
+            }
+        }
+        return null;
     }
 
     private record Ranked(Candidate candidate, double away) {

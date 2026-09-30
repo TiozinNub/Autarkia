@@ -38,6 +38,7 @@ import dev.luizloyola.autarkia.mod.direction.HomeChooser;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
@@ -384,21 +385,25 @@ public final class DirectionsCommands {
             return 0;
         }
         int r = radius > 0 ? radius : HomeKnob.READ_RADIUS.i();
-        HomeChooser.Choice choice = HomeChooser.choose(level, person.blockPosition(), r,
+        HomeChooser.Choice choice = HomeChooser.choose(level, person.blockPosition(), r, party,
                 person.brain().knowledge());
-        List<Candidate> shown = HomeJudge.apart(choice.ranked(), CHOOSE_SHOWN);
+        List<Candidate> ranked = choice.judgement().ranked();
+        List<Candidate> shown = HomeJudge.apart(ranked, CHOOSE_SHOWN);
         ServerPlayer viewer = source.getPlayer();
         if (viewer != null) {
             HomeChoiceViewer.show(viewer, shown);
         }
+        Component refused = refusals(choice.judgement().refused());
         if (shown.isEmpty()) {
             Replies.fail(source, Component.translatable("autarkia.command.home.choose.none", r,
                     person.getName()));
+            send(source, indent(refused));
             return 0;
         }
         send(source, Component.translatable("autarkia.command.home.choose.header", person.getName(), r,
-                choice.ranked().size(), Math.round(choice.table().bar(0)))
+                ranked.size(), Math.round(choice.table().bar(0)))
                 .withStyle(ChatFormatting.LIGHT_PURPLE));
+        send(source, indent(refused));
         for (int i = 0; i < shown.size(); i++) {
             Candidate plot = shown.get(i);
             send(source, indent(Component.translatable("autarkia.command.home.choose.candidate", i + 1,
@@ -418,6 +423,18 @@ public final class DirectionsCommands {
                 person.getName(), at(home.yard()), Math.round(best.value()), at(home.plot().min()),
                 at(home.plot().max())).withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
+    }
+
+    /** How many plots the ground allowed and something refused, by what. */
+    private static Component refusals(Map<HomeJudge.Refusal, Integer> refused) {
+        if (refused.isEmpty()) {
+            return Component.translatable("autarkia.command.home.choose.refused_none");
+        }
+        List<Component> parts = new ArrayList<>();
+        refused.forEach((why, count) -> parts.add(Component.translatable(
+                "autarkia.command.home.choose.refused_by", count,
+                Component.translatable("autarkia.home.refusal." + why.key()))));
+        return Component.translatable("autarkia.command.home.choose.refused", join(parts));
     }
 
     /** A plot's breakdown: each want, how far or how much, and its points. */
