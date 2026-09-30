@@ -6,7 +6,7 @@
     "BreezeMixin",
     "CreakingAiMixin",
     "CreakingMixin",
-    "CubeMobContactMixin",
+    "CubeMobTouchInvoker",
     "GuardianSelectorMixin",
     "HoglinAiMixin",
     "LivingEntityPeacefulMixin",

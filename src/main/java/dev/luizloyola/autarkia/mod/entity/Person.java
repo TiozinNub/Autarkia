@@ -52,6 +52,7 @@ import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentStriker;
 import dev.luizloyola.anima.mod.brain.AgentWardrobe;
+import dev.luizloyola.autarkia.compat.aggro.CubeMobs;
 import dev.luizloyola.anima.mod.brain.AgentLeaner;
 import dev.luizloyola.anima.mod.brain.AgentRiser;
 import dev.luizloyola.anima.mod.brain.PoiSensor;
@@ -663,6 +664,8 @@ public class Person extends Avatar implements AgentBody {
         // Gather any dropped items we're standing over — before the mirror runs, so a caught item
         // that lands in the selected hotbar slot is held (and rendered) this same tick.
         pickUpNearbyItems((ServerLevel) level());
+        // A player's tick is where a slime's touch hurts it; a Person's has to run the same pass.
+        CubeMobs.touch(this);
         syncEquipmentMirror();
         // Metabolism runs every server tick, whoever owns the movement input below.
         tickNeeds();
