@@ -3,23 +3,33 @@ package dev.luizloyola.autarkia.core.config;
 import dev.luizloyola.anima.core.agent.AgentProfile;
 import dev.luizloyola.anima.core.config.ConfigStore;
 import dev.luizloyola.anima.core.config.ConfigValues;
+import dev.luizloyola.anima.core.config.KnobSpec;
 import dev.luizloyola.anima.core.config.KnobSet;
+import dev.luizloyola.autarkia.core.direction.HomeKnob;
 import dev.luizloyola.autarkia.core.person.PersonSpecies;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Autarkia's own live configuration — {@code config/autarkia.toml}, edited with
  * {@code /autarkia config}.
  *
- * <p>No tunables of its own yet: everything in the file describes a {@link PersonSpecies Person},
- * generated from that declaration by Anima.
+ * <p>What a {@link PersonSpecies Person} is like, generated from that declaration by Anima, and
+ * how a party judges a place to live ({@link HomeKnob}).
  *
  * <p>The store is read through on every use rather than cached into fields. That is what makes
  * {@code /autarkia config reload} retune Persons already walking around.
  */
 public final class AutarkiaConfig {
 
-    /** Autarkia's knob set: today, the {@code person} species family. */
-    public static final KnobSet SET = KnobSet.of("autarkia", "Autarkia", PersonSpecies.KNOBS.knobs());
+    /** Autarkia's knob set: the {@code person} species family, then {@code home}. */
+    public static final KnobSet SET = KnobSet.of("autarkia", "Autarkia", knobs());
+
+    private static List<KnobSpec> knobs() {
+        List<KnobSpec> all = new ArrayList<>(PersonSpecies.KNOBS.knobs());
+        all.addAll(List.of(HomeKnob.values()));
+        return all;
+    }
 
     private static final ConfigStore STORE = new ConfigStore(SET);
 

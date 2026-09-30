@@ -17,6 +17,20 @@ public record Home(Region plot, Pos yard, boolean cleared) {
         Objects.requireNonNull(yard, "yard");
     }
 
+    /**
+     * How far a plot reaches below and above its yard. A plot is ground, but its clearing must take
+     * in a whole tree standing on it, crown and all, and the ground is rarely flat.
+     */
+    private static final int BELOW = 16;
+    private static final int ABOVE = 48;
+
+    /** A new, uncleared HOME: a square plot {@code radius} out from its yard, which is its centre. */
+    public static Home square(Pos yard, int radius) {
+        return new Home(new Region(
+                new Pos(yard.x() - radius, yard.y() - BELOW, yard.z() - radius),
+                new Pos(yard.x() + radius, yard.y() + ABOVE, yard.z() + radius)), yard, false);
+    }
+
     public Home withCleared(boolean now) {
         return new Home(plot, yard, now);
     }

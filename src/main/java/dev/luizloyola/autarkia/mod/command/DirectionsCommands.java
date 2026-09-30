@@ -20,6 +20,9 @@ import dev.luizloyola.autarkia.core.direction.Direction;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
 import dev.luizloyola.autarkia.core.direction.DirectionLine;
 import dev.luizloyola.autarkia.core.direction.Home;
+import dev.luizloyola.autarkia.core.direction.HomeJudge;
+import dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate;
+import dev.luizloyola.autarkia.core.direction.HomeKnob;
 import dev.luizloyola.autarkia.core.direction.Lines;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.NodeKind;
@@ -28,8 +31,10 @@ import dev.luizloyola.autarkia.core.direction.PartyView;
 import dev.luizloyola.autarkia.core.direction.Status;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
+import dev.luizloyola.autarkia.mod.debug.HomeChoiceViewer;
 import dev.luizloyola.autarkia.mod.direction.Directions;
 import dev.luizloyola.autarkia.mod.direction.DirectionsData;
+import dev.luizloyola.autarkia.mod.direction.HomeChooser;
 import dev.luizloyola.autarkia.mod.entity.Person;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,11 +49,14 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
 /**
  * Layer 4 at the command line: {@code directions} reads a party's climb and lets an operator grant
- * or revoke a node; {@code home} sets the plot the Directions work on. Subject-scoped, like the
+ * or revoke a node; {@code home} sets the plot the Directions work on, or judges the plots around
+ * the subject ({@code home choose}). Subject-scoped, like the
  * board — the party read or changed is the subject's.
  */
 public final class DirectionsCommands {
@@ -60,12 +68,12 @@ public final class DirectionsCommands {
     private static final int HOME_MIN_RADIUS = 4;
     private static final int HOME_MAX_RADIUS = 64;
 
-    /**
-     * How far HOME reaches below and above its centre. A plot is ground, but its clearing must take
-     * in a whole tree standing on it, crown and all, and the ground is rarely flat.
-     */
-    private static final int HOME_BELOW = 16;
-    private static final int HOME_ABOVE = 48;
+    /** How far {@code home choose} may look, to plot centres; its default is {@code home.read_radius}. */
+    private static final int CHOOSE_MIN_RADIUS = 16;
+    private static final int CHOOSE_MAX_RADIUS = 128;
+
+    /** Plots {@code home choose} lists and paints. */
+    private static final int CHOOSE_SHOWN = 5;
 
     /** A node's path, or its whole id in quotes — a word cannot hold the colon. */
     private static final SuggestionProvider<CommandSourceStack> NODES = (ctx, builder) ->
@@ -93,7 +101,16 @@ public final class DirectionsCommands {
                                 .then(Commands.argument("radius",
                                                 IntegerArgumentType.integer(HOME_MIN_RADIUS, HOME_MAX_RADIUS))
                                         .executes(DirectionsCommands::homeSet))))
-                .then(Commands.literal("clear").executes(DirectionsCommands::homeClear));
+                .then(Commands.literal("clear").executes(DirectionsCommands::homeClear))
+                .then(Commands.literal("choose")
+                        .executes(ctx -> homeChoose(ctx, 0, false))
+                        .then(Commands.literal("apply").executes(ctx -> homeChoose(ctx, 0, true)))
+                        .then(Commands.argument("radius",
+                                        IntegerArgumentType.integer(CHOOSE_MIN_RADIUS, CHOOSE_MAX_RADIUS))
+                                .executes(ctx -> homeChoose(ctx,
+                                        IntegerArgumentType.getInteger(ctx, "radius"), false))
+                                .then(Commands.literal("apply").executes(ctx -> homeChoose(ctx,
+                                        IntegerArgumentType.getInteger(ctx, "radius"), true)))));
     }
 
     // ── the readout ─────────────────────────────────────────────────────────────────────────
@@ -328,12 +345,11 @@ public final class DirectionsCommands {
         }
         BlockPos center = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
         int radius = IntegerArgumentType.getInteger(ctx, "radius");
-        Pos yard = new Pos(center.getX(), center.getY(), center.getZ());
-        Region plot = new Region(
-                new Pos(center.getX() - radius, center.getY() - HOME_BELOW, center.getZ() - radius),
-                new Pos(center.getX() + radius, center.getY() + HOME_ABOVE, center.getZ() + radius));
+        Home home = Home.square(new Pos(center.getX(), center.getY(), center.getZ()), radius);
+        Region plot = home.plot();
+        Pos yard = home.yard();
         MinecraftServer server = source.getServer();
-        Directions.home(server, party, new Home(plot, yard, false));
+        Directions.home(server, party, home);
         OpJournal.record(source, PartyData.get(server).members(party),
                 "set HOME " + at(plot.min()) + " to " + at(plot.max()));
         Replies.send(source, () -> Component.translatable("autarkia.command.home.set", person.getName(),
@@ -354,6 +370,73 @@ public final class DirectionsCommands {
         Replies.send(source, () -> Component.translatable("autarkia.command.home.cleared",
                 person.getName()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
+    }
+
+    /**
+     * The judge around the subject, as a dry run: the best plots that share no column, each want's
+     * part, and the bar its party would face at a first stop. {@code apply} claims the best.
+     */
+    private static int homeChoose(CommandContext<CommandSourceStack> ctx, int radius, boolean apply) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = person(ctx);
+        PartyId party = person == null ? null : partyOf(source, person);
+        if (party == null || !(person.level() instanceof ServerLevel level)) {
+            return 0;
+        }
+        int r = radius > 0 ? radius : HomeKnob.READ_RADIUS.i();
+        HomeChooser.Choice choice = HomeChooser.choose(level, person.blockPosition(), r,
+                person.brain().knowledge());
+        List<Candidate> shown = HomeJudge.apart(choice.ranked(), CHOOSE_SHOWN);
+        ServerPlayer viewer = source.getPlayer();
+        if (viewer != null) {
+            HomeChoiceViewer.show(viewer, shown);
+        }
+        if (shown.isEmpty()) {
+            Replies.fail(source, Component.translatable("autarkia.command.home.choose.none", r,
+                    person.getName()));
+            return 0;
+        }
+        send(source, Component.translatable("autarkia.command.home.choose.header", person.getName(), r,
+                choice.ranked().size(), Math.round(choice.table().bar(0)))
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
+        for (int i = 0; i < shown.size(); i++) {
+            Candidate plot = shown.get(i);
+            send(source, indent(Component.translatable("autarkia.command.home.choose.candidate", i + 1,
+                    plot.x() + " " + plot.y() + " " + plot.z(), Math.round(plot.value()), wants(plot))));
+        }
+        if (!apply) {
+            return 1;
+        }
+        Candidate best = shown.get(0);
+        Home home = Home.square(new Pos(best.x(), best.y() + 1, best.z()), best.size() / 2);
+        MinecraftServer server = source.getServer();
+        Directions.home(server, party, home);
+        OpJournal.record(source, PartyData.get(server).members(party),
+                "chose HOME " + at(home.plot().min()) + " to " + at(home.plot().max()) + ", worth "
+                        + Math.round(best.value()));
+        Replies.send(source, () -> Component.translatable("autarkia.command.home.choose.applied",
+                person.getName(), at(home.yard()), Math.round(best.value()), at(home.plot().min()),
+                at(home.plot().max())).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
+    /** A plot's breakdown: each want, how far or how much, and its points. */
+    private static Component wants(Candidate plot) {
+        List<Component> parts = new ArrayList<>();
+        for (HomeJudge.Line line : plot.lines()) {
+            Component name = Component.translatable("autarkia.home.want." + line.want().key());
+            long points = Math.round(line.points());
+            if (line.want() == HomeJudge.Want.ROOM) {
+                parts.add(Component.translatable("autarkia.command.home.choose.want.room", name,
+                        Math.round(line.measure()), points));
+            } else if (Double.isInfinite(line.measure())) {
+                parts.add(Component.translatable("autarkia.command.home.choose.want.none", name));
+            } else {
+                parts.add(Component.translatable("autarkia.command.home.choose.want.distance", name,
+                        Math.round(line.measure()), points));
+            }
+        }
+        return join(parts);
     }
 
     // ── words ───────────────────────────────────────────────────────────────────────────────
