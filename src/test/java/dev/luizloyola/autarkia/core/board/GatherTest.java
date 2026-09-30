@@ -18,6 +18,7 @@ import dev.luizloyola.anima.core.brain.task.EnsureStore;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.PutItems;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemStack;
@@ -632,8 +633,9 @@ class GatherTest {
         GatheringErrand errand = assertInstanceOf(GatheringErrand.class, trip.root());
         List<Task> steps = errand.methods().get(0).decompose(new BoardBrainContext());
 
-        assertEquals(3, steps.size(), "fetch it, get to the yard, put it down");
-        ObtainItem fetch = assertInstanceOf(ObtainItem.class, steps.get(0));
+        assertEquals(2, steps.size(), "fetch it, then bring back what was got");
+        ObtainItem fetch = assertInstanceOf(ObtainItem.class,
+                assertInstanceOf(Try.class, steps.get(0)).attempt());
         assertEquals(ObtainItem.Sources.NOT_STORES, fetch.sources(),
                 "the remainder is measured against what the yard already holds, so an errand "
                         + "allowed to take from storage would be sent to fetch the very goods it "
@@ -642,14 +644,27 @@ class GatherTest {
         assertEquals(Stock.LOGS, fetch.spec());
         assertEquals(64, fetch.count());
 
-        assertEquals(YARD, assertInstanceOf(EnsureStore.class, steps.get(1)).hint(),
+        BringBack back = assertInstanceOf(BringBack.class, steps.get(1));
+        List<Task> delivery = back.methods().get(0).decompose(new BoardBrainContext());
+        assertEquals(YARD, assertInstanceOf(EnsureStore.class, delivery.get(0)).hint(),
                 "the yard is a hint, and this is what grows a chest on it");
 
-        PutItems deposit = assertInstanceOf(PutItems.class, steps.get(2));
+        PutItems deposit = assertInstanceOf(PutItems.class, delivery.get(1));
         assertEquals(Stock.LOGS, deposit.spec());
         assertEquals(64, deposit.count());
         assertNull(deposit.at(),
                 "the chest is resolved on arrival — nobody knows its anchor when the trip is taken");
+    }
+
+    @Test
+    void aFetchThatRanOutBringsBackWhatItGotAndOneThatGotNothingDoesNotWalkHome() {
+        BringBack back = new BringBack(Stock.LOGS, 64, YARD);
+        dev.luizloyola.anima.core.brain.task.FakeContext ctx =
+                new dev.luizloyola.anima.core.brain.task.FakeContext();
+
+        assertFalse(back.methods().get(0).applicable(ctx), "nothing got: no walk to the yard");
+        ctx.percepts.inventory.set(0, dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 9, 64));
+        assertTrue(back.methods().get(0).applicable(ctx), "nine of sixty-four still go home");
     }
 
     /** A slice is scored and shown, never run: {@code realise} replaces it before it is leased. */

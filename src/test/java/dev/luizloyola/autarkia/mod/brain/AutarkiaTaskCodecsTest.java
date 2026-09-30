@@ -136,6 +136,17 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void aLoadOnItsWayToTheYardSurvivesTheFile() {
+        dev.luizloyola.autarkia.core.board.BringBack after = assertInstanceOf(
+                dev.luizloyola.autarkia.core.board.BringBack.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.BringBack(Stock.LOGS, 16, new Pos(10, 64, 10))));
+
+        assertEquals(Stock.LOGS, after.spec());
+        assertEquals(16, after.count());
+        assertEquals(new Pos(10, 64, 10), after.yard());
+    }
+
+    @Test
     void aTripForAnItemNobodyDeclaredSurvivesTheFile() {
         // `board post gather <item>` posts an ItemSpec.anyOf, so the member walking it is holding
         // a spec no bootstrap re-registers. By NAME that plan cannot decode at all, and an

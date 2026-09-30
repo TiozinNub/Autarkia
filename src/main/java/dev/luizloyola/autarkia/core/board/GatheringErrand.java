@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.PutItems;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.store.Store;
 import java.util.List;
@@ -19,6 +20,9 @@ import java.util.List;
  * measures its remainder against what the yard already holds, so an errand allowed to take from
  * storage would be sent to fetch the very goods it is counting: wanting 64 with 32 already banked,
  * it would make a new 32 by emptying the yard.
+ *
+ * <p><b>A fetch that runs out still delivers</b> what it got ({@link BringBack}): the load is the
+ * party's, and a trip is over when there is no more to be had, not only when the count is met.
  *
  * <p><b>The deposit resolves its chest on arrival.</b> Nobody knows the anchor when the trip is
  * minted — the yard is a hint and {@link EnsureStore} may still have to grow a chest on it — which
@@ -79,10 +83,9 @@ public final class GatheringErrand implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
-            return List.of(new ObtainItem(spec, count, java.util.Set.of(),
-                            ObtainItem.Sources.NOT_STORES),
-                    new EnsureStore(yard),
-                    PutItems.deposit(spec, count));
+            return List.of(new Try(new ObtainItem(spec, count, java.util.Set.of(),
+                            ObtainItem.Sources.NOT_STORES)),
+                    new BringBack(spec, count, yard));
         }
 
         @Override

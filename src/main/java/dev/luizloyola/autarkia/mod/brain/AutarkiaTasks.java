@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
+import dev.luizloyola.autarkia.core.board.BringBack;
 import dev.luizloyola.autarkia.core.board.GatheringErrand;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
@@ -102,6 +103,12 @@ public final class AutarkiaTasks {
                         Codec.INT.fieldOf("count").forGetter(GatheringErrand::count),
                         POS.fieldOf("yard").forGetter(GatheringErrand::yard)
                 ).apply(t, GatheringErrand::new)));
+        TaskCodecs.register("autarkia:bring_back", BringBack.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),
+                        Codec.INT.fieldOf("count").forGetter(BringBack::count),
+                        POS.fieldOf("yard").forGetter(BringBack::yard)
+                ).apply(t, BringBack::new)));
         // A forage trip's work at the patch. Registered the day it was written, like the rest.
         TaskCodecs.register("autarkia:pick_patch", PickPatch.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
