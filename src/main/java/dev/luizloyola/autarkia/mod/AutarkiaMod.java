@@ -183,6 +183,13 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.direction.StorageLine.INSTANCE);
         dev.luizloyola.autarkia.core.direction.Lines.register(
                 dev.luizloyola.autarkia.core.direction.FoodLine.INSTANCE);
+        // The line a party with no HOME works on: a search for one, which reads the world through
+        // the mod's looks.
+        dev.luizloyola.autarkia.core.direction.Lines.register(
+                dev.luizloyola.autarkia.core.direction.HomeLine.INSTANCE);
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Explore.TYPE);
+        dev.luizloyola.autarkia.mod.direction.HomeLooks.init();
         // What the base and storage lines post: stations put down one at a time, as a party's job.
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.SetUp.TYPE);

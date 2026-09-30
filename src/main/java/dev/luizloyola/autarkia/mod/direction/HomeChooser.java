@@ -43,8 +43,11 @@ public final class HomeChooser {
     private static final Map<Want, PoiKind> KINDS =
             Map.of(Want.STONE, Landmarks.STONE_POI, Want.BEE, Landmarks.BEES);
 
-    /** Every allowed plot within the read radius of the centre, best first, and the table used. */
-    public record Choice(Table table, Judgement judgement) {
+    /**
+     * Every allowed plot within the read radius of the centre, best first; the table used, the
+     * ground read, and what the settler knew.
+     */
+    public record Choice(Table table, Judgement judgement, Landscape land, Map<Want, List<Known>> known) {
     }
 
     /** How far past a structure's start its record may reach: a village's streets. */
@@ -68,8 +71,10 @@ public final class HomeChooser {
                 centre.getX() + reach, centre.getZ() + reach);
         Terrain terrain = Terrain.analyse(sample, rules);
         Avoid avoid = avoid(level, centre, radius + h, party, terrain);
-        return new Choice(table, HomeJudge.judge(new Landscape(terrain), centre.getX(), centre.getZ(),
-                table, known(knowledge), avoid));
+        Landscape land = new Landscape(terrain);
+        Map<Want, List<Known>> known = known(knowledge);
+        return new Choice(table, HomeJudge.judge(land, centre.getX(), centre.getZ(), table, known, avoid),
+                land, known);
     }
 
     /**

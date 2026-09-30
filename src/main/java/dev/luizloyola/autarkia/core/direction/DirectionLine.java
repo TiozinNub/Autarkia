@@ -33,7 +33,10 @@ public interface DirectionLine {
      */
     boolean isWork(Project project, Direction direction, PartyView party);
 
-    /** The work to post while the condition does not hold. Only asked when the party has a HOME. */
+    /**
+     * The work to post while the condition does not hold. Every line but {@code home} waits for a
+     * HOME before it is unmet.
+     */
     PartyProject post(Direction direction, PartyView party, double priority);
 
     /**

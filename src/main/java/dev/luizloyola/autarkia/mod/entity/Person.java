@@ -48,6 +48,7 @@ import dev.luizloyola.autarkia.core.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.board.StandingWants;
 import dev.luizloyola.autarkia.core.board.StowSurplus;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
+import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import dev.luizloyola.anima.mod.brain.AgentBlockBreaker;
 import dev.luizloyola.anima.mod.brain.AgentStriker;
 import dev.luizloyola.anima.mod.brain.AgentLeaner;
@@ -333,6 +334,9 @@ public class Person extends Avatar implements AgentBody {
         }
         PartyId party = PartyData.get(server.getServer()).partyOf(id);
         if (!party.equals(this.boardParty) || this.partyWork == null) {
+            // Every party runs its Directions from its first member's first ask: a fresh settler
+            // has no HOME, and the home line is what sets it looking for one.
+            DirectionsData.get(server.getServer()).progress(party);
             this.boardParty = party;
             this.partyWork = PartyBoards.of(server.getServer(), party).viewFor(this::getAgentId);
         }

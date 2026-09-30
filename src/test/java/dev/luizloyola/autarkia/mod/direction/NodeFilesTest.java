@@ -13,6 +13,7 @@ import dev.luizloyola.autarkia.core.direction.AreaLine;
 import dev.luizloyola.autarkia.core.direction.BaseLine;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
 import dev.luizloyola.autarkia.core.direction.FoodLine;
+import dev.luizloyola.autarkia.core.direction.HomeLine;
 import dev.luizloyola.autarkia.core.direction.Lines;
 import dev.luizloyola.autarkia.core.direction.Node;
 import dev.luizloyola.autarkia.core.direction.NodeKind;
@@ -43,6 +44,7 @@ class NodeFilesTest {
         Lines.register(BaseLine.INSTANCE);
         Lines.register(StorageLine.INSTANCE);
         Lines.register(FoodLine.INSTANCE);
+        Lines.register(HomeLine.INSTANCE);
     }
 
     @AfterEach

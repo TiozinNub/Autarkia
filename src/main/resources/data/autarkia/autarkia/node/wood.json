@@ -3,6 +3,7 @@
   "kind": "core",
   "parents": [],
   "directions": [
+    {"line": "home"},
     {"line": "base"},
     {"line": "area"},
     {"line": "wood", "count": 64},

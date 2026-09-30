@@ -10,6 +10,9 @@ import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
  */
 public enum HomeKnob implements KnobSpec {
 
+    EXPLORE("home.explore", Kind.BOOL, 1, 0, 1,
+            "Whether a party with no HOME goes looking for one. Off, HOME is set by command only — "
+                    + "for a test scene that wants its settlers to stay where they were put."),
     SIZE("home.size", Kind.INT, 17, 5, 63,
             "The side of the plot a party claims, in blocks. Rounded up to odd."),
     READ_RADIUS("home.read_radius", Kind.INT, 64, 16, 128,
@@ -20,6 +23,22 @@ public enum HomeKnob implements KnobSpec {
     BAR_STEP("home.bar_step", Kind.DOUBLE, 5, 0, 1000,
             "How much less a settler asks for with every leg it has walked since the first plot it "
                     + "found. At 5, about 90% settle within four legs."),
+    LEG_LENGTH("home.leg_length", Kind.INT, 64, 16, 128,
+            "How far a scout walks between one look round and the next."),
+    MAX_LEGS("home.max_legs", Kind.INT, 8, 1, 64,
+            "Legs walked after the first plot found before the scout goes back to the best one and "
+                    + "settles there, whatever it is worth."),
+    MAX_SEARCH("home.max_search", Kind.INT, 32, 1, 256,
+            "Legs a scout walks without finding any allowed plot before it gives up for now."),
+    HEADING_LAND("home.heading.land", Kind.DOUBLE, 30, 0, 1000,
+            "What open land ahead is worth to a heading, at all of it: the share of dry, flat "
+                    + "ground 40 to 64 blocks out that way, times this."),
+    HEADING_KEEP("home.heading.keep", Kind.DOUBLE, 10, 0, 1000,
+            "What keeping the last leg's heading is worth; half of it for one 45° off."),
+    HEADING_HOLD("home.heading.hold", Kind.DOUBLE, 40, 0, 1000,
+            "What keeping the last heading is worth while no plot has been found yet: a settler "
+                    + "crossing a plain picks a way and keeps to it. With momentum alone the lost "
+                    + "walked in circles."),
 
     WATER_WORTH("home.want.water.worth", Kind.DOUBLE, 40, 0, 1000,
             "Water nearby — a river, a lake or the sea, frozen or not."),
@@ -125,5 +144,9 @@ public enum HomeKnob implements KnobSpec {
 
     public int i() {
         return AutarkiaConfig.get().i(this);
+    }
+
+    public boolean b() {
+        return AutarkiaConfig.get().b(this);
     }
 }

@@ -14,13 +14,17 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.Explore;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.ProjectState;
 import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.WorkKey;
+import dev.luizloyola.autarkia.core.direction.HomeJudge;
+import dev.luizloyola.autarkia.core.direction.HomeSearch;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -248,6 +252,69 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(SetUp.State::lastTick)
             ).apply(project, SetUp.State::new));
 
+    private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
+        return Codec.STRING.comapFlatMap(name -> {
+            for (E value : type.getEnumConstants()) {
+                if (value.name().equalsIgnoreCase(name)) {
+                    return DataResult.success(value);
+                }
+            }
+            return DataResult.error(() -> "no " + type.getSimpleName() + " called \"" + name + "\"");
+        }, value -> value.name().toLowerCase(Locale.ROOT));
+    }
+
+    /** One want's part in a plot's worth. An infinite measure is a want with nothing known. */
+    private static final Codec<HomeJudge.Line> HOME_LINE = RecordCodecBuilder.create(line -> line.group(
+            lowerCase(HomeJudge.Want.class).fieldOf("want").forGetter(HomeJudge.Line::want),
+            Codec.DOUBLE.fieldOf("measure").forGetter(HomeJudge.Line::measure),
+            Codec.DOUBLE.fieldOf("points").forGetter(HomeJudge.Line::points)
+    ).apply(line, HomeJudge.Line::new));
+
+    private static final Codec<HomeJudge.Candidate> CANDIDATE = RecordCodecBuilder.create(plot -> plot.group(
+            Codec.INT.fieldOf("x").forGetter(HomeJudge.Candidate::x),
+            Codec.INT.fieldOf("z").forGetter(HomeJudge.Candidate::z),
+            Codec.INT.fieldOf("y").forGetter(HomeJudge.Candidate::y),
+            Codec.INT.fieldOf("size").forGetter(HomeJudge.Candidate::size),
+            Codec.DOUBLE.fieldOf("value").forGetter(HomeJudge.Candidate::value),
+            HOME_LINE.listOf().optionalFieldOf("lines", List.of()).forGetter(HomeJudge.Candidate::lines)
+    ).apply(plot, HomeJudge.Candidate::new));
+
+    private static final Codec<HomeSearch.Option> HEADING = RecordCodecBuilder.create(option -> option.group(
+            Codec.INT.fieldOf("heading").forGetter(HomeSearch.Option::heading),
+            Codec.DOUBLE.fieldOf("score").forGetter(HomeSearch.Option::score),
+            POS.optionalFieldOf("leg_end").forGetter(o -> Optional.ofNullable(o.legEnd()))
+    ).apply(option, (heading, score, legEnd) -> new HomeSearch.Option(heading, score, legEnd.orElse(null))));
+
+    /** A search for a HOME, down to the leg being walked. */
+    public static final Codec<HomeSearch.State> HOME_SEARCH = RecordCodecBuilder.create(search -> search.group(
+            POS.optionalFieldOf("start").forGetter(s -> Optional.ofNullable(s.start())),
+            POS.listOf().optionalFieldOf("stops", List.of()).forGetter(HomeSearch.State::stops),
+            Codec.INT.optionalFieldOf("legs", 0).forGetter(HomeSearch.State::legs),
+            Codec.INT.optionalFieldOf("first_at", -1).forGetter(HomeSearch.State::firstAt),
+            Codec.INT.optionalFieldOf("heading", -1).forGetter(HomeSearch.State::heading),
+            Codec.INT.listOf().optionalFieldOf("blocked", List.of()).forGetter(HomeSearch.State::blocked),
+            CANDIDATE.optionalFieldOf("best").forGetter(s -> Optional.ofNullable(s.best())),
+            POS.optionalFieldOf("leg_end").forGetter(s -> Optional.ofNullable(s.legEnd())),
+            lowerCase(HomeSearch.Phase.class).fieldOf("phase").forGetter(HomeSearch.State::phase),
+            HEADING.listOf().optionalFieldOf("options", List.of()).forGetter(HomeSearch.State::options)
+    ).apply(search, (start, stops, legs, firstAt, heading, blocked, best, legEnd, phase, options) ->
+            new HomeSearch.State(start.orElse(null), stops, legs, firstAt, heading, blocked,
+                    best.orElse(null), legEnd.orElse(null), phase, options)));
+
+    /** Everything an {@code explore} row carries beyond its kind. */
+    public static final MapCodec<Explore.State> EXPLORE =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    UUIDUtil.CODEC.fieldOf("party").forGetter(state -> state.party().value()),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(Explore.State::priority),
+                    HOME_SEARCH.fieldOf("search").forGetter(Explore.State::search),
+                    UUIDUtil.CODEC.optionalFieldOf("scout")
+                            .forGetter(state -> state.scout().map(AgentId::value)),
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(Explore.State::cooldowns),
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(Explore.State::lastTick)
+            ).apply(project, (party, priority, search, scout, cooldowns, lastTick) -> new Explore.State(
+                    PartyId.of(party), priority, search, scout.map(AgentId::of), cooldowns, lastTick)));
+
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this
      * cannot be a bare {@code optionalFieldOf(name, default)} — that omits the field whenever the
@@ -271,6 +338,7 @@ public final class PartyBoardCodecs {
             case "clear_area" -> DataResult.success(CLEAR_AREA);
             case "gather" -> DataResult.success(GATHER);
             case "set_up" -> DataResult.success(SET_UP);
+            case "explore" -> DataResult.success(EXPLORE);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }

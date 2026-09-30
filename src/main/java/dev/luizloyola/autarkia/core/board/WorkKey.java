@@ -36,6 +36,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Putting a station down at a base. */
     String SET_UP = "set_up";
 
+    /** A scout's step in the search for a HOME. */
+    String EXPLORE = "explore";
+
     /** Taking a job's load to its yard once the job has nothing left for that member. */
     String BRING_IN = "bring_in";
 
