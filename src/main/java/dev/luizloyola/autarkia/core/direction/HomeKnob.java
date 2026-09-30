@@ -30,6 +30,11 @@ public enum HomeKnob implements KnobSpec {
                     + "settles there, whatever it is worth."),
     MAX_SEARCH("home.max_search", Kind.INT, 32, 1, 256,
             "Legs a scout walks without finding any allowed plot before it gives up for now."),
+    GATHER_RADIUS("home.gather_radius", Kind.INT, 16, 2, 64,
+            "At a stop the scout waits until every companion is this near before it looks round."),
+    GATHER_WAIT("home.gather_wait", Kind.INT, 600, 0, 12_000,
+            "The longest the scout waits for its companions at a stop, in ticks: one that fell "
+                    + "behind or went to eat does not hold the party forever."),
     HEADING_LAND("home.heading.land", Kind.DOUBLE, 30, 0, 1000,
             "What open land ahead is worth to a heading, at all of it: the share of dry, flat "
                     + "ground 40 to 64 blocks out that way, times this."),

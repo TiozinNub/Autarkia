@@ -131,6 +131,11 @@ public final class HomeSearch {
         return legs;
     }
 
+    /** Where the scout last looked round, or null before the first look. */
+    public @Nullable Pos lastStop() {
+        return stops.isEmpty() ? null : stops.get(stops.size() - 1);
+    }
+
     /** Where the scout stands to claim the best plot: its centre, on the ground. */
     public @Nullable Pos yard() {
         return best == null ? null : new Pos(best.x(), best.y() + 1, best.z());

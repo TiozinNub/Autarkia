@@ -10,8 +10,10 @@ import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
+import dev.luizloyola.anima.core.brain.task.Follow;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.LookRound;
+import dev.luizloyola.anima.core.brain.task.WaitForCompany;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.direction.Direction;
@@ -88,9 +90,10 @@ class ExploreTest {
         Lines.clear();
     }
 
+    /** The scout's step: first on offer, before the offer to keep with the scout. */
     private static WorkItem only(Explore explore) {
         List<WorkItem> open = explore.open();
-        assertEquals(1, open.size(), explore.describe());
+        assertFalse(open.isEmpty(), explore.describe());
         return open.get(0);
     }
 
@@ -235,5 +238,62 @@ class ExploreTest {
         Evolution.Outcome met = Evolution.beat(tree, progress, view, board);
 
         assertEquals(1, met.withdrawn().size(), "an operator's HOME ends the search");
+    }
+
+    @Test
+    void companionsKeepWithTheScoutAndTheScoutWaitsForThem() {
+        Stub world = new Stub();
+        Explore.install(world);
+        Explore explore = new Explore(party, 0.5);
+        FakeContext scout = new FakeContext();
+        FakeContext companion = new FakeContext();
+        WorkItem look = only(explore);
+        explore.claimed(look, scout.self);
+        explore.completed(look, scout);
+
+        List<WorkItem> open = explore.open();
+        assertEquals(2, open.size(), "the leg, and the offer to keep with the scout");
+        WorkItem offer = open.get(1);
+        assertFalse(explore.offerableTo(offer, scout.self, scout), "the scout does not follow itself");
+        assertFalse(explore.offerableTo(open.get(0), companion.self, companion),
+                "nor does a companion take the scout's step");
+        WorkItem mine = explore.realise(offer, companion.self, companion);
+        explore.claimed(mine, companion.self);
+        Follow follow = assertInstanceOf(Follow.class, mine.root());
+        assertEquals(dev.luizloyola.anima.core.brain.sense.BeingId.of(scout.self), follow.leader());
+        assertEquals(new WorkKey.ForMember(WorkKey.ACCOMPANY, companion.self),
+                explore.keyOf(mine).orElseThrow());
+
+        GoTo leg = (GoTo) open.get(0).root();
+        scout.percepts.position = new Pos(leg.x(), leg.y(), leg.z());
+        explore.completed(open.get(0), scout);
+
+        WaitForCompany wait = assertInstanceOf(WaitForCompany.class, explore.open().get(0).root());
+        assertEquals(java.util.Set.of(dev.luizloyola.anima.core.brain.sense.BeingId.of(companion.self)),
+                wait.whom());
+        explore.completed(explore.open().get(0), scout);
+        assertInstanceOf(LookRound.class, explore.open().get(0).root(), "then it looks round");
+
+        Explore restored = Explore.restore((Explore.State) explore.snapshot(), 0).orElseThrow();
+        assertTrue(restored.itemFor(new WorkKey.ForMember(WorkKey.ACCOMPANY, companion.self)).isPresent(),
+                "a restored companion keeps its own item");
+        assertInstanceOf(LookRound.class, restored.open().get(0).root(), "and the party stays gathered");
+    }
+
+    @Test
+    void aStepTheScoutLeavesGoesToSomebodyElse() {
+        Explore.install(new Stub());
+        Explore explore = new Explore(party, 0.5);
+        FakeContext scout = new FakeContext();
+        FakeContext other = new FakeContext();
+        WorkItem look = only(explore);
+        explore.claimed(look, scout.self);
+        explore.completed(look, scout);
+        WorkItem walk = explore.open().get(0);
+
+        explore.tick(Explore.SCOUT_LAPSE / 2);
+        assertFalse(explore.offerableTo(walk, other.self, other));
+        explore.tick(Explore.SCOUT_LAPSE + 1);
+        assertTrue(explore.offerableTo(walk, other.self, other), "the scout left it too long");
     }
 }
