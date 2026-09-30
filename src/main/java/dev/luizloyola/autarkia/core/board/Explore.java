@@ -265,8 +265,12 @@ public final class Explore implements PartyProject {
     public void failed(WorkItem item, AgentId who, BrainContext ctx) {
         if (item instanceof Accompany accompany) {
             accompanying.remove(accompany.who());
-            companions.remove(accompany.who());
-            cooldownUntil.put(who, ctx.percepts().time() + FAIL_COOLDOWN);
+            // Nobody at the meeting place is expected once the scout has gone on to a new one: the
+            // companion takes the offer again, with the new place. At the same place, it is lost.
+            if (Objects.equals(accompany.meet, meeting())) {
+                companions.remove(accompany.who());
+                cooldownUntil.put(who, ctx.percepts().time() + FAIL_COOLDOWN);
+            }
             return;
         }
         if (item != current) {
@@ -454,6 +458,9 @@ public final class Explore implements PartyProject {
     private final class Accompany implements WorkItem {
         private final AgentId who;
 
+        /** The meeting place its follow was given. */
+        private @Nullable Pos meet;
+
         private Accompany(AgentId who) {
             this.who = who;
         }
@@ -473,7 +480,8 @@ public final class Explore implements PartyProject {
 
         @Override
         public Task root() {
-            return new Follow(BeingId.of(Objects.requireNonNull(scout, "scout")), meeting());
+            meet = meeting();
+            return new Follow(BeingId.of(Objects.requireNonNull(scout, "scout")), meet);
         }
 
         @Override

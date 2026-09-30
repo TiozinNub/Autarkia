@@ -297,4 +297,29 @@ class ExploreTest {
         explore.tick(Explore.SCOUT_LAPSE + 1);
         assertTrue(explore.offerableTo(walk, other.self, other), "the scout left it too long");
     }
+
+    @Test
+    void aCompanionLeftBehindAtAnOldMeetingPlaceGoesOnToTheNew() {
+        Explore.install(new Stub());
+        Explore explore = new Explore(party, 0.5);
+        FakeContext scout = new FakeContext();
+        FakeContext companion = new FakeContext();
+        WorkItem look = only(explore);
+        explore.claimed(look, scout.self);
+        explore.completed(look, scout);
+        WorkItem walk = explore.open().get(0);
+        GoTo leg = (GoTo) walk.root();
+        scout.percepts.position = new Pos(leg.x(), leg.y(), leg.z());
+        explore.completed(walk, scout);
+        WorkItem mine = explore.realise(explore.open().get(1), companion.self, companion);
+        explore.claimed(mine, companion.self);
+        mine.root(); // given the stop the scout stands at
+        explore.completed(explore.open().get(0), scout); // the wait
+        explore.completed(explore.open().get(0), scout); // the look: off on the next leg
+
+        explore.failed(mine, companion.self, companion);
+
+        assertTrue(explore.offerableTo(explore.open().get(1), companion.self, companion),
+                "a new leg's end to meet at, so no cooldown");
+    }
 }
