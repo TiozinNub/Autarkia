@@ -219,6 +219,9 @@ public final class Structures {
                 if (next != structure) {
                     data.replace(party, next);
                     tell(server, party, next);
+                    if (next.phase() == Phase.BUILT) {
+                        MovingIn.moveIn(server, party, next).forEach(line -> journal(server, party, line));
+                    }
                 }
             }
         }
