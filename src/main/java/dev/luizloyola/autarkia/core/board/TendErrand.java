@@ -20,14 +20,14 @@ public final class TendErrand implements CompoundTask {
     private final Pos at;
     private final ItemSpec output;
     private final @Nullable ItemSpec fuel;
-    private final @Nullable Pos yard;
+    private final boolean home;
     private final List<Method> methods = List.of(new Way());
 
-    public TendErrand(Pos at, ItemSpec output, @Nullable ItemSpec fuel, @Nullable Pos yard) {
+    public TendErrand(Pos at, ItemSpec output, @Nullable ItemSpec fuel, boolean home) {
         this.at = at;
         this.output = output;
         this.fuel = fuel;
-        this.yard = yard;
+        this.home = home;
     }
 
     @Override
@@ -52,8 +52,9 @@ public final class TendErrand implements CompoundTask {
         return fuel;
     }
 
-    public @Nullable Pos yard() {
-        return yard;
+    /** Whether what it made goes home afterwards. */
+    public boolean home() {
+        return home;
     }
 
     private final class Way implements Method {
@@ -71,8 +72,8 @@ public final class TendErrand implements CompoundTask {
         public List<Task> decompose(BrainContext ctx) {
             List<Task> steps = new ArrayList<>();
             steps.add(new UnloadFurnace(at, output, fuel));
-            if (yard != null) {
-                steps.add(new BringBack(output, LOAD, yard));
+            if (home) {
+                steps.add(new BringBack(output, LOAD));
             }
             return steps;
         }

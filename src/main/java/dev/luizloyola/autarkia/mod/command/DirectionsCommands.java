@@ -155,7 +155,7 @@ public final class DirectionsCommands {
             send(source, Component.translatable("autarkia.command.directions.learned", join(learned)));
         }
         PartyView view = Directions.view(server, party, progress);
-        send(source, homeLine(progress.home(), view.area()));
+        send(source, homeLine(progress.home(), view.area(), view.spot()));
         PartyBoard board = PartyBoards.of(server, party);
         send(source, Component.translatable("autarkia.command.directions.in_force"));
         for (Direction direction : tree.inForce(progress.reached())) {
@@ -221,13 +221,13 @@ public final class DirectionsCommands {
         return line;
     }
 
-    private static Component homeLine(@Nullable Home home, Set<ChunkKey> area) {
+    private static Component homeLine(@Nullable Home home, Set<ChunkKey> area, Optional<Pos> spot) {
         if (home == null) {
             return Component.translatable("autarkia.command.directions.no_home")
                     .withStyle(ChatFormatting.GRAY);
         }
         return Component.translatable("autarkia.command.directions.home", area.size(),
-                area.size() - home.uncleared(area).size(), at(home.yard()));
+                area.size() - home.uncleared(area).size(), spot.map(DirectionsCommands::at).orElse("—"));
     }
 
     /** {@code [x, z]} of the area's first and last chunks along each axis. */
@@ -354,14 +354,17 @@ public final class DirectionsCommands {
         }
         Set<ChunkKey> area = areaOf(source.getServer(), party);
         String[] corners = corners(area);
+        Optional<Pos> spot = DirectionsData.get(source.getServer()).find(party)
+                .flatMap(progress -> Directions.view(source.getServer(), party, progress).spot());
         send(source, Component.translatable("autarkia.command.home.show", person.getName(), area.size(),
-                area.size() - home.uncleared(area).size(), corners[0], corners[1], at(home.yard())));
+                area.size() - home.uncleared(area).size(), corners[0], corners[1],
+                spot.map(DirectionsCommands::at).orElse("—")));
         return 1;
     }
 
     /**
-     * The chunks a square round a centre touches, and the centre as the yard. Setting it again is a
-     * new HOME, and a new HOME is one nobody has cleared.
+     * The chunks a square round a centre touches. Setting it again is a new HOME, and a new HOME is
+     * one nobody has cleared.
      */
     private static int homeSet(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
@@ -372,9 +375,9 @@ public final class DirectionsCommands {
         }
         BlockPos center = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
         int radius = IntegerArgumentType.getInteger(ctx, "radius");
-        Pos yard = new Pos(center.getX(), center.getY(), center.getZ());
+        Pos centre = new Pos(center.getX(), center.getY(), center.getZ());
         MinecraftServer server = source.getServer();
-        Claimed claimed = Directions.settle(server, party, yard, Home.square(yard, radius),
+        Claimed claimed = Directions.settle(server, party, Home.square(centre, radius),
                 Reason.of(Reason.Kind.OP, "home set by " + source.getTextName()));
         if (!claimed.granted()) {
             Replies.fail(source, Component.translatable("autarkia.command.home.refused", person.getName(),
@@ -384,9 +387,9 @@ public final class DirectionsCommands {
         Set<ChunkKey> area = areaOf(server, party);
         String[] corners = corners(area);
         OpJournal.record(source, PartyData.get(server).members(party),
-                "set HOME at " + at(yard) + ", " + area.size() + " chunks");
+                "set HOME round " + at(centre) + ", " + area.size() + " chunks");
         Replies.send(source, () -> Component.translatable("autarkia.command.home.set", person.getName(),
-                area.size(), corners[0], corners[1], at(yard)).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+                area.size(), corners[0], corners[1]).withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
 
@@ -445,9 +448,9 @@ public final class DirectionsCommands {
             return 1;
         }
         Candidate best = shown.get(0);
-        Pos yard = new Pos(best.x(), best.y() + 1, best.z());
+        Pos centre = new Pos(best.x(), best.y() + 1, best.z());
         MinecraftServer server = source.getServer();
-        Claimed claimed = Directions.settle(server, party, yard, Home.square(yard, best.size() / 2),
+        Claimed claimed = Directions.settle(server, party, Home.square(centre, best.size() / 2),
                 Reason.of(Reason.Kind.OP, "home choose by " + source.getTextName() + ", worth "
                         + Math.round(best.value())));
         if (!claimed.granted()) {
@@ -458,9 +461,9 @@ public final class DirectionsCommands {
         Set<ChunkKey> area = areaOf(server, party);
         String[] corners = corners(area);
         OpJournal.record(source, PartyData.get(server).members(party),
-                "chose HOME at " + at(yard) + ", worth " + Math.round(best.value()));
+                "chose HOME at " + at(centre) + ", worth " + Math.round(best.value()));
         Replies.send(source, () -> Component.translatable("autarkia.command.home.choose.applied",
-                person.getName(), at(yard), Math.round(best.value()), area.size(), corners[0], corners[1])
+                person.getName(), at(centre), Math.round(best.value()), area.size(), corners[0], corners[1])
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }

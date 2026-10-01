@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test;
  */
 class FoodLineTest {
 
-    private static final Pos YARD = new Pos(10, 64, 10);
     private static final Direction FOOD = new Direction(new DirectionId("test:wood", "food"), 32, null);
 
     /** A party of {@link #members} with HOME's stores holding {@link #points} of food as {@link #items}. */
@@ -41,7 +40,7 @@ class FoodLineTest {
 
         @Override
         public Optional<Home> home() {
-            return Optional.of(Home.at(YARD));
+            return Optional.of(Home.fresh());
         }
 
         @Override
@@ -106,7 +105,6 @@ class FoodLineTest {
         Gather gather = assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4));
 
         assertEquals(Food.SPEC, gather.spec());
-        assertEquals(YARD, gather.yard());
         assertEquals(10 + 28, gather.target(),
                 "56 points short at two a berry is 28 more items on top of the 10 there");
     }
@@ -114,7 +112,7 @@ class FoodLineTest {
     @Test
     void itKnowsItsOwnGatherAndNoOther() {
         Gather food = assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4));
-        Gather logs = new Gather(Stock.LOGS, 64, YARD, 0.4, party.id, CarrySplit.INSTANCE);
+        Gather logs = new Gather(Stock.LOGS, 64, 0.4, party.id, CarrySplit.INSTANCE);
 
         assertTrue(FoodLine.INSTANCE.isWork(food, FOOD, party));
         assertFalse(FoodLine.INSTANCE.isWork(logs, FOOD, party));

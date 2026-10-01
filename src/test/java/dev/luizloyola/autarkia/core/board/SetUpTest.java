@@ -22,10 +22,10 @@ import org.junit.jupiter.api.Test;
  */
 class SetUpTest {
 
-    private static final Pos YARD = new Pos(10, 64, 10);
+    private static final Pos SPOT = new Pos(10, 64, 10);
 
     private static SetUp base() {
-        return new SetUp(List.of(SetUp.WORKBENCH, SetUp.STORE), YARD, 0.5);
+        return new SetUp(List.of(SetUp.WORKBENCH, SetUp.STORE), SPOT, 0.5);
     }
 
     @Test
@@ -37,7 +37,7 @@ class SetUpTest {
         assertEquals(1, setUp.open().size());
         PlaceStation root = assertInstanceOf(PlaceStation.class, bench.root());
         assertEquals(SetUp.WORKBENCH.itemId(), root.itemId());
-        assertEquals(YARD, root.near());
+        assertEquals(SPOT, root.near());
 
         setUp.completed(bench, ctx);
         WorkItem chest = setUp.open().get(0);

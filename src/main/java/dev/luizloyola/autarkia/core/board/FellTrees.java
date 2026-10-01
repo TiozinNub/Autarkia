@@ -12,8 +12,6 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.brain.task.SweepingErrand;
 import dev.luizloyola.anima.core.brain.task.Task;
-import dev.luizloyola.anima.core.agent.ProfileAspect;
-import dev.luizloyola.anima.core.store.Store;
 import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
@@ -197,29 +195,22 @@ public final class FellTrees implements PartyProject {
     private final Coverage ground = new Ground();
 
     /**
-     * Cargo, in full stacks, that makes the walk to the yard worth taking: three is about 192 logs,
+     * Cargo, in full stacks, that makes the walk home worth taking: three is about 192 logs,
      * two dozen trees with their saplings and sticks.
      *
      * <p><b>Stacks, not slots.</b> It was three SLOTS from 2026-08-20, when a woodcutter carried
      * only logs and a slot was a stack of them. Once the chop swept up its drops (2026-09-10), one
      * tree in a mixed wood filled three slots with two kinds of log, saplings and sticks, and
-     * settlers walked to the yard after every tree with about fifteen items (in-world, 2026-09-27).
-     * The first cut, twelve slots, would have cleared a box without once walking to the yard.
+     * settlers walked home after every tree with about fifteen items (in-world, 2026-09-27).
+     * The first cut, twelve slots, would have cleared a box without once walking home.
      *
      * <p>A pack of odds and ends that runs out of room goes whatever its load, above the line
      * where unburden would take it to the NEAREST store instead ({@code PutAwaySurplus}).
      */
     public static final int HAUL_LINE = 3;
 
-    /** Where the operator asked the wood to go, or null — see the five-argument constructor. */
-    private final @Nullable Pos yard;
-
-    /**
-     * The chests actually standing at the yard, learned from workers as they report in. A hint says
-     * where somebody wanted a yard; this says where one is, which is what a readout should name and
-     * what a later hauler walks to.
-     */
-    private final Set<Pos> yardChests = new LinkedHashSet<>();
+    /** Whether the wood goes home — to the worker's depot — or stays in the felling's packs. */
+    private final boolean home;
 
     /**
      * Targets removed since refusals were last reopened — the licence to reopen them again.
@@ -249,24 +240,20 @@ public final class FellTrees implements PartyProject {
     private final Map<AgentId, Long> bringInCooling = new java.util.HashMap<>();
 
     public FellTrees(Felling clearing, Region bounds, double priority) {
-        this(clearing, bounds, priority, null);
+        this(clearing, bounds, priority, false);
     }
 
     /**
-     * As above, with somewhere for the wood to go.
-     *
-     * <p><b>The yard is a hint, not a coordinate to obey</b> (decision: Luiz, 2026-08-20): the first
-     * hauler builds on whatever ground near it will hold a chest, and {@link #yardChests()} is where
-     * the project remembers what they actually built. Completion is unaffected either way — the box
-     * is clear when it is clear, whether or not a single log reached the yard.
+     * As above, the wood taken home when {@code home}. Completion is unaffected either way — the
+     * box is clear when it is clear, whether or not a single log reached a home chest.
      */
-    public FellTrees(Felling clearing, Region bounds, double priority, @Nullable Pos yard) {
+    public FellTrees(Felling clearing, Region bounds, double priority, boolean home) {
         this.clearing = clearing;
         this.bounds = bounds;
         this.priority = priority;
         this.slices = sliceUp(bounds);
         this.covered = new CoverageGrid(bounds);
-        this.yard = yard;
+        this.home = home;
     }
 
     /** What this project clears, for the store and the readout. */
@@ -529,7 +516,7 @@ public final class FellTrees implements PartyProject {
         if (item == bringIn) {
             return crew.contains(asker)
                     && bringInCooling.getOrDefault(asker, 0L) <= ctx.percepts().time()
-                    && !new PutAwaySurplus(yard, 0).satisfied(ctx);
+                    && !new PutAwaySurplus(0).satisfied(ctx);
         }
         if (item instanceof ClearItem target && !ctx.claims()
                 .availableTo(clearing.kind(), target.key.at(), ctx.percepts().time())) {
@@ -575,8 +562,6 @@ public final class FellTrees implements PartyProject {
         }
         WorkKey key = named.get();
         claimed.remove(key);
-        // Whatever the errand was, this worker has been out there and may have opened the yard.
-        learnYard(ctx);
         if (WorkKey.BRING_IN.equals(key.flavour())) {
             open.remove(key);
             rebuildOffer();
@@ -722,7 +707,7 @@ public final class FellTrees implements PartyProject {
     @Override
     public Optional<WorkItem> itemFor(WorkKey key) {
         if (key instanceof WorkKey.ForMember member && WorkKey.BRING_IN.equals(member.flavour())
-                && yard != null) {
+                && home) {
             return Optional.of(open.computeIfAbsent(key, k -> new BringInItem(member.who())));
         }
         return Optional.ofNullable(open.get(key));
@@ -737,18 +722,7 @@ public final class FellTrees implements PartyProject {
 
     @Override
     public String describe() {
-        return name() + " — " + progress() + yardNote();
-    }
-
-    /** Where the wood is going, when anywhere: {@code " · yard: 2 chests near (10, 64, 10)"}. */
-    private String yardNote() {
-        if (yard == null) {
-            return "";
-        }
-        String chests = yardChests.isEmpty()
-                ? "not opened yet"
-                : yardChests.size() + (yardChests.size() == 1 ? " chest" : " chests");
-        return " · yard: " + chests + " near " + at(yard);
+        return name() + " — " + progress() + (home ? " · wood goes home" : "");
     }
 
     /**
@@ -764,32 +738,9 @@ public final class FellTrees implements PartyProject {
         return false;
     }
 
-    /** Where the operator asked the wood to go, if anywhere. */
-    public Optional<Pos> yard() {
-        return Optional.ofNullable(yard);
-    }
-
-    /** The chests known to stand at the yard, in the order they were learned about. */
-    public List<Pos> yardChests() {
-        return List.copyOf(yardChests);
-    }
-
-    /**
-     * Learns what a returning worker knows about the yard: the party's stores close enough to the
-     * hint to BE the yard. Called from {@code completed} because that is the one moment the project
-     * holds both a worker and their knowledge — the board itself never reads a mind, and this is the
-     * same "people bring knowledge to the board" rule layer 3 has had since it was written.
-     */
-    private void learnYard(BrainContext ctx) {
-        if (yard == null) {
-            return;
-        }
-        double radius = ctx.profile().i(ProfileAspect.STORES_FOUND_RADIUS);
-        for (PoiMemory memory : Store.ours(ctx)) {
-            if (Store.distance(memory.anchor(), yard) <= radius) {
-                yardChests.add(memory.anchor());
-            }
-        }
+    /** Whether the wood goes home. */
+    public boolean home() {
+        return home;
     }
 
     /**
@@ -938,7 +889,7 @@ public final class FellTrees implements PartyProject {
 
     private void rebuildOffer() {
         List<WorkItem> items = new ArrayList<>(open.values());
-        if (yard != null && !unclaimedWork()) {
+        if (home && !unclaimedWork()) {
             items.add(bringIn);
         }
         this.offer = List.copyOf(items);
@@ -1031,11 +982,11 @@ public final class FellTrees implements PartyProject {
         @Override
         public Task root() {
             Task felling = clearing.clear(key.at());
-            // Without a yard the inner errand is byte-for-byte what it has always been — the haul
-            // is additive, and a box posted the old way behaves the old way.
-            Task work = yard == null ? felling
-                    : new HaulingErrand(felling, yard, HAUL_LINE, FellTrees.this::unclaimedWork);
-            // Outermost, so the walk out, the felling and the walk to the yard all count.
+            // Without a haul home the inner errand is byte-for-byte what it has always been — the
+            // haul is additive, and a box posted the old way behaves the old way.
+            Task work = !home ? felling
+                    : new HaulingErrand(felling, HAUL_LINE, FellTrees.this::unclaimedWork);
+            // Outermost, so the walk out, the felling and the walk home all count.
             return new SweepingErrand(work, ground);
         }
 
@@ -1063,7 +1014,7 @@ public final class FellTrees implements PartyProject {
     }
 
     /**
-     * Take the load to the yard — the end of the job for a member whose last tree left others still
+     * Take the load home — the end of the job for a member whose last tree left others still
      * being felled, so the in-errand check saw work and let the load be. Named by the member: a load
      * has no place to be keyed by.
      */
@@ -1094,12 +1045,12 @@ public final class FellTrees implements PartyProject {
 
         @Override
         public double estimatedCost(BrainContext ctx) {
-            return costOfWalkingTo(yard, ctx);
+            return costOfWalkingHome(ctx);
         }
 
         @Override
         public Task root() {
-            return new PutAwaySurplus(yard, 0);
+            return new PutAwaySurplus(0);
         }
 
         @Override
@@ -1109,7 +1060,7 @@ public final class FellTrees implements PartyProject {
 
         @Override
         public String describe() {
-            return "bring the load in to the yard near " + at(yard);
+            return "bring the load home";
         }
     }
 
@@ -1127,12 +1078,12 @@ public final class FellTrees implements PartyProject {
 
         @Override
         public double estimatedCost(BrainContext ctx) {
-            return costOfWalkingTo(yard, ctx);
+            return costOfWalkingHome(ctx);
         }
 
         @Override
         public Task root() {
-            return new PutAwaySurplus(yard, 0);
+            return new PutAwaySurplus(0);
         }
 
         @Override
@@ -1142,7 +1093,7 @@ public final class FellTrees implements PartyProject {
 
         @Override
         public String describe() {
-            return "bring loads in to the yard near " + at(yard);
+            return "bring loads home";
         }
     }
 
@@ -1156,6 +1107,11 @@ public final class FellTrees implements PartyProject {
      * around a hill rather than through it, and a height difference the pathfinder handles should
      * not price an errand out.
      */
+    /** The walk to the depot's hint; a body with no home pays the most. */
+    private static double costOfWalkingHome(BrainContext ctx) {
+        return ctx.depot().map(site -> costOfWalkingTo(site.hint(), ctx)).orElse(COST_AT_RANGE);
+    }
+
     private static double costOfWalkingTo(Pos there, BrainContext ctx) {
         Pos here = ctx.percepts().position();
         double dx = there.x() - here.x();
@@ -1181,7 +1137,7 @@ public final class FellTrees implements PartyProject {
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<SliceCooldown> sliceCooldowns, List<Target> targets,
                         int felledSinceReopen, List<CellMask> covered,
-                        @Nullable Pos yard, List<Pos> yardChests, List<AgentId> crew)
+                        boolean home, List<AgentId> crew)
             implements ProjectState {
 
         @Override
@@ -1207,8 +1163,8 @@ public final class FellTrees implements PartyProject {
         List<CellMask> cells = new ArrayList<>();
         covered.masks().forEach((corner, mask) -> cells.add(new CellMask(corner, mask)));
         return new State(clearing.id(), bounds, priority, phase, List.copyOf(cooldowns),
-                List.copyOf(ledger.values()), felledSinceReopen, List.copyOf(cells), yard,
-                List.copyOf(yardChests), List.copyOf(crew));
+                List.copyOf(ledger.values()), felledSinceReopen, List.copyOf(cells), home,
+                List.copyOf(crew));
     }
 
     /**
@@ -1219,7 +1175,7 @@ public final class FellTrees implements PartyProject {
     public static Optional<FellTrees> restore(State state, long now) {
         return Fellings.byId(state.clearing()).map(clearing -> {
             FellTrees project =
-                    new FellTrees(clearing, state.bounds(), state.priority(), state.yard());
+                    new FellTrees(clearing, state.bounds(), state.priority(), state.home());
             project.phase = state.phase();
             for (SliceCooldown cooldown : state.sliceCooldowns()) {
                 project.sliceRetryAfter.put(cooldown.slice(), cooldown.retryAfter());
@@ -1231,7 +1187,6 @@ public final class FellTrees implements PartyProject {
             for (CellMask cell : state.covered()) {
                 project.covered.markMask(cell.corner(), cell.mask());
             }
-            project.yardChests.addAll(state.yardChests());
             project.crew.addAll(state.crew());
             project.refresh(now);
             return project;

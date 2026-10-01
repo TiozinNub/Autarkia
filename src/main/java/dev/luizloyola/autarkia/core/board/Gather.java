@@ -1,7 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.agent.AgentId;
-import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
@@ -24,12 +23,12 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Get this much of this into that yard — the second kind of party project, and the first whose goal
+ * Get this much of this into HOME's stores — the second kind of party project, and the first whose goal
  * is a QUANTITY rather than a place.
  *
  * <h2>The ledger is the chest as last read</h2>
  *
- * <p>One {@link Reading} per yard chest, {@link #stored()} their sum, and {@link #finished()} is
+ * <p>One {@link Reading} per home chest, {@link #stored()} their sum, and {@link #finished()} is
  * {@code stored >= target} — context-free, reading nothing but its own state, which is what a
  * project ticking in a host with nobody's eyes has to be. The two alternatives were both ruled out
  * on 2026-08-18: a monotonic tally of deliveries never decrements and so closes satisfied over an
@@ -92,7 +91,7 @@ public final class Gather implements PartyProject {
     public static final int SLATE_SLICES = 32;
 
     /**
-     * What one yard chest held the last time anybody looked, and when.
+     * What one home chest held the last time anybody looked, and when.
      *
      * @param at the game time of the look — carried so a restart cannot make a stale belief look
      *           fresh, and so a reporter with an older memory cannot overwrite a newer reading
@@ -122,17 +121,17 @@ public final class Gather implements PartyProject {
     private final ItemSpec spec;
     private final int target;
 
-    /** Where the goods are wanted. A hint, exactly as a clearing's yard is — see {@code EnsureStore}. */
-    private final Pos yard;
-
     private final double priority;
     private final PartyId party;
     private final Split split;
 
-    /** The chests actually standing at the yard, learned from workers as they report in. */
-    private final Set<Pos> yardChests = new LinkedHashSet<>();
+    /**
+     * The chests standing at HOME — any store of the reporter's depot — learned from workers as
+     * they report in.
+     */
+    private final Set<Pos> chests = new LinkedHashSet<>();
 
-    /** The latest reading per yard chest — the whole of what this project believes it has. */
+    /** The latest reading per home chest — the whole of what this project believes it has. */
     private final Map<Pos, Reading> readings = new LinkedHashMap<>();
 
     /** What is on offer right now. Held rather than rebuilt: the board leases items by IDENTITY. */
@@ -164,10 +163,9 @@ public final class Gather implements PartyProject {
      */
     private long lastTick;
 
-    public Gather(ItemSpec spec, int target, Pos yard, double priority, PartyId party, Split split) {
+    public Gather(ItemSpec spec, int target, double priority, PartyId party, Split split) {
         this.spec = spec;
         this.target = target;
-        this.yard = yard;
         this.priority = priority;
         this.party = party;
         this.split = split;
@@ -181,11 +179,6 @@ public final class Gather implements PartyProject {
         return target;
     }
 
-    /** Where the operator asked the goods to go. */
-    public Pos yard() {
-        return yard;
-    }
-
     public PartyId party() {
         return party;
     }
@@ -194,19 +187,19 @@ public final class Gather implements PartyProject {
         return split;
     }
 
-    /** The chests known to stand at the yard, in the order they were learned about. */
-    public List<Pos> yardChests() {
-        return List.copyOf(yardChests);
+    /** The chests known to stand at HOME, in the order they were learned about. */
+    public List<Pos> chests() {
+        return List.copyOf(chests);
     }
 
-    /** The latest reading of each yard chest, in the order the chests were learned about. */
+    /** The latest reading of each home chest, in the order the chests were learned about. */
     public List<Reading> readings() {
         return List.copyOf(readings.values());
     }
 
     // ── the arithmetic ───────────────────────────────────────────────────────────────────────
 
-    /** What the yard was last seen holding: the sum of the latest reading of each of its chests. */
+    /** What HOME was last seen holding: the sum of the latest reading of each of its chests. */
     public int stored() {
         int total = 0;
         for (Reading reading : readings.values()) {
@@ -421,7 +414,7 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * A trip came back: the reporter tells us where the yard's chests are and what is in them, and
+     * A trip came back: the reporter tells us where HOME's chests are and what is in them, and
      * if that satisfies the target the project closes with a line in THEIR journal.
      *
      * <p><b>The closing line has to be written here.</b> {@code Board.closeFinished} drops a
@@ -437,9 +430,9 @@ public final class Gather implements PartyProject {
         }
         WorkKey key = named.get();
         claimed.remove(key);
-        // Whatever the trip was, this worker has just been standing in the yard with a lid open.
-        learnYard(ctx);
-        readYard(ctx, ctx.percepts().time());
+        // Whatever the trip was, this worker has just been standing at a home chest with a lid open.
+        learnChests(ctx);
+        readChests(ctx, ctx.percepts().time());
         open.remove(key);
         if (finished()) {
             withdrawAll();
@@ -450,28 +443,29 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * Learns what a returning worker knows about the yard: every one of the party's stores near
-     * enough to the hint to BE the yard — a chest nobody may fill is no part of it. Called from
-     * {@link #completed} because that is the one moment this project holds a worker and their
-     * knowledge — the board itself never reads a mind.
+     * Learns what a returning worker knows about HOME's chests: every one of the party's stores in
+     * the worker's depot — a chest nobody may fill is no part of it. Called from {@link #completed}
+     * because that is the one moment this project holds a worker and their knowledge — the board
+     * itself never reads a mind.
      */
-    private void learnYard(BrainContext ctx) {
-        double radius = ctx.profile().i(ProfileAspect.STORES_FOUND_RADIUS);
-        for (PoiMemory memory : Store.ours(ctx)) {
-            if (Store.distance(memory.anchor(), yard) <= radius) {
-                yardChests.add(memory.anchor());
+    private void learnChests(BrainContext ctx) {
+        ctx.depot().ifPresent(site -> {
+            for (PoiMemory memory : Store.ours(ctx)) {
+                if (site.holds(memory.anchor())) {
+                    chests.add(memory.anchor());
+                }
             }
-        }
+        });
     }
 
     /**
-     * Takes the reporter's belief about each yard chest into the ledger, keeping only the LATEST
+     * Takes the reporter's belief about each home chest into the ledger, keeping only the LATEST
      * belief about each — a member arriving with an hour-old memory has not seen anything newer,
      * so their reading is not an update.
      *
      * <p><b>A chest the reporter cannot remember at all reads as EMPTY, stamped now.</b> That is a
      * reading, not an erasure, and the difference is the whole rule. {@code Store.wouldNotOpen}
-     * disproves a chest that has gone, so a vanished yard chest stops being remembered; erasing the
+     * disproves a chest that has gone, so a vanished home chest stops being remembered; erasing the
      * row instead would leave nothing for the staleness guard to compare against, and the next
      * reporter who happened to look inside it last week would write the old count straight back —
      * a phantom the project then closes satisfied over. A zero stamped at this tick outranks every
@@ -481,12 +475,12 @@ public final class Gather implements PartyProject {
      * reading when a member's memory cap has evicted the place, and that asymmetry is the point:
      * the error must always be "collect too much", never a project closing over an empty hole.
      */
-    private void readYard(BrainContext ctx, long now) {
+    private void readChests(BrainContext ctx, long now) {
         Set<Pos> remembered = new HashSet<>();
         for (PoiMemory memory : ctx.knowledge().all(Store.POI)) {
             remembered.add(memory.anchor());
         }
-        for (Pos chest : yardChests) {
+        for (Pos chest : chests) {
             if (!remembered.contains(chest)) {
                 // `now` is by construction newer than any belief anybody can be carrying.
                 readings.put(chest, new Reading(chest, 0, now));
@@ -546,7 +540,7 @@ public final class Gather implements PartyProject {
      * that shared them once closed with {@code done (3 cleared - done) 3 cleared}.
      */
     private String name() {
-        return "gather " + target + " " + spec.name() + " at " + at(yard);
+        return "gather " + target + " " + spec.name() + " at home";
     }
 
     @Override
@@ -559,16 +553,25 @@ public final class Gather implements PartyProject {
             return closingLine();
         }
         int trips = open.size();
-        return stored() + "/" + target + " in the yard, " + trips
+        return stored() + "/" + target + " at home, " + trips
                 + (trips == 1 ? " trip out" : " trips out");
     }
 
     private String closingLine() {
-        return "done — the yard holds " + stored();
+        return "done — home holds " + stored();
     }
 
-    private static String at(Pos p) {
-        return "(" + p.x() + ", " + p.y() + ", " + p.z() + ")";
+    /**
+     * Distance home, mapped onto the bid scale; a body with no home pays the most. Horizontal
+     * distance is not worth the extra arithmetic here — the fetch, which is the bulk of the walk,
+     * prices itself per asker inside {@code ObtainItem}, and this only has to keep a far-off gather
+     * from outbidding work underfoot.
+     */
+    private static double costFromHome(BrainContext ctx) {
+        double distance = ctx.depot()
+                .map(site -> Store.distance(site.hint(), ctx.percepts().position()))
+                .orElse((double) COST_RANGE);
+        return COST_AT_RANGE * Math.min(1.0, distance / COST_RANGE);
     }
 
     // ── internals ────────────────────────────────────────────────────────────────────────────
@@ -616,8 +619,7 @@ public final class Gather implements PartyProject {
 
         @Override
         public double estimatedCost(BrainContext ctx) {
-            double distance = Store.distance(yard, ctx.percepts().position());
-            return COST_AT_RANGE * Math.min(1.0, distance / COST_RANGE);
+            return costFromHome(ctx);
         }
 
         /** Never called: {@link Gather#realise} replaces a slice with a trip before it is leased. */
@@ -628,17 +630,17 @@ public final class Gather implements PartyProject {
 
         @Override
         public Deed doing() {
-            return Deed.of(WorkDoings.GATHERING, WorkDoings.goods(spec), WorkDoings.FOR_THE_YARD);
+            return Deed.of(WorkDoings.GATHERING, WorkDoings.goods(spec), WorkDoings.FOR_THE_STORES);
         }
 
         @Override
         public String describe() {
-            return "fetch " + size + " " + spec.name() + " to " + at(yard);
+            return "fetch " + size + " " + spec.name() + " home";
         }
     }
 
     /**
-     * One body's whole trip: go and get this much, then put it in the yard. It does not carry who
+     * One body's whole trip: go and get this much, then put it in a home chest. It does not carry who
      * it is for — the {@link WorkKey.ForMember} it is filed under already says, and an item holding
      * its own name would be a second copy to keep in step.
      */
@@ -669,36 +671,29 @@ public final class Gather implements PartyProject {
             return priority;
         }
 
-        /**
-         * Distance to the yard, mapped onto the bid scale. Horizontal distance is not worth the
-         * extra arithmetic here — the fetch, which is the bulk of the walk, prices itself per asker
-         * inside {@code ObtainItem}, and this only has to keep a far-off gather from outbidding
-         * work underfoot.
-         */
         @Override
         public double estimatedCost(BrainContext ctx) {
-            double distance = Store.distance(yard, ctx.percepts().position());
-            return COST_AT_RANGE * Math.min(1.0, distance / COST_RANGE);
+            return costFromHome(ctx);
         }
 
         @Override
         public Task root() {
-            return new GatheringErrand(spec, size, yard);
+            return new GatheringErrand(spec, size);
         }
 
         @Override
         public Deed doing() {
-            return Deed.of(WorkDoings.GATHERING, WorkDoings.goods(spec), WorkDoings.FOR_THE_YARD);
+            return Deed.of(WorkDoings.GATHERING, WorkDoings.goods(spec), WorkDoings.FOR_THE_STORES);
         }
 
         @Override
         public String describe() {
-            return "fetch " + size + " " + spec.name() + " to " + at(yard);
+            return "fetch " + size + " " + spec.name() + " home";
         }
 
         @Override
         public String progress(BrainContext ctx) {
-            return stored() + "/" + target + " in the yard";
+            return stored() + "/" + target + " at home";
         }
     }
 
@@ -720,16 +715,16 @@ public final class Gather implements PartyProject {
      *             {@link #restore} looks it up — see {@code PartyBoardCodecs.SPEC}
      * @param split the {@link Split} registry id, for the same reason
      */
-    public record State(String spec, int target, Pos yard, double priority, PartyId party,
-                        String split, List<Pos> yardChests, List<Reading> readings,
+    public record State(String spec, int target, double priority, PartyId party,
+                        String split, List<Pos> chests, List<Reading> readings,
                         List<Trip> trips, List<Cooldown> cooldowns, long lastTick)
             implements ProjectState {
 
         /** A state saved before the clock was: the restore's own tick stands in for it. */
-        public State(String spec, int target, Pos yard, double priority, PartyId party, String split,
-                     List<Pos> yardChests, List<Reading> readings, List<Trip> trips,
+        public State(String spec, int target, double priority, PartyId party, String split,
+                     List<Pos> chests, List<Reading> readings, List<Trip> trips,
                      List<Cooldown> cooldowns) {
-            this(spec, target, yard, priority, party, split, yardChests, readings, trips, cooldowns, -1L);
+            this(spec, target, priority, party, split, chests, readings, trips, cooldowns, -1L);
         }
 
         @Override
@@ -749,8 +744,8 @@ public final class Gather implements PartyProject {
         });
         List<Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Cooldown(who, until)));
-        return new State(spec.name(), target, yard, priority, party, split.id(),
-                List.copyOf(yardChests), List.copyOf(readings.values()), List.copyOf(trips),
+        return new State(spec.name(), target, priority, party, split.id(),
+                List.copyOf(chests), List.copyOf(readings.values()), List.copyOf(trips),
                 List.copyOf(cooldowns), lastTick);
     }
 
@@ -766,9 +761,9 @@ public final class Gather implements PartyProject {
      */
     public static Optional<Gather> restore(State state, long now) {
         return ItemSpec.byName(state.spec()).map(spec -> {
-            Gather project = new Gather(spec, state.target(), state.yard(), state.priority(),
+            Gather project = new Gather(spec, state.target(), state.priority(),
                     state.party(), Splits.byId(state.split()).orElse(CarrySplit.INSTANCE));
-            project.yardChests.addAll(state.yardChests());
+            project.chests.addAll(state.chests());
             for (Reading reading : state.readings()) {
                 project.readings.put(reading.chest(), reading);
             }

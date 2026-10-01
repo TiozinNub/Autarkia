@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
-import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.continuity.StateGraph;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.mod.board.PartyBoardCodecs;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.Test;
 class PartyBoardContinuityTest {
 
     private static final PartyId PARTY = PartyId.of(UUID.randomUUID());
-    private static final Pos YARD = new Pos(10, 64, 10);
 
     @BeforeEach
     void wireTheRegistries() {
@@ -52,8 +50,8 @@ class PartyBoardContinuityTest {
         AgentId flailer = AgentId.random();
         AgentId benched = AgentId.random();
         PartyBoard live = new PartyBoard(PARTY);
-        live.post(new Gather(Stock.LOGS, 1, new Pos(0, 64, 0), 0.5, PARTY, CarrySplit.INSTANCE));
-        live.post(new Gather(Stock.LOGS, 64, YARD, 0.5, PARTY, CarrySplit.INSTANCE));
+        live.post(new Gather(Stock.LOGS, 1, 0.5, PARTY, CarrySplit.INSTANCE));
+        live.post(new Gather(Stock.LOGS, 64, 0.5, PARTY, CarrySplit.INSTANCE));
         live.tick(0L);
         Gather gather = (Gather) live.projects().get(live.projects().size() - 1);
         BoardBrainContext ctx = new BoardBrainContext();

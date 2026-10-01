@@ -20,11 +20,10 @@ class TendTest {
     private final AgentId ana = AgentId.random();
     private final AgentId bia = AgentId.random();
     private final Pos furnace = new Pos(4, 64, 0);
-    private final Pos yard = new Pos(0, 64, 0);
     private final FakeContext ctx = new FakeContext();
 
     private Tend dueAt(long due) {
-        return new Tend(furnace, "minecraft:charcoal", Stock.PLANKS, yard, ana, due);
+        return new Tend(furnace, "minecraft:charcoal", Stock.PLANKS, true, ana, due);
     }
 
     @Test
@@ -53,8 +52,7 @@ class TendTest {
         UnloadFurnace unload = assertInstanceOf(UnloadFurnace.class, steps.get(0));
         assertEquals(furnace, unload.at());
         assertEquals(Stock.PLANKS, unload.fuel());
-        BringBack back = assertInstanceOf(BringBack.class, steps.get(1));
-        assertEquals(yard, back.yard());
+        assertInstanceOf(BringBack.class, steps.get(1));
     }
 
     @Test

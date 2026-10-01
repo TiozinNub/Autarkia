@@ -14,7 +14,6 @@ import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.board.Tend;
-import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import java.util.HashMap;
@@ -77,8 +76,8 @@ public final class Tending {
                     return;
                 }
             }
-            Home home = DirectionsData.get(server).find(party).map(PartyProgress::home).orElse(null);
-            Tend tend = new Tend(row.at(), process.output(), Stock.PLANKS, home == null ? null : home.yard(),
+            boolean home = DirectionsData.get(server).find(party).map(PartyProgress::home).isPresent();
+            Tend tend = new Tend(row.at(), process.output(), Stock.PLANKS, home,
                     process.starter(), process.dueAt());
             int handle = board.post(tend);
             JournalService journal = Journals.of(server);

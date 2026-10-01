@@ -56,7 +56,7 @@ public final class WorkDoings {
      * What every gather delivers to today. A building project that starts gathers will pass what it
      * is building instead, which is why the slot exists before anything fills it differently.
      */
-    public static final Slot FOR_THE_YARD = Slot.lang("autarkia.purpose.yard");
+    public static final Slot FOR_THE_STORES = Slot.lang("autarkia.purpose.stores");
 
     private WorkDoings() {
     }

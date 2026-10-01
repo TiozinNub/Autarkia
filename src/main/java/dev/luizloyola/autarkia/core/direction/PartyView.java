@@ -29,11 +29,19 @@ public interface PartyView {
         return Collections.emptySortedSet();
     }
 
+    /**
+     * Where the party's next store or station goes: beside its stores at HOME when it has one, else
+     * the middle of its area. Empty with no HOME, or no area.
+     */
+    default Optional<dev.luizloyola.anima.core.brain.sense.Pos> spot() {
+        return Optional.empty();
+    }
+
     int members();
 
     /**
-     * How many items the spec names are in HOME's stores — the party's own chests on the plot or at
-     * its yard. Empty when one of them could not be read this beat, or there is no HOME.
+     * How many items the spec names are in HOME's stores — the party's own chests in its area. Empty
+     * when one of them could not be read this beat, or there is no HOME.
      */
     OptionalInt storedAtHome(ItemSpec spec);
 
@@ -44,7 +52,7 @@ public interface PartyView {
      */
     OptionalInt foodAtHome();
 
-    /** Whether the party claims a place of this kind at HOME — on the plot or at its yard. */
+    /** Whether the party claims a place of this kind at HOME — in its area. */
     boolean hasAtHome(PoiKind kind);
 
     /** Where the party's place of this kind at HOME is, the first claimed if it has several. */

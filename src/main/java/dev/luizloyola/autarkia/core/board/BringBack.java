@@ -1,7 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.brain.BrainContext;
-import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.CompoundTask;
 import dev.luizloyola.anima.core.brain.task.EnsureStore;
 import dev.luizloyola.anima.core.brain.task.Method;
@@ -11,7 +10,7 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import java.util.List;
 
 /**
- * Take a gather's load to the yard — whatever was got, if the fetch ran out short of its count. A
+ * Take a gather's load home — whatever was got, if the fetch ran out short of its count. A
  * hunter who killed the last cow of a herd brings the meat home rather than carrying it about
  * while it looks for more. With nothing got there is no way, and the errand fails as it did before
  * this existed, without a walk home.
@@ -20,13 +19,11 @@ public final class BringBack implements CompoundTask {
 
     private final ItemSpec spec;
     private final int count;
-    private final Pos yard;
     private final List<Method> methods;
 
-    public BringBack(ItemSpec spec, int count, Pos yard) {
+    public BringBack(ItemSpec spec, int count) {
         this.spec = spec;
         this.count = count;
-        this.yard = yard;
         this.methods = List.of(new Deliver());
     }
 
@@ -37,7 +34,7 @@ public final class BringBack implements CompoundTask {
 
     @Override
     public String describe() {
-        return "bring the " + spec.name() + " to the yard";
+        return "bring the " + spec.name() + " home";
     }
 
     public ItemSpec spec() {
@@ -46,10 +43,6 @@ public final class BringBack implements CompoundTask {
 
     public int count() {
         return count;
-    }
-
-    public Pos yard() {
-        return yard;
     }
 
     private final class Deliver implements Method {
@@ -69,12 +62,12 @@ public final class BringBack implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
-            return List.of(new EnsureStore(yard), PutItems.deposit(spec, count));
+            return List.of(new EnsureStore(), PutItems.deposit(spec, count));
         }
 
         @Override
         public String describe() {
-            return "carry it to the yard";
+            return "carry it home";
         }
     }
 }

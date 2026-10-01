@@ -1,7 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.brain.BrainContext;
-import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.CompoundTask;
 import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
@@ -24,20 +23,18 @@ import java.util.function.BooleanSupplier;
  * "haul when laden" fall out of the executor re-asking, instead of anything scheduling it.
  *
  * <p><b>The last tree takes everything.</b> When the project has nothing left to hand out, the load
- * goes to the yard whatever its size, or it would stay in the pack for good.
+ * goes home whatever its size, or it would stay in the pack for good.
  */
 public final class HaulingErrand implements CompoundTask {
 
     private final Task work;
-    private final Pos yard;
     private final int haulLine;
     /** Whether the project has more to hand out; asked after the work, not when the errand starts. */
     private final BooleanSupplier workLeft;
     private final List<Method> methods;
 
-    public HaulingErrand(Task work, Pos yard, int haulLine, BooleanSupplier workLeft) {
+    public HaulingErrand(Task work, int haulLine, BooleanSupplier workLeft) {
         this.work = work;
-        this.yard = yard;
         this.haulLine = haulLine;
         this.workLeft = workLeft;
         this.methods = List.of(new WorkThenHaul());
@@ -47,8 +44,8 @@ public final class HaulingErrand implements CompoundTask {
      * What a save hands back: the project's live answer is not data, so until it re-grants the
      * errand the job is taken to go on, and the load waits for the line.
      */
-    public static HaulingErrand restored(Task work, Pos yard, int haulLine) {
-        return new HaulingErrand(work, yard, haulLine, () -> true);
+    public static HaulingErrand restored(Task work, int haulLine) {
+        return new HaulingErrand(work, haulLine, () -> true);
     }
 
     @Override
@@ -80,10 +77,6 @@ public final class HaulingErrand implements CompoundTask {
         }
     }
 
-    public Pos yard() {
-        return yard;
-    }
-
     public int haulLine() {
         return haulLine;
     }
@@ -102,7 +95,7 @@ public final class HaulingErrand implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
-            return List.of(work, new PutAwaySurplus(yard, haulLine, workLeft));
+            return List.of(work, new PutAwaySurplus(haulLine, workLeft));
         }
 
         @Override

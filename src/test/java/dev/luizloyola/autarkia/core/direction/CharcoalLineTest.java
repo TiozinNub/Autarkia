@@ -23,7 +23,8 @@ import org.junit.jupiter.api.Test;
 /** {@code charcoal}: a furnace at HOME first, then a load for the shortfall, waiting while it smelts. */
 class CharcoalLineTest {
 
-    private static final Pos YARD = new Pos(10, 64, 10);
+    /** Where the party's next station goes; HOME is its chunk. */
+    private static final Pos SPOT = new Pos(10, 64, 10);
     private static final Pos FURNACE = new Pos(12, 64, 10);
     private static final Direction CHARCOAL = new Direction(new DirectionId("test:wood", "charcoal"), 16, null);
 
@@ -41,7 +42,18 @@ class CharcoalLineTest {
 
         @Override
         public Optional<Home> home() {
-            return Optional.of(Home.at(YARD));
+            return Optional.of(Home.fresh());
+        }
+
+        @Override
+        public java.util.SortedSet<dev.luizloyola.anima.core.territory.ChunkKey> area() {
+            return new java.util.TreeSet<>(java.util.Set.of(dev.luizloyola.anima.core.territory.ChunkKey.at(
+                    dev.luizloyola.anima.core.territory.ChunkKey.OVERWORLD, SPOT.x(), SPOT.z())));
+        }
+
+        @Override
+        public Optional<Pos> spot() {
+            return Optional.of(SPOT);
         }
 
         @Override
@@ -95,7 +107,7 @@ class CharcoalLineTest {
         party.furnace = false;
         SetUp setUp = assertInstanceOf(SetUp.class, CharcoalLine.INSTANCE.post(CHARCOAL, party, 0.5));
         assertEquals(List.of(SetUp.FURNACE), setUp.stations());
-        assertEquals(YARD, setUp.near());
+        assertEquals(SPOT, setUp.near());
         assertTrue(CharcoalLine.INSTANCE.isWork(setUp, CHARCOAL, party), "its own, so it is not posted twice");
     }
 
@@ -123,9 +135,9 @@ class CharcoalLineTest {
 
     @Test
     void comingBackToItsFurnaceIsItsWork() {
-        Tend tend = new Tend(FURNACE, "minecraft:charcoal", Stock.PLANKS, YARD, AgentId.random(), 0L);
+        Tend tend = new Tend(FURNACE, "minecraft:charcoal", Stock.PLANKS, true, AgentId.random(), 0L);
         assertTrue(CharcoalLine.INSTANCE.isWork(tend, CHARCOAL, party));
-        Tend elsewhere = new Tend(new Pos(90, 64, 90), "minecraft:charcoal", Stock.PLANKS, YARD, AgentId.random(), 0L);
+        Tend elsewhere = new Tend(new Pos(90, 64, 90), "minecraft:charcoal", Stock.PLANKS, true, AgentId.random(), 0L);
         assertFalse(CharcoalLine.INSTANCE.isWork(elsewhere, CHARCOAL, party));
     }
 

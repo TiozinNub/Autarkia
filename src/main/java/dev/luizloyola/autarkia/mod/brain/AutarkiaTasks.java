@@ -94,7 +94,6 @@ public final class AutarkiaTasks {
         TaskCodecs.register("autarkia:haul_errand", HaulingErrand.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         TaskCodecs.codec().fieldOf("work").forGetter(HaulingErrand::work),
-                        POS.fieldOf("yard").forGetter(HaulingErrand::yard),
                         Codec.INT.fieldOf("haul_line").forGetter(HaulingErrand::haulLine)
                 ).apply(t, HaulingErrand::restored)));
         // A gather's whole trip. Same rule as the wrapper above: registered the day it was
@@ -102,8 +101,7 @@ public final class AutarkiaTasks {
         TaskCodecs.register("autarkia:gather_errand", GatheringErrand.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(GatheringErrand::spec),
-                        Codec.INT.fieldOf("count").forGetter(GatheringErrand::count),
-                        POS.fieldOf("yard").forGetter(GatheringErrand::yard)
+                        Codec.INT.fieldOf("count").forGetter(GatheringErrand::count)
                 ).apply(t, GatheringErrand::new)));
         TaskCodecs.register("autarkia:mine_patch", dev.luizloyola.autarkia.core.patch.MinePatch.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
@@ -133,14 +131,15 @@ public final class AutarkiaTasks {
                         POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.TendErrand::at),
                         ITEM_SPEC.fieldOf("output").forGetter(dev.luizloyola.autarkia.core.board.TendErrand::output),
                         ITEM_SPEC.optionalFieldOf("fuel").forGetter(e -> java.util.Optional.ofNullable(e.fuel())),
-                        POS.optionalFieldOf("yard").forGetter(e -> java.util.Optional.ofNullable(e.yard()))
-                ).apply(t, (at, output, fuel, yard) -> new dev.luizloyola.autarkia.core.board.TendErrand(
-                        at, output, fuel.orElse(null), yard.orElse(null)))));
+                        // A plan saved before 2026-10-01 named a yard; read as going home, never written.
+                        Codec.BOOL.optionalFieldOf("home").forGetter(e -> java.util.Optional.of(e.home())),
+                        POS.optionalFieldOf("yard").forGetter(e -> java.util.Optional.empty())
+                ).apply(t, (at, output, fuel, home, legacyYard) -> new dev.luizloyola.autarkia.core.board.TendErrand(
+                        at, output, fuel.orElse(null), home.orElse(legacyYard.isPresent())))));
         TaskCodecs.register("autarkia:bring_back", BringBack.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),
-                        Codec.INT.fieldOf("count").forGetter(BringBack::count),
-                        POS.fieldOf("yard").forGetter(BringBack::yard)
+                        Codec.INT.fieldOf("count").forGetter(BringBack::count)
                 ).apply(t, BringBack::new)));
         // A forage trip's work at the patch. Registered the day it was written, like the rest.
         TaskCodecs.register("autarkia:pick_patch", PickPatch.class,

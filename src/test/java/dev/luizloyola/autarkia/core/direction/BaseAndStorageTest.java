@@ -34,7 +34,8 @@ import org.junit.jupiter.api.Test;
 class BaseAndStorageTest {
 
     private static final String WOOD = "test:wood";
-    private static final Pos YARD = new Pos(10, 64, 10);
+    /** Where the party's next station goes; HOME is its chunk. */
+    private static final Pos SPOT = new Pos(10, 64, 10);
 
     private final PartyId partyId = PartyId.of(new UUID(7, 7));
     private final PartyBoard board = new PartyBoard(partyId);
@@ -45,9 +46,18 @@ class BaseAndStorageTest {
     /** What HOME has and how much room is left, set by each test. */
     private final class Base implements PartyView {
 
+        /** A HOME whose chunks were never claimed. */
+        boolean noArea;
+
         @Override
         public SortedSet<ChunkKey> area() {
-            return new TreeSet<>(Set.of(ChunkKey.at(ChunkKey.OVERWORLD, YARD.x(), YARD.z())));
+            return noArea ? new TreeSet<>()
+                    : new TreeSet<>(Set.of(ChunkKey.at(ChunkKey.OVERWORLD, SPOT.x(), SPOT.z())));
+        }
+
+        @Override
+        public Optional<Pos> spot() {
+            return noArea ? Optional.empty() : Optional.of(SPOT);
         }
         final Set<PoiKind> stations = new HashSet<>();
         OptionalInt free = OptionalInt.of(27);
@@ -102,7 +112,7 @@ class BaseAndStorageTest {
                         new Direction(new DirectionId(WOOD, "storage"), 9, null)),
                 Set.of(), Set.of());
         tree = Tree.build(List.of(wood), Set.of("minecraft:oak_log"), key -> false).tree();
-        progress.home(Home.at(YARD));
+        progress.home(Home.fresh());
     }
 
     @AfterEach
@@ -128,8 +138,16 @@ class BaseAndStorageTest {
         SetUp setUp = assertInstanceOf(SetUp.class, board.projects().get(0));
         assertEquals(List.of(SetUp.WORKBENCH, SetUp.STORE), setUp.stations(),
                 "the workbench first, so the chest is crafted at HOME's own table");
-        assertEquals(YARD, setUp.near());
+        assertEquals(SPOT, setUp.near());
         assertEquals(1, setUp.open().size(), "one station on offer at a time — one builder");
+    }
+
+    @Test
+    void aHomeWithNoAreaPostsNoBase() {
+        view.noArea = true;
+
+        assertTrue(beat().posted().isEmpty(),
+                "with no chunks there is no spot for a station, and posting would throw");
     }
 
     @Test

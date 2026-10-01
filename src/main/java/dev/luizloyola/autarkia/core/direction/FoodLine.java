@@ -61,8 +61,7 @@ public final class FoodLine implements DirectionLine {
 
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        return project instanceof Gather gather && gather.spec() == Food.SPEC
-                && party.home().map(home -> home.yard().equals(gather.yard())).orElse(false);
+        return project instanceof Gather gather && gather.spec() == Food.SPEC && party.home().isPresent();
     }
 
     @Override
@@ -70,8 +69,7 @@ public final class FoodLine implements DirectionLine {
         int shortfall = Math.max(0, wanted(direction, party) - party.foodAtHome().orElse(0));
         int target = party.storedAtHome(Food.SPEC).orElse(0)
                 + (shortfall + POINTS_PER_ITEM - 1) / POINTS_PER_ITEM;
-        return new Gather(Food.SPEC, Math.max(1, target), party.home().orElseThrow().yard(),
-                priority, party.party(), CarrySplit.INSTANCE);
+        return new Gather(Food.SPEC, Math.max(1, target), priority, party.party(), CarrySplit.INSTANCE);
     }
 
     private static int wanted(Direction direction, PartyView party) {

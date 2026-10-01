@@ -1,6 +1,5 @@
 package dev.luizloyola.autarkia.mod.direction;
 
-import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Food;
@@ -12,7 +11,6 @@ import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.inv.StoreContents;
-import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.core.direction.PartyView;
@@ -28,9 +26,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 
 /**
- * A party as its Directions may see it. HOME's stores are the party's own claimed chests on the plot
- * or near enough its yard to count — the same {@code stores.found_radius} a gather's own yard uses,
- * or a gather's chest just off the plot would never count toward the line that posted it.
+ * A party as its Directions may see it. HOME's stores are the party's own claimed chests in its
+ * area, and nowhere else (home area decision 11): a chest a gatherer makes outside it is a camp's.
  *
  * <p>Overworld only: a claimed place carries no dimension yet, and every settlement so far is there.
  */
@@ -70,6 +67,29 @@ final class HomeView implements PartyView {
     }
 
     @Override
+    public Optional<Pos> spot() {
+        if (progress.home() == null) {
+            return Optional.empty();
+        }
+        Optional<Pos> store = placeAtHome(Store.POI);
+        return store.isPresent() ? store : Home.middle(area()).map(chunk -> ground(server, chunk));
+    }
+
+    /**
+     * The middle column of a chunk, on its ground — or at sea level when the chunk is not loaded,
+     * since reading it would load it, and a store is only made there by somebody who walks over.
+     */
+    private static Pos ground(MinecraftServer server, ChunkKey chunk) {
+        net.minecraft.server.level.ServerLevel level = server.overworld();
+        int x = chunk.minBlockX() + 8;
+        int z = chunk.minBlockZ() + 8;
+        int y = level.hasChunk(chunk.x(), chunk.z())
+                ? level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z)
+                : level.getSeaLevel();
+        return new Pos(x, y, z);
+    }
+
+    @Override
     public int members() {
         return members;
     }
@@ -102,7 +122,7 @@ final class HomeView implements PartyView {
         }
         SortedSet<ChunkKey> area = area();
         for (PlaceRow row : PlacesData.get(server).places().rows()) {
-            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(home, area, row.at())) {
+            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(area, row.at())) {
                 return java.util.Optional.of(row.at());
             }
         }
@@ -125,7 +145,7 @@ final class HomeView implements PartyView {
         Set<BlockPos> counted = new HashSet<>();
         int total = 0;
         for (PlaceRow row : PlacesData.get(server).places().rows()) {
-            if (!row.kind().equals(Store.POI) || !party.equals(row.party()) || !atHome(home, area, row.at())) {
+            if (!row.kind().equals(Store.POI) || !party.equals(row.party()) || !atHome(area, row.at())) {
                 continue;
             }
             Optional<StoreContents.Reading> read = StoreContents.read(server.overworld(), row.at(), ids,
@@ -138,12 +158,7 @@ final class HomeView implements PartyView {
         return OptionalInt.of(total);
     }
 
-    /**
-     * In the area, or near enough the yard to count — the radius a gather's own yard uses. The
-     * starter base needs no area, so a chest just past its edge is still HOME's.
-     */
-    private static boolean atHome(Home home, Set<ChunkKey> area, Pos at) {
-        return area.contains(ChunkKey.at(ChunkKey.OVERWORLD, at.x(), at.z()))
-                || Store.distance(at, home.yard()) <= AutarkiaConfig.PERSON.i(ProfileAspect.STORES_FOUND_RADIUS);
+    private static boolean atHome(Set<ChunkKey> area, Pos at) {
+        return area.contains(ChunkKey.at(ChunkKey.OVERWORLD, at.x(), at.z()));
     }
 }

@@ -98,12 +98,21 @@ final class BoardBrainContext implements BrainContext {
         return reserved;
     }
 
-    /** Where this body's goods go; null, the default, is a body with no HOME. */
+    /** Where a new store of this body's would go; null, the default, is a body with no HOME. */
     Pos depot;
 
+    /** The depot's area; null is the hint's own chunk alone. */
+    java.util.Set<dev.luizloyola.anima.core.territory.ChunkKey> depotArea;
+
     @Override
-    public java.util.Optional<Pos> depot() {
-        return java.util.Optional.ofNullable(depot);
+    public java.util.Optional<dev.luizloyola.anima.core.store.Depot.Site> depot() {
+        if (depot == null) {
+            return java.util.Optional.empty();
+        }
+        java.util.Set<dev.luizloyola.anima.core.territory.ChunkKey> area = depotArea != null ? depotArea
+                : java.util.Set.of(dev.luizloyola.anima.core.territory.ChunkKey.at(
+                        dev.luizloyola.anima.core.territory.ChunkKey.OVERWORLD, depot.x(), depot.z()));
+        return java.util.Optional.of(new dev.luizloyola.anima.core.store.Depot.Site(depot, area));
     }
 
     /** The world these percepts read. Tests place logs and leaves in it directly. */

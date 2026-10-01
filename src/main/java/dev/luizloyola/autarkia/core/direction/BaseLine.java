@@ -38,7 +38,8 @@ public final class BaseLine implements DirectionLine {
 
     @Override
     public Status judge(Direction direction, PartyView party) {
-        if (party.home().isEmpty()) {
+        // A HOME whose area could not be had has nowhere for the base to go.
+        if (party.home().isEmpty() || party.area().isEmpty()) {
             return Status.NO_HOME;
         }
         List<SetUp.Station> missing = missing(party);
@@ -49,14 +50,13 @@ public final class BaseLine implements DirectionLine {
     }
 
     /**
-     * A set-up at HOME's yard that would put down something the base lacks. Not every set-up there:
+     * A set-up in HOME's area that would put down something the base lacks. Not every set-up there:
      * once the base stands, the storage line's extra chest is not the base's work, and claiming it
      * would have the met base withdraw it every beat while storage posted it again.
      */
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        if (!(project instanceof SetUp setUp)
-                || !party.home().map(home -> home.yard().equals(setUp.near())).orElse(false)) {
+        if (!(project instanceof SetUp setUp) || party.home().isEmpty() || !inArea(party, setUp.near())) {
             return false;
         }
         List<SetUp.Station> missing = missing(party);
@@ -65,7 +65,13 @@ public final class BaseLine implements DirectionLine {
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        return new SetUp(missing(party), party.home().orElseThrow().yard(), priority);
+        return new SetUp(missing(party), party.spot().orElseThrow(), priority);
+    }
+
+    /** Whether a set-up's spot is in the party's area: how a line knows the set-up is HOME's. */
+    static boolean inArea(PartyView party, dev.luizloyola.anima.core.brain.sense.Pos at) {
+        return party.area().contains(dev.luizloyola.anima.core.territory.ChunkKey.at(
+                dev.luizloyola.anima.core.territory.ChunkKey.OVERWORLD, at.x(), at.z()));
     }
 
     private static List<SetUp.Station> missing(PartyView party) {

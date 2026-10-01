@@ -118,27 +118,25 @@ public final class PartyBoardCodecs {
                     // its sweep; never written, since a fresh save always has "covered" instead.
                     POS.listOf().optionalFieldOf("swept", List.of())
                             .forGetter(state -> List.<Pos>of()),
-                    // Both optional: a box posted without a destination writes neither, and a world
-                    // saved before yards existed loads as exactly that.
-                    POS.optionalFieldOf("yard")
-                            .forGetter(state -> java.util.Optional.ofNullable(state.yard())),
-                    POS.listOf().optionalFieldOf("yard_chests", List.of())
-                            .forGetter(FellTrees.State::yardChests),
+                    // Whether the wood goes home. A save from before 2026-10-01 named a yard instead;
+                    // read as going home, never written.
+                    Codec.BOOL.optionalFieldOf("home").forGetter(state -> java.util.Optional.of(state.home())),
+                    POS.optionalFieldOf("yard").forGetter(state -> java.util.Optional.empty()),
                     // Who has worked the box, so the end of the job still knows whose loads to
                     // bring in after a restart. A save from before 2026-09-27 has no crew yet.
                     UUIDUtil.CODEC.listOf().optionalFieldOf("crew", List.of())
                             .forGetter(state -> state.crew().stream().map(AgentId::value).toList())
             ).apply(project, (clearing, bounds, priority, phase, cooldowns, targets, felled,
-                    covered, legacySwept, yard, chests, crew) -> new FellTrees.State(
+                    covered, legacySwept, home, legacyYard, crew) -> new FellTrees.State(
                             clearing, bounds, priority, phase, cooldowns, targets, felled,
                             covered.isEmpty()
                                     ? legacySwept.stream()
                                             .map(at -> new FellTrees.CellMask(at, CoverageGrid.FULL))
                                             .toList()
                                     : covered,
-                            yard.orElse(null), chests, crew.stream().map(AgentId::of).toList())));
+                            home.orElse(legacyYard.isPresent()), crew.stream().map(AgentId::of).toList())));
 
-    /** What one yard chest held when somebody last looked, and when they looked. */
+    /** What one home chest held when somebody last looked, and when they looked. */
     public static final Codec<Gather.Reading> READING =
             RecordCodecBuilder.create(reading -> reading.group(
                     POS.fieldOf("chest").forGetter(Gather.Reading::chest),
@@ -213,12 +211,11 @@ public final class PartyBoardCodecs {
             RecordCodecBuilder.mapCodec(project -> project.group(
                     SPEC.fieldOf("spec").forGetter(Gather.State::spec),
                     Codec.INT.fieldOf("target").forGetter(Gather.State::target),
-                    POS.fieldOf("yard").forGetter(Gather.State::yard),
                     Codec.DOUBLE.fieldOf("priority").forGetter(Gather.State::priority),
                     UUIDUtil.CODEC.fieldOf("party").forGetter(state -> state.party().value()),
                     Codec.STRING.fieldOf("split").forGetter(Gather.State::split),
-                    POS.listOf().optionalFieldOf("yard_chests", List.of())
-                            .forGetter(Gather.State::yardChests),
+                    POS.listOf().optionalFieldOf("chests", List.of())
+                            .forGetter(Gather.State::chests),
                     READING.listOf().optionalFieldOf("readings", List.of())
                             .forGetter(Gather.State::readings),
                     TRIP.listOf().optionalFieldOf("trips", List.of())
@@ -229,8 +226,8 @@ public final class PartyBoardCodecs {
                             .forGetter(Gather.State::cooldowns),
                     // The project's clock, since 2026-09-26; absent, the restore's tick stands in.
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(Gather.State::lastTick)
-            ).apply(project, (spec, target, yard, priority, party, split, chests, readings, trips,
-                    cooldowns, lastTick) -> new Gather.State(spec, target, yard, priority,
+            ).apply(project, (spec, target, priority, party, split, chests, readings, trips,
+                    cooldowns, lastTick) -> new Gather.State(spec, target, priority,
                             PartyId.of(party), split, chests, readings, trips, cooldowns, lastTick)));
 
     /** A station by the place kind it is remembered as and the block that places it. */
@@ -260,15 +257,18 @@ public final class PartyBoardCodecs {
                     POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::at),
                     Codec.STRING.fieldOf("output").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::output),
                     SPEC.optionalFieldOf("fuel").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::fuel),
-                    POS.optionalFieldOf("yard").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::yard),
+                    // Whether the output goes home; a save from before 2026-10-01 named a yard instead.
+                    Codec.BOOL.optionalFieldOf("home").forGetter(state -> java.util.Optional.of(state.home())),
+                    POS.optionalFieldOf("yard").forGetter(state -> java.util.Optional.empty()),
                     UUIDUtil.CODEC.fieldOf("starter").forGetter(state -> state.starter().value()),
                     Codec.LONG.fieldOf("due_at").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::dueAt),
                     Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.Tend.State::done),
                     GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(dev.luizloyola.autarkia.core.board.Tend.State::cooldowns),
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Tend.State::lastTick)
-            ).apply(project, (at, output, fuel, yard, starter, dueAt, done, cooldowns, lastTick) ->
-                    new dev.luizloyola.autarkia.core.board.Tend.State(at, output, fuel, yard, AgentId.of(starter),
+            ).apply(project, (at, output, fuel, home, legacyYard, starter, dueAt, done, cooldowns, lastTick) ->
+                    new dev.luizloyola.autarkia.core.board.Tend.State(at, output, fuel,
+                            home.orElse(legacyYard.isPresent()), AgentId.of(starter),
                             dueAt, done, cooldowns, lastTick)));
 
     /** Everything a {@code fire} row carries: the furnace, the load and its fuel. */

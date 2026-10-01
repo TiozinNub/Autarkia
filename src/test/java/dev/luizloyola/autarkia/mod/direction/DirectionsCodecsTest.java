@@ -33,7 +33,7 @@ class DirectionsCodecsTest {
     void aPartyRowKeepsItsNodesCheckpointsAndHome() {
         PartyRow row = new PartyRow(new UUID(1, 2), List.of("autarkia:wood", "autarkia:stone"),
                 List.of(new DirectionId("autarkia:wood", "wood"), new DirectionId("autarkia:wood", "area")),
-                Optional.of(new SavedHome(Home.at(new Pos(0, 64, 0))
+                Optional.of(new SavedHome(Home.fresh()
                         .withCleared(new ChunkKey(ChunkKey.OVERWORLD, -1, 0))
                         .withCleared(new ChunkKey(ChunkKey.OVERWORLD, 0, 0)), Optional.empty())));
         assertEquals(row, roundTrip(DirectionsCodecs.PARTY_ROW, row));
@@ -41,14 +41,13 @@ class DirectionsCodecsTest {
 
     /** A save from before the area kept a square plot: it is read once, for the server to claim. */
     @Test
-    void aHomeSavedAsAPlotKeepsItsYardAndHandsOverThePlot() {
+    void aHomeSavedAsAPlotHandsOverThePlotAndForgetsItsYard() {
         Region plot = new Region(new Pos(-8, 48, -8), new Pos(8, 112, 8));
         JsonObject old = new JsonObject();
         old.add("yard", PartyBoardCodecs.POS.encodeStart(JsonOps.INSTANCE, new Pos(0, 64, 0)).getOrThrow());
         old.addProperty("cleared", true);
         old.add("plot", PartyBoardCodecs.REGION.encodeStart(JsonOps.INSTANCE, plot).getOrThrow());
         SavedHome saved = DirectionsCodecs.HOME.parse(JsonOps.INSTANCE, old).getOrThrow();
-        assertEquals(new Pos(0, 64, 0), saved.home().yard());
         assertTrue(saved.home().cleared().isEmpty(), "a square's clearing is not a chunk's");
         assertEquals(plot, saved.plot().orElseThrow());
         JsonObject written = DirectionsCodecs.HOME.encodeStart(JsonOps.INSTANCE, saved).getOrThrow()

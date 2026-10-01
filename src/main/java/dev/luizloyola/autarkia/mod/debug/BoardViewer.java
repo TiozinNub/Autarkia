@@ -96,7 +96,7 @@ public final class BoardViewer {
     /** Ground behind the frontier — somebody has been over it, so nobody walks it again. */
     private static final int SETTLED = 0x281060C0;
 
-    // A gather's yard: one cell per chest it has actually found, no state of its own to shade by.
+    // A gather's home chests: one cell per chest it has actually found, no state of its own to shade by.
     private static final int GATHER_CHEST = 0xFFFFD700;
     private static final int GATHER_CHEST_FILL = 0x40FFD700;
 
@@ -165,7 +165,8 @@ public final class BoardViewer {
             for (Project project : board.projects()) {
                 if (project instanceof FellTrees area && withinRange(area.bounds(), here)) {
                     out.add(area);
-                } else if (project instanceof Gather gather && withinRange(gather.yard(), here)) {
+                } else if (project instanceof Gather gather && !gather.chests().isEmpty()
+                        && withinRange(gather.chests().get(0), here)) {
                     out.add(gather);
                 }
             }
@@ -180,7 +181,7 @@ public final class BoardViewer {
         return dx <= RANGE && dz <= RANGE;
     }
 
-    /** Horizontal distance from a point — a gather has a yard hint, not a box. */
+    /** Horizontal distance from a point — a gather has chests, not a box. */
     private static boolean withinRange(Pos point, Pos here) {
         return Math.abs(point.x() - here.x()) <= RANGE && Math.abs(point.z() - here.z()) <= RANGE;
     }
@@ -222,15 +223,15 @@ public final class BoardViewer {
     }
 
     /**
-     * One cell per yard chest the project has actually learned about, plus a label carrying what
-     * it wants, what the yard was last seen holding, and how many trips are out — all three are
+     * One cell per home chest the project has actually learned about, plus a label carrying what
+     * it wants, what home was last seen holding, and how many trips are out — all three are
      * already in {@link Gather#describe()}, so there is nothing here to compute.
      */
     private static void paintGather(Frame frame, Gather gather) {
-        for (Pos chest : gather.yardChests()) {
+        for (Pos chest : gather.chests()) {
             frame.cell(chest, GATHER_CHEST, GATHER_CHEST_FILL, TARGET_WIDTH);
         }
-        frame.label(gather.describe(), gather.yard(), 3);
+        frame.label(gather.describe(), gather.chests().get(0), 3);
     }
 
     /** The coarse explored answer: one outline per slice, coloured by what the project knows. */

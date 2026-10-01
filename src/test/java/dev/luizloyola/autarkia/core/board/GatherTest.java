@@ -47,9 +47,10 @@ import org.junit.jupiter.api.Test;
  */
 class GatherTest {
 
-    private static final Pos YARD = new Pos(10, 64, 10);
+    /** Where a home chest would be made: the depot's hint, in chunk (0, 0), HOME's only chunk. */
+    private static final Pos HINT = new Pos(10, 64, 10);
 
-    /** A block off the hint, because a yard is a hint and the chest lands where ground allows. */
+    /** A block off the hint, because a hint is a hint and the chest lands where ground allows. */
     private static final Pos CHEST = new Pos(11, 64, 10);
 
     private static final PartyId PARTY = PartyId.of(UUID.randomUUID());
@@ -71,7 +72,7 @@ class GatherTest {
     }
 
     private static Gather posted(int target) {
-        Gather project = new Gather(Stock.LOGS, target, YARD, 0.5, PARTY, CarrySplit.INSTANCE);
+        Gather project = new Gather(Stock.LOGS, target, 0.5, PARTY, CarrySplit.INSTANCE);
         project.tick(0L);
         return project;
     }
@@ -124,22 +125,29 @@ class GatherTest {
 
     /** The line a trip of this size shows, built from the spec so it cannot drift from the code. */
     private static String fetchLine(int size) {
-        return "fetch " + size + " " + Stock.LOGS.name() + " to (10, 64, 10)";
+        return "fetch " + size + " " + Stock.LOGS.name() + " home";
+    }
+
+    /** A member of the party, whose depot is HOME. */
+    private static BoardBrainContext member() {
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.depot = HINT;
+        return ctx;
     }
 
     /**
-     * A member back from the yard: they remember the chest, and they remember what was in it when
-     * they closed the lid. Both facts are the depositor's, never the board's.
+     * A member back from a home chest: they remember the chest, and they remember what was in it
+     * when they closed the lid. Both facts are the depositor's, never the board's.
      */
     private static BoardBrainContext depositor(Pos chest, int held) {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = member();
         saw(ctx, chest, held, ctx.now());
         return ctx;
     }
 
-    /** A member standing at this tick, remembering nothing about the yard yet. */
+    /** A member standing at this tick, remembering nothing about HOME's chests yet. */
     private static BoardBrainContext reporterAt(long tick) {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = member();
         ctx.advance(tick);
         return ctx;
     }
@@ -454,36 +462,36 @@ class GatherTest {
 
         project.completed(trip, depositor(CHEST, 16));
 
-        assertEquals(List.of(CHEST), project.yardChests(),
+        assertEquals(List.of(CHEST), project.chests(),
                 "the readout names where the goods are, not where they were asked for");
         assertEquals(16, project.stored());
         assertEquals(48, project.remainder());
     }
 
     @Test
-    void aChestNowhereNearTheHintIsNotThisProjectsYard() {
+    void aChestOutsideTheAreaIsNotHomes() {
         Gather project = posted(64);
         WorkItem trip = claims(project, KYLE, new BoardBrainContext());
 
         project.completed(trip, depositor(new Pos(900, 64, 900), 64));
 
-        assertTrue(project.yardChests().isEmpty(),
-                "a worker's own chest across the map is not the party's yard");
+        assertTrue(project.chests().isEmpty(),
+                "a worker's own chest across the map is not the party's");
         assertEquals(0, project.stored());
     }
 
     @Test
-    void somebodyElsesChestAtTheYardIsNotThisProjectsYard() {
+    void somebodyElsesChestAtHomeIsNotStock() {
         Gather project = posted(64);
         WorkItem trip = claims(project, KYLE, new BoardBrainContext());
-        BoardBrainContext passerBy = new BoardBrainContext();
+        BoardBrainContext passerBy = member();
         passerBy.remember(Store.POI, CHEST);
         passerBy.knowledge().sawInside(CHEST, List.of(ItemStack.of("minecraft:oak_log", 64, 64)),
                 passerBy.now(), AgentKnowledge.maxPerKind(passerBy.profile()));
 
         project.completed(trip, passerBy);
 
-        assertTrue(project.yardChests().isEmpty(), "logs nobody in the party may take are not stock");
+        assertTrue(project.chests().isEmpty(), "logs nobody in the party may take are not stock");
         assertEquals(0, project.stored());
     }
 
@@ -541,7 +549,7 @@ class GatherTest {
     }
 
     @Test
-    void asecondChestAtTheYardIsCountedBesideTheFirst() {
+    void aSecondChestAtHomeIsCountedBesideTheFirst() {
         Gather project = posted(128);
         Pos second = new Pos(12, 64, 10);
         WorkItem trip = claims(project, KYLE, new BoardBrainContext());
@@ -552,7 +560,7 @@ class GatherTest {
 
         project.completed(trip, ctx);
 
-        assertEquals(List.of(CHEST, second), project.yardChests());
+        assertEquals(List.of(CHEST, second), project.chests());
         assertEquals(96, project.stored(), "a full first chest does not end the count");
     }
 
@@ -567,7 +575,7 @@ class GatherTest {
                 late.now(), AgentKnowledge.maxPerKind(late.profile()));
         project.completed(hers, late);
 
-        // He was at the yard an hour ago and has not been back since.
+        // He was at the chest an hour ago and has not been back since.
         project.completed(his, depositor(CHEST, 8));
 
         assertEquals(64, project.stored(),
@@ -577,7 +585,7 @@ class GatherTest {
     // ── closing ──────────────────────────────────────────────────────────────────────────────
 
     @Test
-    void theProjectFinishesWhenTheYardHoldsEnough() {
+    void theProjectFinishesWhenHomeHoldsEnough() {
         Gather project = posted(32);
         WorkItem trip = claims(project, KYLE, new BoardBrainContext());
         assertFalse(project.finished());
@@ -601,11 +609,11 @@ class GatherTest {
         // only moment a party project ever has a worker's journal to write in.
         List<Entry> lines = ctx.journal().recent(10);
         Entry closing = lines.get(lines.size() - 1);
-        assertEquals("gather 32 logs at (10, 64, 10)", closing.event());
+        assertEquals("gather 32 logs at home", closing.event());
         assertFalse(closing.event().contains("done"),
                 "the subject says what the project IS; how it went belongs in the detail, or the "
                         + "line reads 'done (...) done'");
-        assertEquals("done — the yard holds 32", closing.detail());
+        assertEquals("done — home holds 32", closing.detail());
     }
 
     @Test
@@ -614,7 +622,7 @@ class GatherTest {
         WorkItem hers = claims(project, KYLE, packWithRoomFor(32));
         WorkItem his = claims(project, SAM, packWithRoomFor(32));
 
-        // The yard already held some, so her thirty-two satisfies the whole target.
+        // HOME already held some, so her thirty-two satisfies the whole target.
         project.completed(hers, depositor(CHEST, 64));
 
         assertTrue(project.finished());
@@ -637,17 +645,17 @@ class GatherTest {
         ObtainItem fetch = assertInstanceOf(ObtainItem.class,
                 assertInstanceOf(Try.class, steps.get(0)).attempt());
         assertEquals(ObtainItem.Sources.NOT_STORES, fetch.sources(),
-                "the remainder is measured against what the yard already holds, so an errand "
+                "the remainder is measured against what HOME already holds, so an errand "
                         + "allowed to take from storage would be sent to fetch the very goods it "
                         + "is counting: wanting 64 with 32 banked, it would make a new 32 by "
-                        + "emptying the yard");
+                        + "emptying a home chest");
         assertEquals(Stock.LOGS, fetch.spec());
         assertEquals(64, fetch.count());
 
         BringBack back = assertInstanceOf(BringBack.class, steps.get(1));
         List<Task> delivery = back.methods().get(0).decompose(new BoardBrainContext());
-        assertEquals(YARD, assertInstanceOf(EnsureStore.class, delivery.get(0)).hint(),
-                "the yard is a hint, and this is what grows a chest on it");
+        assertInstanceOf(EnsureStore.class, delivery.get(0),
+                "the depot is what grows a chest when HOME has none");
 
         PutItems deposit = assertInstanceOf(PutItems.class, delivery.get(1));
         assertEquals(Stock.LOGS, deposit.spec());
@@ -658,11 +666,11 @@ class GatherTest {
 
     @Test
     void aFetchThatRanOutBringsBackWhatItGotAndOneThatGotNothingDoesNotWalkHome() {
-        BringBack back = new BringBack(Stock.LOGS, 64, YARD);
+        BringBack back = new BringBack(Stock.LOGS, 64);
         dev.luizloyola.anima.core.brain.task.FakeContext ctx =
                 new dev.luizloyola.anima.core.brain.task.FakeContext();
 
-        assertFalse(back.methods().get(0).applicable(ctx), "nothing got: no walk to the yard");
+        assertFalse(back.methods().get(0).applicable(ctx), "nothing got: no walk home");
         ctx.percepts.inventory.set(0, dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:oak_log", 9, 64));
         assertTrue(back.methods().get(0).applicable(ctx), "nine of sixty-four still go home");
         ctx.percepts.position = new dev.luizloyola.anima.core.brain.sense.Pos(140, 64, 10);
@@ -711,7 +719,7 @@ class GatherTest {
         claims(project, KYLE, new BoardBrainContext());
         claims(project, SAM, new BoardBrainContext());
 
-        assertEquals("gather 128 logs at (10, 64, 10) — 0/128 in the yard, 2 trips out",
+        assertEquals("gather 128 logs at home — 0/128 at home, 2 trips out",
                 project.describe());
     }
 
@@ -731,7 +739,7 @@ class GatherTest {
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
     @Test
-    void aSavedGatherComesBackWithItsYardAndItsLedger() {
+    void aSavedGatherComesBackWithItsChestsAndItsLedger() {
         Gather project = posted(64);
         WorkItem trip = claims(project, KYLE, new BoardBrainContext());
         project.completed(trip, depositor(CHEST, 16));
@@ -739,7 +747,7 @@ class GatherTest {
 
         Gather back = Gather.restore(project.snapshot(), 40L).orElseThrow();
 
-        assertEquals(List.of(CHEST), back.yardChests());
+        assertEquals(List.of(CHEST), back.chests());
         assertEquals(16, back.stored());
         assertEquals(project.describe(), back.describe());
     }
@@ -758,7 +766,7 @@ class GatherTest {
 
     @Test
     void aGatherForSomethingThisBuildDoesNotKnowComesBackAsNothing() {
-        Gather.State unknown = new Gather.State("dilithium", 64, YARD, 0.5, PARTY, "carry",
+        Gather.State unknown = new Gather.State("dilithium", 64, 0.5, PARTY, "carry",
                 List.of(), List.of(), List.of(), List.of());
 
         // Never silently an empty project: the store's job is to refuse the world, and it can only
@@ -773,7 +781,7 @@ class GatherTest {
         AgentId carol = AgentId.random();
         AgentId dan = AgentId.random();
         PartyBoard board = new PartyBoard(PARTY);
-        Gather project = new Gather(Stock.LOGS, 64, YARD, 0.5, PARTY, CarrySplit.INSTANCE);
+        Gather project = new Gather(Stock.LOGS, 64, 0.5, PARTY, CarrySplit.INSTANCE);
         board.post(project);
         board.tick(0L);
 
@@ -809,15 +817,15 @@ class GatherTest {
      * The seam a reload hangs on. {@code PartyBoard.restore} hands a lease straight back without
      * the bidding {@code claim} does, so it has to tell the project itself — and it must tell it
      * WHO, because a project that files a claim under its claimant hears nothing from the one-arg
-     * form. Untold, the trip is not in {@code claimed}, so the moment the yard is satisfied
+     * form. Untold, the trip is not in {@code claimed}, so the moment HOME is satisfied
      * {@code withdrawAll} drops it out from under the body still walking: their report then lands
-     * on an item {@code keyOf} cannot name, takes no yard reading, and their cargo stops being
+     * on an item {@code keyOf} cannot name, takes no reading of HOME, and their cargo stops being
      * reserved against {@code Unburden} on the way.
      */
     @Test
     void aReclaimedTripSurvivesTheFinishThatDropsTheSlate() {
         PartyBoard board = new PartyBoard(PARTY);
-        Gather project = new Gather(Stock.LOGS, 64, YARD, 0.5, PARTY, CarrySplit.INSTANCE);
+        Gather project = new Gather(Stock.LOGS, 64, 0.5, PARTY, CarrySplit.INSTANCE);
         board.post(project);
         board.tick(0L);
         takes(board, project, KYLE, packWithRoomFor(32));
@@ -827,7 +835,7 @@ class GatherTest {
         assertEquals(0, reloaded.restore(board.snapshot(0L), 0L));
         Gather back = (Gather) reloaded.projects().get(0);
 
-        // Kyle gets back and the yard is satisfied. Sam is still mid-walk with his own thirty-two.
+        // Kyle gets back and HOME is satisfied. Sam is still mid-walk with his own thirty-two.
         reloaded.completed(back.itemFor(keyFor(KYLE)).orElseThrow(), KYLE, depositor(CHEST, 64));
 
         assertTrue(back.finished());
@@ -852,7 +860,7 @@ class GatherTest {
     void aRestoredTripNobodyCameBackForIsDropped() {
         long ttl = Board.ttlTicks();
         PartyBoard board = new PartyBoard(PARTY);
-        Gather project = new Gather(Stock.LOGS, 512, YARD, 0.5, PARTY, CarrySplit.INSTANCE);
+        Gather project = new Gather(Stock.LOGS, 512, 0.5, PARTY, CarrySplit.INSTANCE);
         board.post(project);
         board.tick(0L);
         takes(board, project, SAM, new BoardBrainContext());
@@ -917,10 +925,10 @@ class GatherTest {
     }
 
     @Test
-    void aSliceAndItsTripBothTellOfGatheringForTheYard() {
+    void aSliceAndItsTripBothTellOfGatheringForTheStores() {
         Gather project = posted(64);
         Deed told = Deed.of(WorkDoings.GATHERING, Slot.lang("autarkia.goods.logs"),
-                WorkDoings.FOR_THE_YARD);
+                WorkDoings.FOR_THE_STORES);
 
         assertEquals(told, project.open().get(0).doing());
         assertEquals(told, claims(project, KYLE, new BoardBrainContext()).doing());

@@ -249,10 +249,10 @@ public final class Explore implements PartyProject {
                 Candidate best = search.best();
                 if (best != null && world != null && world.claim(party, best, ctx.knowledge())) {
                     search.claimed();
-                    journal(ctx, "settled at " + at(search.yard()) + ": " + breakdown(best));
+                    journal(ctx, "settled at " + at(search.settleAt()) + ": " + breakdown(best));
                 } else {
                     search.claimRefused();
-                    journal(ctx, "the plot at " + at(search.yard()) + " was refused on a second look");
+                    journal(ctx, "the plot at " + at(search.settleAt()) + " was refused on a second look");
                 }
             }
             case DONE, STRANDED -> {
@@ -327,8 +327,8 @@ public final class Explore implements PartyProject {
         String state = switch (search.phase()) {
             case LOOK -> "looking round";
             case WALK -> "walking to " + at(search.legEnd());
-            case SETTLE -> "going to settle at " + at(search.yard());
-            case DONE -> "settled at " + at(search.yard());
+            case SETTLE -> "going to settle at " + at(search.settleAt());
+            case DONE -> "settled at " + at(search.settleAt());
             case STRANDED -> "found nowhere to live";
         };
         return "explore for a HOME — " + search.legs() + " legs, "
@@ -357,7 +357,7 @@ public final class Explore implements PartyProject {
     private @Nullable Pos meeting() {
         return switch (search.phase()) {
             case WALK -> search.legEnd();
-            case SETTLE -> search.yard();
+            case SETTLE -> search.settleAt();
             default -> search.lastStop();
         };
     }
@@ -406,7 +406,7 @@ public final class Explore implements PartyProject {
         private @Nullable Pos target() {
             return switch (phase) {
                 case WALK -> search.legEnd();
-                case SETTLE -> search.yard();
+                case SETTLE -> search.settleAt();
                 default -> null;
             };
         }
@@ -424,7 +424,7 @@ public final class Explore implements PartyProject {
             return switch (phase) {
                 case LOOK -> "look round for a place to live";
                 case WALK -> "walk on to " + at(search.legEnd());
-                case SETTLE -> "go and settle at " + at(search.yard());
+                case SETTLE -> "go and settle at " + at(search.settleAt());
                 default -> "explore";
             };
         }

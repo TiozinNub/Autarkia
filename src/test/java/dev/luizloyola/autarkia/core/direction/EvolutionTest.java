@@ -37,10 +37,11 @@ class EvolutionTest {
 
     private static final String WOOD = "test:wood";
     private static final String STONE = "test:stone";
-    private static final Pos YARD = new Pos(10, 64, 10);
+    /** The party's store: where its next one would go, and the height its work is posted at. */
+    private static final Pos SPOT = new Pos(10, 64, 10);
     private static final ChunkKey HERE = new ChunkKey(ChunkKey.OVERWORLD, 0, 0);
     private static final ChunkKey EAST = new ChunkKey(ChunkKey.OVERWORLD, 1, 0);
-    private static final Region PLOT = Home.at(YARD).region(HERE);
+    private static final Region PLOT = Home.region(HERE, SPOT.y());
 
     private final PartyId partyId = PartyId.of(new UUID(4, 2));
     private final PartyBoard board = new PartyBoard(partyId);
@@ -56,6 +57,11 @@ class EvolutionTest {
         @Override
         public SortedSet<ChunkKey> area() {
             return area;
+        }
+
+        @Override
+        public Optional<Pos> spot() {
+            return Optional.of(SPOT);
         }
 
         @Override
@@ -108,7 +114,7 @@ class EvolutionTest {
                 new Requirements(new DirectionId(WOOD, "wood"), List.of(new DirectionId(WOOD, "area")), 1),
                 List.of(new Direction(new DirectionId(STONE, "wood"), 256, null)), Set.of(), Set.of());
         tree = Tree.build(List.of(wood, stone), Set.of("minecraft:oak_log"), key -> false).tree();
-        progress.home(Home.at(YARD));
+        progress.home(Home.fresh());
     }
 
     @AfterEach
@@ -136,7 +142,6 @@ class EvolutionTest {
         Gather gather = assertInstanceOf(Gather.class, board.projects().stream()
                 .filter(p -> p instanceof Gather).findFirst().orElseThrow());
         assertEquals(64, gather.target());
-        assertEquals(YARD, gather.yard());
         assertEquals(Direction.TOWARD_CORE, gather.priority(), "it leads toward the Stone Age");
         FellTrees clearing = assertInstanceOf(FellTrees.class, board.projects().stream()
                 .filter(p -> p instanceof FellTrees).findFirst().orElseThrow());
@@ -148,11 +153,11 @@ class EvolutionTest {
 
     @Test
     void anOperatorsIdenticalWorkServesAsWell() {
-        board.post(new Gather(dev.luizloyola.autarkia.core.board.Stock.LOGS, 500, YARD, 0.5, partyId,
+        board.post(new Gather(dev.luizloyola.autarkia.core.board.Stock.LOGS, 500, 0.5, partyId,
                 dev.luizloyola.autarkia.core.board.CarrySplit.INSTANCE));
         Evolution.Outcome outcome = beat();
         assertEquals(List.of("area"), outcome.posted().stream().map(p -> p.direction().line()).toList(),
-                "a gather of logs to the yard is already the wood line's work, whoever posted it");
+                "a gather of logs home is already the wood line's work, whoever posted it");
     }
 
     @Test
@@ -184,7 +189,7 @@ class EvolutionTest {
         FellTrees posted = clearingOnTheBoard();
         board.cancel(board.handleOf(posted).orElseThrow());
         FellTrees done = FellTrees.restore(new FellTrees.State("trees", PLOT, 0.5, FellTrees.Phase.DONE,
-                List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L).orElseThrow();
+                List.of(), List.of(), 0, List.of(), true, List.of()), 0L).orElseThrow();
         board.post(done);
         assertEquals(List.of(new DirectionId(WOOD, "area")),
                 Evolution.collect(tree, progress, view, board.closeFinished()));
@@ -219,16 +224,15 @@ class EvolutionTest {
 
     /**
      * Moving HOME withdraws the work the Directions had out for the old one, found by content —
-     * an in-memory map of it was empty after a restart and left the old yard's work running.
+     * an in-memory map of it was empty after a restart and left the old HOME's work running.
      */
     @Test
     void theWorkForAHomeIsFoundByWhatItIs() {
         beat();
-        board.post(new Gather(dev.luizloyola.autarkia.core.board.Stock.LOGS, 500,
-                new dev.luizloyola.anima.core.brain.sense.Pos(900, 64, 900), 0.5, partyId,
-                dev.luizloyola.autarkia.core.board.CarrySplit.INSTANCE));
+        board.post(new FellTrees(TreeFelling.INSTANCE, Home.region(new ChunkKey(ChunkKey.OVERWORLD, 50, 50),
+                SPOT.y()), 0.5, true));
         List<Project> own = Evolution.ownWork(tree, progress, view, board);
-        assertEquals(2, own.size(), "the clearing and the gather for this HOME, not a gather elsewhere");
+        assertEquals(2, own.size(), "the clearing and the gather for this HOME, not a felling elsewhere");
     }
 
     @Test
@@ -242,14 +246,14 @@ class EvolutionTest {
     }
 
     /**
-     * A chunk at a time, the nearest the yard first, felled and then its plants pulled up; a chunk
+     * A chunk at a time, the nearest the party's store first, felled and then its plants pulled up; a chunk
      * the area grows into is uncleared.
      */
     @Test
     void eachChunkOfTheAreaIsClearedInTurn() {
         view.area.add(EAST);
         beat();
-        assertEquals(PLOT, clearingOnTheBoard().bounds(), "the yard's own chunk first");
+        assertEquals(PLOT, clearingOnTheBoard().bounds(), "the store's own chunk first");
         finish(clearingOnTheBoard());
         assertEquals(Set.of(HERE), progress.home().felled());
 
@@ -261,7 +265,7 @@ class EvolutionTest {
         assertEquals(Set.of(HERE), progress.home().cleared());
 
         beat();
-        assertEquals(Home.at(YARD).region(EAST), clearingOnTheBoard().bounds());
+        assertEquals(Home.region(EAST, SPOT.y()), clearingOnTheBoard().bounds());
         finish(clearingOnTheBoard());
         beat();
         finish(plantsOnTheBoard());
@@ -271,7 +275,7 @@ class EvolutionTest {
     private void finish(FellTrees posted) {
         board.cancel(board.handleOf(posted).orElseThrow());
         FellTrees done = FellTrees.restore(new FellTrees.State("trees", posted.bounds(), 0.5,
-                FellTrees.Phase.DONE, List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L)
+                FellTrees.Phase.DONE, List.of(), List.of(), 0, List.of(), true, List.of()), 0L)
                 .orElseThrow();
         board.post(done);
         Evolution.collect(tree, progress, view, board.closeFinished());

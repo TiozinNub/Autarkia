@@ -42,7 +42,7 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Keeping with the scout of a search for a HOME. */
     String ACCOMPANY = "accompany";
 
-    /** Taking a job's load to its yard once the job has nothing left for that member. */
+    /** Taking a job's load home once the job has nothing left for that member. */
     String BRING_IN = "bring_in";
 
     /** Coming back to a place where a process fell due. */

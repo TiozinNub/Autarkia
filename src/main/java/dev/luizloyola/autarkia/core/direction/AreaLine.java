@@ -18,7 +18,7 @@ import java.util.Optional;
  * <p>What the party knows of a chunk is its own work's ledger, and nothing else — nobody shares the
  * trees they walked past. So a chunk is felled once a felling of it has finished, and a chunk the
  * area grows into is one nobody has touched. One job is out at a time, on the unfinished chunk
- * nearest the yard: a felling's slicing and ledger are a single region's.
+ * nearest the party's stores: a felling's slicing and ledger are a single region's.
  */
 public final class AreaLine implements DirectionLine {
 
@@ -57,16 +57,19 @@ public final class AreaLine implements DirectionLine {
         if (bounds.isEmpty() || party.home().isEmpty()) {
             return false;
         }
-        return party.home().get().chunkOf(bounds.get()).filter(party.area()::contains).isPresent();
+        return Home.chunkOf(bounds.get()).filter(party.area()::contains).isPresent();
     }
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
         Home home = party.home().orElseThrow();
-        ChunkKey next = home.uncleared(party.area()).get(0);
+        // The base stands before this line posts, so there is a store and with it a spot.
+        dev.luizloyola.anima.core.brain.sense.Pos spot = party.spot().orElseThrow();
+        ChunkKey next = home.uncleared(party.area(), spot).get(0);
+        Region bounds = Home.region(next, spot.y());
         return home.felled().contains(next)
-                ? new ClearPlants(home.region(next), priority)
-                : new FellTrees(TreeFelling.INSTANCE, home.region(next), priority, home.yard());
+                ? new ClearPlants(bounds, priority)
+                : new FellTrees(TreeFelling.INSTANCE, bounds, priority, true);
     }
 
     @Override
@@ -76,9 +79,9 @@ public final class AreaLine implements DirectionLine {
             return;
         }
         if (project instanceof FellTrees felling) {
-            home.chunkOf(felling.bounds()).ifPresent(chunk -> progress.home(home.withFelled(chunk)));
+            Home.chunkOf(felling.bounds()).ifPresent(chunk -> progress.home(home.withFelled(chunk)));
         } else if (project instanceof ClearPlants plants) {
-            home.chunkOf(plants.bounds()).ifPresent(chunk -> progress.home(home.withCleared(chunk)));
+            Home.chunkOf(plants.bounds()).ifPresent(chunk -> progress.home(home.withCleared(chunk)));
         }
     }
 

@@ -2,7 +2,6 @@ package dev.luizloyola.autarkia.mod.board;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
@@ -53,7 +52,7 @@ class PartyBoardCodecsTest {
                 targets, 7,
                 List.of(new FellTrees.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
                         new FellTrees.CellMask(new Pos(8, 60, 0), 0x00FF)),
-                new Pos(40, 63, 40), List.of(new Pos(41, 63, 40)), List.of(CREW));
+                true, List.of(CREW));
     }
 
     @Test
@@ -80,17 +79,33 @@ class PartyBoardCodecsTest {
     }
 
     @Test
-    void aBoxWithNoYardRoundTripsWithoutOne() {
+    void aBoxWithNoHaulRoundTripsWithoutOne() {
         FellTrees.State plain = new FellTrees.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), null, List.of(),
-                List.of());
+                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), false, List.of());
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(plain, List.of()));
 
         assertEquals(plain, after.project());
-        assertNull(((FellTrees.State) after.project()).yard(),
-                "no destination, no migration, no surprise chest");
+        assertFalse(((FellTrees.State) after.project()).home(),
+                "no haul, no migration, no surprise chest");
+    }
+
+    @Test
+    void aBoxSavedWithAYardStillTakesItsWoodHome() {
+        FellTrees.State plain = new FellTrees.State("trees",
+                new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
+                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), false, List.of());
+        JsonObject row = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, new PartyBoard.Row(plain, List.of()))
+                .getOrThrow().getAsJsonObject();
+        JsonObject project = row.getAsJsonObject("project");
+        project.remove("home");
+        project.add("yard", PartyBoardCodecs.POS.encodeStart(JsonOps.INSTANCE, new Pos(0, 64, 0)).getOrThrow());
+
+        FellTrees.State read = (FellTrees.State) PartyBoardCodecs.ROW.parse(JsonOps.INSTANCE, row).getOrThrow()
+                .project();
+
+        assertTrue(read.home(), "a box posted with a yard before 2026-10-01 hauled, and still does");
     }
 
     @Test
@@ -277,7 +292,7 @@ class PartyBoardCodecsTest {
     void aGatherRowComesBackWithItsLedgerAndItsHolds() {
         AgentId alice = AgentId.random();
         PartyId party = PartyId.of(java.util.UUID.randomUUID());
-        Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5, party, "carry",
+        Gather.State before = new Gather.State("logs", 64, 0.5, party, "carry",
                 List.of(new Pos(11, 64, 10), new Pos(12, 64, 10)),
                 List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L),
                         new Gather.Reading(new Pos(12, 64, 10), 8, 1_200L)),
@@ -302,7 +317,7 @@ class PartyBoardCodecsTest {
     void aGatherReadingKeepsTheTickItWasTakenAt() {
         // Without it a restart makes every belief look freshly taken, and a member arriving with
         // an hour-old memory overwrites a newer reading — the ledger is the chest as LAST read.
-        Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5,
+        Gather.State before = new Gather.State("logs", 64, 0.5,
                 PartyId.of(java.util.UUID.randomUUID()), "carry", List.of(new Pos(11, 64, 10)),
                 List.of(new Gather.Reading(new Pos(11, 64, 10), 24, 900L)), List.of(), List.of());
 
@@ -318,7 +333,7 @@ class PartyBoardCodecsTest {
         // Without it a reload puts a failing member straight back in front of the same trip they
         // just proved impossible — the whole defect this pacing exists to close.
         AgentId alice = AgentId.random();
-        Gather.State before = new Gather.State("logs", 64, new Pos(10, 64, 10), 0.5,
+        Gather.State before = new Gather.State("logs", 64, 0.5,
                 PartyId.of(java.util.UUID.randomUUID()), "carry", List.of(), List.of(), List.of(),
                 List.of(new Gather.Cooldown(alice, 12_345L)));
 
@@ -361,7 +376,7 @@ class PartyBoardCodecsTest {
         // "logs". Writing that derived name alone is a dead handle: restore comes back empty, the
         // board counts the project unknown, and refuseUnknown will not start the world again.
         ItemSpec posted = ItemSpec.anyOf(Set.of("minecraft:oak_log"));
-        Gather.State before = new Gather.State(posted.name(), 64, new Pos(10, 64, 10), 0.5,
+        Gather.State before = new Gather.State(posted.name(), 64, 0.5,
                 PartyId.of(UUID.randomUUID()), "carry", List.of(), List.of(), List.of(), List.of());
         PartyBoard.Row row = new PartyBoard.Row(before, List.of());
 

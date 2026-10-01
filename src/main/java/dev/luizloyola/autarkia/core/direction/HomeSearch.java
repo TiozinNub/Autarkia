@@ -141,7 +141,7 @@ public final class HomeSearch {
     }
 
     /** Where the scout stands to claim the best plot: its centre, on the ground. */
-    public @Nullable Pos yard() {
+    public @Nullable Pos settleAt() {
         return best == null ? null : new Pos(best.x(), best.y() + 1, best.z());
     }
 

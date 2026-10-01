@@ -64,7 +64,7 @@ class HomeSearchTest {
                 TABLE, WALK, NO_NOISE);
 
         assertEquals(Phase.SETTLE, search.phase(), line);
-        assertEquals(new Pos(10, 64, 0), search.yard());
+        assertEquals(new Pos(10, 64, 0), search.settleAt());
     }
 
     @Test
@@ -96,7 +96,7 @@ class HomeSearchTest {
 
         assertEquals(66, search.bar(TABLE), 1e-9);
         assertEquals(Phase.SETTLE, search.phase(), "the best seen, worth 70, will do now: " + line);
-        assertEquals(new Pos(10, 64, 0), search.yard(), "and it goes back to it");
+        assertEquals(new Pos(10, 64, 0), search.settleAt(), "and it goes back to it");
     }
 
     @Test
@@ -113,7 +113,7 @@ class HomeSearchTest {
         }
 
         assertEquals(Phase.SETTLE, search.phase());
-        assertEquals(new Pos(at.x(), 64, at.z()), search.yard(), "not back at the first stop");
+        assertEquals(new Pos(at.x(), 64, at.z()), search.settleAt(), "not back at the first stop");
     }
 
     @Test

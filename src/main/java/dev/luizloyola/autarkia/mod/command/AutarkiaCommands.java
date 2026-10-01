@@ -294,50 +294,44 @@ public final class AutarkiaCommands {
                                         .then(Commands.argument("to", BlockPosArgument.blockPos())
                                                 .executes(ctx -> boardPostFell(ctx,
                                                         corner(ctx, "from"), corner(ctx, "to"),
-                                                        FELL_PRIORITY, null))
+                                                        FELL_PRIORITY, false))
                                                 .then(Commands.argument("priority",
                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
                                                         .executes(ctx -> boardPostFell(ctx,
                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
-                                                                null)))
-                                                // Where the wood goes. A HINT, not a cell to obey: the
-                                                // first hauler opens a chest on whatever ground near it
-                                                // will hold one, and the readout names where it went.
-                                                .then(Commands.literal("at")
-                                                        .then(Commands.argument("yard", BlockPosArgument.blockPos())
+                                                                false)))
+                                                // The wood goes home: to any store in the party's
+                                                // area, or a new one at its next store's spot.
+                                                .then(Commands.literal("home")
+                                                        .executes(ctx -> boardPostFell(ctx,
+                                                                corner(ctx, "from"), corner(ctx, "to"),
+                                                                FELL_PRIORITY, true))
+                                                        .then(Commands.argument("priority",
+                                                                        DoubleArgumentType.doubleArg(0.0, 1.0))
                                                                 .executes(ctx -> boardPostFell(ctx,
                                                                         corner(ctx, "from"), corner(ctx, "to"),
-                                                                        FELL_PRIORITY, corner(ctx, "yard")))
-                                                                .then(Commands.argument("priority",
-                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                        .executes(ctx -> boardPostFell(ctx,
-                                                                                corner(ctx, "from"), corner(ctx, "to"),
-                                                                                DoubleArgumentType.getDouble(ctx, "priority"),
-                                                                                corner(ctx, "yard")))))))))
+                                                                        DoubleArgumentType.getDouble(ctx, "priority"),
+                                                                        true)))))))
                         // Level a cleared area: the plan `flatten plan` paints, posted.
                         .then(Commands.literal("flatten").then(FlattenCommands.area(
                                 AutarkiaCommands::boardPostFlatten)))
-                        // Get this many of this item into that yard. `at` is MANDATORY here (unlike
-                        // clear's) — a gather with nowhere to put the goods has no completion rule —
-                        // so this is two leaves, not four.
+                        // Get this many of this item into HOME's stores. A party with no HOME is
+                        // refused: a gather with nowhere to put the goods has no completion rule.
                         .then(Commands.literal("gather")
                                 .then(Commands.argument("item", ItemArgument.item(registryAccess))
                                         .then(Commands.argument("count", IntegerArgumentType.integer(1))
-                                                .then(Commands.literal("at")
-                                                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
-                                                                .executes(ctx -> boardPostGather(ctx,
-                                                                        ItemArgument.getItem(ctx, "item"),
-                                                                        IntegerArgumentType.getInteger(ctx, "count"),
-                                                                        corner(ctx, "pos"), GATHER_PRIORITY))
-                                                                .then(Commands.argument("priority",
-                                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                        .executes(ctx -> boardPostGather(ctx,
-                                                                                ItemArgument.getItem(ctx, "item"),
-                                                                                IntegerArgumentType.getInteger(ctx, "count"),
-                                                                                corner(ctx, "pos"),
-                                                                                DoubleArgumentType.getDouble(
-                                                                                        ctx, "priority"))))))))))
+                                                .executes(ctx -> boardPostGather(ctx,
+                                                        ItemArgument.getItem(ctx, "item"),
+                                                        IntegerArgumentType.getInteger(ctx, "count"),
+                                                        GATHER_PRIORITY))
+                                                .then(Commands.argument("priority",
+                                                                DoubleArgumentType.doubleArg(0.0, 1.0))
+                                                        .executes(ctx -> boardPostGather(ctx,
+                                                                ItemArgument.getItem(ctx, "item"),
+                                                                IntegerArgumentType.getInteger(ctx, "count"),
+                                                                DoubleArgumentType.getDouble(
+                                                                        ctx, "priority"))))))))
                 // Every row of the ledger, one line each — the only way to ask "did that tree
                 // actually go?" of the world afterwards.
                 .then(Commands.literal("targets")
@@ -569,7 +563,7 @@ public final class AutarkiaCommands {
     }
 
     private static int boardPostFell(CommandContext<CommandSourceStack> ctx, BlockPos from, BlockPos to,
-                                      double priority, @Nullable BlockPos yard) {
+                                      double priority, boolean home) {
         CommandSourceStack source = ctx.getSource();
         Person person = resolve(ctx);
         if (person == null) return 0;
@@ -598,8 +592,7 @@ public final class AutarkiaCommands {
         PartyBoard board = PartyBoards.of(server, party);
         // Trees, because they are the only thing anything knows how to clear. The kind becomes an
         // argument the day a second Felling is registered; until then a choice of one is noise.
-        FellTrees project = new FellTrees(TreeFelling.INSTANCE, bounds, priority,
-                yard == null ? null : new Pos(yard.getX(), yard.getY(), yard.getZ()));
+        FellTrees project = new FellTrees(TreeFelling.INSTANCE, bounds, priority, home);
         int handle = board.post(project);
         PartyBoards.touch(server);
         OpJournal.record(source, PartyData.get(server).members(party),
@@ -653,17 +646,16 @@ public final class AutarkiaCommands {
     }
 
     /**
-     * Posts "get this many of this item into that yard" to the resolved Person's party board.
+     * Posts "get this many of this item into HOME's stores" to the resolved Person's party board.
      *
-     * <p>{@code at} is mandatory, unlike {@code post fell}'s optional yard: a clearing's box knows
-     * it is done from its own ledger, but a gather's completion rule IS "the yard holds enough" —
-     * with no yard there is nothing to ever check.
+     * <p>Refused for a party with no HOME, unlike {@code post fell}: a clearing's box knows it is
+     * done from its own ledger, but a gather's completion rule IS "HOME holds enough".
      *
      * <p>Refused before anything is posted when nothing registered here can ever make the item —
      * otherwise the settlement looks busy on a job that can never complete.
      */
     private static int boardPostGather(CommandContext<CommandSourceStack> ctx, ItemInput item, int count,
-                                       BlockPos yard, double priority) {
+                                       double priority) {
         CommandSourceStack source = ctx.getSource();
         Person person = resolve(ctx);
         if (person == null) return 0;
@@ -691,9 +683,13 @@ public final class AutarkiaCommands {
         }
         MinecraftServer server = level.getServer();
         PartyId party = PartyData.get(server).partyOf(who);
+        if (dev.luizloyola.autarkia.mod.direction.DirectionsData.get(server).find(party)
+                .map(dev.luizloyola.autarkia.core.direction.PartyProgress::home).isEmpty()) {
+            Replies.fail(source, Component.translatable("autarkia.command.gather.no_home", person.getName()));
+            return 0;
+        }
         PartyBoard board = PartyBoards.of(server, party);
-        Gather project = new Gather(ItemSpec.anyOf(Set.of(id)), count,
-                new Pos(yard.getX(), yard.getY(), yard.getZ()), priority, party, CarrySplit.INSTANCE);
+        Gather project = new Gather(ItemSpec.anyOf(Set.of(id)), count, priority, party, CarrySplit.INSTANCE);
         int handle = board.post(project);
         PartyBoards.touch(server);
         OpJournal.record(source, PartyData.get(server).members(party),

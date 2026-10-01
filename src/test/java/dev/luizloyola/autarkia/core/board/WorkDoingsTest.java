@@ -34,7 +34,7 @@ class WorkDoingsTest {
     @Test
     void everySlotAutarkiaFillsHasWords() {
         for (Slot slot : List.of(WorkDoings.goods(Stock.LOGS), WorkDoings.goods(Stock.AXES),
-                WorkDoings.FOR_THE_YARD, WorkDoings.cleared(TreeFelling.INSTANCE))) {
+                WorkDoings.FOR_THE_STORES, WorkDoings.cleared(TreeFelling.INSTANCE))) {
             assertEquals(Slot.Type.LANG, slot.type(), slot.encode());
             assertTrue(EN.containsKey(slot.value()), slot.value() + " has no line in en_us");
         }

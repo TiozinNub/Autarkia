@@ -101,11 +101,10 @@ class AutarkiaTaskCodecsTest {
 
     @Test
     void aHaulingErrandSurvivesTheFile() {
-        HaulingErrand before = HaulingErrand.restored(new Idle(7), new Pos(10, 64, 10), 3);
+        HaulingErrand before = HaulingErrand.restored(new Idle(7), 3);
 
         HaulingErrand after = assertInstanceOf(HaulingErrand.class, roundTrip(before));
 
-        assertEquals(before.yard(), after.yard());
         assertEquals(before.haulLine(), after.haulLine());
         assertInstanceOf(Idle.class, after.work(), "and it carries its work with it");
     }
@@ -126,24 +125,22 @@ class AutarkiaTaskCodecsTest {
     void aGatheringErrandSurvivesTheFile() {
         // A declared spec travels as its registry NAME: its matcher is a lambda, and a trip
         // reloaded against the wrong one would fetch nothing and never satisfy.
-        GatheringErrand before = new GatheringErrand(Stock.LOGS, 16, new Pos(10, 64, 10));
+        GatheringErrand before = new GatheringErrand(Stock.LOGS, 16);
 
         GatheringErrand after = assertInstanceOf(GatheringErrand.class, roundTrip(before));
 
         assertEquals(Stock.LOGS, after.spec());
         assertEquals(16, after.count());
-        assertEquals(before.yard(), after.yard());
     }
 
     @Test
-    void aLoadOnItsWayToTheYardSurvivesTheFile() {
+    void aLoadOnItsWayHomeSurvivesTheFile() {
         dev.luizloyola.autarkia.core.board.BringBack after = assertInstanceOf(
                 dev.luizloyola.autarkia.core.board.BringBack.class,
-                roundTrip(new dev.luizloyola.autarkia.core.board.BringBack(Stock.LOGS, 16, new Pos(10, 64, 10))));
+                roundTrip(new dev.luizloyola.autarkia.core.board.BringBack(Stock.LOGS, 16)));
 
         assertEquals(Stock.LOGS, after.spec());
         assertEquals(16, after.count());
-        assertEquals(new Pos(10, 64, 10), after.yard());
     }
 
     @Test
@@ -152,7 +149,7 @@ class AutarkiaTaskCodecsTest {
         // a spec no bootstrap re-registers. By NAME that plan cannot decode at all, and an
         // undecodable task in a saved plan is the failure this class exists for.
         ItemSpec literal = ItemSpec.anyOf(java.util.Set.of("minecraft:oak_log"));
-        GatheringErrand before = new GatheringErrand(literal, 16, new Pos(10, 64, 10));
+        GatheringErrand before = new GatheringErrand(literal, 16);
 
         var written = TaskCodecs.codec().encodeStart(JsonOps.INSTANCE, before).getOrThrow();
         assertTrue(written.getAsJsonObject().get("spec").isJsonArray(),

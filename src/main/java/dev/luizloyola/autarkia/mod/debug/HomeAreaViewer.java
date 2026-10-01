@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.debug;
 
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.debug.CellOverlays;
@@ -7,12 +8,14 @@ import dev.luizloyola.anima.mod.net.CellOverlayPayload;
 import dev.luizloyola.anima.mod.territory.TerritoryViewer;
 import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.PartyProgress;
+import dev.luizloyola.autarkia.core.direction.PartyView;
 import dev.luizloyola.autarkia.mod.direction.Directions;
 import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.UUID;
@@ -24,7 +27,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
- * What HOME adds to Anima's territory view, drawn whenever that view is on: each party's yard, a
+ * What HOME adds to Anima's territory view, drawn whenever that view is on: where each party's next store goes, a
  * ring inside every chunk not yet cleared, and a label naming the HOME.
  */
 public final class HomeAreaViewer {
@@ -35,7 +38,7 @@ public final class HomeAreaViewer {
     private static final String SOURCE = "autarkia:home_area";
     private static final int REFRESH_TICKS = 20;
     private static final int TTL_TICKS = REFRESH_TICKS * 3;
-    private static final int YARD = 0xFF40FF40;
+    private static final int SPOT = 0xFF40FF40;
     private static final int UNCLEARED = 0xFFFFB020;
     private static final int LABEL = 0xFFFFFFFF;
 
@@ -65,31 +68,35 @@ public final class HomeAreaViewer {
             return;
         }
         int reach = TerritoryViewer.RANGE_BLOCKS;
-        List<CellOverlayPayload.Box> yards = new ArrayList<>();
+        List<CellOverlayPayload.Box> spots = new ArrayList<>();
         List<CellOverlayPayload.Box> uncleared = new ArrayList<>();
         List<CellOverlayPayload.Label> labels = new ArrayList<>();
         for (Map.Entry<PartyId, PartyProgress> entry : DirectionsData.get(server).parties().entrySet()) {
             Home home = entry.getValue().home();
-            if (home == null || Math.abs(home.yard().x() - player.getBlockX()) > reach
-                    || Math.abs(home.yard().z() - player.getBlockZ()) > reach) {
+            if (home == null) {
                 continue;
             }
-            PartyProgress progress = entry.getValue();
-            SortedSet<ChunkKey> area = Directions.view(server, entry.getKey(), progress).area();
+            PartyView view = Directions.view(server, entry.getKey(), entry.getValue());
+            Optional<Pos> next = view.spot();
+            if (next.isEmpty() || Math.abs(next.get().x() - player.getBlockX()) > reach
+                    || Math.abs(next.get().z() - player.getBlockZ()) > reach) {
+                continue;
+            }
+            SortedSet<ChunkKey> area = view.area();
             List<ChunkKey> left = home.uncleared(area);
-            BlockPos yard = new BlockPos(home.yard().x(), home.yard().y(), home.yard().z());
-            yards.add(new CellOverlayPayload.Box(yard, yard));
+            BlockPos spot = new BlockPos(next.get().x(), next.get().y(), next.get().z());
+            spots.add(new CellOverlayPayload.Box(spot, spot));
             for (ChunkKey chunk : left) {
-                int y = groundAt(level, chunk, home.yard().y() - 1);
+                int y = groundAt(level, chunk, spot.getY() - 1);
                 uncleared.add(new CellOverlayPayload.Box(
                         new BlockPos(chunk.minBlockX() + 2, y, chunk.minBlockZ() + 2),
                         new BlockPos(chunk.maxBlockX() - 2, y, chunk.maxBlockZ() - 2)));
             }
             labels.add(new CellOverlayPayload.Label("HOME — " + area.size() + " chunks, "
-                    + (area.size() - left.size()) + " cleared", LABEL, yard.above(2)));
+                    + (area.size() - left.size()) + " cleared", LABEL, spot.above(2)));
         }
         CellOverlays.show(player, new CellOverlayPayload(SOURCE, TTL_TICKS, List.of(), List.of(), List.of(
-                new CellOverlayPayload.BoxGroup(YARD, 3.0F, 0x6040FF40, true, yards),
+                new CellOverlayPayload.BoxGroup(SPOT, 3.0F, 0x6040FF40, true, spots),
                 new CellOverlayPayload.BoxGroup(UNCLEARED, 2.0F, 0, false, uncleared)), labels));
     }
 

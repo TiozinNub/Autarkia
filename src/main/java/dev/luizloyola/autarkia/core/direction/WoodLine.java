@@ -50,13 +50,11 @@ public final class WoodLine implements DirectionLine {
 
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        return project instanceof Gather gather && gather.spec() == Stock.LOGS
-                && party.home().map(home -> home.yard().equals(gather.yard())).orElse(false);
+        return project instanceof Gather gather && gather.spec() == Stock.LOGS && party.home().isPresent();
     }
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        return new Gather(Stock.LOGS, direction.count(), party.home().orElseThrow().yard(), priority,
-                party.party(), CarrySplit.INSTANCE);
+        return new Gather(Stock.LOGS, direction.count(), priority, party.party(), CarrySplit.INSTANCE);
     }
 }

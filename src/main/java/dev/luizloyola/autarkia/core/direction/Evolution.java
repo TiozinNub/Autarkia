@@ -108,7 +108,7 @@ public final class Evolution {
 
     /**
      * Every project on the board that is some Direction's work under {@code view} — what a move of
-     * HOME withdraws, judged against the HOME being left, since the work names its plot and yard.
+     * HOME withdraws, judged against the HOME being left, since the work names its area.
      */
     public static List<Project> ownWork(Tree tree, PartyProgress progress, PartyView view,
                                         PartyBoard board) {

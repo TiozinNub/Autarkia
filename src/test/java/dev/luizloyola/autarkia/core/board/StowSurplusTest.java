@@ -31,12 +31,12 @@ class StowSurplusTest {
         }
     }
 
-    private static final Pos YARD = new Pos(40, 64, -12);
+    private static final Pos HOME = new Pos(40, 64, -12);
 
     /** A body whose party has a HOME, so its goods have somewhere to go. */
     private static BoardBrainContext settled() {
         BoardBrainContext ctx = new BoardBrainContext();
-        ctx.depot = YARD;
+        ctx.depot = HOME;
         return ctx;
     }
 
@@ -149,7 +149,9 @@ class StowSurplusTest {
         beats(stow, ctx, 2);
 
         PutAwaySurplus goal = (PutAwaySurplus) stow.open().get(0).root();
-        assertEquals(YARD, goal.hint(), "to HOME's yard, never the nearest chest");
+        assertInstanceOf(dev.luizloyola.anima.core.brain.task.EnsureStore.class,
+                goal.methods().get(0).decompose(ctx).get(0),
+                "to a store of HOME's — the depot's — never the nearest chest");
     }
 
     @Test

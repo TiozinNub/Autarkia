@@ -29,7 +29,7 @@ import java.util.Set;
  *
  * <p><b>One item at a time is the point.</b> A station the party needs is posted once, on its
  * board, so two members can never both decide to build it. When each hauler decided for itself,
- * two crafted a chest for the same yard within a tick of each other (2026-09-24).
+ * two crafted a chest for the same spot within a tick of each other (2026-09-24).
  *
  * <p>The station is the item's kit NEED as well as what its root places: the kit-up gets it inside
  * the claim, the board refuses the item to a body that could never have one, and a carried chest is

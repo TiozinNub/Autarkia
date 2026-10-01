@@ -40,7 +40,8 @@ public final class Tend implements PartyProject {
     private final Pos at;
     private final String output;
     private final @Nullable ItemSpec fuel;
-    private final @Nullable Pos yard;
+    /** Whether the output goes home: a party with no HOME leaves it in the furnace's taker's pack. */
+    private final boolean home;
     private final AgentId starter;
     private final long dueAt;
 
@@ -49,12 +50,12 @@ public final class Tend implements PartyProject {
     private long lastTick;
     private final TendItem item = new TendItem();
 
-    public Tend(Pos at, String output, @Nullable ItemSpec fuel, @Nullable Pos yard, AgentId starter,
+    public Tend(Pos at, String output, @Nullable ItemSpec fuel, boolean home, AgentId starter,
                 long dueAt) {
         this.at = Objects.requireNonNull(at, "at");
         this.output = Objects.requireNonNull(output, "output");
         this.fuel = fuel;
-        this.yard = yard;
+        this.home = home;
         this.starter = Objects.requireNonNull(starter, "starter");
         this.dueAt = dueAt;
         this.lastTick = dueAt;
@@ -119,7 +120,7 @@ public final class Tend implements PartyProject {
     /** The output is cargo on its way home: the stow machinery leaves it be. */
     @Override
     public List<ItemCall> reserved() {
-        return done || yard == null ? List.of() : List.of(ItemCall.need(spec(), TendErrand.LOAD));
+        return done || !home ? List.of() : List.of(ItemCall.need(spec(), TendErrand.LOAD));
     }
 
     private ItemSpec spec() {
@@ -130,7 +131,7 @@ public final class Tend implements PartyProject {
     public ProjectState snapshot() {
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
-        return new State(at, output, Optional.ofNullable(fuel).map(ItemSpec::name), Optional.ofNullable(yard), starter, dueAt,
+        return new State(at, output, Optional.ofNullable(fuel).map(ItemSpec::name), home, starter, dueAt,
                 done, List.copyOf(cooldowns), lastTick);
     }
 
@@ -163,7 +164,7 @@ public final class Tend implements PartyProject {
 
         @Override
         public Task root() {
-            return new TendErrand(at, spec(), fuel, yard);
+            return new TendErrand(at, spec(), fuel, home);
         }
 
         @Override
@@ -179,7 +180,7 @@ public final class Tend implements PartyProject {
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
-    public record State(Pos at, String output, Optional<String> fuel, Optional<Pos> yard, AgentId starter,
+    public record State(Pos at, String output, Optional<String> fuel, boolean home, AgentId starter,
                         long dueAt, boolean done, List<Gather.Cooldown> cooldowns, long lastTick)
             implements ProjectState {
         @Override
@@ -190,7 +191,7 @@ public final class Tend implements PartyProject {
 
     public static Optional<Tend> restore(State state, long now) {
         Tend project = new Tend(state.at(), state.output(), state.fuel().flatMap(ItemSpec::byName).orElse(null),
-                state.yard().orElse(null),
+                state.home(),
                 state.starter(), state.dueAt());
         project.done = state.done();
         for (Gather.Cooldown cooldown : state.cooldowns()) {

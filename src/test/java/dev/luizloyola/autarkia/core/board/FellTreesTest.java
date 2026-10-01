@@ -131,116 +131,74 @@ class FellTreesTest {
 
     // ── where the wood goes ──────────────────────────────────────────────────────────────────
 
-    private static final Pos YARD = new Pos(6, 60, 6);
-
     @Test
-    void aBoxWithoutADestinationIsExactlyWhatItWas() {
+    void aBoxWithoutAHaulIsExactlyWhatItWas() {
         FellTrees project = posted(ABLE, oneSlice());
 
-        assertTrue(project.yard().isEmpty(), "no destination named, none invented");
-        assertFalse(project.describe().contains("yard"), "and the readout says nothing about one");
+        assertFalse(project.home(), "no haul asked for, none invented");
+        assertFalse(project.describe().contains("home"), "and the readout says nothing about one");
     }
 
     @Test
-    void aNamedDestinationIsCarriedAndSaidOutLoud() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
+    void aHaulHomeIsCarriedAndSaidOutLoud() {
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, true);
         project.tick(0L);
 
-        assertEquals(YARD, project.yard().orElseThrow());
-        assertTrue(project.describe().contains("yard"),
-                "an operator who asked for a destination should see it in the readout");
+        assertTrue(project.home());
+        assertTrue(project.describe().contains("home"),
+                "an operator who asked for the wood to go home should see it in the readout");
     }
 
     @Test
-    void theDestinationSurvivesASnapshotRoundTrip() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
+    void theHaulSurvivesASnapshotRoundTrip() {
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, true);
         project.tick(0L);
 
         FellTrees restored = FellTrees.restore(project.snapshot(), 0L).orElseThrow();
 
-        assertEquals(YARD, restored.yard().orElseThrow());
+        assertTrue(restored.home());
     }
 
     @Test
-    void aBoxSavedBeforeYardsExistedStillLoads() {
+    void aBoxWithoutAHaulRestoresWithoutOne() {
         FellTrees plain = posted(ABLE, oneSlice());
 
         FellTrees restored = FellTrees.restore(plain.snapshot(), 0L).orElseThrow();
 
-        assertTrue(restored.yard().isEmpty(), "no destination, no migration, no surprise chest");
+        assertFalse(restored.home(), "no haul, no migration, no surprise chest");
     }
 
     @Test
-    void itRemembersWhereTheChestActuallyWent() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
-        project.tick(0L);
-        BoardBrainContext ctx = new BoardBrainContext();
-        // The hauler built it a block off the hint, because the hint was a hint.
-        ctx.claim(dev.luizloyola.anima.core.store.Store.POI, new Pos(7, 60, 6));
-
-        project.completed(project.open().get(0), ctx);
-
-        assertEquals(List.of(new Pos(7, 60, 6)), project.yardChests(),
-                "the readout should name where the wood is, not where it was asked for");
-        assertTrue(project.describe().contains("1 chest"));
-    }
-
-    @Test
-    void aChestNowhereNearTheHintIsNotThisProjectsYard() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
-        project.tick(0L);
-        BoardBrainContext ctx = new BoardBrainContext();
-        ctx.claim(dev.luizloyola.anima.core.store.Store.POI, new Pos(900, 60, 900));
-
-        project.completed(project.open().get(0), ctx);
-
-        assertTrue(project.yardChests().isEmpty(),
-                "a worker's own chest across the map is not the project's yard");
-    }
-
-    @Test
-    void somebodyElsesChestAtTheHintIsNotThisProjectsYard() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
-        project.tick(0L);
-        BoardBrainContext ctx = new BoardBrainContext();
-        ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(7, 60, 6));
-
-        project.completed(project.open().get(0), ctx);
-
-        assertTrue(project.yardChests().isEmpty(), "seen, but not the party's to fill");
-    }
-
-    @Test
-    void aClearItemHaulsOnlyWhenThereIsAYard() {
+    void aClearItemHaulsOnlyWhenTheWoodGoesHome() {
         FellTrees plain = posted(ABLE, oneSlice());
         plain.completed(plain.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
-        Task withoutYard = ((SweepingErrand) plain.open().stream()
+        Task withoutHaul = ((SweepingErrand) plain.open().stream()
                 .filter(item -> item.describe().startsWith("fell")).findFirst().orElseThrow()
                 .root()).work();
 
-        assertFalse(withoutYard instanceof HaulingErrand,
-                "no destination, and the root is byte-for-byte what it always was");
+        assertFalse(withoutHaul instanceof HaulingErrand,
+                "no haul, and the root is byte-for-byte what it always was");
 
-        FellTrees withYard = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
-        withYard.tick(0L);
-        withYard.completed(withYard.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
-        Task hauling = ((SweepingErrand) withYard.open().stream()
+        FellTrees hauled = new FellTrees(ABLE, oneSlice(), 0.5, true);
+        hauled.tick(0L);
+        hauled.completed(hauled.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
+        Task hauling = ((SweepingErrand) hauled.open().stream()
                 .filter(item -> item.describe().startsWith("fell")).findFirst().orElseThrow()
                 .root()).work();
 
         assertTrue(hauling instanceof HaulingErrand,
-                "with one, felling is followed by taking the load over when laden");
+                "with one, felling is followed by taking the load home when laden");
     }
 
-    /** The yard haul a clear item's errand ends with, as the executor reaches it. */
+    /** The haul home a clear item's errand ends with, as the executor reaches it. */
     private static PutAwaySurplus haulOf(WorkItem tree, BoardBrainContext ctx) {
         HaulingErrand errand = (HaulingErrand) ((SweepingErrand) tree.root()).work();
         return (PutAwaySurplus) errand.methods().get(0).decompose(ctx).get(1);
     }
 
     @Test
-    void theLastTreeTakesTheWholeLoadToTheYard() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
+    void theLastTreeTakesTheWholeLoadHome() {
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, true);
         project.tick(0L);
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         ctx.remember(THING, new Pos(8, 60, 8));
@@ -287,7 +245,7 @@ class FellTreesTest {
 
     @Test
     void aCrewMemberTheLastTreesWentPastIsSentHomeWithTheLoad() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, true);
         project.tick(0L);
         AgentId surveyor = AgentId.random();
         AgentId feller = AgentId.random();
@@ -313,7 +271,6 @@ class FellTreesTest {
         project.claimed(mine, surveyor);
         assertFalse(project.offerableTo(mine, feller, laden), "a load is its carrier's");
         PutAwaySurplus haul = (PutAwaySurplus) mine.root();
-        assertEquals(YARD, haul.hint());
         assertEquals(0, haul.haulLine(), "everything goes, whatever the load");
 
         project.completed(tree, new BoardBrainContext());
@@ -337,8 +294,8 @@ class FellTreesTest {
     }
 
     @Test
-    void theSweepWrapsTheHaulSoTheWalkToTheYardCountsToo() {
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, new Pos(60, 60, 60));
+    void theSweepWrapsTheHaulSoTheWalkHomeCountsToo() {
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, true);
         project.tick(0L);
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
@@ -1202,7 +1159,7 @@ class FellTreesTest {
         PartyProjects.register(FellTrees.TYPE);
         PartyBoard board = new PartyBoard(
                 dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
-        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, true);
         board.post(project);
         board.tick(0L);
         AgentId surveyor = AgentId.random();

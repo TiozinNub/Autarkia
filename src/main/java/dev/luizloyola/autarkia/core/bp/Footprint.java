@@ -27,7 +27,7 @@ public record Footprint(int minX, int minZ, int maxX, int maxZ) {
 
     /**
      * The open cell on the outside of the plan's first door, as {@code {dx, layer, dz}} from the
-     * anchor — where a yard goes, so the HOME a building founds starts at its door. A door has two
+     * anchor — where a building is entered from. A door has two
      * open sides; the outside is the one farther from the plan's middle, which holds for a door set
      * back behind a porch as well as one in the outer wall. Empty when no door has an open side.
      */

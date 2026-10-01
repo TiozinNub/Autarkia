@@ -81,9 +81,9 @@ public final class HomeLooks implements HomeLooking {
         if (!allowed) {
             return false;
         }
-        Pos yard = new Pos(plot.x(), plot.y() + 1, plot.z());
-        return Directions.settle(server, party, yard, Home.square(yard, plot.size() / 2),
-                Reason.of(Reason.Kind.FOUND, "settled at (" + yard.x() + ", " + yard.y() + ", " + yard.z() + "), worth " + Math.round(plot.value())))
+        Pos centre = new Pos(plot.x(), plot.y() + 1, plot.z());
+        return Directions.settle(server, party, Home.square(centre, plot.size() / 2),
+                Reason.of(Reason.Kind.FOUND, "settled at (" + centre.x() + ", " + centre.y() + ", " + centre.z() + "), worth " + Math.round(plot.value())))
                 .granted();
     }
 

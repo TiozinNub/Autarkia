@@ -4,7 +4,6 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.gate.Act;
 import dev.luizloyola.anima.core.brain.gate.Acts;
 import dev.luizloyola.anima.core.brain.gate.Gate;
-import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.JournalService;
 import dev.luizloyola.anima.core.social.PartyId;
@@ -31,6 +30,7 @@ import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
@@ -282,16 +283,15 @@ public final class Directions {
     /**
      * A new HOME on exactly these chunks, nothing cleared. The party's area is swapped in one claim,
      * refused whole — a site that cannot be had leaves the old HOME as it was. The work the
-     * Directions had out was for the old area and yard, so it is withdrawn; the next beat posts again.
+     * Directions had out was for the old area, so it is withdrawn; the next beat posts again.
      *
-     * <p>Growing the area is not this: a growth keeps the yard, and the work keyed on it.
+     * <p>Growing the area is not this: a growth keeps HOME, and the work for it.
      */
-    public static Claimed settle(MinecraftServer server, PartyId party, Pos yard, Collection<ChunkKey> chunks,
-                                 Reason why) {
+    public static Claimed settle(MinecraftServer server, PartyId party, Collection<ChunkKey> chunks, Reason why) {
         List<Project> old = ownWork(server, party);
         Claimed claimed = Territories.of(server).move(party, chunks, why, Territories.now(server));
         if (claimed.granted()) {
-            replace(server, party, Home.at(yard), old);
+            replace(server, party, Home.fresh(), old);
         }
         return claimed;
     }
@@ -299,13 +299,13 @@ public final class Directions {
     /**
      * A building of the party's stands on these chunks, so they are ready ground: felled and cleared,
      * since a clearing over them now would pull up the flowers it was built with. A party with no
-     * HOME is given one, its yard at the building's door. Whether it was.
+     * HOME is given one, on the area the building founded. Whether it was.
      */
-    public static boolean built(MinecraftServer server, PartyId party, Pos yard, Collection<ChunkKey> footprint) {
+    public static boolean built(MinecraftServer server, PartyId party, Collection<ChunkKey> footprint) {
         DirectionsData data = DirectionsData.get(server);
         PartyProgress progress = data.progress(party);
         boolean founded = progress.home() == null;
-        Home home = founded ? Home.at(yard) : progress.home();
+        Home home = founded ? Home.fresh() : progress.home();
         for (ChunkKey chunk : footprint) {
             home = home.withFelled(chunk).withCleared(chunk);
         }
@@ -322,8 +322,8 @@ public final class Directions {
     }
 
     /**
-     * The work out for the HOME being left, found by content since it names that area and yard. An
-     * in-memory map of it was empty after a restart, and a HOME moved then left the old yard's
+     * The work out for the HOME being left, found by content since it names that area. An
+     * in-memory map of it was empty after a restart, and a HOME moved then left the old HOME's
      * gather and clearing running (2026-09-25).
      */
     private static List<Project> ownWork(MinecraftServer server, PartyId party) {
@@ -413,17 +413,38 @@ public final class Directions {
         return reached;
     }
 
-    /** Where a body's goods go: its party's HOME yard, and nowhere before it has one. */
-    private static Optional<Pos> depotOf(AgentId body) {
+    /**
+     * Where a body's goods go: any store in its party's area, a new one at the party's spot, and
+     * nowhere before it has a HOME. Asked by every haul's planning, so worked out once a tick per
+     * party.
+     */
+    private static Optional<Depot.Site> depotOf(AgentId body) {
         MinecraftServer server = live;
         if (server == null) {
             return Optional.empty();
         }
-        return PartyData.get(server).currentPartyOf(body)
-                .flatMap(DirectionsData.get(server)::find)
-                .map(PartyProgress::home)
-                .map(Home::yard);
+        Optional<PartyId> party = PartyData.get(server).currentPartyOf(body);
+        if (party.isEmpty()) {
+            return Optional.empty();
+        }
+        long now = server.overworld().getGameTime();
+        if (now != depotsAt) {
+            depots.clear();
+            depotsAt = now;
+        }
+        return depots.computeIfAbsent(party.get(), id -> DirectionsData.get(server).find(id)
+                .filter(progress -> progress.home() != null)
+                .flatMap(progress -> {
+                    PartyView view = view(server, id, progress);
+                    SortedSet<ChunkKey> area = view.area();
+                    return area.isEmpty() ? Optional.empty()
+                            : view.spot().map(spot -> new Depot.Site(spot, area));
+                }));
     }
+
+    /** {@link #depotOf}'s answers this tick; the server thread is the only one asking. */
+    private static final Map<PartyId, Optional<Depot.Site>> depots = new HashMap<>();
+    private static long depotsAt = Long.MIN_VALUE;
 
     /** Anima's two questions, answered from the node table. */
     private static final class Answers implements Gate.Policy {

@@ -6,7 +6,6 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.anima.core.agent.AgentId;
-import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.core.territory.Claimed;
@@ -490,7 +489,7 @@ public final class BlueprintCommands {
     }
 
     /** A placement that is a party's building, priced and not yet claimed. */
-    private record Building(PartyId party, String who, SortedSet<ChunkKey> footprint, Reason why, Pos yard,
+    private record Building(PartyId party, String who, SortedSet<ChunkKey> footprint, Reason why,
                             boolean overworld) {
     }
 
@@ -520,10 +519,7 @@ public final class BlueprintCommands {
                     AgentCommands.label(server, who), priced.describe()));
             return null;
         }
-        Pos yard = Footprint.doorstep(plan, placement, Blueprints.dictionary())
-                .map(step -> new Pos(anchor.getX() + step[0], anchor.getY() + step[1], anchor.getZ() + step[2]))
-                .orElse(new Pos(anchor.getX(), anchor.getY(), anchor.getZ()));
-        return new Building(party, AgentCommands.label(server, who), footprint, why, yard,
+        return new Building(party, AgentCommands.label(server, who), footprint, why,
                 source.getLevel() == server.overworld());
     }
 
@@ -536,11 +532,9 @@ public final class BlueprintCommands {
         Replies.send(source, () -> Component.translatable("autarkia.command.bp.place.party", building.who(),
                 claimed.added().size(), holds).withStyle(ChatFormatting.LIGHT_PURPLE), true);
         // HOME is the overworld's; a building elsewhere is held and nothing more.
-        if (building.overworld() && Directions.built(server, building.party(), building.yard(),
-                building.footprint())) {
-            Pos yard = building.yard();
-            Replies.send(source, () -> Component.translatable("autarkia.command.bp.place.party_home", building.who(),
-                    yard.x() + " " + yard.y() + " " + yard.z()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        if (building.overworld() && Directions.built(server, building.party(), building.footprint())) {
+            Replies.send(source, () -> Component.translatable("autarkia.command.bp.place.party_home",
+                    building.who()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
         }
     }
 

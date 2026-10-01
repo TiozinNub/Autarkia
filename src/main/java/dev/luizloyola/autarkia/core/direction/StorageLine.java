@@ -56,11 +56,11 @@ public final class StorageLine implements DirectionLine {
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
         return project instanceof SetUp setUp && setUp.remaining().contains(SetUp.STORE)
-                && party.home().map(home -> home.yard().equals(setUp.near())).orElse(false);
+                && party.home().isPresent() && BaseLine.inArea(party, setUp.near());
     }
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        return new SetUp(List.of(SetUp.STORE), party.home().orElseThrow().yard(), priority);
+        return new SetUp(List.of(SetUp.STORE), party.spot().orElseThrow(), priority);
     }
 }

@@ -154,10 +154,6 @@ public final class PersonSpecies {
             // A minute: long enough that a hungry settler does not reopen an empty HOME chest on
             // every retry, short enough to find what the party's gatherers put in it since.
             .set(ProfileAspect.STORES_RECHECK_TICKS, 1200)
-            // Three chunks: far enough to reach the bench a settler already walks to, short
-            // enough that a camp two valleys over is a different settlement and gets its own
-            // chest rather than dragging this one across the map.
-            .set(ProfileAspect.STORES_FOUND_RADIUS, 48)
             .build();
 
     /** The same declaration as tunables in {@code autarkia.toml}, under {@code person.*}. */
