@@ -455,8 +455,15 @@ public class Person extends Avatar implements AgentBody {
      * 41 slots, and the <em>source of truth</em>: the equipment slots are mirrored onto this entity
      * each server tick ({@link #syncEquipmentMirror()}), and the whole thing persists in NBT and
      * drops on death. Item components ride along losslessly, as an opaque {@code core} payload.
+     * Laid out as a settler keeps it ({@link dev.luizloyola.autarkia.core.person.SettlerPack}).
      */
-    private final Inventory inventory = new Inventory();
+    private final Inventory inventory = settlerInventory();
+
+    private static Inventory settlerInventory() {
+        Inventory inventory = new Inventory();
+        inventory.setLayout(dev.luizloyola.autarkia.core.person.SettlerPack.INSTANCE);
+        return inventory;
+    }
 
     /**
      * The last value {@link #syncEquipmentMirror() the equipment mirror} synced for each slot, in
