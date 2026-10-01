@@ -1,6 +1,11 @@
 package dev.luizloyola.autarkia.mod.board;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.craft.Furnace;
+import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.log.JournalService;
+import dev.luizloyola.anima.mod.log.Journals;
+import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.PlaceRow;
 import dev.luizloyola.anima.core.social.Process;
@@ -73,8 +78,13 @@ public final class Tending {
                 }
             }
             Home home = DirectionsData.get(server).find(party).map(PartyProgress::home).orElse(null);
-            board.post(new Tend(row.at(), process.output(), Stock.PLANKS, home == null ? null : home.yard(),
-                    process.starter(), process.dueAt()));
+            Tend tend = new Tend(row.at(), process.output(), Stock.PLANKS, home == null ? null : home.yard(),
+                    process.starter(), process.dueAt());
+            int handle = board.post(tend);
+            JournalService journal = Journals.of(server);
+            for (AgentId member : PartyData.get(server).members(party)) {
+                journal.record(member, Category.PROJECT, "tending", "posted #" + handle + " " + tend.describe());
+            }
             PartyBoards.touch(server);
         });
     }
