@@ -103,6 +103,14 @@ public final class AutarkiaTasks {
                         Codec.INT.fieldOf("count").forGetter(GatheringErrand::count),
                         POS.fieldOf("yard").forGetter(GatheringErrand::yard)
                 ).apply(t, GatheringErrand::new)));
+        TaskCodecs.register("autarkia:tend_errand", dev.luizloyola.autarkia.core.board.TendErrand.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.TendErrand::at),
+                        ITEM_SPEC.fieldOf("output").forGetter(dev.luizloyola.autarkia.core.board.TendErrand::output),
+                        ITEM_SPEC.optionalFieldOf("fuel").forGetter(e -> java.util.Optional.ofNullable(e.fuel())),
+                        POS.optionalFieldOf("yard").forGetter(e -> java.util.Optional.ofNullable(e.yard()))
+                ).apply(t, (at, output, fuel, yard) -> new dev.luizloyola.autarkia.core.board.TendErrand(
+                        at, output, fuel.orElse(null), yard.orElse(null)))));
         TaskCodecs.register("autarkia:bring_back", BringBack.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),

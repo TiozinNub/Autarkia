@@ -45,6 +45,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Taking a job's load to its yard once the job has nothing left for that member. */
     String BRING_IN = "bring_in";
 
+    /** Coming back to a place where a process fell due. */
+    String TEND = "tend";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

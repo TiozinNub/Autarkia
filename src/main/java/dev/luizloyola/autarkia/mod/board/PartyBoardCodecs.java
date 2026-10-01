@@ -252,6 +252,23 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(SetUp.State::lastTick)
             ).apply(project, SetUp.State::new));
 
+    /** Everything a {@code tend} row carries: where, what, who came first, and when it fell due. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.Tend.State> TEND =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::at),
+                    Codec.STRING.fieldOf("output").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::output),
+                    SPEC.optionalFieldOf("fuel").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::fuel),
+                    POS.optionalFieldOf("yard").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::yard),
+                    UUIDUtil.CODEC.fieldOf("starter").forGetter(state -> state.starter().value()),
+                    Codec.LONG.fieldOf("due_at").forGetter(dev.luizloyola.autarkia.core.board.Tend.State::dueAt),
+                    Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.Tend.State::done),
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Tend.State::cooldowns),
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Tend.State::lastTick)
+            ).apply(project, (at, output, fuel, yard, starter, dueAt, done, cooldowns, lastTick) ->
+                    new dev.luizloyola.autarkia.core.board.Tend.State(at, output, fuel, yard, AgentId.of(starter),
+                            dueAt, done, cooldowns, lastTick)));
+
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {
             for (E value : type.getEnumConstants()) {
@@ -348,6 +365,7 @@ public final class PartyBoardCodecs {
             case "gather" -> DataResult.success(GATHER);
             case "set_up" -> DataResult.success(SET_UP);
             case "explore" -> DataResult.success(EXPLORE);
+            case "tend" -> DataResult.success(TEND);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }

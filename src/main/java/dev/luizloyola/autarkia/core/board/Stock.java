@@ -18,6 +18,11 @@ public final class Stock {
             ItemSpec.register(
                     new ItemSpec("logs", id -> id.endsWith("_log") || id.endsWith("_stem")));
 
+    /** Planks of any wood — what a furnace burns: a log as four planks smelts six, burnt whole one
+     *  and a half. The string-level convention of {@link #LOGS}. */
+    public static final ItemSpec PLANKS =
+            ItemSpec.register(new ItemSpec("planks", id -> id.endsWith("_planks")));
+
     /** Any axe, any tier — what chopping WANTS (never needs: a chop works bare-handed, slower).
      *  Same string-level convention as {@link #LOGS}; the wield step never reads this — it
      *  measures — so the spec only has to be right where there is no block to measure against. */

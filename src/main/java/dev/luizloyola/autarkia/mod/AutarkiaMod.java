@@ -202,6 +202,10 @@ public class AutarkiaMod implements ModInitializer {
         // What the base and storage lines post: stations put down one at a time, as a party's job.
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.SetUp.TYPE);
+        // And somebody comes back to a furnace when what it was given should be done.
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Tend.TYPE);
+        dev.luizloyola.autarkia.mod.board.Tending.init();
         dev.luizloyola.autarkia.mod.direction.Directions.init();
         dev.luizloyola.autarkia.mod.bp.Blueprints.init();
         dev.luizloyola.autarkia.mod.bp.Captures.init();
