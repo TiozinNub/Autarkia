@@ -90,7 +90,8 @@ class NodeFilesTest {
                 return Optional.empty();
             }
         });
-        Tree.Built built = Tree.build(nodes, Set.of("minecraft:oak_log", "minecraft:sweet_berries"),
+        Tree.Built built = Tree.build(nodes, Set.of("minecraft:oak_log", "minecraft:sweet_berries",
+                        "minecraft:charcoal"),
                 key -> false);
         assertTrue(built.errors().isEmpty(), () -> "the shipped tree is refused: " + built.errors());
         assertEquals(Set.of("autarkia:wood"), built.tree().roots());
