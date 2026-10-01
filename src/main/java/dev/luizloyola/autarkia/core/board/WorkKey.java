@@ -51,6 +51,12 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Loading a furnace. */
     String FIRE = "fire";
 
+    /** Cutting one patch of a flatten at one layer. */
+    String CUT = "cut";
+
+    /** Filling one patch of a flatten at one layer. */
+    String FILL = "fill";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

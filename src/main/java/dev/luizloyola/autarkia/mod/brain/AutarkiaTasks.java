@@ -111,6 +111,15 @@ public final class AutarkiaTasks {
                         ITEM_SPEC.fieldOf("wanted").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::wanted)
                 ).apply(t, (anchor, min, max, wanted) -> new dev.luizloyola.autarkia.core.patch.MinePatch(
                         anchor, new dev.luizloyola.anima.core.brain.knowledge.Region(min, max), wanted))));
+        TaskCodecs.register("autarkia:cut_cells", dev.luizloyola.autarkia.core.earthwork.CutCells.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.listOf().fieldOf("cells").forGetter(dev.luizloyola.autarkia.core.earthwork.CutCells::cells)
+                ).apply(t, dev.luizloyola.autarkia.core.earthwork.CutCells::new)));
+        TaskCodecs.register("autarkia:fill_cells", dev.luizloyola.autarkia.core.earthwork.FillCells.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.listOf().fieldOf("cells").forGetter(dev.luizloyola.autarkia.core.earthwork.FillCells::cells),
+                        POS.listOf().fieldOf("tops").forGetter(dev.luizloyola.autarkia.core.earthwork.FillCells::tops)
+                ).apply(t, dev.luizloyola.autarkia.core.earthwork.FillCells::new)));
         TaskCodecs.register("autarkia:stone_yield", dev.luizloyola.autarkia.core.patch.MinePatch.Yield.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::anchor),

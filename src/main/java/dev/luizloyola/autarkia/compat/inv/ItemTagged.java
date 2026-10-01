@@ -16,4 +16,10 @@ public final class ItemTagged {
         Identifier id = Identifier.tryParse(itemId);
         return id != null && new ItemStack(BuiltInRegistries.ITEM.getValue(id)).is(ItemTags.STONE_CRAFTING_MATERIALS);
     }
+
+    /** Whether an item is in {@code #minecraft:dirt} — what tops a filled column. */
+    public static boolean dirt(String itemId) {
+        Identifier id = Identifier.tryParse(itemId);
+        return id != null && new ItemStack(BuiltInRegistries.ITEM.getValue(id)).is(ItemTags.DIRT);
+    }
 }

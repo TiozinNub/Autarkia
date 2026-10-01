@@ -155,6 +155,7 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.patch.Forage::new);
         // Stone a furnace is made of, from where it shows (decision 19); the tag only the mod reads.
         Stock.furnaceStoneBy(dev.luizloyola.autarkia.compat.inv.ItemTagged::stoneCrafting);
+        Stock.dirtBy(dev.luizloyola.autarkia.compat.inv.ItemTagged::dirt);
         dev.luizloyola.autarkia.core.patch.MineStone.ACT.key();
         Producers.register(Stock.FURNACE_STONE, Stock.FURNACE_STONE::matches,
                 dev.luizloyola.autarkia.core.patch.MineStone::new);
@@ -217,6 +218,9 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.board.Tend.TYPE);
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Fire.TYPE);
+        // Levelling ground to a plan read off the natural ground (/autarkia flatten).
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Flatten.TYPE);
         dev.luizloyola.autarkia.mod.board.Tending.init();
         dev.luizloyola.autarkia.mod.direction.Directions.init();
         dev.luizloyola.autarkia.mod.bp.Blueprints.init();

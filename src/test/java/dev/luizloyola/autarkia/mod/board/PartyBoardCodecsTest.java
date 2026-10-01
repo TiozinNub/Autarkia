@@ -411,4 +411,16 @@ class PartyBoardCodecsTest {
         assertEquals("set_up", PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow()
                 .getAsJsonObject().getAsJsonObject("project").get("type").getAsString());
     }
+
+    @Test
+    void aFlattenComesBackWithEveryColumnWhereItGotTo() {
+        dev.luizloyola.autarkia.core.board.Flatten.State before = new dev.luizloyola.autarkia.core.board.Flatten.State(
+                new Region(new Pos(0, 64, 0), new Pos(15, 64, 15)), 1, 64, "BALANCED", 0.5,
+                List.of(new dev.luizloyola.autarkia.core.board.Flatten.Col(1, 2, 67, 65, 66, false),
+                        new dev.luizloyola.autarkia.core.board.Flatten.Col(-3, 9, 60, 63, 60, true)),
+                List.of(new dev.luizloyola.autarkia.core.board.Flatten.Cooldown("cut", new Pos(0, 66, 0), 2, 4800L)),
+                1234L);
+        PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
+        assertEquals(before, after.project());
+    }
 }

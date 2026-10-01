@@ -15,6 +15,7 @@ import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.Explore;
+import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.ProjectState;
@@ -283,6 +284,49 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Fire.State::lastTick)
             ).apply(project, dev.luizloyola.autarkia.core.board.Fire.State::new));
 
+    /**
+     * A flatten's columns packed six ints apiece — x, z, ground, goal, now, refused — since an area
+     * of 64 a side is four thousand of them.
+     */
+    private static final Codec<List<Flatten.Col>> FLATTEN_COLS = Codec.INT_STREAM.comapFlatMap(
+            stream -> {
+                int[] ints = stream.toArray();
+                if (ints.length % 6 != 0) {
+                    return DataResult.error(() -> "flatten columns: " + ints.length + " ints, not sixes");
+                }
+                List<Flatten.Col> cols = new java.util.ArrayList<>(ints.length / 6);
+                for (int i = 0; i < ints.length; i += 6) {
+                    cols.add(new Flatten.Col(ints[i], ints[i + 1], ints[i + 2], ints[i + 3], ints[i + 4],
+                            ints[i + 5] != 0));
+                }
+                return DataResult.success(cols);
+            },
+            cols -> java.util.stream.IntStream.of(cols.stream().flatMapToInt(c -> java.util.stream.IntStream.of(
+                    c.x(), c.z(), c.ground(), c.goal(), c.now(), c.refused() ? 1 : 0)).toArray()));
+
+    private static final Codec<Flatten.Cooldown> FLATTEN_COOLDOWN =
+            RecordCodecBuilder.create(cooldown -> cooldown.group(
+                    Codec.STRING.fieldOf("flavour").forGetter(Flatten.Cooldown::flavour),
+                    POS.fieldOf("at").forGetter(Flatten.Cooldown::at),
+                    Codec.INT.fieldOf("failures").forGetter(Flatten.Cooldown::failures),
+                    Codec.LONG.fieldOf("retry_after").forGetter(Flatten.Cooldown::retryAfter)
+            ).apply(cooldown, Flatten.Cooldown::new));
+
+    /** Everything a {@code flatten} row carries: the plan's goals and how far each column has got. */
+    public static final MapCodec<Flatten.State> FLATTEN =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    REGION.fieldOf("area").forGetter(Flatten.State::area),
+                    Codec.INT.fieldOf("tolerance").forGetter(Flatten.State::tolerance),
+                    Codec.INT.fieldOf("y").forGetter(Flatten.State::y),
+                    Codec.STRING.fieldOf("why").forGetter(Flatten.State::why),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(Flatten.State::priority),
+                    FLATTEN_COLS.fieldOf("cols").forGetter(Flatten.State::cols),
+                    FLATTEN_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(Flatten.State::cooldowns),
+                    Codec.LONG.optionalFieldOf("material_wait_until", 0L)
+                            .forGetter(Flatten.State::materialWaitUntil)
+            ).apply(project, Flatten.State::new));
+
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {
             for (E value : type.getEnumConstants()) {
@@ -381,6 +425,7 @@ public final class PartyBoardCodecs {
             case "explore" -> DataResult.success(EXPLORE);
             case "tend" -> DataResult.success(TEND);
             case "fire" -> DataResult.success(FIRE);
+            case "flatten" -> DataResult.success(FLATTEN);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }

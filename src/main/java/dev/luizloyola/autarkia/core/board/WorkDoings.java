@@ -43,6 +43,9 @@ public final class WorkDoings {
     public static final Doing FIRING = Doings.register(new Doing(
             "firing", "autarkia.doing.firing", List.of("what"), true));
     /** Looking for somewhere to live. */
+    /** Cutting and filling ground level. */
+    public static final Doing LEVELLING = Doings.register(new Doing(
+            "levelling", "autarkia.doing.levelling", List.of(), true));
     public static final Doing EXPLORING = Doings.register(new Doing(
             "exploring", "autarkia.doing.exploring", List.of(), true));
 

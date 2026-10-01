@@ -197,4 +197,16 @@ class AutarkiaTaskCodecsTest {
         assertEquals(FellTree.Stage.APPROACH, back.stage());
         assertTrue(back.climb().isEmpty());
     }
+
+    @Test
+    void earthworkWritesDownItsCells() {
+        var cut = new dev.luizloyola.autarkia.core.earthwork.CutCells(java.util.List.of(new Pos(1, 65, 2), new Pos(2, 65, 2)));
+        var cutBack = assertInstanceOf(dev.luizloyola.autarkia.core.earthwork.CutCells.class, roundTrip(cut));
+        assertEquals(cut.cells(), cutBack.cells());
+        var fill = new dev.luizloyola.autarkia.core.earthwork.FillCells(
+                java.util.List.of(new Pos(5, 63, 5), new Pos(6, 63, 5)), java.util.List.of(new Pos(6, 63, 5)));
+        var fillBack = assertInstanceOf(dev.luizloyola.autarkia.core.earthwork.FillCells.class, roundTrip(fill));
+        assertEquals(fill.cells(), fillBack.cells());
+        assertEquals(fill.tops(), fillBack.tops());
+    }
 }

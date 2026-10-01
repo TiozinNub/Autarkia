@@ -62,6 +62,24 @@ public final class Stock {
         layable = rule;
     }
 
+    /** Any shovel, any tier — what digging dirt WANTS; it works bare-handed, slower. */
+    public static final ItemSpec SHOVELS =
+            ItemSpec.register(new ItemSpec("shovels", id -> id.endsWith("_shovel")));
+
+    /**
+     * Vanilla's {@code #minecraft:dirt} as items — what tops a filled column so it reads as natural
+     * ground again. Only the mod layer can read the tag, so it installs the rule ({@link #dirtBy}).
+     */
+    public static final ItemSpec DIRT =
+            ItemSpec.register(new ItemSpec("dirt", id -> Stock.dirt.test(id)));
+
+    private static volatile java.util.function.Predicate<String> dirt = id -> false;
+
+    /** Sets what {@link #DIRT} matches. */
+    public static void dirtBy(java.util.function.Predicate<String> rule) {
+        dirt = rule;
+    }
+
     private Stock() {
     }
 }
