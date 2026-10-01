@@ -9,8 +9,13 @@ import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.JournalService;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.store.Depot;
+import dev.luizloyola.anima.core.territory.ChunkKey;
+import dev.luizloyola.anima.core.territory.Claimed;
+import dev.luizloyola.anima.core.territory.Reason;
+import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.social.PartyData;
+import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.inv.ItemIds;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
@@ -25,6 +30,7 @@ import dev.luizloyola.autarkia.core.direction.PartyView;
 import dev.luizloyola.autarkia.core.direction.Tree;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -79,6 +85,8 @@ public final class Directions {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             live = server;
             rebuild();
+            Territories.of(server).namedBy(party -> named(server, party));
+            claimOldPlots(server);
         });
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, manager, success) -> rebuild());
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
@@ -272,26 +280,76 @@ public final class Directions {
     }
 
     /**
-     * A new HOME, or none. The work the Directions had out was for the old plot and yard, so it is
-     * withdrawn; the next beat posts again for the new one.
+     * A new HOME on exactly these chunks, nothing cleared. The party's area is swapped in one claim,
+     * refused whole — a site that cannot be had leaves the old HOME as it was. The work the
+     * Directions had out was for the old area and yard, so it is withdrawn; the next beat posts again.
+     *
+     * <p>Growing the area is not this: a growth keeps the yard, and the work keyed on it.
      */
-    public static void home(MinecraftServer server, PartyId party, @Nullable Home home) {
+    public static Claimed settle(MinecraftServer server, PartyId party, Pos yard, Collection<ChunkKey> chunks,
+                                 Reason why) {
+        List<Project> old = ownWork(server, party);
+        Claimed claimed = Territories.of(server).move(party, chunks, why, Territories.now(server));
+        if (claimed.granted()) {
+            replace(server, party, Home.at(yard), old);
+        }
+        return claimed;
+    }
+
+    /** No HOME: the area is let go and the work for it withdrawn. */
+    public static void unsettle(MinecraftServer server, PartyId party, Reason why) {
+        List<Project> old = ownWork(server, party);
+        Territories.of(server).releaseAll(party, why, Territories.now(server));
+        replace(server, party, null, old);
+    }
+
+    /**
+     * The work out for the HOME being left, found by content since it names that area and yard. An
+     * in-memory map of it was empty after a restart, and a HOME moved then left the old yard's
+     * gather and clearing running (2026-09-25).
+     */
+    private static List<Project> ownWork(MinecraftServer server, PartyId party) {
+        PartyProgress progress = DirectionsData.get(server).progress(party);
+        return tree.isEmpty() || progress.home() == null ? List.of()
+                : Evolution.ownWork(tree, progress, view(server, party, progress), PartyBoards.of(server, party));
+    }
+
+    private static void replace(MinecraftServer server, PartyId party, @Nullable Home home, List<Project> old) {
         DirectionsData data = DirectionsData.get(server);
-        PartyProgress progress = data.progress(party);
-        // Found by content against the HOME being left, since its work names that plot and yard.
-        // An in-memory map of it was empty after a restart, and a HOME moved then left the old
-        // yard's gather and clearing running (2026-09-25).
-        PartyBoard board = PartyBoards.of(server, party);
-        List<Project> old = tree.isEmpty() || progress.home() == null ? List.of()
-                : Evolution.ownWork(tree, progress, view(server, party, progress), board);
-        progress.home(home);
+        data.progress(party).home(home);
         data.setDirty();
         if (!old.isEmpty()) {
+            PartyBoard board = PartyBoards.of(server, party);
             for (Project project : old) {
                 board.handleOf(project).ifPresent(board::cancel);
             }
             PartyBoards.touch(server);
         }
+    }
+
+    /** A save from before the area kept a square plot; the party is given the chunks it covers. */
+    private static void claimOldPlots(MinecraftServer server) {
+        DirectionsData data = DirectionsData.get(server);
+        if (data.oldPlots().isEmpty()) {
+            return;
+        }
+        data.oldPlots().forEach((party, plot) -> Territories.of(server).claim(party,
+                ChunkKey.covering(ChunkKey.OVERWORLD, plot.min().x(), plot.min().z(), plot.max().x(),
+                        plot.max().z()),
+                Reason.of(Reason.Kind.MIGRATE, "the plot (" + plot.min().x() + ", " + plot.min().z() + ") to ("
+                        + plot.max().x() + ", " + plot.max().z() + ")"),
+                Territories.now(server)));
+        data.oldPlots().clear();
+        data.setDirty();
+    }
+
+    /** A party by its members' names: what a map or a log line can show a player. */
+    private static Optional<String> named(MinecraftServer server, PartyId party) {
+        List<String> names = new ArrayList<>();
+        for (AgentId member : PartyData.get(server).members(party)) {
+            AgentDirectory.of(server).nameOf(member).ifPresent(names::add);
+        }
+        return names.isEmpty() ? Optional.empty() : Optional.of(String.join(", ", names));
     }
 
     // ── words for the journal ──────────────────────────────────────────────────────────────

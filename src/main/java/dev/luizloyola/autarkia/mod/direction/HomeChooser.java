@@ -10,6 +10,8 @@ import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
 import dev.luizloyola.anima.core.terrain.TerrainRules;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.territory.Territory;
+import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.home.HomeRecords;
 import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.HomeJudge;
@@ -85,13 +87,15 @@ public final class HomeChooser {
                                Terrain terrain) {
         List<Keep> boxes = new ArrayList<>();
         int partyAway = HomeKnob.AVOID_PARTY.i();
-        DirectionsData.get(level.getServer()).parties().forEach((other, progress) -> {
-            Home home = progress.home();
-            if (home != null && !other.equals(party)) {
-                boxes.add(new Keep(Refusal.PARTY, home.plot().min().x(), home.plot().min().z(),
-                        home.plot().max().x(), home.plot().max().z(), partyAway));
+        Territory territory = Territories.of(level.getServer());
+        for (PartyId other : territory.parties()) {
+            if (other.equals(party)) {
+                continue;
             }
-        });
+            for (int[] row : Home.rows(SettledGround.overworld(territory.area(other)))) {
+                boxes.add(new Keep(Refusal.PARTY, row[0], row[1], row[2], row[3], partyAway));
+            }
+        }
         int far = reach + Math.max(Math.max(HomeKnob.AVOID_MONSTERS.i(), HomeKnob.AVOID_VILLAGE.i()),
                 Math.max(HomeKnob.AVOID_TEMPLE.i(), HomeKnob.AVOID_PORTAL.i())) + STRUCTURE_REACH;
         HomeRecords.Structures structures = HomeRecords.structures(level, centre.getX() - far,

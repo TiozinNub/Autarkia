@@ -5,10 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
-import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.board.Clearings;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +34,6 @@ import org.junit.jupiter.api.Test;
 class BaseAndStorageTest {
 
     private static final String WOOD = "test:wood";
-    private static final Region PLOT = new Region(new Pos(0, 60, 0), new Pos(20, 90, 20));
     private static final Pos YARD = new Pos(10, 64, 10);
 
     private final PartyId partyId = PartyId.of(new UUID(7, 7));
@@ -43,6 +44,11 @@ class BaseAndStorageTest {
 
     /** What HOME has and how much room is left, set by each test. */
     private final class Base implements PartyView {
+
+        @Override
+        public SortedSet<ChunkKey> area() {
+            return new TreeSet<>(Set.of(ChunkKey.at(ChunkKey.OVERWORLD, YARD.x(), YARD.z())));
+        }
         final Set<PoiKind> stations = new HashSet<>();
         OptionalInt free = OptionalInt.of(27);
 
@@ -96,7 +102,7 @@ class BaseAndStorageTest {
                         new Direction(new DirectionId(WOOD, "storage"), 9, null)),
                 Set.of(), Set.of());
         tree = Tree.build(List.of(wood), Set.of("minecraft:oak_log"), key -> false).tree();
-        progress.home(new Home(PLOT, YARD, false));
+        progress.home(Home.at(YARD));
     }
 
     @AfterEach

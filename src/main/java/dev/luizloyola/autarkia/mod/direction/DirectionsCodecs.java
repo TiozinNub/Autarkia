@@ -2,11 +2,15 @@ package dev.luizloyola.autarkia.mod.direction;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
+import dev.luizloyola.anima.mod.territory.TerritoryData;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
 import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.mod.board.PartyBoardCodecs;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 
@@ -25,15 +29,23 @@ public final class DirectionsCodecs {
             Codec.STRING.fieldOf("line").forGetter(DirectionId::line)
     ).apply(id, DirectionId::new));
 
-    public static final Codec<Home> HOME = RecordCodecBuilder.create(home -> home.group(
-            PartyBoardCodecs.REGION.fieldOf("plot").forGetter(Home::plot),
-            PartyBoardCodecs.POS.fieldOf("yard").forGetter(Home::yard),
-            Codec.BOOL.optionalFieldOf("cleared", false).forGetter(Home::cleared)
-    ).apply(home, Home::new));
+    /**
+     * HOME as the file holds it. {@code plot} is read and never written: a save from before the area
+     * (2026-10-01) kept a square, whose chunks the party is given once the server is up.
+     */
+    public record SavedHome(Home home, Optional<Region> plot) {
+    }
+
+    public static final Codec<SavedHome> HOME = RecordCodecBuilder.create(home -> home.group(
+            PartyBoardCodecs.POS.fieldOf("yard").forGetter(saved -> saved.home().yard()),
+            TerritoryData.CHUNKS.optionalFieldOf("cleared_chunks", Set.of())
+                    .forGetter(saved -> saved.home().cleared()),
+            PartyBoardCodecs.REGION.optionalFieldOf("plot").forGetter(saved -> Optional.empty())
+    ).apply(home, (yard, cleared, plot) -> new SavedHome(new Home(yard, new TreeSet<>(cleared)), plot)));
 
     /** One party's climb. Node ids travel as strings: a node the table no longer names stays reached. */
     public record PartyRow(UUID party, List<String> reached, List<DirectionId> checkpoints,
-                           Optional<Home> home) {
+                           Optional<SavedHome> home) {
     }
 
     /** What one person has reached, wherever they have been. */

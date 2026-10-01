@@ -3,9 +3,12 @@ package dev.luizloyola.autarkia.core.direction;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.board.SetUp;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.SortedSet;
 
 /**
  * What a Direction may know of its party, and nothing more. <b>Never omniscient</b>: its claimed
@@ -17,6 +20,14 @@ public interface PartyView {
     PartyId party();
 
     Optional<Home> home();
+
+    /**
+     * The party's area in the overworld — the chunks it holds, which HOME is. Empty for a party that
+     * holds none; a test's view that never asks about the area need not answer.
+     */
+    default SortedSet<ChunkKey> area() {
+        return Collections.emptySortedSet();
+    }
 
     int members();
 

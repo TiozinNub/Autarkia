@@ -1,15 +1,21 @@
 package dev.luizloyola.autarkia.mod.direction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.gson.JsonObject;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
 import dev.luizloyola.autarkia.core.direction.Home;
+import dev.luizloyola.autarkia.mod.board.PartyBoardCodecs;
 import dev.luizloyola.autarkia.mod.direction.DirectionsCodecs.PartyRow;
 import dev.luizloyola.autarkia.mod.direction.DirectionsCodecs.PersonRow;
+import dev.luizloyola.autarkia.mod.direction.DirectionsCodecs.SavedHome;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,9 +33,27 @@ class DirectionsCodecsTest {
     void aPartyRowKeepsItsNodesCheckpointsAndHome() {
         PartyRow row = new PartyRow(new UUID(1, 2), List.of("autarkia:wood", "autarkia:stone"),
                 List.of(new DirectionId("autarkia:wood", "wood"), new DirectionId("autarkia:wood", "area")),
-                Optional.of(new Home(new Region(new Pos(-16, 48, -16), new Pos(16, 112, 16)),
-                        new Pos(0, 64, 0), true)));
+                Optional.of(new SavedHome(Home.at(new Pos(0, 64, 0))
+                        .withCleared(new ChunkKey(ChunkKey.OVERWORLD, -1, 0))
+                        .withCleared(new ChunkKey(ChunkKey.OVERWORLD, 0, 0)), Optional.empty())));
         assertEquals(row, roundTrip(DirectionsCodecs.PARTY_ROW, row));
+    }
+
+    /** A save from before the area kept a square plot: it is read once, for the server to claim. */
+    @Test
+    void aHomeSavedAsAPlotKeepsItsYardAndHandsOverThePlot() {
+        Region plot = new Region(new Pos(-8, 48, -8), new Pos(8, 112, 8));
+        JsonObject old = new JsonObject();
+        old.add("yard", PartyBoardCodecs.POS.encodeStart(JsonOps.INSTANCE, new Pos(0, 64, 0)).getOrThrow());
+        old.addProperty("cleared", true);
+        old.add("plot", PartyBoardCodecs.REGION.encodeStart(JsonOps.INSTANCE, plot).getOrThrow());
+        SavedHome saved = DirectionsCodecs.HOME.parse(JsonOps.INSTANCE, old).getOrThrow();
+        assertEquals(new Pos(0, 64, 0), saved.home().yard());
+        assertTrue(saved.home().cleared().isEmpty(), "a square's clearing is not a chunk's");
+        assertEquals(plot, saved.plot().orElseThrow());
+        JsonObject written = DirectionsCodecs.HOME.encodeStart(JsonOps.INSTANCE, saved).getOrThrow()
+                .getAsJsonObject();
+        assertFalse(written.has("plot"), "and it is never written again");
     }
 
     @Test

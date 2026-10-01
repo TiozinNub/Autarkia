@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.compat.SavedDatas;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.mod.store.StoreGuard;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
@@ -52,6 +53,8 @@ public final class DirectionsData extends SavedData implements StoreGuard.Checke
 
     private final Map<PartyId, PartyProgress> parties = new LinkedHashMap<>();
     private final Map<AgentId, Set<String>> persons = new LinkedHashMap<>();
+    /** Square plots read from a save older than the area, waiting to be claimed as chunks. */
+    private final Map<PartyId, Region> oldPlots = new LinkedHashMap<>();
     private final int loadedVersion;
     private final int declaredRows;
     private final int decodedRows;
@@ -69,8 +72,10 @@ public final class DirectionsData extends SavedData implements StoreGuard.Checke
             PartyProgress progress = new PartyProgress();
             row.reached().forEach(progress::reach);
             row.checkpoints().forEach(progress::complete);
-            progress.home(row.home().orElse(null));
+            progress.home(row.home().map(DirectionsCodecs.SavedHome::home).orElse(null));
             parties.put(PartyId.of(row.party()), progress);
+            row.home().flatMap(DirectionsCodecs.SavedHome::plot)
+                    .ifPresent(plot -> oldPlots.put(PartyId.of(row.party()), plot));
         }
         for (PersonRow row : personRows) {
             persons.put(AgentId.of(row.agent()), new LinkedHashSet<>(row.reached()));
@@ -105,6 +110,11 @@ public final class DirectionsData extends SavedData implements StoreGuard.Checke
     // ── parties ─────────────────────────────────────────────────────────────────────────────
 
     /** Every party with a climb worth keeping, in the order they began. */
+    /** The old plots read off disk; whoever claims them empties this. */
+    public Map<PartyId, Region> oldPlots() {
+        return oldPlots;
+    }
+
     public Map<PartyId, PartyProgress> parties() {
         return Collections.unmodifiableMap(parties);
     }
@@ -152,7 +162,8 @@ public final class DirectionsData extends SavedData implements StoreGuard.Checke
             if (!progress.isEmpty()) {
                 rows.add(new PartyRow(party.value(), List.copyOf(progress.reached()),
                         List.<DirectionId>copyOf(progress.checkpoints()),
-                        Optional.ofNullable(progress.home())));
+                        Optional.ofNullable(progress.home())
+                                .map(home -> new DirectionsCodecs.SavedHome(home, Optional.empty()))));
             }
         });
         return rows;

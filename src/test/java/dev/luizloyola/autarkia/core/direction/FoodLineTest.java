@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
-import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Food;
 import dev.luizloyola.anima.core.inv.ItemSpec;
@@ -42,7 +41,7 @@ class FoodLineTest {
 
         @Override
         public Optional<Home> home() {
-            return Optional.of(new Home(Region.of(YARD), YARD, false));
+            return Optional.of(Home.at(YARD));
         }
 
         @Override

@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.direction;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.territory.Reason;
 import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
 import dev.luizloyola.autarkia.core.board.Explore;
@@ -77,11 +78,13 @@ public final class HomeLooks implements HomeLooking {
                 new BlockPos(plot.x(), plot.y(), plot.z()), 0, party, knowledge);
         boolean allowed = choice.judgement().ranked().stream()
                 .anyMatch(again -> again.x() == plot.x() && again.z() == plot.z());
-        if (allowed) {
-            Directions.home(server, party,
-                    Home.square(new Pos(plot.x(), plot.y() + 1, plot.z()), plot.size() / 2));
+        if (!allowed) {
+            return false;
         }
-        return allowed;
+        Pos yard = new Pos(plot.x(), plot.y() + 1, plot.z());
+        return Directions.settle(server, party, yard, Home.square(yard, plot.size() / 2),
+                Reason.of(Reason.Kind.FOUND, "settled at (" + yard.x() + ", " + yard.y() + ", " + yard.z() + "), worth " + Math.round(plot.value())))
+                .granted();
     }
 
     /** The eight headings from {@code at}, in {@link HomeSearch}'s order. */

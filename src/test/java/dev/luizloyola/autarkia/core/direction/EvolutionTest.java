@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.board.ClearArea;
 import dev.luizloyola.autarkia.core.board.Clearings;
 import dev.luizloyola.autarkia.core.board.Gather;
@@ -19,6 +20,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,8 +36,10 @@ class EvolutionTest {
 
     private static final String WOOD = "test:wood";
     private static final String STONE = "test:stone";
-    private static final Region PLOT = new Region(new Pos(0, 60, 0), new Pos(20, 90, 20));
     private static final Pos YARD = new Pos(10, 64, 10);
+    private static final ChunkKey HERE = new ChunkKey(ChunkKey.OVERWORLD, 0, 0);
+    private static final ChunkKey EAST = new ChunkKey(ChunkKey.OVERWORLD, 1, 0);
+    private static final Region PLOT = Home.at(YARD).region(HERE);
 
     private final PartyId partyId = PartyId.of(new UUID(4, 2));
     private final PartyBoard board = new PartyBoard(partyId);
@@ -45,6 +50,12 @@ class EvolutionTest {
     /** HOME as the progress holds it, and a store count the test sets. */
     private final class Stores implements PartyView {
         OptionalInt logs = OptionalInt.of(0);
+        SortedSet<ChunkKey> area = new TreeSet<>(Set.of(HERE));
+
+        @Override
+        public SortedSet<ChunkKey> area() {
+            return area;
+        }
 
         @Override
         public PartyId party() {
@@ -96,7 +107,7 @@ class EvolutionTest {
                 new Requirements(new DirectionId(WOOD, "wood"), List.of(new DirectionId(WOOD, "area")), 1),
                 List.of(new Direction(new DirectionId(STONE, "wood"), 256, null)), Set.of(), Set.of());
         tree = Tree.build(List.of(wood, stone), Set.of("minecraft:oak_log"), key -> false).tree();
-        progress.home(new Home(PLOT, YARD, false));
+        progress.home(Home.at(YARD));
     }
 
     @AfterEach
@@ -178,7 +189,7 @@ class EvolutionTest {
                 Evolution.collect(tree, progress, view, board.closeFinished()));
 
         Evolution.Outcome outcome = beat();
-        assertTrue(progress.home().cleared(), "the finished clearing is the party's knowledge");
+        assertTrue(progress.home().cleared().contains(HERE), "the finished clearing is the party's knowledge");
         assertTrue(outcome.completed().contains(new DirectionId(WOOD, "area")));
         assertEquals(List.of(STONE), outcome.reached());
         assertTrue(progress.reached().contains(STONE));
@@ -217,6 +228,32 @@ class EvolutionTest {
         board.cancel(board.handleOf(posted).orElseThrow());
         Evolution.Outcome outcome = beat();
         assertEquals(List.of("area"), outcome.posted().stream().map(p -> p.direction().line()).toList());
-        assertTrue(!progress.home().cleared(), "cancelled is not finished");
+        assertTrue(progress.home().cleared().isEmpty(), "cancelled is not finished");
+    }
+
+    /** A chunk at a time, the nearest the yard first; a chunk the area grows into is uncleared. */
+    @Test
+    void eachChunkOfTheAreaIsClearedInTurn() {
+        view.area.add(EAST);
+        beat();
+        assertEquals(PLOT, clearingOnTheBoard().bounds(), "the yard's own chunk first");
+        finish(clearingOnTheBoard());
+        assertEquals(Set.of(HERE), progress.home().cleared());
+
+        beat();
+        assertEquals(Home.at(YARD).region(EAST), clearingOnTheBoard().bounds());
+        assertTrue(Evolution.ownWork(tree, progress, view, board).contains(clearingOnTheBoard()),
+                "the second chunk's clearing is this HOME's work too");
+        finish(clearingOnTheBoard());
+        assertEquals(Set.of(HERE, EAST), progress.home().cleared());
+    }
+
+    private void finish(ClearArea posted) {
+        board.cancel(board.handleOf(posted).orElseThrow());
+        ClearArea done = ClearArea.restore(new ClearArea.State("trees", posted.bounds(), 0.5,
+                ClearArea.Phase.DONE, List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L)
+                .orElseThrow();
+        board.post(done);
+        Evolution.collect(tree, progress, view, board.closeFinished());
     }
 }

@@ -234,7 +234,7 @@ class ExploreTest {
         assertInstanceOf(Explore.class, first.posted().get(0).project());
         assertTrue(Evolution.beat(tree, progress, view, board).posted().isEmpty(), "posted once");
 
-        progress.home(Home.square(new Pos(0, 64, 0), 8));
+        progress.home(Home.at(new Pos(0, 64, 0)));
         Evolution.Outcome met = Evolution.beat(tree, progress, view, board);
 
         assertEquals(1, met.withdrawn().size(), "an operator's HOME ends the search");

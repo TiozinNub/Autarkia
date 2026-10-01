@@ -8,7 +8,9 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.PlaceRow;
 import dev.luizloyola.anima.core.store.Store;
+import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.social.PlacesData;
+import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.inv.StoreContents;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.core.direction.Home;
@@ -18,6 +20,8 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 import net.minecraft.core.BlockPos;
@@ -55,6 +59,17 @@ final class HomeView implements PartyView {
     }
 
     @Override
+    public SortedSet<ChunkKey> area() {
+        SortedSet<ChunkKey> overworld = new TreeSet<>();
+        for (ChunkKey chunk : Territories.of(server).area(party)) {
+            if (chunk.dimension().equals(ChunkKey.OVERWORLD)) {
+                overworld.add(chunk);
+            }
+        }
+        return overworld;
+    }
+
+    @Override
     public int members() {
         return members;
     }
@@ -76,16 +91,7 @@ final class HomeView implements PartyView {
 
     @Override
     public boolean hasAtHome(PoiKind kind) {
-        Home home = progress.home();
-        if (home == null) {
-            return false;
-        }
-        for (PlaceRow row : PlacesData.get(server).places().rows()) {
-            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(home, row.at())) {
-                return true;
-            }
-        }
-        return false;
+        return placeAtHome(kind).isPresent();
     }
 
     @Override
@@ -94,8 +100,9 @@ final class HomeView implements PartyView {
         if (home == null) {
             return java.util.Optional.empty();
         }
+        SortedSet<ChunkKey> area = area();
         for (PlaceRow row : PlacesData.get(server).places().rows()) {
-            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(home, row.at())) {
+            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(home, area, row.at())) {
                 return java.util.Optional.of(row.at());
             }
         }
@@ -114,10 +121,11 @@ final class HomeView implements PartyView {
         if (home == null) {
             return OptionalInt.empty();
         }
+        SortedSet<ChunkKey> area = area();
         Set<BlockPos> counted = new HashSet<>();
         int total = 0;
         for (PlaceRow row : PlacesData.get(server).places().rows()) {
-            if (!row.kind().equals(Store.POI) || !party.equals(row.party()) || !atHome(home, row.at())) {
+            if (!row.kind().equals(Store.POI) || !party.equals(row.party()) || !atHome(home, area, row.at())) {
                 continue;
             }
             Optional<StoreContents.Reading> read = StoreContents.read(server.overworld(), row.at(), ids,
@@ -130,9 +138,12 @@ final class HomeView implements PartyView {
         return OptionalInt.of(total);
     }
 
-    /** On the plot, or near enough its yard to count — the radius a gather's own yard uses. */
-    private static boolean atHome(Home home, Pos at) {
-        return home.plot().contains(at)
+    /**
+     * In the area, or near enough the yard to count — the radius a gather's own yard uses. The
+     * starter base needs no area, so a chest just past its edge is still HOME's.
+     */
+    private static boolean atHome(Home home, Set<ChunkKey> area, Pos at) {
+        return area.contains(ChunkKey.at(ChunkKey.OVERWORLD, at.x(), at.z()))
                 || Store.distance(at, home.yard()) <= AutarkiaConfig.PERSON.i(ProfileAspect.STORES_FOUND_RADIUS);
     }
 }
