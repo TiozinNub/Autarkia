@@ -10,12 +10,12 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
-import dev.luizloyola.autarkia.core.board.ClearArea;
-import dev.luizloyola.autarkia.core.board.Clearings;
+import dev.luizloyola.autarkia.core.board.FellTrees;
+import dev.luizloyola.autarkia.core.board.Fellings;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
-import dev.luizloyola.autarkia.core.tree.TreeClearing;
+import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -98,7 +98,7 @@ class EvolutionTest {
     void climb() {
         Lines.register(AreaLine.INSTANCE);
         Lines.register(WoodLine.INSTANCE);
-        Clearings.register(TreeClearing.INSTANCE);
+        Fellings.register(TreeFelling.INSTANCE);
         Node wood = new Node(WOOD, NodeKind.CORE, List.of(), true, Requirements.NONE,
                 List.of(new Direction(new DirectionId(WOOD, "area"), 0, null),
                         new Direction(new DirectionId(WOOD, "wood"), 64, null)),
@@ -113,7 +113,7 @@ class EvolutionTest {
     @AfterEach
     void clear() {
         Lines.clear();
-        Clearings.clear();
+        Fellings.clear();
     }
 
     private Evolution.Outcome beat() {
@@ -137,8 +137,8 @@ class EvolutionTest {
         assertEquals(64, gather.target());
         assertEquals(YARD, gather.yard());
         assertEquals(Direction.TOWARD_CORE, gather.priority(), "it leads toward the Stone Age");
-        ClearArea clearing = assertInstanceOf(ClearArea.class, board.projects().stream()
-                .filter(p -> p instanceof ClearArea).findFirst().orElseThrow());
+        FellTrees clearing = assertInstanceOf(FellTrees.class, board.projects().stream()
+                .filter(p -> p instanceof FellTrees).findFirst().orElseThrow());
         assertEquals(PLOT, clearing.bounds());
 
         assertTrue(beat().posted().isEmpty(), "its own work is on the board already");
@@ -180,9 +180,9 @@ class EvolutionTest {
         // The clearing finishes, and the board's own tick closes it and hands it over on that tick
         // — the one moment its ledger still exists. A restart between that close and the next
         // Directions beat used to lose it: the map that remembered it lived in memory.
-        ClearArea posted = clearingOnTheBoard();
+        FellTrees posted = clearingOnTheBoard();
         board.cancel(board.handleOf(posted).orElseThrow());
-        ClearArea done = ClearArea.restore(new ClearArea.State("trees", PLOT, 0.5, ClearArea.Phase.DONE,
+        FellTrees done = FellTrees.restore(new FellTrees.State("trees", PLOT, 0.5, FellTrees.Phase.DONE,
                 List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L).orElseThrow();
         board.post(done);
         assertEquals(List.of(new DirectionId(WOOD, "area")),
@@ -202,8 +202,8 @@ class EvolutionTest {
                 "and it leads nowhere new in a two-node tree");
     }
 
-    private ClearArea clearingOnTheBoard() {
-        return (ClearArea) board.projects().stream().filter(p -> p instanceof ClearArea)
+    private FellTrees clearingOnTheBoard() {
+        return (FellTrees) board.projects().stream().filter(p -> p instanceof FellTrees)
                 .findFirst().orElseThrow();
     }
 
@@ -224,7 +224,7 @@ class EvolutionTest {
     @Test
     void aCancelledClearingIsPostedAgain() {
         beat();
-        ClearArea posted = clearingOnTheBoard();
+        FellTrees posted = clearingOnTheBoard();
         board.cancel(board.handleOf(posted).orElseThrow());
         Evolution.Outcome outcome = beat();
         assertEquals(List.of("area"), outcome.posted().stream().map(p -> p.direction().line()).toList());
@@ -248,10 +248,10 @@ class EvolutionTest {
         assertEquals(Set.of(HERE, EAST), progress.home().cleared());
     }
 
-    private void finish(ClearArea posted) {
+    private void finish(FellTrees posted) {
         board.cancel(board.handleOf(posted).orElseThrow());
-        ClearArea done = ClearArea.restore(new ClearArea.State("trees", posted.bounds(), 0.5,
-                ClearArea.Phase.DONE, List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L)
+        FellTrees done = FellTrees.restore(new FellTrees.State("trees", posted.bounds(), 0.5,
+                FellTrees.Phase.DONE, List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L)
                 .orElseThrow();
         board.post(done);
         Evolution.collect(tree, progress, view, board.closeFinished());

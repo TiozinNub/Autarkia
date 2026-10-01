@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
  * <p>Blind: a survey here is a member handing back what they "remember". That is what
  * a real one will be. The walking is step 2's and changes no rule below.
  */
-class ClearAreaTest {
+class FellTreesTest {
 
     /** A kind of place that is only ever a test's. */
     private static final PoiKind THING = PoiKind.register("clear_test_thing", 1, "");
@@ -41,7 +41,7 @@ class ClearAreaTest {
     private static dev.luizloyola.anima.core.brain.knowledge.Coverage lastCoverage =
             dev.luizloyola.anima.core.brain.knowledge.Coverage.NONE;
 
-    private record TestClearing(boolean surveys) implements Clearing {
+    private record TestFelling(boolean surveys) implements Felling {
         @Override
         public String id() {
             return "test_things";
@@ -80,35 +80,35 @@ class ClearAreaTest {
     /** Ground the double reports as residue — what perception will not name but a box must take. */
     private static java.util.List<Pos> residue = java.util.List.of();
 
-    private static final Clearing ABLE = new TestClearing(true);
-    private static final Clearing UNABLE = new TestClearing(false);
+    private static final Felling ABLE = new TestFelling(true);
+    private static final Felling UNABLE = new TestFelling(false);
 
     /** A box exactly one slice across, so sweeping the whole box is a single errand. */
     private static Region oneSlice() {
         return new Region(new Pos(0, 60, 0), new Pos(10, 70, 10));
     }
 
-    /** Two slices at {@link ClearArea#SLICE_SIZE}, so one can be swept while the other is not. */
+    /** Two slices at {@link FellTrees#SLICE_SIZE}, so one can be swept while the other is not. */
     private static Region twoSlices() {
         return new Region(new Pos(0, 60, 0), new Pos(95, 70, 47));
     }
 
-    private static ClearArea posted(Clearing clearing, Region bounds) {
-        ClearArea project = new ClearArea(clearing, bounds, 0.5);
+    private static FellTrees posted(Felling clearing, Region bounds) {
+        FellTrees project = new FellTrees(clearing, bounds, 0.5);
         project.tick(0L);
         return project;
     }
 
     /** The survey errand on offer — position in the offer is not part of any rule here. */
-    private static WorkItem surveyItem(ClearArea project) {
+    private static WorkItem surveyItem(FellTrees project) {
         return project.open().stream()
                 .filter(item -> item.describe().startsWith("survey")).findFirst().orElseThrow();
     }
 
     /** The clear errand on offer, when exactly one is. */
-    private static WorkItem clearItem(ClearArea project) {
+    private static WorkItem clearItem(FellTrees project) {
         return project.open().stream()
-                .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow();
+                .filter(item -> item.describe().startsWith("fell")).findFirst().orElseThrow();
     }
 
     // ── who an item is offerable to ─────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ class ClearAreaTest {
      */
     @Test
     void anItemIsOfferableToAnybodyByDefault() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         WorkItem item = surveyItem(project);
 
         assertTrue(project.offerableTo(item, AgentId.random(), new BoardBrainContext()));
@@ -135,7 +135,7 @@ class ClearAreaTest {
 
     @Test
     void aBoxWithoutADestinationIsExactlyWhatItWas() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
 
         assertTrue(project.yard().isEmpty(), "no destination named, none invented");
         assertFalse(project.describe().contains("yard"), "and the readout says nothing about one");
@@ -143,7 +143,7 @@ class ClearAreaTest {
 
     @Test
     void aNamedDestinationIsCarriedAndSaidOutLoud() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
 
         assertEquals(YARD, project.yard().orElseThrow());
@@ -153,26 +153,26 @@ class ClearAreaTest {
 
     @Test
     void theDestinationSurvivesASnapshotRoundTrip() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
 
-        ClearArea restored = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
+        FellTrees restored = FellTrees.restore(project.snapshot(), 0L).orElseThrow();
 
         assertEquals(YARD, restored.yard().orElseThrow());
     }
 
     @Test
     void aBoxSavedBeforeYardsExistedStillLoads() {
-        ClearArea plain = posted(ABLE, oneSlice());
+        FellTrees plain = posted(ABLE, oneSlice());
 
-        ClearArea restored = ClearArea.restore(plain.snapshot(), 0L).orElseThrow();
+        FellTrees restored = FellTrees.restore(plain.snapshot(), 0L).orElseThrow();
 
         assertTrue(restored.yard().isEmpty(), "no destination, no migration, no surprise chest");
     }
 
     @Test
     void itRemembersWhereTheChestActuallyWent() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         BoardBrainContext ctx = new BoardBrainContext();
         // The hauler built it a block off the hint, because the hint was a hint.
@@ -187,7 +187,7 @@ class ClearAreaTest {
 
     @Test
     void aChestNowhereNearTheHintIsNotThisProjectsYard() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.claim(dev.luizloyola.anima.core.store.Store.POI, new Pos(900, 60, 900));
@@ -200,7 +200,7 @@ class ClearAreaTest {
 
     @Test
     void somebodyElsesChestAtTheHintIsNotThisProjectsYard() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(dev.luizloyola.anima.core.store.Store.POI, new Pos(7, 60, 6));
@@ -212,20 +212,20 @@ class ClearAreaTest {
 
     @Test
     void aClearItemHaulsOnlyWhenThereIsAYard() {
-        ClearArea plain = posted(ABLE, oneSlice());
+        FellTrees plain = posted(ABLE, oneSlice());
         plain.completed(plain.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
         Task withoutYard = ((SweepingErrand) plain.open().stream()
-                .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow()
+                .filter(item -> item.describe().startsWith("fell")).findFirst().orElseThrow()
                 .root()).work();
 
         assertFalse(withoutYard instanceof HaulingErrand,
                 "no destination, and the root is byte-for-byte what it always was");
 
-        ClearArea withYard = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees withYard = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         withYard.tick(0L);
         withYard.completed(withYard.open().get(0), ctxThatSaw(new Pos(3, 60, 3)));
         Task hauling = ((SweepingErrand) withYard.open().stream()
-                .filter(item -> item.describe().startsWith("clear")).findFirst().orElseThrow()
+                .filter(item -> item.describe().startsWith("fell")).findFirst().orElseThrow()
                 .root()).work();
 
         assertTrue(hauling instanceof HaulingErrand,
@@ -240,13 +240,13 @@ class ClearAreaTest {
 
     @Test
     void theLastTreeTakesTheWholeLoadToTheYard() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         ctx.remember(THING, new Pos(8, 60, 8));
         project.completed(project.open().get(0), ctx);
         List<WorkItem> trees = project.open().stream()
-                .filter(item -> item.describe().startsWith("clear")).toList();
+                .filter(item -> item.describe().startsWith("fell")).toList();
         assertEquals(2, trees.size());
         ctx.inventory().set(0, ItemStack.of("minecraft:oak_log", 6, 64));
 
@@ -269,7 +269,7 @@ class ClearAreaTest {
      */
     @Test
     void aTargetSomebodyElseIsRemovingWaitsUntilTheyLetGo() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         project.completed(surveyItem(project), ctxThatSaw(new Pos(3, 60, 3)));
         WorkItem tree = clearItem(project);
         SiteClaims sites = new SiteClaims();
@@ -287,7 +287,7 @@ class ClearAreaTest {
 
     @Test
     void aCrewMemberTheLastTreesWentPastIsSentHomeWithTheLoad() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         project.tick(0L);
         AgentId surveyor = AgentId.random();
         AgentId feller = AgentId.random();
@@ -295,11 +295,11 @@ class ClearAreaTest {
         project.claimed(survey, surveyor);
         project.completed(survey, ctxThatSaw(new Pos(3, 60, 3)));
         WorkItem tree = clearItem(project);
-        assertTrue(project.open().stream().noneMatch(ClearAreaTest::isBringIn),
+        assertTrue(project.open().stream().noneMatch(FellTreesTest::isBringIn),
                 "a tree nobody holds is still the next job");
 
         project.claimed(tree, feller);
-        WorkItem offer = project.open().stream().filter(ClearAreaTest::isBringIn)
+        WorkItem offer = project.open().stream().filter(FellTreesTest::isBringIn)
                 .findFirst().orElseThrow();
         BoardBrainContext laden = new BoardBrainContext();
         laden.inventory().set(0, ItemStack.of("minecraft:oak_log", 6, 64));
@@ -324,11 +324,11 @@ class ClearAreaTest {
 
     @Test
     void aClearErrandBanksTheGroundItCrosses() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
         WorkItem tree = project.open().stream()
-                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+                .filter(i -> i.describe().startsWith("fell")).findFirst().orElseThrow();
 
         Task root = tree.root();
 
@@ -338,12 +338,12 @@ class ClearAreaTest {
 
     @Test
     void theSweepWrapsTheHaulSoTheWalkToTheYardCountsToo() {
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, new Pos(60, 60, 60));
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, new Pos(60, 60, 60));
         project.tick(0L);
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
         WorkItem tree = project.open().stream()
-                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+                .filter(i -> i.describe().startsWith("fell")).findFirst().orElseThrow();
 
         Task root = tree.root();
 
@@ -366,7 +366,7 @@ class ClearAreaTest {
         // The one rule harvest has, and the regression test for the 197 cleared / 186 / 197 / 186
         // cycle (live, 2026-08-12): re-reading rows the ledger already holds reopened cleared
         // anchors and sent people to fell ghosts. Stated as a rule now, not as a tick comparison.
-        ClearArea project = posted(ABLE, twoSlices());
+        FellTrees project = posted(ABLE, twoSlices());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos felled = new Pos(3, 60, 3);
         Pos stubborn = new Pos(11, 60, 11);
@@ -374,9 +374,9 @@ class ClearAreaTest {
         ctx.remember(THING, stubborn);
         project.completed(surveyItem(project), ctx);
         project.completed(itemAt(project, felled), ctx);
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 
@@ -385,16 +385,16 @@ class ClearAreaTest {
         ctx.remember(THING, fresh);
         project.completed(surveyItem(project), ctx);
 
-        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(felled).state(),
+        assertEquals(FellTrees.TargetState.CLEARED, project.ledger().get(felled).state(),
                 "a stale memory of something already felled is not evidence it is back");
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state(),
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(stubborn).state(),
                 "and re-reporting a refusal would restart the loop REFUSE_AFTER exists to end");
-        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(fresh).state());
+        assertEquals(FellTrees.TargetState.OPEN, project.ledger().get(fresh).state());
     }
 
     @Test
     void aFailedTargetSitsOutLongerEachTime() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos tree = new Pos(3, 60, 3);
         ctx.remember(THING, tree);
@@ -404,15 +404,15 @@ class ClearAreaTest {
         for (int failures = 1; failures <= 3; failures++) {
             long before = ctx.now();
             project.failed(itemAt(project, tree), alone, ctx);
-            assertEquals(before + ClearArea.cooldownAfter(failures),
+            assertEquals(before + FellTrees.cooldownAfter(failures),
                     project.ledger().get(tree).retryAfter(), "after failure " + failures);
-            ctx.advance(ClearArea.cooldownAfter(failures));
+            ctx.advance(FellTrees.cooldownAfter(failures));
             project.tick(ctx.now());
         }
-        assertEquals(ClearArea.FAIL_COOLDOWN, ClearArea.cooldownAfter(1));
-        assertEquals(ClearArea.FAIL_COOLDOWN * 4, ClearArea.cooldownAfter(3));
-        assertEquals(ClearArea.FAIL_COOLDOWN * 64, ClearArea.cooldownAfter(20), "capped");
-        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(tree).state(),
+        assertEquals(FellTrees.FAIL_COOLDOWN, FellTrees.cooldownAfter(1));
+        assertEquals(FellTrees.FAIL_COOLDOWN * 4, FellTrees.cooldownAfter(3));
+        assertEquals(FellTrees.FAIL_COOLDOWN * 64, FellTrees.cooldownAfter(20), "capped");
+        assertEquals(FellTrees.TargetState.OPEN, project.ledger().get(tree).state(),
                 "still one person's word: never refused for it");
     }
 
@@ -424,14 +424,14 @@ class ClearAreaTest {
         // call a crownless trunk a tree ("a woodpile, a stump"), so the stub is never remembered.
         // The sweep is honest — that ground WAS covered — which is exactly why the box must ask.
         residue = java.util.List.of(new Pos(3, 60, 3));
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
 
         project.completed(project.open().get(0), ctx);
 
         assertFalse(project.finished(),
                 "the ledger was empty and the box fully swept, but a stub still stands in it");
-        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(new Pos(3, 60, 3)).state(),
+        assertEquals(FellTrees.TargetState.OPEN, project.ledger().get(new Pos(3, 60, 3)).state(),
                 "and it is on offer, not merely counted");
         residue = java.util.List.of();
     }
@@ -439,7 +439,7 @@ class ClearAreaTest {
     @Test
     void residueOutsideTheBoxIsNotTheBoxsToTake() {
         residue = java.util.List.of(new Pos(500, 60, 500));
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
 
         project.completed(project.open().get(0), ctx);
@@ -452,7 +452,7 @@ class ClearAreaTest {
     @Test
     void aBoxWithNoResidueClosesExactlyAsBefore() {
         residue = java.util.List.of();
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
 
         project.completed(project.open().get(0), ctx);
@@ -464,11 +464,11 @@ class ClearAreaTest {
 
     @Test
     void aChopperReportsTheTreesTheyWalkedPast() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
         WorkItem tree = project.open().stream()
-                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+                .filter(i -> i.describe().startsWith("fell")).findFirst().orElseThrow();
         // On the way to the tree the chopper individuates another one.
         ctx.remember(THING, new Pos(8, 60, 8));
 
@@ -483,7 +483,7 @@ class ClearAreaTest {
     void aChoppersReportCannotResurrectAnAnchorSomebodyAlreadyCleared() {
         // The 197/186 cycle: a felled tree lingers in its chopper's memory until the near field
         // re-probes that column, and a report that rewrote rows would put it straight back.
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos felled = new Pos(3, 60, 3);
         Pos other = new Pos(8, 60, 8);
@@ -495,7 +495,7 @@ class ClearAreaTest {
         // A different worker finishes a different tree, still remembering the felled one.
         project.completed(itemAt(project, other), ctx);
 
-        assertEquals(ClearArea.TargetState.CLEARED, project.ledger().get(felled).state(),
+        assertEquals(FellTrees.TargetState.CLEARED, project.ledger().get(felled).state(),
                 "settle() only ever touches the item's own anchor, so this row is harvest's to "
                         + "leave alone — and it does, because the rule is membership, not state");
     }
@@ -505,7 +505,7 @@ class ClearAreaTest {
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.advance(5_000L);
         ctx.rememberSeenAt(THING, new Pos(3, 60, 3), 500L);
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5);
         project.tick(5_000L);
 
         project.completed(project.open().get(0), ctx);
@@ -517,11 +517,11 @@ class ClearAreaTest {
 
     @Test
     void aWorkerWhoFailedStillReportsWhatTheySaw() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
         WorkItem tree = project.open().stream()
-                .filter(i -> i.describe().startsWith("clear")).findFirst().orElseThrow();
+                .filter(i -> i.describe().startsWith("fell")).findFirst().orElseThrow();
         ctx.remember(THING, new Pos(8, 60, 8));
 
         project.failed(tree, AgentId.random(), ctx);
@@ -534,7 +534,7 @@ class ClearAreaTest {
 
     @Test
     void aPreemptedSurveyResumesWhereItStopped() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         var errand = project.open().get(0);
 
         errand.root();                      // granted: the double captures the sink
@@ -549,11 +549,11 @@ class ClearAreaTest {
 
     @Test
     void coverageSurvivesASnapshotRoundTrip() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         project.open().get(0).root();
         lastCoverage.settled(new Pos(0, 60, 0));
 
-        ClearArea restored = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
+        FellTrees restored = FellTrees.restore(project.snapshot(), 0L).orElseThrow();
         restored.open().get(0).root();
 
         assertTrue(lastKnown.keySet().contains(new Pos(0, 60, 0)),
@@ -573,7 +573,7 @@ class ClearAreaTest {
     @Test
     void aBoxWalkedByAChopperClosesOnlyOnceEveryCellIsCovered() {
         // Aligned to the coverage grid, so "the cell beside" is a cell of this box.
-        ClearArea project = posted(ABLE, new Region(new Pos(0, 60, 0), new Pos(15, 70, 7)));
+        FellTrees project = posted(ABLE, new Region(new Pos(0, 60, 0), new Pos(15, 70, 7)));
         dev.luizloyola.anima.core.brain.knowledge.Coverage walking = project.coverage();
 
         walking.near(new Pos(4, 60, 4), 8);
@@ -598,7 +598,7 @@ class ClearAreaTest {
 
     @Test
     void aFreshBoxOffersOnlySurveys() {
-        ClearArea project = posted(ABLE, twoSlices());
+        FellTrees project = posted(ABLE, twoSlices());
 
         assertEquals(2, project.open().size());
         assertTrue(project.open().stream().allMatch(item -> item.describe().startsWith("survey")));
@@ -606,12 +606,12 @@ class ClearAreaTest {
 
     @Test
     void aTreeReportedMidSweepIsOfferedWhileTheRestIsStillBeingWalked() {
-        ClearArea project = posted(ABLE, twoSlices());
+        FellTrees project = posted(ABLE, twoSlices());
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
 
         project.completed(project.open().get(0), ctx);
 
-        assertTrue(project.open().stream().anyMatch(i -> i.describe().startsWith("clear")),
+        assertTrue(project.open().stream().anyMatch(i -> i.describe().startsWith("fell")),
                 "the SURVEYING barrier is gone: the first slice reported puts trees in front of "
                         + "the crew while the rest of the box is still unwalked");
         assertTrue(project.open().stream().anyMatch(i -> i.describe().startsWith("survey")),
@@ -620,7 +620,7 @@ class ClearAreaTest {
 
     @Test
     void aSliceEverybodyHasAlreadyCoveredIsNeverMintedAsAnErrand() {
-        ClearArea project = posted(ABLE, twoSlices());
+        FellTrees project = posted(ABLE, twoSlices());
         Region first = project.slices().get(0);
         for (int x = first.min().x(); x <= first.max().x(); x += CoverageGrid.CELL) {
             for (int z = first.min().z(); z <= first.max().z(); z += CoverageGrid.CELL) {
@@ -634,7 +634,7 @@ class ClearAreaTest {
 
     @Test
     void theBoxClosesWhenTheFrontierIsEmptyAndNothingIsStanding() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
 
         project.completed(project.open().get(0), ctx);
@@ -645,7 +645,7 @@ class ClearAreaTest {
 
     @Test
     void theBoxDoesNotCloseWhileAnyTargetIsStillOpen() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
 
         project.completed(project.open().get(0), ctx);
@@ -655,7 +655,7 @@ class ClearAreaTest {
 
     @Test
     void aTargetCoolingOffKeepsTheBoxOpen() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
         WorkItem tree = clearItem(project);
@@ -668,7 +668,7 @@ class ClearAreaTest {
 
     @Test
     void thereIsNoSecondSweepOfGroundSomebodyAlreadyCovered() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = ctxThatSaw(new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
         WorkItem tree = clearItem(project);
@@ -686,7 +686,7 @@ class ClearAreaTest {
         // Two slices wide, two deep — which one comes out shorter is now the cell grid's call,
         // not simply "the last one".
         Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
-        ClearArea project = posted(ABLE, big);
+        FellTrees project = posted(ABLE, big);
         assertEquals(4, project.slices().size());
         assertEquals(new Pos(0, 60, 0), project.slices().get(0).min());
         assertEquals(new Pos(60, 70, 50), project.slices().get(3).max());
@@ -720,7 +720,7 @@ class ClearAreaTest {
     @Test
     void everySliceCornerSitsOnTheBoxesCellGrid() {
         // 130 across at a 48 ceiling is three slices; unaligned they would land on 43 and 87.
-        ClearArea project = posted(ABLE,
+        FellTrees project = posted(ABLE,
                 new Region(new Pos(0, 60, 0), new Pos(129, 70, 129)));
 
         for (Region slice : project.slices()) {
@@ -746,13 +746,13 @@ class ClearAreaTest {
 
     /** Every ceiling/empty/grid invariant {@code cuts} owes, for a box {@code span} blocks square. */
     private static void assertSliceInvariants(int span) {
-        ClearArea project =
+        FellTrees project =
                 posted(ABLE, new Region(new Pos(0, 60, 0), new Pos(span - 1, 70, span - 1)));
         for (Region slice : project.slices()) {
             int wide = slice.max().x() - slice.min().x() + 1;
             int deep = slice.max().z() - slice.min().z() + 1;
-            assertTrue(wide > 0 && wide <= ClearArea.SLICE_SIZE, "span " + span + " wide: " + wide);
-            assertTrue(deep > 0 && deep <= ClearArea.SLICE_SIZE, "span " + span + " deep: " + deep);
+            assertTrue(wide > 0 && wide <= FellTrees.SLICE_SIZE, "span " + span + " wide: " + wide);
+            assertTrue(deep > 0 && deep <= FellTrees.SLICE_SIZE, "span " + span + " deep: " + deep);
             assertEquals(0, slice.min().x() % CoverageGrid.CELL, "span " + span + " x corner");
             assertEquals(0, slice.min().z() % CoverageGrid.CELL, "span " + span + " z corner");
         }
@@ -761,12 +761,12 @@ class ClearAreaTest {
     @Test
     void theSlicesTileTheBoxWithNoGapNoOverlapAndNothingOversized() {
         Region box = new Region(new Pos(-7, 60, 12), new Pos(123, 70, 60));
-        ClearArea project = posted(ABLE, box);
+        FellTrees project = posted(ABLE, box);
         int covered = 0;
         for (Region slice : project.slices()) {
             int wide = slice.max().x() - slice.min().x() + 1;
             int deep = slice.max().z() - slice.min().z() + 1;
-            assertTrue(wide <= ClearArea.SLICE_SIZE && deep <= ClearArea.SLICE_SIZE,
+            assertTrue(wide <= FellTrees.SLICE_SIZE && deep <= FellTrees.SLICE_SIZE,
                     "slice " + wide + "×" + deep + " is over the ceiling");
             assertTrue(wide > 0 && deep > 0, "an empty slice is still a whole errand");
             covered += wide * deep;
@@ -780,7 +780,7 @@ class ClearAreaTest {
 
     @Test
     void nobodyIsOfferedAnythingWhileNothingCanSurvey() {
-        ClearArea project = posted(UNABLE, oneSlice());
+        FellTrees project = posted(UNABLE, oneSlice());
         assertTrue(project.open().isEmpty());
         // And the readout says why, rather than looking like a project with nothing to do.
         assertTrue(project.describe().contains("nobody can survey"));
@@ -791,7 +791,7 @@ class ClearAreaTest {
 
     @Test
     void everythingFoundAndFelledClosesTheBox() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(THING, new Pos(3, 60, 3));
         ctx.remember(THING, new Pos(7, 60, 8));
@@ -803,13 +803,13 @@ class ClearAreaTest {
             project.completed(item, ctx);
         }
 
-        assertEquals(ClearArea.Phase.DONE, project.phase());
+        assertEquals(FellTrees.Phase.DONE, project.phase());
         assertTrue(project.describe().contains("2 cleared"));
     }
 
     @Test
     void onlyWhatIsInsideTheBoxIsTaken() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(THING, new Pos(3, 60, 3));
         ctx.remember(THING, new Pos(300, 60, 300));
@@ -823,29 +823,29 @@ class ClearAreaTest {
 
     @Test
     void aTargetThatKeepsFailingIsRefusedAndTheProjectCanFinish() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
         ctx.remember(THING, stubborn);
         project.completed(project.open().get(0), ctx);
 
-        for (int attempt = 1; attempt <= ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 1; attempt <= FellTrees.REFUSE_AFTER; attempt++) {
             assertEquals(1, project.open().size(), "attempt " + attempt + " should be on offer");
             project.failed(project.open().get(0), ctx);
-            if (attempt < ClearArea.REFUSE_AFTER) {
+            if (attempt < FellTrees.REFUSE_AFTER) {
                 // A failure is paced: nothing is on offer until the cooldown runs out, or an agent
                 // would burn every attempt within a second of the first.
                 assertTrue(project.open().isEmpty(), "attempt " + attempt + " must cool down");
             }
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(stubborn).state());
         // Refused means gone from the offer for good — this is what stops "repeat until done"
         // from repeating forever over one thing nobody can remove. The last failure leaves nothing
         // un-swept and nothing standing, so the box closes on that same call.
         assertTrue(project.open().isEmpty());
-        assertEquals(ClearArea.Phase.DONE, project.phase());
+        assertEquals(FellTrees.Phase.DONE, project.phase());
         assertTrue(project.describe().contains("1 refused"));
     }
 
@@ -853,22 +853,22 @@ class ClearAreaTest {
     void aRefusedAnchorIsNotReportedBackEither() {
         // Two slices, so the box stays open on the frontier while the refusal settles and a later
         // sweep still has somewhere to report from.
-        ClearArea project = posted(ABLE, twoSlices());
+        FellTrees project = posted(ABLE, twoSlices());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
         ctx.remember(THING, stubborn);
         project.completed(surveyItem(project), ctx);
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(stubborn).state());
 
         // The next sweep reports it again, because it is still standing there in plain sight.
         project.completed(surveyItem(project), ctx);
 
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state(),
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(stubborn).state(),
                 "a refused target reported afresh would restart the loop it exists to end");
         assertTrue(project.finished());
     }
@@ -877,7 +877,7 @@ class ClearAreaTest {
     void aRefusedTargetGetsAnotherGoOnceItsNeighboursAreDown() {
         // A thing can be unreachable BECAUSE of what surrounds it, so a box that removed something
         // has changed the world and earned the refused ones a retry before it closes.
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
         Pos easy = new Pos(8, 60, 8);
@@ -886,16 +886,16 @@ class ClearAreaTest {
         project.completed(project.open().get(0), ctx);
 
         // Refuse one, fell the other.
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(stubborn).state());
         project.completed(itemAt(project, easy), ctx);
 
         assertFalse(project.finished(), "the box would have closed, so the refusal gets its retry");
-        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(stubborn).state(),
+        assertEquals(FellTrees.TargetState.OPEN, project.ledger().get(stubborn).state(),
                 "the trigger is the close, not the end of a round — there are no rounds");
     }
 
@@ -903,19 +903,19 @@ class ClearAreaTest {
     void aBoxThatFelledNothingDoesNotReopenAndEnds() {
         // The termination guarantee. Reopening costs a felled tree; a box that felled none has
         // changed nothing, so retrying would loop forever — which is what REFUSE_AFTER is for.
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
         ctx.remember(THING, stubborn);
         project.completed(project.open().get(0), ctx);
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
-        assertEquals(ClearArea.Phase.DONE, project.phase(), "nothing changed, so nothing to retry");
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(stubborn).state());
+        assertEquals(FellTrees.Phase.DONE, project.phase(), "nothing changed, so nothing to retry");
         assertTrue(project.describe().contains("1 refused"),
                 "the operator can see what stopped it rather than inferring it");
     }
@@ -924,32 +924,32 @@ class ClearAreaTest {
     void refusalsAreReopenedOnceAndOnlyOnce() {
         // The reopening is paid for out of felled targets, and the payment is spent. A second close
         // with nothing felled since must end the box rather than hand out another free retry.
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
         Pos easy = new Pos(8, 60, 8);
         ctx.remember(THING, stubborn);
         ctx.remember(THING, easy);
         project.completed(project.open().get(0), ctx);
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
         project.completed(itemAt(project, easy), ctx); // felling buys the one retry
 
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, stubborn), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 
         assertTrue(project.finished(), "the licence was spent; a box cannot retry on credit");
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(stubborn).state());
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(stubborn).state());
     }
 
     /** The open item standing at this anchor — the tests act through the board's own offers. */
-    private static WorkItem itemAt(ClearArea project, Pos anchor) {
+    private static WorkItem itemAt(FellTrees project, Pos anchor) {
         return project.itemFor(new WorkKey.AtPlace(WorkKey.CLEAR, anchor)).orElseThrow();
     }
 
@@ -958,45 +958,45 @@ class ClearAreaTest {
         // The 134-tree bug: one body in a try-fail loop refused a whole ledger, because failures
         // were charged to the tree rather than the worker. Giving up means several DIFFERENT people
         // could not.
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos tree = new Pos(3, 60, 3);
         ctx.remember(THING, tree);
         project.completed(project.open().get(0), ctx);
 
         AgentId stuck = AgentId.random();
-        for (int attempt = 1; attempt <= ClearArea.REFUSE_AFTER * 3; attempt++) {
+        for (int attempt = 1; attempt <= FellTrees.REFUSE_AFTER * 3; attempt++) {
             project.failed(itemAt(project, tree), stuck, ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt));
+            ctx.advance(FellTrees.cooldownAfter(attempt));
             project.tick(ctx.now());
         }
-        assertEquals(ClearArea.TargetState.OPEN, project.ledger().get(tree).state(),
+        assertEquals(FellTrees.TargetState.OPEN, project.ledger().get(tree).state(),
                 "one body failing repeatedly is evidence about the body, not about the tree");
     }
 
     @Test
     void enoughDifferentPeopleFailingIsWhatRefusesIt() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos tree = new Pos(3, 60, 3);
         ctx.remember(THING, tree);
         project.completed(project.open().get(0), ctx);
 
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(itemAt(project, tree), AgentId.random(), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
-        assertEquals(ClearArea.TargetState.REFUSED, project.ledger().get(tree).state());
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(tree).state());
     }
 
     @Test
     void aFailedSliceIsOfferedAgainAfterItsCooldown() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         project.failed(project.open().get(0), ctx);
         assertTrue(project.open().isEmpty());
-        ctx.advance(ClearArea.FAIL_COOLDOWN);
+        ctx.advance(FellTrees.FAIL_COOLDOWN);
         project.tick(ctx.now());
         assertEquals(1, project.open().size());
         assertFalse(project.finished(), "un-swept ground holds the box open however it got there");
@@ -1006,7 +1006,7 @@ class ClearAreaTest {
 
     @Test
     void anErrandSomebodyHoldsIsNeverWithdrawn() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         WorkItem taken = project.open().get(0);
         project.claimed(taken);
@@ -1016,7 +1016,7 @@ class ClearAreaTest {
         WorkItem again = project.open().isEmpty() ? null : project.open().get(0);
         assertTrue(again == null || again != taken);
 
-        ctx.advance(ClearArea.FAIL_COOLDOWN);
+        ctx.advance(FellTrees.FAIL_COOLDOWN);
         project.tick(ctx.now());
         WorkItem reoffered = project.open().get(0);
         project.claimed(reoffered);
@@ -1027,7 +1027,7 @@ class ClearAreaTest {
     @Test
     void anItemKeepsItsIdentityAcrossBeats() {
         // The board leases by IDENTITY, so re-minting on every ask would drop every hold.
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         WorkItem first = project.open().get(0);
         project.tick(1L);
         project.tick(2L);
@@ -1038,7 +1038,7 @@ class ClearAreaTest {
 
     @Test
     void everyOfferedItemHasADurableNameThatFindsItAgain() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(THING, new Pos(3, 60, 3));
         project.completed(project.open().get(0), ctx);
@@ -1052,7 +1052,7 @@ class ClearAreaTest {
 
     @Test
     void aNameForSomethingNoLongerOfferedFindsNothing() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         assertTrue(project.itemFor(new WorkKey.AtPlace(WorkKey.CLEAR, new Pos(1, 1, 1))).isEmpty());
     }
 
@@ -1060,16 +1060,16 @@ class ClearAreaTest {
 
     @Test
     void aSavedProjectComesBackMidClearWithTheSameLedgerAndOffers() {
-        Clearings.register(ABLE);
-        ClearArea project = posted(ABLE, oneSlice());
+        Fellings.register(ABLE);
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         ctx.remember(THING, new Pos(3, 60, 3));
         ctx.remember(THING, new Pos(7, 60, 8));
         project.completed(project.open().get(0), ctx);
         project.completed(project.open().get(0), ctx);
 
-        ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
-        assertEquals(ClearArea.Phase.WORKING, back.phase());
+        FellTrees back = FellTrees.restore(project.snapshot(), ctx.now()).orElseThrow();
+        assertEquals(FellTrees.Phase.WORKING, back.phase());
         assertEquals(project.ledger(), back.ledger());
         assertEquals(1, back.open().size(), "the one target still standing is on offer again");
         assertEquals(project.describe(), back.describe());
@@ -1077,33 +1077,33 @@ class ClearAreaTest {
 
     @Test
     void aSavedProjectRemembersWhatItGaveUpOn() {
-        Clearings.register(ABLE);
-        ClearArea project = posted(ABLE, oneSlice());
+        Fellings.register(ABLE);
+        FellTrees project = posted(ABLE, oneSlice());
         BoardBrainContext ctx = new BoardBrainContext();
         Pos stubborn = new Pos(3, 60, 3);
         ctx.remember(THING, stubborn);
         project.completed(project.open().get(0), ctx);
-        for (int attempt = 0; attempt < ClearArea.REFUSE_AFTER; attempt++) {
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER; attempt++) {
             project.failed(project.open().get(0), ctx);
-            ctx.advance(ClearArea.cooldownAfter(attempt + 1));
+            ctx.advance(FellTrees.cooldownAfter(attempt + 1));
             project.tick(ctx.now());
         }
 
-        ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
-        assertEquals(ClearArea.TargetState.REFUSED, back.ledger().get(stubborn).state(),
+        FellTrees back = FellTrees.restore(project.snapshot(), ctx.now()).orElseThrow();
+        assertEquals(FellTrees.TargetState.REFUSED, back.ledger().get(stubborn).state(),
                 "a restart that forgot a refusal would let the loop back in through the store");
     }
 
     @Test
     void aSavedProjectRemembersHowFarTheSurveyGot() {
-        Clearings.register(ABLE);
+        Fellings.register(ABLE);
         Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
-        ClearArea project = posted(ABLE, big);
+        FellTrees project = posted(ABLE, big);
         BoardBrainContext ctx = new BoardBrainContext();
         project.completed(project.open().get(0), ctx);
         assertEquals(3, project.open().size());
 
-        ClearArea back = ClearArea.restore(project.snapshot(), ctx.now()).orElseThrow();
+        FellTrees back = FellTrees.restore(project.snapshot(), ctx.now()).orElseThrow();
         assertEquals(3, back.open().size(), "a walked slice must not be walked again");
         assertEquals(project.describe(), back.describe(),
                 "and the swept fraction comes back where it left off, not at zero");
@@ -1111,23 +1111,23 @@ class ClearAreaTest {
 
     @Test
     void aProjectWhoseClearingThisBuildLacksComesBackAsNothing() {
-        Clearings.clear();
-        ClearArea project = posted(ABLE, oneSlice());
+        Fellings.clear();
+        FellTrees project = posted(ABLE, oneSlice());
         // Never silently an empty project: the store's job is to refuse the world, and it can only
         // do that if this says so rather than handing back something plausible.
-        assertTrue(ClearArea.restore(project.snapshot(), 0L).isEmpty());
-        Clearings.register(ABLE);
+        assertTrue(FellTrees.restore(project.snapshot(), 0L).isEmpty());
+        Fellings.register(ABLE);
     }
 
     @Test
     void aSurveyItemKeepsItsNameAcrossARestart() {
-        Clearings.register(ABLE);
+        Fellings.register(ABLE);
         Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
-        ClearArea project = posted(ABLE, big);
+        FellTrees project = posted(ABLE, big);
         WorkItem held = project.open().get(1);
         WorkKey key = project.keyOf(held).orElseThrow();
 
-        ClearArea back = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
+        FellTrees back = FellTrees.restore(project.snapshot(), 0L).orElseThrow();
         // A different object, the same errand: the member walking to it gets THAT one back rather
         // than the pool.
         assertTrue(back.itemFor(key).isPresent());
@@ -1136,12 +1136,12 @@ class ClearAreaTest {
 
     @Test
     void stateRoundTripsTheCoverageGrid() {
-        Clearings.register(ABLE);
-        ClearArea project = posted(ABLE, oneSlice());
+        Fellings.register(ABLE);
+        FellTrees project = posted(ABLE, oneSlice());
         project.covered().markNear(new Pos(4, 60, 4), 8);
         int before = project.covered().settledCount();
 
-        ClearArea back = ClearArea.restore(project.snapshot(), 0L).orElseThrow();
+        FellTrees back = FellTrees.restore(project.snapshot(), 0L).orElseThrow();
 
         assertEquals(before, back.covered().settledCount(),
                 "a reload must not put a settler back on ground the party already walked");
@@ -1149,24 +1149,24 @@ class ClearAreaTest {
 
     @Test
     void aWorldSavedBeforeTheFrontierComesBackWorking() {
-        assertEquals(ClearArea.Phase.WORKING, ClearArea.phaseByName("SURVEYING"));
-        assertEquals(ClearArea.Phase.WORKING, ClearArea.phaseByName("CLEARING"));
-        assertEquals(ClearArea.Phase.WORKING, ClearArea.phaseByName("VERIFYING"));
-        assertEquals(ClearArea.Phase.DONE, ClearArea.phaseByName("DONE"));
+        assertEquals(FellTrees.Phase.WORKING, FellTrees.phaseByName("SURVEYING"));
+        assertEquals(FellTrees.Phase.WORKING, FellTrees.phaseByName("CLEARING"));
+        assertEquals(FellTrees.Phase.WORKING, FellTrees.phaseByName("VERIFYING"));
+        assertEquals(FellTrees.Phase.DONE, FellTrees.phaseByName("DONE"));
     }
 
     // ── the board around it ──────────────────────────────────────────────────────────────────
 
     @Test
     void aPartyBoardHandsEveryHolderBackTheirOwnErrand() {
-        Clearings.register(ABLE);
+        Fellings.register(ABLE);
         // restore() now resolves the row's kind through PartyProjects before it ever asks a
-        // Clearing for anything — a mod's bootstrap does this once; a plain core test has to.
-        PartyProjects.register(ClearArea.TYPE);
+        // Felling for anything — a mod's bootstrap does this once; a plain core test has to.
+        PartyProjects.register(FellTrees.TYPE);
         PartyBoard board = new PartyBoard(
                 dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
         Region big = new Region(new Pos(0, 60, 0), new Pos(60, 70, 50));
-        ClearArea project = new ClearArea(ABLE, big, 0.5);
+        FellTrees project = new FellTrees(ABLE, big, 0.5);
         board.post(project);
         board.tick(0L);
 
@@ -1185,7 +1185,7 @@ class ClearAreaTest {
         PartyBoard reloaded = new PartyBoard(board.party());
         assertEquals(0, reloaded.restore(saved, 0L));
 
-        ClearArea back = (ClearArea) reloaded.projects().get(0);
+        FellTrees back = (FellTrees) reloaded.projects().get(0);
         assertTrue(reloaded.holds(back.itemFor(herSlice).orElseThrow(), alice, 0L),
                 "Alice must get HER slice back, not whichever one scores best");
         assertTrue(reloaded.holds(back.itemFor(hisSlice).orElseThrow(), bob, 0L));
@@ -1198,11 +1198,11 @@ class ClearAreaTest {
 
     @Test
     void theBoardHandsALadenCrewMemberTheirOwnWayHomeAndKeepsItAcrossAReload() {
-        Clearings.register(ABLE);
-        PartyProjects.register(ClearArea.TYPE);
+        Fellings.register(ABLE);
+        PartyProjects.register(FellTrees.TYPE);
         PartyBoard board = new PartyBoard(
                 dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5, YARD);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, YARD);
         board.post(project);
         board.tick(0L);
         AgentId surveyor = AgentId.random();
@@ -1225,17 +1225,17 @@ class ClearAreaTest {
         List<PartyBoard.Row> saved = board.snapshot(0L);
         PartyBoard reloaded = new PartyBoard(board.party());
         assertEquals(0, reloaded.restore(saved, 0L));
-        ClearArea back = (ClearArea) reloaded.projects().get(0);
+        FellTrees back = (FellTrees) reloaded.projects().get(0);
         assertTrue(reloaded.holds(back.itemFor(key).orElseThrow(), surveyor, 0L),
                 "the walk home survives a restart");
     }
 
     @Test
     void aFinishedProjectIsClosedByItsBoardsOwnBeat() {
-        Clearings.register(ABLE);
+        Fellings.register(ABLE);
         PartyBoard board = new PartyBoard(
                 dev.luizloyola.anima.core.social.PartyId.of(java.util.UUID.randomUUID()));
-        ClearArea project = new ClearArea(ABLE, oneSlice(), 0.5);
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5);
         board.post(project);
         board.tick(0L);
         project.completed(project.open().get(0), new BoardBrainContext());
@@ -1247,7 +1247,7 @@ class ClearAreaTest {
 
     @Test
     void itsErrandsTellOfSurveyingAndClearingTheirKind() {
-        ClearArea project = posted(ABLE, oneSlice());
+        FellTrees project = posted(ABLE, oneSlice());
         Slot kind = Slot.lang("autarkia.clearing." + ABLE.id());
         assertEquals(Deed.of(WorkDoings.SURVEYING, kind), surveyItem(project).doing());
 

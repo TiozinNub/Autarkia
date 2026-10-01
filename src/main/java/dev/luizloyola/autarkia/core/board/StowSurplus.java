@@ -47,7 +47,7 @@ public final class StowSurplus implements PersonalProject {
      * Above the wander floor and well below real work. Both bounds are load-bearing and the lower
      * one was found in-world: at 0.1 this sat UNDER {@code instincts.wander_idle_pressure} (0.15),
      * so a settler with fourteen stacks of logs preferred to stroll and the errand was posted for
-     * ever without being taken. Clear-area posts at 0.5, which is what keeps tidying from
+     * ever without being taken. A felling posts at 0.5, which is what keeps tidying from
      * outranking the job.
      */
     public static final double PRIORITY = 0.25;

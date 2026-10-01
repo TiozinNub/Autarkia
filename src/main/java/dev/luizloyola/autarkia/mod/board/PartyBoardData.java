@@ -181,7 +181,7 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
     /**
      * Refuses to run a world holding a project this build cannot rebuild.
      *
-     * <p>An unknown {@code Clearing} id means a bug or a downgrade; dropping the project would
+     * <p>An unknown {@code Felling} id means a bug or a downgrade; dropping the project would
      * silently empty a party's work board and the next save would make it permanent — the failure
      * {@code StoreGuard} exists to prevent, one layer up.
      */
@@ -192,7 +192,7 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
         String message = "Autarkia refused to start: " + unknown + " saved project(s) on party "
                 + party.value() + " name a kind of clearing this build does not have. Dropping them "
                 + "would empty that party's board and the next save would make it permanent. This "
-                + "is what removing a Clearing, or downgrading past the one that added it, looks "
+                + "is what removing a Felling, or downgrading past the one that added it, looks "
                 + "like.";
         LOGGER.error(message);
         throw new IllegalStateException(message);

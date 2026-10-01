@@ -68,7 +68,7 @@ public final class WorkDoings {
                 .orElseGet(() -> Slot.lang("autarkia.goods." + spec.name()));
     }
 
-    public static Slot cleared(Clearing clearing) {
+    public static Slot cleared(Felling clearing) {
         return Slot.lang("autarkia.clearing." + clearing.id());
     }
 }

@@ -67,7 +67,7 @@ import org.jspecify.annotations.Nullable;
  * mean walking that ground twice. Only the claimed slice is banked as covered, because that is the
  * only ground the errand actually promised to walk.
  */
-public final class ClearArea implements PartyProject {
+public final class FellTrees implements PartyProject {
 
     /**
      * <b>Longest</b> edge one slice may have, in blocks — a ceiling, not a stride. Sized against
@@ -167,7 +167,7 @@ public final class ClearArea implements PartyProject {
     public record SliceCooldown(int slice, long retryAfter) {
     }
 
-    private final Clearing clearing;
+    private final Felling clearing;
     private final Region bounds;
     private final double priority;
 
@@ -248,7 +248,7 @@ public final class ClearArea implements PartyProject {
     /** Members whose bring-in failed, and until when they are not asked again. */
     private final Map<AgentId, Long> bringInCooling = new java.util.HashMap<>();
 
-    public ClearArea(Clearing clearing, Region bounds, double priority) {
+    public FellTrees(Felling clearing, Region bounds, double priority) {
         this(clearing, bounds, priority, null);
     }
 
@@ -260,7 +260,7 @@ public final class ClearArea implements PartyProject {
      * the project remembers what they actually built. Completion is unaffected either way — the box
      * is clear when it is clear, whether or not a single log reached the yard.
      */
-    public ClearArea(Clearing clearing, Region bounds, double priority, @Nullable Pos yard) {
+    public FellTrees(Felling clearing, Region bounds, double priority, @Nullable Pos yard) {
         this.clearing = clearing;
         this.bounds = bounds;
         this.priority = priority;
@@ -270,7 +270,7 @@ public final class ClearArea implements PartyProject {
     }
 
     /** What this project clears, for the store and the readout. */
-    public Clearing clearing() {
+    public Felling clearing() {
         return clearing;
     }
 
@@ -450,7 +450,7 @@ public final class ClearArea implements PartyProject {
     }
 
     /**
-     * Takes into the ledger whatever {@link Clearing#residue} finds inside the bounds that the
+     * Takes into the ledger whatever {@link Felling#residue} finds inside the bounds that the
      * ledger has never held — see that method for why a project needs eyes of its own.
      *
      * <p><b>Terminates.</b> Add-only against a ledger no row ever leaves, so an anchor is asked
@@ -589,7 +589,7 @@ public final class ClearArea implements PartyProject {
                 int slice = indexOf(place);
                 sliceRetryAfter.remove(slice);
                 // A sweep SUCCEEDS only once every cell of its slice is known — the contract on
-                // Clearing.survey — so completion is that claim. The sink has normally banked it
+                // Felling.survey — so completion is that claim. The sink has normally banked it
                 // already, cell by cell; saying it once more here is what keeps a slice from being
                 // re-offered because one write-off went astray.
                 markCovered(slices.get(slice));
@@ -798,7 +798,7 @@ public final class ClearArea implements PartyProject {
      * line came out {@code done (3 cleared - done) 3 cleared}.
      */
     private String name() {
-        return "clear " + clearing.label() + " in " + size() + " at " + at(bounds.min());
+        return "fell " + clearing.label() + " in " + size() + " at " + at(bounds.min());
     }
 
     /**
@@ -1034,7 +1034,7 @@ public final class ClearArea implements PartyProject {
             // Without a yard the inner errand is byte-for-byte what it has always been — the haul
             // is additive, and a box posted the old way behaves the old way.
             Task work = yard == null ? felling
-                    : new HaulingErrand(felling, yard, HAUL_LINE, ClearArea.this::unclaimedWork);
+                    : new HaulingErrand(felling, yard, HAUL_LINE, FellTrees.this::unclaimedWork);
             // Outermost, so the walk out, the felling and the walk to the yard all count.
             return new SweepingErrand(work, ground);
         }
@@ -1044,7 +1044,7 @@ public final class ClearArea implements PartyProject {
             return Deed.of(WorkDoings.CLEARING, WorkDoings.cleared(clearing));
         }
 
-        /** The clearing kind's answer, not this project's — see {@link Clearing#kit()}. */
+        /** The clearing kind's answer, not this project's — see {@link Felling#kit()}. */
         @Override
         public Kit kit() {
             return clearing.kit();
@@ -1052,7 +1052,7 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public String describe() {
-            return "clear the " + clearing.label() + " at " + at(key.at());
+            return "fell the " + clearing.label() + " at " + at(key.at());
         }
 
         @Override
@@ -1078,8 +1078,8 @@ public final class ClearArea implements PartyProject {
             return new WorkKey.ForMember(WorkKey.BRING_IN, who);
         }
 
-        private ClearArea owner() {
-            return ClearArea.this;
+        private FellTrees owner() {
+            return FellTrees.this;
         }
 
         @Override
@@ -1171,7 +1171,7 @@ public final class ClearArea implements PartyProject {
     }
 
     /**
-     * Everything this project is, minus what its {@link Clearing} rebuilds — the party store's row.
+     * Everything this project is, minus what its {@link Felling} rebuilds — the party store's row.
      *
      * <p>The slice grid is not here: it is a pure function of the bounds and {@link #SLICE_SIZE}, so
      * it comes back identical and slice indices stay the names they were. If either that constant or
@@ -1186,7 +1186,7 @@ public final class ClearArea implements PartyProject {
 
         @Override
         public String type() {
-            return "clear_area";
+            return "fell_trees";
         }
     }
 
@@ -1213,13 +1213,13 @@ public final class ClearArea implements PartyProject {
 
     /**
      * Rebuilds a saved project and mints its current offers, so a lease can be handed straight back
-     * to the member who held it. Empty when this build has no {@link Clearing} by that id — a real
+     * to the member who held it. Empty when this build has no {@link Felling} by that id — a real
      * failure for the store to report, never a row to drop quietly.
      */
-    public static Optional<ClearArea> restore(State state, long now) {
-        return Clearings.byId(state.clearing()).map(clearing -> {
-            ClearArea project =
-                    new ClearArea(clearing, state.bounds(), state.priority(), state.yard());
+    public static Optional<FellTrees> restore(State state, long now) {
+        return Fellings.byId(state.clearing()).map(clearing -> {
+            FellTrees project =
+                    new FellTrees(clearing, state.bounds(), state.priority(), state.yard());
             project.phase = state.phase();
             for (SliceCooldown cooldown : state.sliceCooldowns()) {
                 project.sliceRetryAfter.put(cooldown.slice(), cooldown.retryAfter());
@@ -1239,20 +1239,20 @@ public final class ClearArea implements PartyProject {
     }
 
     /**
-     * What {@link PartyProjects} and the dispatching codec both mean by {@code "clear_area"} —
-     * registered in {@code AutarkiaMod} beside {@link Clearings} itself. By the time a row's
+     * What {@link PartyProjects} and the dispatching codec both mean by {@code "fell_trees"} —
+     * registered in {@code AutarkiaMod} beside {@link Fellings} itself. By the time a row's
      * {@code type} has dispatched to this branch at all, the state handed in is provably a
      * {@link State}, so an unmatched instance here would be a dispatch bug, not a saved world.
      */
     public static final ProjectType TYPE = new ProjectType() {
         @Override
         public String id() {
-            return "clear_area";
+            return "fell_trees";
         }
 
         @Override
-        public Optional<ClearArea> restore(ProjectState state, long now) {
-            return state instanceof State s ? ClearArea.restore(s, now) : Optional.empty();
+        public Optional<FellTrees> restore(ProjectState state, long now) {
+            return state instanceof State s ? FellTrees.restore(s, now) : Optional.empty();
         }
     };
 }

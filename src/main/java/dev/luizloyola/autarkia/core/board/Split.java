@@ -12,7 +12,7 @@ public interface Split {
 
     /**
      * A stable name for this split, written into the party store and resolved through
-     * {@link Splits} on load, like {@link Clearing#id()}.
+     * {@link Splits} on load, like {@link Felling#id()}.
      */
     String id();
 

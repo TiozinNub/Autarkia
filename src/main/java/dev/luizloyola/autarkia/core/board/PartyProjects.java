@@ -11,11 +11,11 @@ import java.util.Optional;
  * the behaviour it was posted with again.
  *
  * <p>Canonical per id, in registration order, like the other extension points here
- * ({@code Clearings}, {@code PoiKind}, {@code Producers}, {@code Being.Kind}): registered once at
+ * ({@code Fellings}, {@code PoiKind}, {@code Producers}, {@code Being.Kind}): registered once at
  * bootstrap beside the thing registered, and the instance handed back is the one the store, the
  * codec and the board all mean.
  *
- * <p>A different registry from {@link Clearings}, one level up: {@code Clearings} registers what to
+ * <p>A different registry from {@link Fellings}, one level up: {@code Fellings} registers what to
  * clear; this registers what a project IS.
  */
 public final class PartyProjects {

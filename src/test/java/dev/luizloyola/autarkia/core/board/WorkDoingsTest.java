@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.anima.core.brain.history.DoingLines;
 import dev.luizloyola.anima.core.brain.history.Slot;
 import dev.luizloyola.anima.core.inv.ItemSpec;
-import dev.luizloyola.autarkia.core.tree.TreeClearing;
+import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,7 +34,7 @@ class WorkDoingsTest {
     @Test
     void everySlotAutarkiaFillsHasWords() {
         for (Slot slot : List.of(WorkDoings.goods(Stock.LOGS), WorkDoings.goods(Stock.AXES),
-                WorkDoings.FOR_THE_YARD, WorkDoings.cleared(TreeClearing.INSTANCE))) {
+                WorkDoings.FOR_THE_YARD, WorkDoings.cleared(TreeFelling.INSTANCE))) {
             assertEquals(Slot.Type.LANG, slot.type(), slot.encode());
             assertTrue(EN.containsKey(slot.value()), slot.value() + " has no line in en_us");
         }

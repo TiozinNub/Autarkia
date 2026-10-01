@@ -178,7 +178,7 @@ class StowSurplusTest {
         assertTrue(bid > 0.15,
                 "over instincts.wander_idle_pressure, or a settler would rather stroll for ever");
         assertTrue(bid < 0.5,
-                "under what a posted clear-area costs, so tidying never outranks the job");
+                "under what a posted felling costs, so tidying never outranks the job");
         assertFalse(stow.finished(), "and it is never done");
     }
 

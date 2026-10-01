@@ -54,7 +54,7 @@ public final class Gather implements PartyProject {
 
     /**
      * Distance at which a trip costs the most it can, and how much that is — the same mapping and
-     * the same numbers {@code ClearArea} prices its errands with, so the two kinds of party work
+     * the same numbers {@code FellTrees} prices its errands with, so the two kinds of party work
      * compete on one scale. Without it a gather posted across the world would outbid a clearing
      * underfoot, since the default item cost is zero.
      */
@@ -101,7 +101,7 @@ public final class Gather implements PartyProject {
     }
 
     /**
-     * One member waiting out a failed trip — the same pacing {@code ClearArea.SliceCooldown} gives
+     * One member waiting out a failed trip — the same pacing {@code FellTrees.SliceCooldown} gives
      * a slice, scoped to a member instead of a place because that is what a quantity project can
      * name.
      */
@@ -427,7 +427,7 @@ public final class Gather implements PartyProject {
      * <p><b>The closing line has to be written here.</b> {@code Board.closeFinished} drops a
      * finished project without a word and {@code PartyBoard.tick} holds no {@link BrainContext} at
      * all, so a report is the only moment a party project ever has a worker's context — the same
-     * reason {@code ClearArea} closes its box from inside a report.
+     * reason {@code FellTrees} closes its box from inside a report.
      */
     @Override
     public void completed(WorkItem item, BrainContext ctx) {
@@ -759,7 +759,7 @@ public final class Gather implements PartyProject {
      * whole of what a reload assigns, since nothing here mints anything new.
      *
      * <p>Empty when no build here registers that {@link ItemSpec} — a real failure for the store to
-     * report, never a row to drop quietly, exactly as an unknown {@code Clearing} id is. An unknown
+     * report, never a row to drop quietly, exactly as an unknown {@code Felling} id is. An unknown
      * {@link Split} id is NOT that: a policy is not identity, so it falls back to
      * {@link CarrySplit} and the party goes on fetching rather than losing the job to a removed
      * strategy.

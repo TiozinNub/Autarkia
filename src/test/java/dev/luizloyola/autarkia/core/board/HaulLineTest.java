@@ -36,7 +36,7 @@ class HaulLineTest {
         pack.set(3, ItemStack.of("minecraft:stick", 3, 64));
         pack.set(4, ItemStack.of("minecraft:leaf_litter", 2, 64));
 
-        assertTrue(new PutAwaySurplus(YARD, ClearArea.HAUL_LINE).satisfied(ctx),
+        assertTrue(new PutAwaySurplus(YARD, FellTrees.HAUL_LINE).satisfied(ctx),
                 "five kinds of sixteen items sent a settler to the yard after every tree");
     }
 
@@ -46,7 +46,7 @@ class HaulLineTest {
         for (int slot = 0; slot < 3; slot++) {
             ctx.percepts.inventory().set(slot, ItemStack.of("minecraft:oak_log", 64, 64));
         }
-        assertFalse(new PutAwaySurplus(YARD, ClearArea.HAUL_LINE).satisfied(ctx));
+        assertFalse(new PutAwaySurplus(YARD, FellTrees.HAUL_LINE).satisfied(ctx));
     }
 
     @Test
@@ -57,7 +57,7 @@ class HaulLineTest {
                 ctx.percepts.inventory().set(slot, ItemStack.of("minecraft:kind_" + slot, 1, 64));
             }
             if (new UnburdenInstinct().pressure(ctx) > 0.0) {
-                assertFalse(new PutAwaySurplus(YARD, ClearArea.HAUL_LINE).satisfied(ctx),
+                assertFalse(new PutAwaySurplus(YARD, FellTrees.HAUL_LINE).satisfied(ctx),
                         "a pack of odds and ends with " + empty + " slots free");
             }
         }

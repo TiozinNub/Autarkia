@@ -13,7 +13,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.Board;
-import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Explore;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.Gather;
@@ -60,58 +60,58 @@ public final class PartyBoardCodecs {
      *
      * <p>Decoding is lenient because the phase names changed on 2026-08-23: {@code SURVEYING},
      * {@code CLEARING} and {@code VERIFYING} all mean {@code WORKING} now — see
-     * {@link ClearArea#phaseByName}. Encoding still writes the real name.
+     * {@link FellTrees#phaseByName}. Encoding still writes the real name.
      */
-    public static final Codec<ClearArea.Phase> PHASE =
-            Codec.STRING.xmap(ClearArea::phaseByName, Enum::name);
+    public static final Codec<FellTrees.Phase> PHASE =
+            Codec.STRING.xmap(FellTrees::phaseByName, Enum::name);
 
-    public static final Codec<ClearArea.TargetState> TARGET_STATE =
-            Codec.STRING.xmap(ClearArea.TargetState::valueOf, Enum::name);
+    public static final Codec<FellTrees.TargetState> TARGET_STATE =
+            Codec.STRING.xmap(FellTrees.TargetState::valueOf, Enum::name);
 
-    public static final Codec<ClearArea.CellMask> CELL_MASK =
+    public static final Codec<FellTrees.CellMask> CELL_MASK =
             RecordCodecBuilder.create(cell -> cell.group(
-                    POS.fieldOf("at").forGetter(ClearArea.CellMask::corner),
-                    Codec.INT.fieldOf("mask").forGetter(ClearArea.CellMask::mask)
-            ).apply(cell, ClearArea.CellMask::new));
+                    POS.fieldOf("at").forGetter(FellTrees.CellMask::corner),
+                    Codec.INT.fieldOf("mask").forGetter(FellTrees.CellMask::mask)
+            ).apply(cell, FellTrees.CellMask::new));
 
-    public static final Codec<ClearArea.Target> TARGET =
+    public static final Codec<FellTrees.Target> TARGET =
             RecordCodecBuilder.create(target -> target.group(
-                    POS.fieldOf("at").forGetter(ClearArea.Target::anchor),
-                    TARGET_STATE.fieldOf("state").forGetter(ClearArea.Target::state),
-                    Codec.INT.optionalFieldOf("failures", 0).forGetter(ClearArea.Target::failures),
-                    Codec.LONG.optionalFieldOf("retry", 0L).forGetter(ClearArea.Target::retryAfter),
+                    POS.fieldOf("at").forGetter(FellTrees.Target::anchor),
+                    TARGET_STATE.fieldOf("state").forGetter(FellTrees.Target::state),
+                    Codec.INT.optionalFieldOf("failures", 0).forGetter(FellTrees.Target::failures),
+                    Codec.LONG.optionalFieldOf("retry", 0L).forGetter(FellTrees.Target::retryAfter),
                     UUIDUtil.CODEC.listOf().optionalFieldOf("failed_by", List.of())
                             .forGetter(t -> t.failedBy().stream().map(AgentId::value).toList())
-            ).apply(target, (at, state, failures, retry, failedBy) -> new ClearArea.Target(
+            ).apply(target, (at, state, failures, retry, failedBy) -> new FellTrees.Target(
                     at, state, failures, retry, failedBy.stream().map(AgentId::of).toList())));
 
-    public static final Codec<ClearArea.SliceCooldown> SLICE_COOLDOWN =
+    public static final Codec<FellTrees.SliceCooldown> SLICE_COOLDOWN =
             RecordCodecBuilder.create(cooldown -> cooldown.group(
-                    Codec.INT.fieldOf("slice").forGetter(ClearArea.SliceCooldown::slice),
-                    Codec.LONG.fieldOf("retry").forGetter(ClearArea.SliceCooldown::retryAfter)
-            ).apply(cooldown, ClearArea.SliceCooldown::new));
+                    Codec.INT.fieldOf("slice").forGetter(FellTrees.SliceCooldown::slice),
+                    Codec.LONG.fieldOf("retry").forGetter(FellTrees.SliceCooldown::retryAfter)
+            ).apply(cooldown, FellTrees.SliceCooldown::new));
 
     /**
-     * Everything a {@code clear_area} row carries beyond its kind — a {@link MapCodec} rather than
+     * Everything a {@code fell_trees} row carries beyond its kind — a {@link MapCodec} rather than
      * the plain {@link Codec} this used to be, because {@link #PROJECT} below needs its fields flat
      * in the same object as {@code type}, not nested under a sub-key.
      */
-    public static final MapCodec<ClearArea.State> CLEAR_AREA =
+    public static final MapCodec<FellTrees.State> FELL_TREES =
             RecordCodecBuilder.mapCodec(project -> project.group(
-                    Codec.STRING.fieldOf("clearing").forGetter(ClearArea.State::clearing),
-                    REGION.fieldOf("bounds").forGetter(ClearArea.State::bounds),
-                    Codec.DOUBLE.fieldOf("priority").forGetter(ClearArea.State::priority),
-                    PHASE.fieldOf("phase").forGetter(ClearArea.State::phase),
+                    Codec.STRING.fieldOf("clearing").forGetter(FellTrees.State::clearing),
+                    REGION.fieldOf("bounds").forGetter(FellTrees.State::bounds),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(FellTrees.State::priority),
+                    PHASE.fieldOf("phase").forGetter(FellTrees.State::phase),
                     SLICE_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
-                            .forGetter(ClearArea.State::sliceCooldowns),
+                            .forGetter(FellTrees.State::sliceCooldowns),
                     TARGET.listOf().optionalFieldOf("targets", List.of())
-                            .forGetter(ClearArea.State::targets),
+                            .forGetter(FellTrees.State::targets),
                     Codec.INT.optionalFieldOf("felled_since_reopen", 0)
-                            .forGetter(ClearArea.State::felledSinceReopen),
+                            .forGetter(FellTrees.State::felledSinceReopen),
                     // The frontier itself. A short read here is a box re-swept from scratch, which
                     // is what StoreGuard's row count is for.
                     CELL_MASK.listOf().optionalFieldOf("covered", List.of())
-                            .forGetter(ClearArea.State::covered),
+                            .forGetter(FellTrees.State::covered),
                     // Pre-2026-08-23 saves listed whole settled corners under this name. Read them
                     // as fully covered cells so a live world survives the change rather than losing
                     // its sweep; never written, since a fresh save always has "covered" instead.
@@ -122,17 +122,17 @@ public final class PartyBoardCodecs {
                     POS.optionalFieldOf("yard")
                             .forGetter(state -> java.util.Optional.ofNullable(state.yard())),
                     POS.listOf().optionalFieldOf("yard_chests", List.of())
-                            .forGetter(ClearArea.State::yardChests),
+                            .forGetter(FellTrees.State::yardChests),
                     // Who has worked the box, so the end of the job still knows whose loads to
                     // bring in after a restart. A save from before 2026-09-27 has no crew yet.
                     UUIDUtil.CODEC.listOf().optionalFieldOf("crew", List.of())
                             .forGetter(state -> state.crew().stream().map(AgentId::value).toList())
             ).apply(project, (clearing, bounds, priority, phase, cooldowns, targets, felled,
-                    covered, legacySwept, yard, chests, crew) -> new ClearArea.State(
+                    covered, legacySwept, yard, chests, crew) -> new FellTrees.State(
                             clearing, bounds, priority, phase, cooldowns, targets, felled,
                             covered.isEmpty()
                                     ? legacySwept.stream()
-                                            .map(at -> new ClearArea.CellMask(at, CoverageGrid.FULL))
+                                            .map(at -> new FellTrees.CellMask(at, CoverageGrid.FULL))
                                             .toList()
                                     : covered,
                             yard.orElse(null), chests, crew.stream().map(AgentId::of).toList())));
@@ -402,24 +402,25 @@ public final class PartyBoardCodecs {
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this
      * cannot be a bare {@code optionalFieldOf(name, default)} — that omits the field whenever the
-     * value already equals the default, and {@code "clear_area"} IS the default, which is exactly
+     * value already equals the default, and {@code "fell_trees"} IS the default, which is exactly
      * the row a second kind existing must be able to tell apart from. {@code Optional::of} on the
-     * way in means the field is written every time; absent still reads as {@code "clear_area"}, so
+     * way in means the field is written every time; absent still reads as {@code "fell_trees"}, so
      * a pre-dispatch save loads unchanged.
      */
     private static final MapCodec<String> PROJECT_TYPE = Codec.STRING.optionalFieldOf("type")
-            .xmap(found -> found.orElse("clear_area"), Optional::of);
+            .xmap(found -> found.orElse("fell_trees"), Optional::of);
 
     /**
      * Which flat shape a {@code type} value decodes as. A closed set the codec layer knows by hand,
      * like {@link #workKeyCodecFor} — not {@code PartyProjects}' runtime registry, which answers a
      * different question (how a state RESTORES, not how it reads off disk). An id neither branch
      * claims fails decode outright: the row drops and {@code StoreGuard}'s count catches it, a
-     * different accident from an unknown {@code Clearing} id inside a row that DID decode.
+     * different accident from an unknown {@code Felling} id inside a row that DID decode.
      */
     private static DataResult<? extends MapCodec<? extends ProjectState>> projectCodecFor(String type) {
         return switch (type) {
-            case "clear_area" -> DataResult.success(CLEAR_AREA);
+            // clear_area: what the project was called until 2026-10-01, in a save written before.
+            case "fell_trees", "clear_area" -> DataResult.success(FELL_TREES);
             case "gather" -> DataResult.success(GATHER);
             case "set_up" -> DataResult.success(SET_UP);
             case "explore" -> DataResult.success(EXPLORE);

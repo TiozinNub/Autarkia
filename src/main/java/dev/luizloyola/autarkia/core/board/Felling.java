@@ -10,17 +10,17 @@ import dev.luizloyola.anima.core.inv.Kit;
 
 /**
  * What it means to clear one kind of thing out of a box — the kind, the looking and the removing,
- * the three answers {@link ClearArea} refuses to know for itself.
+ * the three answers {@link FellTrees} refuses to know for itself.
  *
  * <p>Phases, slices, a ledger and refusals are not about trees. Trees are v1 because the chop is
  * the only root that exists, but Luiz's loop already says "any other trees <em>or blocks</em>", so
  * a clearing that grows to boulders finds its ledger already the right shape.
  */
-public interface Clearing {
+public interface Felling {
 
     /**
      * A stable name for this clearing, written into the party store and resolved through
-     * {@link Clearings} on load. Never derived from the class name — a rename would then silently
+     * {@link Fellings} on load. Never derived from the class name — a rename would then silently
      * orphan every saved project of that kind.
      */
     String id();
@@ -53,7 +53,7 @@ public interface Clearing {
      * near field alone.
      *
      * <p><b>Contract: this task must not SUCCEED until every cell of {@code slice} is known.</b>
-     * {@link ClearArea} takes its success as exactly that claim and banks the whole slice covered,
+     * {@link FellTrees} takes its success as exactly that claim and banks the whole slice covered,
      * which is what stops the slice ever being offered again. A task that succeeds early — on a
      * timeout, on reaching the far corner, on anything short of full coverage — closes the box with
      * whatever is still standing in the part nobody walked. Write off ground no walk can reach, as

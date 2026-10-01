@@ -72,7 +72,7 @@ import org.jspecify.annotations.Nullable;
  * <p>The seventh choreography — a compiled dance card and the 1600-line executor that walked it —
  * was deleted whole on 2026-09-06 for this redesign, the way the six before it went on
  * 2026-08-02. <b>Detection was not touched</b>: {@link TreeShape} still answers whose wood is whose.
- * The four callers that hand a tree to the axe — {@link ChopForLogs}, {@link TreeClearing}, the
+ * The four callers that hand a tree to the axe — {@link ChopForLogs}, {@link TreeFelling}, the
  * chop wand and {@code /autarkia brain chop} — keep their shape and their tests.
  */
 public final class FellTree implements PrimitiveTask {

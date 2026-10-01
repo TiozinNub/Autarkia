@@ -11,7 +11,7 @@ import java.util.Optional;
  * was posted with again.
  *
  * <p>Canonical per id, in registration order, like the other extension points here
- * ({@code Clearings}, {@code PartyProjects}, {@code PoiKind}, {@code Producers}, {@code Being.Kind}):
+ * ({@code Fellings}, {@code PartyProjects}, {@code PoiKind}, {@code Producers}, {@code Being.Kind}):
  * registered once at bootstrap beside the thing registered, and the instance handed back is the one
  * the store and the project both mean.
  */

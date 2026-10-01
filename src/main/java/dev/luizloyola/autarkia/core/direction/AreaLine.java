@@ -2,10 +2,10 @@ package dev.luizloyola.autarkia.core.direction;
 
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.territory.ChunkKey;
-import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
-import dev.luizloyola.autarkia.core.tree.TreeClearing;
+import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,7 +51,7 @@ public final class AreaLine implements DirectionLine {
 
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        if (!(project instanceof ClearArea clearing) || party.home().isEmpty()) {
+        if (!(project instanceof FellTrees clearing) || party.home().isEmpty()) {
             return false;
         }
         Home home = party.home().get();
@@ -62,13 +62,13 @@ public final class AreaLine implements DirectionLine {
     public PartyProject post(Direction direction, PartyView party, double priority) {
         Home home = party.home().orElseThrow();
         List<ChunkKey> left = home.uncleared(party.area());
-        return new ClearArea(TreeClearing.INSTANCE, home.region(left.get(0)), priority, home.yard());
+        return new FellTrees(TreeFelling.INSTANCE, home.region(left.get(0)), priority, home.yard());
     }
 
     @Override
     public void finished(Project project, Direction direction, PartyProgress progress) {
         Home home = progress.home();
-        if (home != null && project instanceof ClearArea clearing) {
+        if (home != null && project instanceof FellTrees clearing) {
             home.chunkOf(clearing.bounds()).ifPresent(chunk -> progress.home(home.withCleared(chunk)));
         }
     }

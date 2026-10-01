@@ -30,7 +30,7 @@ import java.util.List;
  * store, and an exception for everything else. Layer 3 reads what an agent holds and knows when they
  * report and writes what it decided; reaching further is a bug these exceptions name.
  *
- * <p>The knowledge store arrived with {@code ClearArea}: a surveyor's report is their memory of the
+ * <p>The knowledge store arrived with {@code FellTrees}: a surveyor's report is their memory of the
  * box at hand-over — one read of a member's mind, not the ambient telepathy the "board is not
  * omniscient" rule forbids.
  */

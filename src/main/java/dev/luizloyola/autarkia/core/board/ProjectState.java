@@ -11,7 +11,7 @@ package dev.luizloyola.autarkia.core.board;
  * what makes the dispatching codec and {@link PartyProjects} provably exhaustive rather than
  * hopefully so.
  */
-public sealed interface ProjectState permits ClearArea.State, Explore.State, Gather.State,
+public sealed interface ProjectState permits FellTrees.State, Explore.State, Gather.State,
         SetUp.State, Tend.State, Fire.State, Flatten.State {
 
     /** The id this kind is saved and dispatched by — what {@link PartyProjects#byId} looks up. */

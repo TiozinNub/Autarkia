@@ -123,7 +123,7 @@ public final class PartyBoard extends Board {
      * carries one without the other, and nothing later can sweep a commitment with no lease.
      *
      * @return how many saved projects could not be rebuilt — its {@link ProjectState#type()} names
-     *         nothing {@link PartyProjects} has, or (an unknown {@link Clearing} id, today) that
+     *         nothing {@link PartyProjects} has, or (an unknown {@link Felling} id, today) that
      *         type's own {@link ProjectType#restore} refused it — never silently zero. A row whose
      *         type the CODEC never recognised at all never reaches here: that failure is caught
      *         earlier, by {@code StoreGuard}'s row count, and is a different accident from this one.

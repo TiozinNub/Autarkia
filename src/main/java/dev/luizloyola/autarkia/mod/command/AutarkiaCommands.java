@@ -42,12 +42,12 @@ import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.CarrySplit;
-import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
-import dev.luizloyola.autarkia.core.tree.TreeClearing;
+import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.core.tree.FellTree;
 import dev.luizloyola.autarkia.core.tree.Pois;
@@ -289,15 +289,15 @@ public final class AutarkiaCommands {
                 // order, and how they learn what is standing there is the project's business, not
                 // the operator's.
                 .then(Commands.literal("post")
-                        .then(Commands.literal("clear")
+                        .then(Commands.literal("fell")
                                 .then(Commands.argument("from", BlockPosArgument.blockPos())
                                         .then(Commands.argument("to", BlockPosArgument.blockPos())
-                                                .executes(ctx -> boardPostClear(ctx,
+                                                .executes(ctx -> boardPostFell(ctx,
                                                         corner(ctx, "from"), corner(ctx, "to"),
-                                                        CLEAR_PRIORITY, null))
+                                                        FELL_PRIORITY, null))
                                                 .then(Commands.argument("priority",
                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                        .executes(ctx -> boardPostClear(ctx,
+                                                        .executes(ctx -> boardPostFell(ctx,
                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
                                                                 null)))
@@ -306,12 +306,12 @@ public final class AutarkiaCommands {
                                                 // will hold one, and the readout names where it went.
                                                 .then(Commands.literal("at")
                                                         .then(Commands.argument("yard", BlockPosArgument.blockPos())
-                                                                .executes(ctx -> boardPostClear(ctx,
+                                                                .executes(ctx -> boardPostFell(ctx,
                                                                         corner(ctx, "from"), corner(ctx, "to"),
-                                                                        CLEAR_PRIORITY, corner(ctx, "yard")))
+                                                                        FELL_PRIORITY, corner(ctx, "yard")))
                                                                 .then(Commands.argument("priority",
                                                                                 DoubleArgumentType.doubleArg(0.0, 1.0))
-                                                                        .executes(ctx -> boardPostClear(ctx,
+                                                                        .executes(ctx -> boardPostFell(ctx,
                                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
                                                                                 corner(ctx, "yard")))))))))
@@ -448,10 +448,10 @@ public final class AutarkiaCommands {
      * purpose: it should win at close range while still losing to a settler who is genuinely
      * hungry.
      */
-    private static final double CLEAR_PRIORITY = 0.5;
+    private static final double FELL_PRIORITY = 0.5;
 
     /** Default bid for a posted gather — the same scale {@link Gather#COST_RANGE} prices its
-     *  errands on (deliberately equal to {@link ClearArea}'s), so the two kinds of party work
+     *  errands on (deliberately equal to {@link FellTrees}'s), so the two kinds of party work
      *  compete fairly by default. */
     private static final double GATHER_PRIORITY = 0.5;
 
@@ -502,10 +502,10 @@ public final class AutarkiaCommands {
         }
         int rows = 0;
         for (dev.luizloyola.autarkia.core.board.Project project : board.get().projects()) {
-            if (!(project instanceof ClearArea area)) {
+            if (!(project instanceof FellTrees area)) {
                 continue;
             }
-            for (ClearArea.Target target : area.ledger().values()) {
+            for (FellTrees.Target target : area.ledger().values()) {
                 Pos at = target.anchor();
                 String line = "TARGET " + at.x() + " " + at.y() + " " + at.z() + " " + target.state();
                 Replies.send(source, () -> Component.literal(line).withStyle(ChatFormatting.GRAY));
@@ -562,13 +562,13 @@ public final class AutarkiaCommands {
      * <p>The box is three-dimensional as typed and the reply says so in blocks: a flat one reads
      * {@code ×1} and finds nothing, which has to be visible.
      */
-    /** One corner argument, loaded — the same read every leaf of {@code post clear} makes. */
+    /** One corner argument, loaded — the same read every leaf of {@code post fell} makes. */
     private static BlockPos corner(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx,
             String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         return BlockPosArgument.getLoadedBlockPos(ctx, name);
     }
 
-    private static int boardPostClear(CommandContext<CommandSourceStack> ctx, BlockPos from, BlockPos to,
+    private static int boardPostFell(CommandContext<CommandSourceStack> ctx, BlockPos from, BlockPos to,
                                       double priority, @Nullable BlockPos yard) {
         CommandSourceStack source = ctx.getSource();
         Person person = resolve(ctx);
@@ -589,7 +589,7 @@ public final class AutarkiaCommands {
         if (wide > CLEAR_MAX_SIDE || deep > CLEAR_MAX_SIDE) {
             // Refused rather than clamped: a box quietly shrunk is a box whose edges are not where
             // the operator put them, and every slice index after it names different ground.
-            Replies.fail(source, Component.translatable("autarkia.command.clear.too_big",
+            Replies.fail(source, Component.translatable("autarkia.command.fell.too_big",
                     wide, deep, CLEAR_MAX_SIDE));
             return 0;
         }
@@ -597,8 +597,8 @@ public final class AutarkiaCommands {
         PartyId party = PartyData.get(server).partyOf(who);
         PartyBoard board = PartyBoards.of(server, party);
         // Trees, because they are the only thing anything knows how to clear. The kind becomes an
-        // argument the day a second Clearing is registered; until then a choice of one is noise.
-        ClearArea project = new ClearArea(TreeClearing.INSTANCE, bounds, priority,
+        // argument the day a second Felling is registered; until then a choice of one is noise.
+        FellTrees project = new FellTrees(TreeFelling.INSTANCE, bounds, priority,
                 yard == null ? null : new Pos(yard.getX(), yard.getY(), yard.getZ()));
         int handle = board.post(project);
         PartyBoards.touch(server);
@@ -606,7 +606,7 @@ public final class AutarkiaCommands {
                 "posted #" + handle + " " + project.describe());
         // LOGGED: this creates durable, shared, persisted state that outlives everyone who works
         // it — the same reason cancel below is logged.
-        Replies.send(source, () -> Component.translatable("autarkia.command.clear.posted",
+        Replies.send(source, () -> Component.translatable("autarkia.command.fell.posted",
                         handle, person.getName(), project.describe(), project.slices().size())
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
@@ -639,7 +639,7 @@ public final class AutarkiaCommands {
         PartyId party = PartyData.get(server).partyOf(who);
         PartyBoard board = PartyBoards.of(server, party);
         Flatten project = Flatten.of(planned.plan(), planned.min().getX(), planned.min().getZ(),
-                planned.max().getX(), planned.max().getZ(), tolerance, CLEAR_PRIORITY);
+                planned.max().getX(), planned.max().getZ(), tolerance, FELL_PRIORITY);
         int handle = board.post(project);
         PartyBoards.touch(server);
         // LOGGED, as a clear is: durable, shared state that outlives everyone who works it.
@@ -655,7 +655,7 @@ public final class AutarkiaCommands {
     /**
      * Posts "get this many of this item into that yard" to the resolved Person's party board.
      *
-     * <p>{@code at} is mandatory, unlike {@code post clear}'s optional yard: a clearing's box knows
+     * <p>{@code at} is mandatory, unlike {@code post fell}'s optional yard: a clearing's box knows
      * it is done from its own ledger, but a gather's completion rule IS "the yard holds enough" —
      * with no yard there is nothing to ever check.
      *

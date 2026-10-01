@@ -231,7 +231,7 @@ public final class Flatten implements PartyProject {
             return;
         }
         cooldowns.put(layer.key, new Cooldown(layer.key.flavour(), layer.key.at(), failures,
-                now + ClearArea.cooldownAfter(failures)));
+                now + FellTrees.cooldownAfter(failures)));
     }
 
     private static boolean hasFill(Inventory pack, boolean onlyTops) {
@@ -446,7 +446,7 @@ public final class Flatten implements PartyProject {
             Pos here = ctx.percepts().position();
             double dx = key.at().x() + PATCH / 2.0 - here.x();
             double dz = key.at().z() + PATCH / 2.0 - here.z();
-            return ClearArea.COST_AT_RANGE * Math.min(1.0, Math.sqrt(dx * dx + dz * dz) / ClearArea.COST_RANGE);
+            return FellTrees.COST_AT_RANGE * Math.min(1.0, Math.sqrt(dx * dx + dz * dz) / FellTrees.COST_RANGE);
         }
 
         @Override

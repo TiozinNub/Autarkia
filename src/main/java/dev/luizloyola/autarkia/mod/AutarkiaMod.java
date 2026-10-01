@@ -36,7 +36,7 @@ import dev.luizloyola.autarkia.core.board.WorkDoings;
 import java.util.List;
 import java.util.Objects;
 import dev.luizloyola.autarkia.core.tree.Pois;
-import dev.luizloyola.autarkia.core.tree.TreeClearing;
+import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import dev.luizloyola.autarkia.core.tree.TreeRule;
 import dev.luizloyola.autarkia.core.tree.WaterRule;
 import dev.luizloyola.autarkia.core.patch.Landmarks;
@@ -170,14 +170,13 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.compat.forage.BerryPicking::pick);
         // And how Autarkia's own tasks write themselves down.
         dev.luizloyola.autarkia.mod.brain.AutarkiaTasks.install();
-        // What "clear this area" means when the things in it are trees. The project knows only
-        // phases, slices and a ledger; the kind, the looking and the felling all arrive through
-        // here, which leaves room for boulders later.
-        dev.luizloyola.autarkia.core.board.Clearings.register(TreeClearing.INSTANCE);
-        // And what a saved row means when it says "clear_area" — the other half of teaching a
-        // party's board this kind of project, one level up from the Clearing itself.
+        // What felling means when the things in a box are trees. The project knows only phases,
+        // slices and a ledger; the kind, the looking and the felling all arrive through here.
+        dev.luizloyola.autarkia.core.board.Fellings.register(TreeFelling.INSTANCE);
+        // And what a saved row means when it says "fell_trees" — the other half of teaching a
+        // party's board this kind of project, one level up from the Felling itself.
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
-                dev.luizloyola.autarkia.core.board.ClearArea.TYPE);
+                dev.luizloyola.autarkia.core.board.FellTrees.TYPE);
         // The second kind: go and get this much of this. How much of it one member takes on a trip
         // is its own registered policy, so a richer split can be posted later without touching
         // either the project or the store.

@@ -9,11 +9,11 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
-import dev.luizloyola.autarkia.core.board.Clearings;
+import dev.luizloyola.autarkia.core.board.Fellings;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SetUp;
-import dev.luizloyola.autarkia.core.tree.TreeClearing;
+import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -94,7 +94,7 @@ class BaseAndStorageTest {
         Lines.register(WoodLine.INSTANCE);
         Lines.register(BaseLine.INSTANCE);
         Lines.register(StorageLine.INSTANCE);
-        Clearings.register(TreeClearing.INSTANCE);
+        Fellings.register(TreeFelling.INSTANCE);
         Node wood = new Node(WOOD, NodeKind.CORE, List.of(), true, Requirements.NONE,
                 List.of(new Direction(new DirectionId(WOOD, "base"), 0, null),
                         new Direction(new DirectionId(WOOD, "area"), 0, null),
@@ -108,7 +108,7 @@ class BaseAndStorageTest {
     @AfterEach
     void clear() {
         Lines.clear();
-        Clearings.clear();
+        Fellings.clear();
     }
 
     private Evolution.Outcome beat() {

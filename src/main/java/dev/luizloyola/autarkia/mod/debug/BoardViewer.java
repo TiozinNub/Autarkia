@@ -10,7 +10,7 @@ import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.debug.CellOverlays;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.net.CellOverlayPayload;
-import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
@@ -155,7 +155,7 @@ public final class BoardViewer {
         return nearby(server, player).size();
     }
 
-    /** Every {@link ClearArea} or {@link Gather} near enough to draw — the only two project kinds
+    /** Every {@link FellTrees} or {@link Gather} near enough to draw — the only two project kinds
      *  this view knows how to paint. */
     private static List<Project> nearby(MinecraftServer server, ServerPlayer player) {
         List<Project> out = new ArrayList<>();
@@ -163,7 +163,7 @@ public final class BoardViewer {
                 player.blockPosition().getZ());
         for (PartyBoard board : PartyBoards.all(server)) {
             for (Project project : board.projects()) {
-                if (project instanceof ClearArea area && withinRange(area.bounds(), here)) {
+                if (project instanceof FellTrees area && withinRange(area.bounds(), here)) {
                     out.add(area);
                 } else if (project instanceof Gather gather && withinRange(gather.yard(), here)) {
                     out.add(gather);
@@ -195,7 +195,7 @@ public final class BoardViewer {
         long now = level.getGameTime();
         Frame frame = new Frame(level);
         for (Project project : projects) {
-            if (project instanceof ClearArea area) {
+            if (project instanceof FellTrees area) {
                 PartyBoard board = boardOf(server, area);
                 Map<WorkKey, AgentId> holds =
                         board == null ? Map.of() : board.holdsOn(area, now);
@@ -234,7 +234,7 @@ public final class BoardViewer {
     }
 
     /** The coarse explored answer: one outline per slice, coloured by what the project knows. */
-    private static void paintSlices(Frame frame, ClearArea project, Map<WorkKey, AgentId> holds,
+    private static void paintSlices(Frame frame, FellTrees project, Map<WorkKey, AgentId> holds,
                                     long now) {
         List<Region> slices = project.slices();
         for (int index = 0; index < slices.size(); index++) {
@@ -256,9 +256,9 @@ public final class BoardViewer {
     }
 
     /** Every ledger row, at its anchor, in the colour of what the project decided about it. */
-    private static void paintTargets(Frame frame, ClearArea project, Map<WorkKey, AgentId> holds,
+    private static void paintTargets(Frame frame, FellTrees project, Map<WorkKey, AgentId> holds,
                                      long now) {
-        for (ClearArea.Target target : project.ledger().values()) {
+        for (FellTrees.Target target : project.ledger().values()) {
             Pos at = target.anchor();
             switch (target.state()) {
                 case CLEARED -> frame.cell(at, TARGET_CLEARED, 0, TARGET_WIDTH);
@@ -284,7 +284,7 @@ public final class BoardViewer {
      * confidence in the slice they are on, look credit and all, which the project's grid does not
      * hold. Read off whatever primitive their executor is on, so absent when nobody is surveying.
      */
-    private static void paintSweeps(Frame frame, MinecraftServer server, ClearArea project) {
+    private static void paintSweeps(Frame frame, MinecraftServer server, FellTrees project) {
         for (AgentBody body : AgentBodies.loaded(server)) {
             body.brain().executor().currentPrimitive()
                     .filter(SurveyArea.class::isInstance)
@@ -302,7 +302,7 @@ public final class BoardViewer {
      * <p>Worth drawing because it is the one part of the plan that is an ABSENCE — a slice nobody
      * is offered because it is covered looks identical to a slice nobody has got to yet.
      */
-    private static void paintCovered(Frame frame, ClearArea project) {
+    private static void paintCovered(Frame frame, FellTrees project) {
         CoverageGrid covered = project.covered();
         for (int cell = 0; cell < covered.cells(); cell++) {
             if (!covered.settled(cell)) {

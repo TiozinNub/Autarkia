@@ -10,26 +10,26 @@ import dev.luizloyola.anima.core.brain.task.SurveyArea;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.Kit;
-import dev.luizloyola.autarkia.core.board.Clearing;
+import dev.luizloyola.autarkia.core.board.Felling;
 import dev.luizloyola.autarkia.core.board.Stock;
 
 /**
- * Clearing a box of its trees — the first {@link Clearing}.
+ * Felling a box of its trees — the first {@link Felling}.
  *
  * <p>Removing is {@link FellTree}: whatever fells a tree takes its own site claim at the anchor,
- * so an item lease and a site claim on a clear-area target coincide without either keyspace
+ * so an item lease and a site claim on a felling target coincide without either keyspace
  * knowing about the other.
  *
  * <p>Looking is {@link SurveyArea}, which WALKS its slice: a standing {@code Survey} reports
  * only coarse-grid glimpses, while the per-tree anchors a ledger needs are grown by the near
  * field alone. Rays rule out open ground cheaply, feet find the trees.
  */
-public final class TreeClearing implements Clearing {
+public final class TreeFelling implements Felling {
 
     /** The one instance — registered at bootstrap and meant by the store, command and project. */
-    public static final TreeClearing INSTANCE = new TreeClearing();
+    public static final TreeFelling INSTANCE = new TreeFelling();
 
-    private TreeClearing() {
+    private TreeFelling() {
     }
 
     /**

@@ -14,7 +14,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
-import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.SetUp;
@@ -45,22 +45,22 @@ class PartyBoardCodecsTest {
         return PartyBoardCodecs.ROW.parse(JsonOps.INSTANCE, encoded).getOrThrow();
     }
 
-    private static ClearArea.State state(ClearArea.Phase phase, List<ClearArea.Target> targets) {
-        return new ClearArea.State("trees",
+    private static FellTrees.State state(FellTrees.Phase phase, List<FellTrees.Target> targets) {
+        return new FellTrees.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, phase, List.of(new ClearArea.SliceCooldown(1, 12_345L)),
+                0.5, phase, List.of(new FellTrees.SliceCooldown(1, 12_345L)),
                 targets, 7,
-                List.of(new ClearArea.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
-                        new ClearArea.CellMask(new Pos(8, 60, 0), 0x00FF)),
+                List.of(new FellTrees.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
+                        new FellTrees.CellMask(new Pos(8, 60, 0), 0x00FF)),
                 new Pos(40, 63, 40), List.of(new Pos(41, 63, 40)), List.of(CREW));
     }
 
     @Test
     void aRowNamesTheKindOfProjectItHolds() {
-        PartyBoard.Row row = new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of());
+        PartyBoard.Row row = new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of());
         var encoded = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow();
 
-        assertEquals("clear_area",
+        assertEquals("fell_trees",
                 encoded.getAsJsonObject().getAsJsonObject("project").get("type").getAsString(),
                 "a row that does not name its kind cannot be read back once a second kind exists");
         assertEquals(row, PartyBoardCodecs.ROW.parse(JsonOps.INSTANCE, encoded).getOrThrow());
@@ -68,10 +68,10 @@ class PartyBoardCodecsTest {
 
     @Test
     void aProjectComesBackWithItsBoxItsPhaseAndItsLedger() {
-        ClearArea.State before = state(ClearArea.Phase.WORKING, List.of(
-                new ClearArea.Target(new Pos(3, 61, 4), ClearArea.TargetState.OPEN, 0, 0L, List.of()),
-                new ClearArea.Target(new Pos(9, 62, 9), ClearArea.TargetState.CLEARED, 0, 0L, List.of()),
-                new ClearArea.Target(new Pos(11, 63, 2), ClearArea.TargetState.REFUSED, 3, 0L,
+        FellTrees.State before = state(FellTrees.Phase.WORKING, List.of(
+                new FellTrees.Target(new Pos(3, 61, 4), FellTrees.TargetState.OPEN, 0, 0L, List.of()),
+                new FellTrees.Target(new Pos(9, 62, 9), FellTrees.TargetState.CLEARED, 0, 0L, List.of()),
+                new FellTrees.Target(new Pos(11, 63, 2), FellTrees.TargetState.REFUSED, 3, 0L,
                         List.of(AgentId.random(), AgentId.random(), AgentId.random()))));
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
@@ -80,27 +80,27 @@ class PartyBoardCodecsTest {
 
     @Test
     void aBoxWithNoYardRoundTripsWithoutOne() {
-        ClearArea.State plain = new ClearArea.State("trees",
+        FellTrees.State plain = new FellTrees.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, ClearArea.Phase.WORKING, List.of(), List.of(), 0, List.of(), null, List.of(),
+                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), null, List.of(),
                 List.of());
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(plain, List.of()));
 
         assertEquals(plain, after.project());
-        assertNull(((ClearArea.State) after.project()).yard(),
+        assertNull(((FellTrees.State) after.project()).yard(),
                 "no destination, no migration, no surprise chest");
     }
 
     @Test
     void aRefusalKeepsItsCountAcrossTheFile() {
         // The count is what decides whether a reloaded target gets three more tries or none.
-        ClearArea.Target stubborn =
-                new ClearArea.Target(new Pos(1, 2, 3), ClearArea.TargetState.OPEN, 2, 900L,
+        FellTrees.Target stubborn =
+                new FellTrees.Target(new Pos(1, 2, 3), FellTrees.TargetState.OPEN, 2, 900L,
                         List.of(AgentId.random(), AgentId.random()));
         PartyBoard.Row after = roundTrip(
-                new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of(stubborn)), List.of()));
-        assertEquals(stubborn, ((ClearArea.State) after.project()).targets().get(0));
+                new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of(stubborn)), List.of()));
+        assertEquals(stubborn, ((FellTrees.State) after.project()).targets().get(0));
     }
 
     @Test
@@ -112,7 +112,7 @@ class PartyBoardCodecsTest {
                 new PartyBoard.Hold(new WorkKey.AtPlace(WorkKey.CLEAR, new Pos(3, 61, 4)), bob));
 
         PartyBoard.Row after =
-                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), holds));
+                roundTrip(new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), holds));
         assertEquals(holds, after.holds());
     }
 
@@ -121,10 +121,10 @@ class PartyBoardCodecsTest {
         // The masks, not just which cells were touched: a partial cell read back as a full one is
         // a box that closes over ground nobody covered, which is the one failure this must not have.
         PartyBoard.Row after =
-                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
-        ClearArea.State project = (ClearArea.State) after.project();
-        assertEquals(List.of(new ClearArea.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
-                new ClearArea.CellMask(new Pos(8, 60, 0), 0x00FF)), project.covered());
+                roundTrip(new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of()));
+        FellTrees.State project = (FellTrees.State) after.project();
+        assertEquals(List.of(new FellTrees.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
+                new FellTrees.CellMask(new Pos(8, 60, 0), 0x00FF)), project.covered());
         assertEquals(1, project.sliceCooldowns().get(0).slice());
         assertEquals(12_345L, project.sliceCooldowns().get(0).retryAfter());
     }
@@ -133,11 +133,11 @@ class PartyBoardCodecsTest {
     void everyPhaseAndEveryTargetStateSurvivesARename() {
         // By NAME, not ordinal: reordering either enum must not silently move saved rows to a
         // different meaning. This fails the day somebody switches to ordinals for compactness.
-        for (ClearArea.Phase phase : ClearArea.Phase.values()) {
+        for (FellTrees.Phase phase : FellTrees.Phase.values()) {
             var encoded = PartyBoardCodecs.PHASE.encodeStart(JsonOps.INSTANCE, phase).getOrThrow();
             assertEquals("\"" + phase.name() + "\"", encoded.toString());
         }
-        for (ClearArea.TargetState state : ClearArea.TargetState.values()) {
+        for (FellTrees.TargetState state : FellTrees.TargetState.values()) {
             var encoded =
                     PartyBoardCodecs.TARGET_STATE.encodeStart(JsonOps.INSTANCE, state).getOrThrow();
             assertEquals("\"" + state.name() + "\"", encoded.toString());
@@ -147,9 +147,9 @@ class PartyBoardCodecsTest {
     @Test
     void theCrewSurvivesTheFile() {
         PartyBoard.Row after = roundTrip(
-                new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
+                new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of()));
 
-        assertEquals(List.of(CREW), ((ClearArea.State) after.project()).crew());
+        assertEquals(List.of(CREW), ((FellTrees.State) after.project()).crew());
     }
 
     @Test
@@ -157,8 +157,8 @@ class PartyBoardCodecsTest {
         // A reload that forgot it would either strand refusals that had earned another go, or hand
         // out a retry no felling had paid for.
         PartyBoard.Row after =
-                roundTrip(new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of()), List.of()));
-        assertEquals(7, ((ClearArea.State) after.project()).felledSinceReopen());
+                roundTrip(new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of()));
+        assertEquals(7, ((FellTrees.State) after.project()).felledSinceReopen());
     }
 
     @Test
@@ -168,12 +168,12 @@ class PartyBoardCodecsTest {
         // the same tree over and over.
         AgentId alice = AgentId.random();
         AgentId bob = AgentId.random();
-        ClearArea.Target tried = new ClearArea.Target(new Pos(4, 5, 6),
-                ClearArea.TargetState.OPEN, 2, 0L, List.of(alice, bob));
+        FellTrees.Target tried = new FellTrees.Target(new Pos(4, 5, 6),
+                FellTrees.TargetState.OPEN, 2, 0L, List.of(alice, bob));
         PartyBoard.Row after = roundTrip(
-                new PartyBoard.Row(state(ClearArea.Phase.WORKING, List.of(tried)), List.of()));
+                new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of(tried)), List.of()));
         assertEquals(List.of(alice, bob),
-                ((ClearArea.State) after.project()).targets().get(0).failedBy());
+                ((FellTrees.State) after.project()).targets().get(0).failedBy());
     }
 
     @Test
@@ -187,10 +187,10 @@ class PartyBoardCodecsTest {
                 new Region(new Pos(0, 0, 0), new Pos(1, 1, 1))).getOrThrow());
         minimal.addProperty("priority", 0.5);
         minimal.addProperty("phase", "WORKING");
-        // CLEAR_AREA, not the dispatching PROJECT: this is testing clear_area's OWN field defaults,
+        // FELL_TREES, not the dispatching PROJECT: this is testing fell_trees's OWN field defaults,
         // a level below which kind of row it is.
-        ClearArea.State read =
-                PartyBoardCodecs.CLEAR_AREA.codec().parse(JsonOps.INSTANCE, minimal).getOrThrow();
+        FellTrees.State read =
+                PartyBoardCodecs.FELL_TREES.codec().parse(JsonOps.INSTANCE, minimal).getOrThrow();
         assertTrue(read.covered().isEmpty());
         assertTrue(read.targets().isEmpty());
         assertTrue(read.sliceCooldowns().isEmpty());
@@ -210,16 +210,16 @@ class PartyBoardCodecsTest {
         legacy.add("swept", PartyBoardCodecs.POS.listOf().encodeStart(JsonOps.INSTANCE,
                 List.of(new Pos(0, 60, 0), new Pos(8, 60, 8))).getOrThrow());
 
-        ClearArea.State read =
-                PartyBoardCodecs.CLEAR_AREA.codec().parse(JsonOps.INSTANCE, legacy).getOrThrow();
+        FellTrees.State read =
+                PartyBoardCodecs.FELL_TREES.codec().parse(JsonOps.INSTANCE, legacy).getOrThrow();
 
-        assertEquals(ClearArea.Phase.WORKING, read.phase(), "a pass name is not a state any more");
+        assertEquals(FellTrees.Phase.WORKING, read.phase(), "a pass name is not a state any more");
         assertEquals(2, read.covered().size(), "a short read here is a box re-swept from scratch");
         assertTrue(read.covered().stream().allMatch(cell -> cell.mask() == CoverageGrid.FULL));
     }
 
     @Test
-    void aRowWrittenBeforeTypesExistedStillReadsAsClearArea() {
+    void aRowWrittenBeforeTypesExistedStillReadsAsFellTrees() {
         // Absent "type" must default exactly as absent "kind" does for WorkKey: every row saved
         // before a second project kind existed lacks the field, and it was always a clearing.
         JsonObject legacy = new JsonObject();
@@ -231,8 +231,17 @@ class PartyBoardCodecsTest {
 
         ProjectState read = PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, legacy).getOrThrow();
 
-        assertEquals("clear_area", read.type());
-        assertTrue(read instanceof ClearArea.State, "no type field predates a second kind existing");
+        assertEquals("fell_trees", read.type());
+        assertTrue(read instanceof FellTrees.State, "no type field predates a second kind existing");
+    }
+
+    @Test
+    void aRowSavedUnderTheProjectsOldNameStillReads() {
+        PartyBoard.Row row = new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of());
+        var encoded = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow();
+        encoded.getAsJsonObject().getAsJsonObject("project").addProperty("type", "clear_area");
+        assertEquals(row, PartyBoardCodecs.ROW.parse(JsonOps.INSTANCE, encoded).getOrThrow(),
+                "a board saved before 2026-10-01 keeps its felling");
     }
 
     @Test

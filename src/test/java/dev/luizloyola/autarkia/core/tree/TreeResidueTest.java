@@ -33,7 +33,7 @@ class TreeResidueTest {
             probe.set(16, y, 16, BlockKind.LOG);
         }
 
-        List<Pos> residue = TreeClearing.INSTANCE.residue(box(), probe);
+        List<Pos> residue = TreeFelling.INSTANCE.residue(box(), probe);
 
         assertEquals(List.of(new Pos(16, GROUND + 1, 16)), residue,
                 "the stub is named at its lowest log, and the oak is left to the ordinary path "
@@ -47,14 +47,14 @@ class TreeResidueTest {
             probe.set(4, y, 4, BlockKind.LOG);
         }
 
-        assertEquals(List.of(new Pos(4, GROUND + 1, 4)), TreeClearing.INSTANCE.residue(box(), probe),
+        assertEquals(List.of(new Pos(4, GROUND + 1, 4)), TreeFelling.INSTANCE.residue(box(), probe),
                 "matching TreeRule's own lowest-base-cell anchor, so a stub and a tree name the "
                         + "same kind of place");
     }
 
     @Test
     void barePlainsYieldNothing() {
-        assertTrue(TreeClearing.INSTANCE.residue(box(), new FakeProbe()).isEmpty(),
+        assertTrue(TreeFelling.INSTANCE.residue(box(), new FakeProbe()).isEmpty(),
                 "the scan must cost an empty box nothing but its reads");
     }
 
@@ -65,7 +65,7 @@ class TreeResidueTest {
             probe.set(100, y, 100, BlockKind.LOG);
         }
 
-        assertTrue(TreeClearing.INSTANCE.residue(box(), probe).isEmpty(),
+        assertTrue(TreeFelling.INSTANCE.residue(box(), probe).isEmpty(),
                 "the bounds are the safeguard — what an operator drew is the whole licence");
     }
 }

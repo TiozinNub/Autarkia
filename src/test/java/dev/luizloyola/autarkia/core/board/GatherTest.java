@@ -38,7 +38,7 @@ import org.junit.jupiter.api.Test;
  * The ledger, the slate and the two edges — everything that decides whether a party's quota gets
  * filled, proven without a world, a body or a block of perception.
  *
- * <p>Blind, like {@code ClearAreaTest}: a deposit here is a member handing back what they
+ * <p>Blind, like {@code FellTreesTest}: a deposit here is a member handing back what they
  * "remember" of a chest they just opened. That is exactly what a real one is — {@code PutItems}
  * writes the sighting as it moves the stacks, and the project reads it off their memory.
  *

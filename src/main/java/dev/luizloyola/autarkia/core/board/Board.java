@@ -487,7 +487,7 @@ public class Board {
 
     /**
      * Ticks a hold survives past its last heartbeat. Shared with {@code SiteClaims} in v1
-     * (decision: Luiz — one semantics, and for the clear-area project the two holds coincide
+     * (decision: Luiz — one semantics, and for the felling project the two holds coincide
      * anyway), so the one knob tunes both.
      */
     public static int ttlTicks() {
