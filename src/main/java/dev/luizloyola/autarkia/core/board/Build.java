@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.PlaceBlock;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemCall;
@@ -27,24 +28,25 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 /**
- * Put a building up in its proved order (builder spec, *Work items*, rung 2). The order is cut into
- * pieces — a run of steps in one section — and one piece is offered at a time, so the proof's
- * order holds; two builders on one house is the next rung. A piece's kit is the blocks it places,
- * from the store or made.
+ * Put a building up in its proved order (builder spec, *Work items*). The order comes cut into
+ * waves of pieces ({@link dev.luizloyola.autarkia.core.builder.BuildOrder.Placed}); every piece of
+ * the first wave not yet up is on offer at once, one builder each, and the next wave opens when it
+ * is done (builders-together spec, rulings 26–28). A piece's kit is the blocks it places, from the
+ * store or made.
  *
  * <p>What stands is read off the world by the builder who reports, never assumed from a success: a
  * step is done when its cell holds its block.
  */
 public final class Build implements PartyProject {
 
-    /** The most steps one trip carries. */
-    static final int PIECE = 24;
-
     /** Fruitless tries at one step before it is handed back. */
     static final int REFUSE_AFTER = 3;
 
     /** How long a piece waits after its builder came back without what it needed. */
     static final long MATERIAL_WAIT = 1200;
+
+    /** How long a piece waits for a body to step out of where it goes next. */
+    static final long IN_THE_WAY_WAIT = 100;
 
     private final UUID structure;
     private final String name;
@@ -54,12 +56,15 @@ public final class Build implements PartyProject {
     private final int[] failures;
     private final Set<Integer> refused = new TreeSet<>();
     private final Set<AgentId> builders = new LinkedHashSet<>();
-    private long retryAfter;
+    /** A piece paced after a fruitless trip, by piece number: when it may be offered again. */
+    private final Map<Integer, Long> retryAfter = new LinkedHashMap<>();
     private long materialWaitUntil;
     private String shortOf = "";
     private long lastTick;
 
-    private PieceItem open;
+    /** The pieces on offer or held, by piece number. */
+    private final Map<Integer, PieceItem> open = new LinkedHashMap<>();
+    private final Set<Integer> held = new TreeSet<>();
 
     public Build(UUID structure, String name, List<Laying> order, double priority) {
         this.structure = Objects.requireNonNull(structure, "structure");
@@ -124,10 +129,16 @@ public final class Build implements PartyProject {
 
     @Override
     public List<WorkItem> open() {
-        if (open == null || retryAfter > lastTick || materialWaitUntil > lastTick) {
+        if (materialWaitUntil > lastTick) {
             return List.of();
         }
-        return List.of(open);
+        List<WorkItem> items = new ArrayList<>();
+        open.forEach((piece, item) -> {
+            if (retryAfter.getOrDefault(piece, Long.MIN_VALUE) <= lastTick) {
+                items.add(item);
+            }
+        });
+        return items;
     }
 
     @Override
@@ -150,31 +161,49 @@ public final class Build implements PartyProject {
         refresh();
     }
 
-    /** The next piece: from the first step still to place, a run in its section. */
+    /**
+     * The pieces of the open wave — the first with a step still to place — each its steps still to
+     * place. A held piece is never withdrawn: the arbiter claims what it was offered a tick ago.
+     */
     private void refresh() {
         int first = next();
-        if (first < 0) {
-            open = null;
-            return;
-        }
-        List<Integer> steps = new ArrayList<>();
-        for (int i = first; i < order.size() && steps.size() < PIECE; i++) {
-            if (order.get(i).section() != order.get(first).section()) {
-                break;
-            }
-            if (!done[i] && !refused.contains(i)) {
-                steps.add(i);
+        Map<Integer, List<Integer>> pieces = new LinkedHashMap<>();
+        if (first >= 0) {
+            int wave = order.get(first).wave();
+            for (int i = first; i < order.size() && order.get(i).wave() == wave; i++) {
+                if (!done[i] && !refused.contains(i)) {
+                    pieces.computeIfAbsent(order.get(i).piece(), p -> new ArrayList<>()).add(i);
+                }
             }
         }
-        if (open == null || !open.steps.equals(steps)) {
-            open = new PieceItem(new WorkKey.AtPlace(WorkKey.BUILD, order.get(first).cell()), steps);
+        Map<Integer, PieceItem> next = new LinkedHashMap<>();
+        pieces.forEach((piece, steps) -> {
+            PieceItem existing = open.get(piece);
+            next.put(piece, existing != null && existing.steps.equals(steps) ? existing
+                    : new PieceItem(piece, new WorkKey.AtPlace(WorkKey.BUILD, order.get(steps.get(0)).cell()), steps));
+        });
+        for (int piece : held) {
+            PieceItem item = open.get(piece);
+            if (item != null) {
+                next.putIfAbsent(piece, item);
+            }
         }
+        open.clear();
+        open.putAll(next);
     }
 
     @Override
     public void claimed(WorkItem item, AgentId who) {
-        if (item == open) {
+        if (item instanceof PieceItem piece && open.get(piece.piece) == piece) {
             builders.add(who);
+            held.add(piece.piece);
+        }
+    }
+
+    @Override
+    public void lapsed(WorkItem item) {
+        if (item instanceof PieceItem piece) {
+            held.remove(piece.piece);
         }
     }
 
@@ -192,6 +221,7 @@ public final class Build implements PartyProject {
         if (!(item instanceof PieceItem piece)) {
             return;
         }
+        held.remove(piece.piece);
         long now = ctx.percepts().time();
         BlockProbe probe = ctx.percepts().blocks();
         int moved = 0;
@@ -203,7 +233,7 @@ public final class Build implements PartyProject {
         }
         if (moved > 0) {
             shortOf = "";
-            retryAfter = 0;
+            retryAfter.remove(piece.piece);
         } else {
             fruitless(piece, ctx, now);
         }
@@ -215,7 +245,9 @@ public final class Build implements PartyProject {
 
     /**
      * A trip that placed nothing. Short of the blocks is waiting, said in the builder's journal
-     * (ruling 24); otherwise it counts against the first step, which is handed back at the last.
+     * (ruling 24); a body standing where the next step goes is somebody's way, not a failure, and
+     * the piece is tried again shortly. Otherwise it counts against the first step still to place,
+     * which is handed back at the last.
      */
     private void fruitless(PieceItem piece, BrainContext ctx, long now) {
         Map<String, Integer> missing = piece.missing(ctx.percepts().inventory());
@@ -225,7 +257,11 @@ public final class Build implements PartyProject {
             ctx.journal().record(Category.PROJECT, describe(), "short of " + shortOf);
             return;
         }
-        int first = piece.steps.get(0);
+        int first = piece.steps.stream().filter(i -> !done[i]).findFirst().orElse(piece.steps.get(0));
+        if (PlaceBlock.occupied(ctx, order.get(first).cell())) {
+            retryAfter.put(piece.piece, now + IN_THE_WAY_WAIT);
+            return;
+        }
         failures[first]++;
         if (failures[first] >= REFUSE_AFTER) {
             refused.add(first);
@@ -233,7 +269,7 @@ public final class Build implements PartyProject {
                     + ": it would not go in");
             return;
         }
-        retryAfter = now + FellTrees.cooldownAfter(failures[first]);
+        retryAfter.put(piece.piece, now + FellTrees.cooldownAfter(failures[first]));
     }
 
     private static String words(Map<String, Integer> counts) {
@@ -246,12 +282,18 @@ public final class Build implements PartyProject {
 
     @Override
     public Optional<WorkKey> keyOf(WorkItem item) {
-        return item instanceof PieceItem piece && piece == open ? Optional.of(piece.key) : Optional.empty();
+        return item instanceof PieceItem piece && open.get(piece.piece) == piece ? Optional.of(piece.key)
+                : Optional.empty();
     }
 
     @Override
     public Optional<WorkItem> itemFor(WorkKey key) {
-        return open != null && open.key.equals(key) ? Optional.of(open) : Optional.empty();
+        for (PieceItem item : open.values()) {
+            if (item.key.equals(key)) {
+                return Optional.of(item);
+            }
+        }
+        return Optional.empty();
     }
 
     // ── the readout ──────────────────────────────────────────────────────────────────────────
@@ -273,10 +315,12 @@ public final class Build implements PartyProject {
     /** A run of steps for one builder, and the blocks they take. */
     private final class PieceItem implements WorkItem {
 
+        private final int piece;
         private final WorkKey.AtPlace key;
         private final List<Integer> steps;
 
-        private PieceItem(WorkKey.AtPlace key, List<Integer> steps) {
+        private PieceItem(int piece, WorkKey.AtPlace key, List<Integer> steps) {
+            this.piece = piece;
             this.key = key;
             this.steps = List.copyOf(steps);
         }
@@ -363,13 +407,17 @@ public final class Build implements PartyProject {
 
     /** Everything a build carries between ticks: the world steps are the plan's copy. */
     public record State(UUID structure, String name, double priority, List<Laying> order, List<Integer> done,
-                        List<Integer> failures, List<Integer> refused, List<AgentId> builders, long retryAfter,
-                        long materialWaitUntil, String shortOf) implements ProjectState {
+                        List<Integer> failures, List<Integer> refused, List<AgentId> builders,
+                        List<Cooldown> cooldowns, long materialWaitUntil, String shortOf) implements ProjectState {
 
         @Override
         public String type() {
             return "build";
         }
+    }
+
+    /** A piece paced after a fruitless trip, and when it may be offered again. */
+    public record Cooldown(int piece, long until) {
     }
 
     @Override
@@ -382,8 +430,10 @@ public final class Build implements PartyProject {
             }
             tries.add(failures[i]);
         }
+        List<Cooldown> cooldowns = new ArrayList<>();
+        retryAfter.forEach((piece, until) -> cooldowns.add(new Cooldown(piece, until)));
         return new State(structure, name, priority, order, placed, tries, List.copyOf(refused),
-                List.copyOf(builders), retryAfter, materialWaitUntil, shortOf);
+                List.copyOf(builders), cooldowns, materialWaitUntil, shortOf);
     }
 
     public static Build restore(State state, long now) {
@@ -398,7 +448,9 @@ public final class Build implements PartyProject {
         }
         project.refused.addAll(state.refused());
         project.builders.addAll(state.builders());
-        project.retryAfter = state.retryAfter();
+        for (Cooldown cooldown : state.cooldowns()) {
+            project.retryAfter.put(cooldown.piece(), cooldown.until());
+        }
         project.materialWaitUntil = state.materialWaitUntil();
         project.shortOf = state.shortOf();
         project.lastTick = now;

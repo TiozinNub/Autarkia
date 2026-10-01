@@ -428,11 +428,19 @@ public final class PartyBoardCodecs {
                     POS.fieldOf("stand").forGetter(dev.luizloyola.autarkia.core.builder.Laying::stand),
                     Codec.INT.optionalFieldOf("count", 1).forGetter(dev.luizloyola.autarkia.core.builder.Laying::count),
                     LAYING_USE.listOf().optionalFieldOf("uses", List.of())
-                            .forGetter(dev.luizloyola.autarkia.core.builder.Laying::uses)
-            ).apply(step, (section, item, at, block, state, also, stand, count, uses) ->
+                            .forGetter(dev.luizloyola.autarkia.core.builder.Laying::uses),
+                    Codec.INT.optionalFieldOf("wave", 0).forGetter(dev.luizloyola.autarkia.core.builder.Laying::wave),
+                    Codec.INT.optionalFieldOf("piece", 0).forGetter(dev.luizloyola.autarkia.core.builder.Laying::piece)
+            ).apply(step, (section, item, at, block, state, also, stand, count, uses, wave, piece) ->
                     new dev.luizloyola.autarkia.core.builder.Laying(section,
                             new dev.luizloyola.anima.core.brain.act.Placing(item, at, block, state), also, stand,
-                            count, uses)));
+                            count, uses, wave, piece)));
+
+    private static final Codec<dev.luizloyola.autarkia.core.board.Build.Cooldown> BUILD_COOLDOWN =
+            RecordCodecBuilder.create(cooldown -> cooldown.group(
+                    Codec.INT.fieldOf("piece").forGetter(dev.luizloyola.autarkia.core.board.Build.Cooldown::piece),
+                    Codec.LONG.fieldOf("until").forGetter(dev.luizloyola.autarkia.core.board.Build.Cooldown::until)
+            ).apply(cooldown, dev.luizloyola.autarkia.core.board.Build.Cooldown::new));
 
     /** Everything a {@code build} row carries: the world steps, and which of them stand. */
     public static final MapCodec<dev.luizloyola.autarkia.core.board.Build.State> BUILD =
@@ -449,15 +457,15 @@ public final class PartyBoardCodecs {
                             .forGetter(dev.luizloyola.autarkia.core.board.Build.State::refused),
                     UUIDUtil.CODEC.listOf().optionalFieldOf("builders", List.of())
                             .forGetter(state -> state.builders().stream().map(AgentId::value).toList()),
-                    Codec.LONG.optionalFieldOf("retry_after", 0L)
-                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::retryAfter),
+                    BUILD_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::cooldowns),
                     Codec.LONG.optionalFieldOf("material_wait_until", 0L)
                             .forGetter(dev.luizloyola.autarkia.core.board.Build.State::materialWaitUntil),
                     Codec.STRING.optionalFieldOf("short_of", "")
                             .forGetter(dev.luizloyola.autarkia.core.board.Build.State::shortOf)
-            ).apply(project, (structure, name, priority, order, done, failures, refused, builders, retryAfter,
+            ).apply(project, (structure, name, priority, order, done, failures, refused, builders, cooldowns,
                     materialWaitUntil, shortOf) -> new dev.luizloyola.autarkia.core.board.Build.State(structure, name,
-                    priority, order, done, failures, refused, builders.stream().map(AgentId::new).toList(), retryAfter,
+                    priority, order, done, failures, refused, builders.stream().map(AgentId::new).toList(), cooldowns,
                     materialWaitUntil, shortOf)));
 
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {

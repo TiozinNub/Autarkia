@@ -14,8 +14,11 @@ import java.util.Set;
  * @param also  the step's other cells — a door's upper half, a bed's head
  * @param count items placed: two for a double slab, the candles in a cell
  * @param uses  what the clicks after it hold: a pot's plant, a cauldron's bucket, a path's shovel
+ * @param wave  its wave in the proved order, and {@code piece} its piece — see
+ *              {@link BuildOrder.Placed}
  */
-public record Laying(Section section, Placing placing, List<Pos> also, Pos stand, int count, List<Use> uses) {
+public record Laying(Section section, Placing placing, List<Pos> also, Pos stand, int count, List<Use> uses,
+                     int wave, int piece) {
 
     /**
      * Items a click holds, any one of them.
@@ -33,8 +36,17 @@ public record Laying(Section section, Placing placing, List<Pos> also, Pos stand
         uses = List.copyOf(uses);
     }
 
+    public Laying(Section section, Placing placing, List<Pos> also, Pos stand, int count, List<Use> uses) {
+        this(section, placing, also, stand, count, uses, 0, 0);
+    }
+
     public Laying(Section section, Placing placing, List<Pos> also, Pos stand, int count) {
         this(section, placing, also, stand, count, List.of());
+    }
+
+    /** The same step in another wave and piece. */
+    public Laying in(int wave, int piece) {
+        return new Laying(section, placing, also, stand, count, uses, wave, piece);
     }
 
     public Pos cell() {

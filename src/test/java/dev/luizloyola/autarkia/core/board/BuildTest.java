@@ -11,6 +11,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemStack;
+import dev.luizloyola.autarkia.core.builder.BuildOrder;
 import dev.luizloyola.autarkia.core.builder.LayPiece;
 import dev.luizloyola.autarkia.core.builder.Laying;
 import dev.luizloyola.autarkia.core.builder.Section;
@@ -25,14 +26,17 @@ class BuildTest {
     private static final String PLANKS = "minecraft:oak_planks";
     private static final String SLAB = "minecraft:oak_slab";
 
-    /** {@code floor} planks along x at y 64, then {@code walls} more a layer up. */
+    /**
+     * {@code floor} planks along x at y 64, the first wave, then {@code walls} more a layer up, the
+     * second; each wave in pieces of {@link BuildOrder#PIECE}.
+     */
     private static List<Laying> house(int floor, int walls) {
         List<Laying> order = new ArrayList<>();
         for (int x = 0; x < floor; x++) {
-            order.add(step(Section.FLOOR, PLANKS, x, 64, 1));
+            order.add(step(Section.FLOOR, PLANKS, x, 64, 1).in(0, x / BuildOrder.PIECE));
         }
         for (int x = 0; x < walls; x++) {
-            order.add(step(Section.WALLS, PLANKS, x, 65, 1));
+            order.add(step(Section.WALLS, PLANKS, x, 65, 1).in(1, 100 + x / BuildOrder.PIECE));
         }
         return order;
     }
@@ -67,10 +71,43 @@ class BuildTest {
     }
 
     @Test
-    void aPieceIsAtMostOneTripLong() {
-        Build build = build(house(0, 30));
-        LayPiece root = assertInstanceOf(LayPiece.class, only(build).root());
-        assertEquals(Build.PIECE, root.steps().size());
+    void everyPieceOfTheOpenWaveIsOfferedAndTheNextWaveWaits() {
+        List<Laying> order = house(30, 5);
+        Build build = build(order);
+        List<WorkItem> floor = build.open();
+        assertEquals(2, floor.size(), build.describe());
+        assertEquals(BuildOrder.PIECE, assertInstanceOf(LayPiece.class, floor.get(0).root()).steps().size());
+        assertEquals(6, assertInstanceOf(LayPiece.class, floor.get(1).root()).steps().size());
+
+        FakeContext ctx = new FakeContext();
+        for (int x = 0; x < BuildOrder.PIECE; x++) {
+            stand(ctx, order.get(x));
+        }
+        build.completed(floor.get(0), ctx);
+        assertEquals(List.of(floor.get(1)), build.open(), "the walls wait for the whole floor");
+
+        for (int x = BuildOrder.PIECE; x < 30; x++) {
+            stand(ctx, order.get(x));
+        }
+        build.completed(floor.get(1), ctx);
+        assertEquals("build 5 of autarkia:test_house's walls from (0, 65, 0)", only(build).describe());
+    }
+
+    @Test
+    void aBodyWhereTheNextStepGoesIsNotAFailedTry() {
+        List<Laying> order = house(2, 0);
+        Build build = build(order);
+        FakeContext ctx = new FakeContext();
+        ctx.percepts.inventory.set(0, ItemStack.of(PLANKS, 2, 64));
+        ctx.percepts.position = order.get(0).cell();
+        long now = 0;
+        for (int tries = 0; tries < Build.REFUSE_AFTER + 2; tries++) {
+            now += 1_000;
+            build.tick(now);
+            ctx.percepts.time = now;
+            build.failed(only(build), ctx);
+        }
+        assertTrue(build.refused().isEmpty(), "standing in the way hands nothing back");
     }
 
     @Test
@@ -126,6 +163,7 @@ class BuildTest {
         Build build = build(order);
         FakeContext ctx = new FakeContext();
         ctx.percepts.inventory.set(0, ItemStack.of(PLANKS, 2, 64));
+        ctx.percepts.position = new Pos(0, 64, 3);
         long now = 0;
         for (int tries = 0; tries < Build.REFUSE_AFTER; tries++) {
             now += 1_000_000;

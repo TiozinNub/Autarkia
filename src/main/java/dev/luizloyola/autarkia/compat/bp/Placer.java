@@ -157,7 +157,7 @@ public final class Placer {
                 BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString(), named);
         return Optional.of(new Laying(step.section(), placing, cells.subList(1, cells.size()),
                 pos(at(anchor, plan, placement, placed.stand())), Planner.count(step.state()),
-                making == null ? List.of() : List.of(use(making))));
+                making == null ? List.of() : List.of(use(making)), placed.wave(), placed.piece()));
     }
 
     /** What a made block's click holds, as every item that will do: a tool is used, the rest used up. */
