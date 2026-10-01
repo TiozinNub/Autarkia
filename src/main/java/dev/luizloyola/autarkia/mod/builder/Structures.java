@@ -12,6 +12,11 @@ import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
+import dev.luizloyola.autarkia.core.board.SiteBuilding;
+import dev.luizloyola.autarkia.core.bp.Blueprint;
+import dev.luizloyola.autarkia.core.bp.BuildPlan;
+import dev.luizloyola.autarkia.core.bp.Diagnostics;
+import dev.luizloyola.autarkia.core.builder.HouseSite;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.builder.Structure.Phase;
@@ -19,6 +24,7 @@ import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.core.earthwork.FlattenPlan;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
+import dev.luizloyola.autarkia.mod.bp.Blueprints;
 import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +61,13 @@ public final class Structures {
     }
 
     private static void beat(MinecraftServer server) {
+        for (PartyBoard board : PartyBoards.all(server)) {
+            for (Project project : board.projects()) {
+                if (project instanceof SiteBuilding site && !site.finished()) {
+                    site(server, board.party(), site);
+                }
+            }
+        }
         StructuresData data = StructuresData.get(server);
         for (Map.Entry<PartyId, List<Structure>> entry : data.parties().entrySet()) {
             PartyId party = entry.getKey();
@@ -71,6 +84,48 @@ public final class Structures {
             }
         }
     }
+
+    /**
+     * A line asked for a building: choose its site and claim it, as {@code bp site … apply} does,
+     * and close the ask. With nowhere to put it, ask the ground again in a while — the area grows
+     * and gets cleared under it.
+     */
+    private static void site(MinecraftServer server, PartyId party, SiteBuilding ask) {
+        long now = server.overworld().getGameTime();
+        if (NEXT_TRY.getOrDefault(ask, Long.MIN_VALUE) > now) {
+            return;
+        }
+        NEXT_TRY.put(ask, now + RETRY_TICKS);
+        Blueprint bp = Blueprints.find(ask.blueprint()).map(entry -> entry.compiled().blueprint()).orElse(null);
+        Diagnostics out = new Diagnostics();
+        BuildPlan plan = bp == null ? null : HouseSites.plan(bp, ask.variants(), out);
+        if (plan == null) {
+            journal(server, party, "cannot plan " + ask.blueprint() + ": " + out.list());
+            return;
+        }
+        HouseSites.Inputs inputs = HouseSites.inputs(server.overworld(), party);
+        if (inputs == null) {
+            return;
+        }
+        HouseSite.Result result = HouseSites.choose(inputs, plan, HouseSites.placements(bp, null, false));
+        if (result.best().isEmpty()) {
+            journal(server, party, "no site for " + ask.blueprint() + " yet — refused " + result.refused());
+            return;
+        }
+        HouseSites.Applied applied = HouseSites.apply(server, party, ask.blueprint(), plan, result.best().get(0),
+                "the house line");
+        if (applied.structure() == null) {
+            journal(server, party, "the area cannot take " + ask.blueprint() + ": " + applied.grown().describe());
+            return;
+        }
+        ask.sited();
+        PartyBoards.touch(server);
+        tell(server, party, applied.structure());
+    }
+
+    /** When an ask with nowhere to go may look again; lost on a restart, which only looks sooner. */
+    private static final Map<SiteBuilding, Long> NEXT_TRY = new java.util.WeakHashMap<>();
+    private static final int RETRY_TICKS = 2400;
 
     /** Its ground cleared, the pad's flatten goes on the board; until then it waits. */
     private static Structure level(MinecraftServer server, PartyId party, Structure structure) {
@@ -146,7 +201,10 @@ public final class Structures {
     }
 
     private static void tell(MinecraftServer server, PartyId party, Structure structure) {
-        String line = describe(structure);
+        journal(server, party, describe(structure));
+    }
+
+    private static void journal(MinecraftServer server, PartyId party, String line) {
         for (AgentId member : PartyData.get(server).members(party)) {
             Journals.of(server).record(member, Category.PROJECT, "structures", line);
         }

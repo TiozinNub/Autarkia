@@ -112,6 +112,11 @@ final class HomeView implements PartyView {
     }
 
     @Override
+    public java.util.List<dev.luizloyola.autarkia.core.builder.Structure> structures() {
+        return dev.luizloyola.autarkia.mod.builder.StructuresData.get(server).of(party);
+    }
+
+    @Override
     public int members() {
         return members;
     }

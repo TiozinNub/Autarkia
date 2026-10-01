@@ -6,6 +6,7 @@
     {"line": "home"},
     {"line": "base"},
     {"line": "area"},
+    {"line": "house"},
     {"line": "wood", "count": 64},
     {"line": "storage", "count": 9},
     {"line": "food", "count": 32},

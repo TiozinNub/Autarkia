@@ -205,6 +205,11 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.direction.FoodLine.INSTANCE);
         dev.luizloyola.autarkia.core.direction.Lines.register(
                 dev.luizloyola.autarkia.core.direction.CharcoalLine.INSTANCE);
+        // A house: the line posts where to put it, and the mod's Structures chooses and claims it.
+        dev.luizloyola.autarkia.core.direction.Lines.register(
+                dev.luizloyola.autarkia.core.direction.HouseLine.INSTANCE);
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.SiteBuilding.TYPE);
         // The line a party with no HOME works on: a search for one, which reads the world through
         // the mod's looks.
         dev.luizloyola.autarkia.core.direction.Lines.register(

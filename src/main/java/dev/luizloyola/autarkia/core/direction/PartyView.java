@@ -37,6 +37,11 @@ public interface PartyView {
         return Optional.empty();
     }
 
+    /** The party's buildings, from the moment a site is chosen. None for a test view that never asks. */
+    default java.util.List<dev.luizloyola.autarkia.core.builder.Structure> structures() {
+        return java.util.List.of();
+    }
+
     int members();
 
     /**

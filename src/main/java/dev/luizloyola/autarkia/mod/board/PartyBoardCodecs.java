@@ -346,6 +346,16 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(ClearPlants.State::lastTick)
             ).apply(project, ClearPlants.State::new));
 
+    /** Everything a {@code site_building} row carries: what to site, and whether it was. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.SiteBuilding.State> SITE_BUILDING =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    Codec.STRING.fieldOf("blueprint").forGetter(dev.luizloyola.autarkia.core.board.SiteBuilding.State::blueprint),
+                    Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("variants", Map.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.SiteBuilding.State::variants),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.SiteBuilding.State::priority),
+                    Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.SiteBuilding.State::done)
+            ).apply(project, dev.luizloyola.autarkia.core.board.SiteBuilding.State::new));
+
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {
             for (E value : type.getEnumConstants()) {
@@ -447,6 +457,7 @@ public final class PartyBoardCodecs {
             case "fire" -> DataResult.success(FIRE);
             case "flatten" -> DataResult.success(FLATTEN);
             case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
+            case "site_building" -> DataResult.success(SITE_BUILDING);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }

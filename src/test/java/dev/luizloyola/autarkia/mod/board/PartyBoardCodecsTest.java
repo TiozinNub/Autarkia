@@ -56,6 +56,16 @@ class PartyBoardCodecsTest {
     }
 
     @Test
+    void anAskToSiteABuildingComesBackAsItWasAsked() {
+        var ask = new dev.luizloyola.autarkia.core.board.SiteBuilding.State("autarkia:basic_wooden_house",
+                java.util.Map.of("base", "lv1", "beds", "none"), 0.5, false);
+
+        assertEquals(ask, roundTrip(new PartyBoard.Row(ask, List.of())).project());
+        var sited = new dev.luizloyola.autarkia.core.board.SiteBuilding.State(ask.blueprint(), ask.variants(), 0.5, true);
+        assertEquals(sited, roundTrip(new PartyBoard.Row(sited, List.of())).project());
+    }
+
+    @Test
     void aRowNamesTheKindOfProjectItHolds() {
         PartyBoard.Row row = new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of());
         var encoded = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow();
