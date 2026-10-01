@@ -30,7 +30,7 @@ publish.modrinth_id = "uj0QkqNF"
 # order at release time is: tag Anima, set this to that number, tag Autarkia.
 deps.anima = "0.1.0-SNAPSHOT"
 
-deps.fabric_loader = "0.19.3"
+deps.fabric_loader = "0.19.5"
 loomx.loom_version = "1.17-SNAPSHOT"
 
 # night-config is not declared here any more. It arrives transitively through Anima's POM, which
