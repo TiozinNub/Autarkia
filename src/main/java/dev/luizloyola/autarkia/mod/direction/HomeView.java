@@ -24,6 +24,7 @@ import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * A party as its Directions may see it. HOME's stores are the party's own claimed chests in its
@@ -76,17 +77,38 @@ final class HomeView implements PartyView {
     }
 
     /**
-     * The middle column of a chunk, on its ground — or at sea level when the chunk is not loaded,
-     * since reading it would load it, and a store is only made there by somebody who walks over.
+     * The open column nearest a chunk's middle, at the cell above its ground: no leaves over it and
+     * no water on it, so a body can stand there. A forest's low canopy left a spot with a block of
+     * headroom that nobody could reach, and the base never went down (2026-10-01). The middle
+     * itself when nothing in the chunk is open; sea level when the chunk is not loaded, since
+     * reading it would load it.
      */
     private static Pos ground(MinecraftServer server, ChunkKey chunk) {
         net.minecraft.server.level.ServerLevel level = server.overworld();
-        int x = chunk.minBlockX() + 8;
-        int z = chunk.minBlockZ() + 8;
-        int y = level.hasChunk(chunk.x(), chunk.z())
-                ? level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z)
-                : level.getSeaLevel();
-        return new Pos(x, y, z);
+        int midX = chunk.minBlockX() + 8;
+        int midZ = chunk.minBlockZ() + 8;
+        if (!level.hasChunk(chunk.x(), chunk.z())) {
+            return new Pos(midX, level.getSeaLevel(), midZ);
+        }
+        Pos best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (int x = chunk.minBlockX(); x <= chunk.maxBlockX(); x++) {
+            for (int z = chunk.minBlockZ(); z <= chunk.maxBlockZ(); z++) {
+                int distance = (x - midX) * (x - midX) + (z - midZ) * (z - midZ);
+                if (distance >= bestDistance) {
+                    continue;
+                }
+                int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+                boolean open = level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z) == ground
+                        && level.getHeight(Heightmap.Types.OCEAN_FLOOR, x, z) == ground;
+                if (open) {
+                    best = new Pos(x, ground, z);
+                    bestDistance = distance;
+                }
+            }
+        }
+        return best != null ? best
+                : new Pos(midX, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, midX, midZ), midZ);
     }
 
     @Override
