@@ -5,7 +5,18 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
+import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.territory.ChunkKey;
+import dev.luizloyola.anima.core.territory.Claimed;
+import dev.luizloyola.anima.core.territory.Reason;
+import dev.luizloyola.anima.core.territory.Territory;
+import dev.luizloyola.anima.mod.command.AgentCommands;
 import dev.luizloyola.anima.mod.command.Replies;
+import dev.luizloyola.anima.mod.command.Subject;
+import dev.luizloyola.anima.mod.social.PartyData;
+import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.bp.BoxReader;
 import dev.luizloyola.autarkia.compat.bp.Placer;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
@@ -23,6 +34,7 @@ import dev.luizloyola.autarkia.core.bp.DiagnosticText;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Dictionary;
 import dev.luizloyola.autarkia.core.bp.Facts;
+import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Ids;
 import dev.luizloyola.autarkia.core.bp.PlanArgs;
 import dev.luizloyola.autarkia.core.bp.Placement;
@@ -53,6 +65,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import net.minecraft.ChatFormatting;
@@ -67,6 +80,7 @@ import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
@@ -443,12 +457,26 @@ public final class BlueprintCommands {
             return 0;
         }
         BlockPos anchor = pos != null ? pos : BlockPos.containing(source.getPosition()).below();
+        Building building = null;
+        if (args.party() != null) {
+            building = building(source, entry, args.party(), anchor, plan, placement);
+            if (building == null) {
+                return 0;
+            }
+        }
         if (args.slow() > 0) {
-            return placeSlowly(source, entry, anchor, plan, placement, args.slow());
+            int placed = placeSlowly(source, entry, anchor, plan, placement, args.slow());
+            if (placed > 0 && building != null) {
+                claim(source, building);
+            }
+            return placed;
         }
         Placer.Result result = Placer.place(source.getLevel(), anchor, plan, placement);
         if (refused(source, result)) {
             return 0;
+        }
+        if (building != null) {
+            claim(source, building);
         }
         MutableComponent line = Component.translatable("autarkia.command.bp.place.done", entry.id(),
                 plan.version(), anchor.getX(), anchor.getY(), anchor.getZ(), placement.north().word(),
@@ -459,6 +487,61 @@ public final class BlueprintCommands {
         line.append(Component.literal(" — ")).append(bindings(plan));
         Replies.send(source, () -> line, true);
         return 1;
+    }
+
+    /** A placement that is a party's building, priced and not yet claimed. */
+    private record Building(PartyId party, String who, SortedSet<ChunkKey> footprint, Reason why, Pos yard,
+                            boolean overworld) {
+    }
+
+    /**
+     * Whether the party may have this building: its footprint and margin added to the area must be
+     * one piece (docs/superpowers/specs/2026-10-01-home-area-design.md, decision 8). Priced before a
+     * block is written, so a refusal places nothing; the refusal is logged like any claim. Null,
+     * having said why, when it may not.
+     */
+    private static @Nullable Building building(CommandSourceStack source, Entry entry, String name, BlockPos anchor,
+                                               BuildPlan plan, Placement placement) {
+        AgentId who = Subject.directoryId(source, name);
+        if (who == null) {
+            return null;
+        }
+        MinecraftServer server = source.getServer();
+        PartyId party = PartyData.get(server).partyOf(who);
+        String dimension = source.getLevel().dimension().identifier().toString();
+        SortedSet<ChunkKey> footprint = Footprint.of(anchor.getX(), anchor.getZ(), plan, placement).chunks(dimension);
+        Reason why = Reason.of(Reason.Kind.GROW, entry.id() + " at (" + anchor.getX() + ", " + anchor.getY() + ", "
+                + anchor.getZ() + "), placed by " + source.getTextName());
+        Territory territory = Territories.of(server);
+        Claimed priced = territory.planGrow(party, footprint, Territories.margin(), why, Territories.now(server));
+        if (!priced.granted()) {
+            territory.grow(party, footprint, Territories.margin(), why, Territories.now(server));
+            Replies.fail(source, Component.translatable("autarkia.command.bp.place.party_refused",
+                    AgentCommands.label(server, who), priced.describe()));
+            return null;
+        }
+        Pos yard = Footprint.doorstep(plan, placement, Blueprints.dictionary())
+                .map(step -> new Pos(anchor.getX() + step[0], anchor.getY() + step[1], anchor.getZ() + step[2]))
+                .orElse(new Pos(anchor.getX(), anchor.getY(), anchor.getZ()));
+        return new Building(party, AgentCommands.label(server, who), footprint, why, yard,
+                source.getLevel() == server.overworld());
+    }
+
+    /** The building stands: its ground is the party's, and HOME knows it is ready ground. */
+    private static void claim(CommandSourceStack source, Building building) {
+        MinecraftServer server = source.getServer();
+        Claimed claimed = Territories.of(server).grow(building.party(), building.footprint(), Territories.margin(),
+                building.why(), Territories.now(server));
+        int holds = Territories.of(server).area(building.party()).size();
+        Replies.send(source, () -> Component.translatable("autarkia.command.bp.place.party", building.who(),
+                claimed.added().size(), holds).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        // HOME is the overworld's; a building elsewhere is held and nothing more.
+        if (building.overworld() && Directions.built(server, building.party(), building.yard(),
+                building.footprint())) {
+            Pos yard = building.yard();
+            Replies.send(source, () -> Component.translatable("autarkia.command.bp.place.party_home", building.who(),
+                    yard.x() + " " + yard.y() + " " + yard.z()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        }
     }
 
     /**

@@ -296,6 +296,24 @@ public final class Directions {
         return claimed;
     }
 
+    /**
+     * A building of the party's stands on these chunks, so they are ready ground: felled and cleared,
+     * since a clearing over them now would pull up the flowers it was built with. A party with no
+     * HOME is given one, its yard at the building's door. Whether it was.
+     */
+    public static boolean built(MinecraftServer server, PartyId party, Pos yard, Collection<ChunkKey> footprint) {
+        DirectionsData data = DirectionsData.get(server);
+        PartyProgress progress = data.progress(party);
+        boolean founded = progress.home() == null;
+        Home home = founded ? Home.at(yard) : progress.home();
+        for (ChunkKey chunk : footprint) {
+            home = home.withFelled(chunk).withCleared(chunk);
+        }
+        progress.home(home);
+        data.setDirty();
+        return founded;
+    }
+
     /** No HOME: the area is let go and the work for it withdrawn. */
     public static void unsettle(MinecraftServer server, PartyId party, Reason why) {
         List<Project> old = ownWork(server, party);

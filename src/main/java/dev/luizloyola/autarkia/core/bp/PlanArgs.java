@@ -14,15 +14,17 @@ import org.jspecify.annotations.Nullable;
  * The words after a blueprint's id in {@code bp place} and {@code bp bill}, in any order: pins
  * ({@code 1=spruce}, commas or spaces between), variant pins ({@code beds=three},
  * {@code cellar=none}), a facing for the drawing's north edge, {@code flip}, and {@code slow} or
- * {@code slow=<ticks>} to place block by block in the builder's order.
+ * {@code slow=<ticks>} to place block by block in the builder's order, and {@code party=<person>} to
+ * place it as that person's party's building, claimed at once.
  *
  * @param variants group to variant, or to {@code none} for an optional group left out
  * @param slow     ticks between blocks, 0 to place at once
+ * @param party    a person whose party the building is, as named; null for nobody's
  */
 public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, @Nullable Facing facing,
-                       boolean flip, int slow) {
+                       boolean flip, int slow, @Nullable String party) {
 
-    public static final PlanArgs NONE = new PlanArgs(Map.of(), Map.of(), null, false, 0);
+    public static final PlanArgs NONE = new PlanArgs(Map.of(), Map.of(), null, false, 0, null);
 
     /** Five blocks a second: slow enough to follow, quick enough to watch a house go up. */
     public static final int SLOW_TICKS = 4;
@@ -42,6 +44,7 @@ public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, 
         Facing facing = null;
         boolean flip = false;
         int slow = 0;
+        String party = null;
         for (String word : words.strip().split("[\\s,]+")) {
             if (word.isEmpty()) {
                 continue;
@@ -65,6 +68,12 @@ public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, 
                     out.error("slow_ticks", 0, 0, "slow= takes the ticks between blocks, 1 to " + SLOWEST + ", not '"
                             + ticks + "'");
                 }
+            } else if (word.startsWith("party=")) {
+                String who = word.substring("party=".length());
+                if (who.isEmpty() || (party != null && !party.equals(who))) {
+                    out.error("party_name", 0, 0, "party= takes one person's name, not '" + who + "'");
+                }
+                party = who;
             } else if (equals > 0 && word.substring(0, equals).matches("[0-9]+") && equals < word.length() - 1) {
                 int slot = Integer.parseInt(word.substring(0, equals));
                 String value = word.substring(equals + 1);
@@ -81,10 +90,10 @@ public record PlanArgs(Map<Integer, String> pins, Map<String, String> variants, 
                 }
             } else {
                 out.error("arg_unknown", 0, 0, "'" + word + "' is not a pin like 1=spruce or beds=two, a facing "
-                        + "(north, east, south, west), flip or slow");
+                        + "(north, east, south, west), flip, slow or party=<person>");
             }
         }
-        return new PlanArgs(pins, variants, facing, flip, slow);
+        return new PlanArgs(pins, variants, facing, flip, slow, party);
     }
 
     /**

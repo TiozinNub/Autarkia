@@ -67,6 +67,18 @@ class PlanArgsTest {
     }
 
     @Test
+    void aPartyIsNamedByAPersonInTheirOwnCase() {
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse("east party=Alma beds=two", out);
+        assertTrue(out.list().isEmpty(), out.list()::toString);
+        assertEquals("Alma", args.party());
+        assertEquals(Map.of("beds", "two"), args.variants(), "not a variant group called party");
+        assertNull(PlanArgs.parse("east", out).party());
+        PlanArgs.parse("party=Alma party=Bram", out);
+        assertEquals(List.of("party_name"), codes(out));
+    }
+
+    @Test
     void anythingElseIsNamed() {
         Diagnostics out = new Diagnostics();
         PlanArgs.parse("up 1= =3 1=oak 1=spruce north south", out);
@@ -84,8 +96,8 @@ class PlanArgsTest {
     @Test
     void theHeadersRefuseWhatTheyForbid() {
         Diagnostics out = new Diagnostics();
-        assertNull(new PlanArgs(Map.of(), Map.of(), Facing.WEST, false, 0).placement(bp("north east", true), out));
-        assertNull(new PlanArgs(Map.of(), Map.of(), null, true, 0).placement(bp("all", false), out));
+        assertNull(new PlanArgs(Map.of(), Map.of(), Facing.WEST, false, 0, null).placement(bp("north east", true), out));
+        assertNull(new PlanArgs(Map.of(), Map.of(), null, true, 0, null).placement(bp("all", false), out));
         assertEquals(List.of("facing_refused", "flip_refused"), codes(out));
         assertFalse(out.list().get(0).message().contains("west,"), out.list().get(0).message());
     }
