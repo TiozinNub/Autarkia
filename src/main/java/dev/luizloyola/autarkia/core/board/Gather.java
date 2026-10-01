@@ -10,6 +10,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.store.Store;
@@ -622,6 +623,11 @@ public final class Gather implements PartyProject {
             return costFromHome(ctx);
         }
 
+        @Override
+        public Kit kit() {
+            return Stock.gatheringKit(spec);
+        }
+
         /** Never called: {@link Gather#realise} replaces a slice with a trip before it is leased. */
         @Override
         public Task root() {
@@ -674,6 +680,11 @@ public final class Gather implements PartyProject {
         @Override
         public double estimatedCost(BrainContext ctx) {
             return costFromHome(ctx);
+        }
+
+        @Override
+        public Kit kit() {
+            return Stock.gatheringKit(spec);
         }
 
         @Override

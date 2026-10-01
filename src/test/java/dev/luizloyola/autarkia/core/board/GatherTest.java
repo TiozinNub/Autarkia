@@ -170,6 +170,18 @@ class GatherTest {
                 .buildsOnTheWay());
     }
 
+    /** A trip for logs wants an axe, so the first log is not cut bare-handed. */
+    @Test
+    void aTripForLogsWantsAnAxe() {
+        Gather project = posted(64);
+        WorkItem trip = project.realise(project.open().get(0), KYLE, new BoardBrainContext());
+
+        assertEquals(List.of(ItemCall.want(Stock.AXES, 1)), trip.kit().calls());
+        assertEquals(List.of(ItemCall.want(Stock.SWORDS, 1)),
+                Stock.gatheringKit(dev.luizloyola.anima.core.brain.task.Food.SPEC).calls());
+        assertTrue(Stock.gatheringKit(Stock.PLANKS).isEmpty(), "planks come from a table, not a tool");
+    }
+
     @Test
     void theRemainderIsTheTargetLessWhatIsBankedAndWhatIsOut() {
         Gather project = posted(256);

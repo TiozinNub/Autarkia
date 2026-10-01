@@ -1,6 +1,9 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.brain.task.Food;
+import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.anima.core.inv.Kit;
 
 /**
  * The item kinds Autarkia's settlers care about holding — here rather than in Anima because which
@@ -46,6 +49,27 @@ public final class Stock {
      *  measures — so the spec only has to be right where there is no block to measure against. */
     public static final ItemSpec AXES =
             ItemSpec.register(new ItemSpec("axes", id -> id.endsWith("_axe")));
+
+    /** Any sword, any tier — what a hunt WANTS; a fight works bare-handed, slower. */
+    public static final ItemSpec SWORDS =
+            ItemSpec.register(new ItemSpec("swords", id -> id.endsWith("_sword")));
+
+    /**
+     * The tools a trip for {@code spec} could use (Luiz, 2026-10-01: work that a tool helps wants
+     * it). Logs come by chopping and food partly by hunting; anything else is fetched by hand.
+     */
+    public static Kit gatheringKit(ItemSpec spec) {
+        if (spec.name().equals(LOGS.name())) {
+            return CHOPPING;
+        }
+        if (spec.name().equals(Food.SPEC.name())) {
+            return HUNTING;
+        }
+        return Kit.NONE;
+    }
+
+    private static final Kit CHOPPING = Kit.of(ItemCall.want(AXES, 1));
+    private static final Kit HUNTING = Kit.of(ItemCall.want(SWORDS, 1));
 
     /**
      * Blocks a walk may lay to bridge or pillar — Anima's {@code #anima:bridging_blocks}, which only
