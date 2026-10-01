@@ -46,6 +46,7 @@ import dev.luizloyola.autarkia.core.board.ComposedBoards;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.board.StandingWants;
+import dev.luizloyola.autarkia.core.board.GleanDrops;
 import dev.luizloyola.autarkia.core.board.StowSurplus;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.mod.direction.DirectionsData;
@@ -172,6 +173,7 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_COOLDOWNS = "BrainCooldowns";
     /** What fight or flight remembers: the gear each target has shown, the fights it gave up. */
     private static final String TAG_FIGHT_MEMORY = "FightMemory";
+    private static final String TAG_WORK_SPOTS = "WorkSpots";
     private static final String TAG_BRAIN_HISTORY = "BrainHistory";
     /** The plan in progress and the grant that owns it — one tag, never two. */
     private static final String TAG_BRAIN_PLAN = "BrainPlan";
@@ -299,6 +301,7 @@ public class Person extends Avatar implements AgentBody {
         // Person's own brain beat, so a settlement's cadences are spread by their bodies rather
         // than by a seed. The parameter stays for a species that wants to spread them further.
         board.post(new StowSurplus(0));
+        board.post(new GleanDrops());
         return board;
     }
 
@@ -1433,6 +1436,8 @@ public class Person extends Avatar implements AgentBody {
             output.store(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS, cooldowns);
         }
         output.store(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY, this.brain.fightMemory());
+        // Where its work let things fall: a restart mid-sweep still knows which drops are its own.
+        output.store(TAG_WORK_SPOTS, BrainState.WORK_SPOTS, this.brain.workSpots().snapshot());
         // What they did lately — what they talk about. Losing it on a restart would leave a whole
         // settlement with nothing to say about the day it just had.
         List<History.Entry> history = this.brain.history();
@@ -1502,6 +1507,7 @@ public class Person extends Avatar implements AgentBody {
                 .ifPresent(this.brain::restoreCooldowns);
         input.read(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY)
                 .ifPresent(this.brain::restoreFightMemory);
+        input.read(TAG_WORK_SPOTS, BrainState.WORK_SPOTS).ifPresent(this.brain.workSpots()::restore);
         input.read(TAG_BRAIN_HISTORY, BrainState.HISTORY).ifPresent(this.brain::restoreHistory);
         this.pendingBrain = input.read(TAG_BRAIN_PLAN, BrainState.brain()).orElse(null);
         this.pendingBoard = input.read(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD).orElse(null);
@@ -1533,6 +1539,15 @@ public class Person extends Avatar implements AgentBody {
             spawnAtLocation(level, ItemStacks.toVanilla(entry.stack(), registryAccess()));
         }
         this.inventory.clear();
+    }
+
+    /** What it killed falls where it died, and is its own loot to pick up (Luiz, 2026-09-30). */
+    @Override
+    public boolean killedEntity(ServerLevel level, LivingEntity victim, DamageSource source) {
+        BlockPos at = victim.blockPosition();
+        this.brain.workSpots().record(new dev.luizloyola.anima.core.brain.sense.Pos(at.getX(), at.getY(), at.getZ()),
+                level.getGameTime());
+        return super.killedEntity(level, victim, source);
     }
 
     /**

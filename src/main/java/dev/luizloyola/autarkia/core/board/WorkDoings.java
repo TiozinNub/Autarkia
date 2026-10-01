@@ -30,6 +30,9 @@ public final class WorkDoings {
             "surveying", "autarkia.doing.surveying", List.of("what"), true));
     public static final Doing STOWING = Doings.register(new Doing(
             "stowing", "autarkia.doing.stowing", List.of(), true));
+    /** Not remembered: picking up after oneself is nothing to talk about. */
+    public static final Doing GLEANING = Doings.register(new Doing(
+            "gleaning", "autarkia.doing.gleaning", List.of(), false));
     /** Slot: the station put down — a workbench, a chest. */
     public static final Doing SETTING_UP = Doings.register(new Doing(
             "setting_up", "autarkia.doing.setting_up", List.of("what"), true));

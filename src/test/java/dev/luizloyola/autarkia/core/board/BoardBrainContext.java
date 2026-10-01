@@ -51,6 +51,15 @@ final class BoardBrainContext implements BrainContext {
     private long now;
     /** Whose work sites this body sees — a group of one unless a test shares a registry. */
     AgentClaims claims = AgentClaims.SOLO;
+    /** What lies on the ground in sight. */
+    List<Drop> drops = List.of();
+    final dev.luizloyola.anima.core.brain.history.WorkSpots workSpots =
+            new dev.luizloyola.anima.core.brain.history.WorkSpots();
+
+    @Override
+    public dev.luizloyola.anima.core.brain.history.WorkSpots workSpots() {
+        return workSpots;
+    }
 
     Inventory inventory() {
         return inventory;
@@ -158,7 +167,7 @@ final class BoardBrainContext implements BrainContext {
             public List<Drop> drops() {
                 // The offer path legitimately looks here now: the kit gate's reachability
                 // question counts a sighted drop as a way to cover a need.
-                return List.of();
+                return drops;
             }
 
             @Override
