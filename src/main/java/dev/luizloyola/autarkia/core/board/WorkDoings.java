@@ -33,6 +33,9 @@ public final class WorkDoings {
     /** Not remembered: picking up after oneself is nothing to talk about. */
     public static final Doing GLEANING = Doings.register(new Doing(
             "gleaning", "autarkia.doing.gleaning", List.of(), false));
+    /** Not remembered either: sorting one's own pack is nothing to talk about. */
+    public static final Doing TIDYING = Doings.register(new Doing(
+            "tidying", "autarkia.doing.tidying", List.of(), false));
     /** Slot: the station put down — a workbench, a chest. */
     public static final Doing SETTING_UP = Doings.register(new Doing(
             "setting_up", "autarkia.doing.setting_up", List.of("what"), true));

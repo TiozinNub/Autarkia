@@ -47,6 +47,7 @@ import dev.luizloyola.autarkia.core.board.PersonalBoard;
 import dev.luizloyola.autarkia.core.board.StandingWants;
 import dev.luizloyola.autarkia.core.board.GleanDrops;
 import dev.luizloyola.autarkia.core.board.StowSurplus;
+import dev.luizloyola.autarkia.core.board.TidyUp;
 import dev.luizloyola.autarkia.core.board.ToolUp;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.mod.direction.DirectionsData;
@@ -284,7 +285,7 @@ public class Person extends Avatar implements AgentBody {
      * <p>The standing "keep 16 logs" quota seeded here went on 2026-08-15 (decision: Luiz): work
      * comes from real projects. What it carries is {@link ToolUp}, which makes the four tools a
      * settler keeps itself in (2026-10-01), {@link StandingWants}, which only answers what else
-     * this body KEEPS, and the stow and the glean.
+     * this body KEEPS, sorting the pack, and the stow and the glean.
      *
      * <p>Built inline, and never from {@code getId()}: a field initialiser runs before the level
      * assigns an entity id, which from 26.2 makes {@code getId()} throw on the client and drops the
@@ -301,6 +302,7 @@ public class Person extends Avatar implements AgentBody {
         // Offset 0 rather than a per-body stagger: PersonalBoard.tick already runs on this
         // Person's own brain beat, so a settlement's cadences are spread by their bodies rather
         // than by a seed. The parameter stays for a species that wants to spread them further.
+        board.post(new TidyUp());
         board.post(new StowSurplus(0));
         board.post(new GleanDrops());
         return board;
