@@ -137,6 +137,15 @@ class FlattenPlanTest {
         assertSteps(scan, plan, 1);
     }
 
+    /** A mound in the middle is the area's business; the land past an untouched edge is not. */
+    @Test
+    void aChangeInsideTheAreaNeverReachesOutside() {
+        NaturalGround scan = scan((x, z) -> x >= 6 && x <= 9 && z >= 6 && z <= 9 ? 70 : 64);
+        FlattenPlan plan = plan(scan, 0, OptionalInt.of(64));
+        assertFalse(plan.columns().isEmpty());
+        assertTrue(plan.columns().stream().allMatch(c -> c.x() >= LO && c.x() <= HI && c.z() >= LO && c.z() <= HI));
+    }
+
     @Test
     void aStepTooHighForTheRingIsAHillside() {
         NaturalGround scan = scan((x, z) -> 80);

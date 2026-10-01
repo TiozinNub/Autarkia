@@ -371,7 +371,7 @@ public final class FlattenPlan {
         }
 
         /**
-         * An outside column's goal: the change made at the pad columns near it, eased out. The
+         * An outside column's goal: the change made at the area's edge near it, eased out. The
          * change, not the pad's height, so a natural slope beside an untouched edge stays as it is.
          */
         private void outward(int x, int z, int[] pad, int reach, List<Column> columns,
@@ -381,7 +381,7 @@ public final class FlattenPlan {
             int widest = 0;
             for (int px = x - reach; px <= x + reach; px++) {
                 for (int pz = z - reach; pz <= z + reach; pz++) {
-                    if (!inBox(px, pz) || !work[index(px, pz)]) {
+                    if (!inBox(px, pz) || !work[index(px, pz)] || !onEdge(px, pz)) {
                         continue;
                     }
                     int change = pad[index(px, pz)] - ground[index(px, pz)];
@@ -420,6 +420,11 @@ public final class FlattenPlan {
             } else if (!scan.has(x, z, NaturalGround.BUILT)) {
                 columns.add(new Column(x, z, g, goal));
             }
+        }
+
+        /** Whether a column has a side on the land outside the area: only there does a change reach out. */
+        private boolean onEdge(int x, int z) {
+            return !inArea(x + 1, z) || !inArea(x - 1, z) || !inArea(x, z + 1) || !inArea(x, z - 1);
         }
 
         /**
