@@ -44,6 +44,7 @@ class NodeFilesTest {
         Lines.register(BaseLine.INSTANCE);
         Lines.register(StorageLine.INSTANCE);
         Lines.register(FoodLine.INSTANCE);
+        Lines.register(dev.luizloyola.autarkia.core.direction.CharcoalLine.INSTANCE);
         Lines.register(HomeLine.INSTANCE);
     }
 
