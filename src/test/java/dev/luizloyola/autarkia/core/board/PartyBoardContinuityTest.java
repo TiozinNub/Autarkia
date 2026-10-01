@@ -89,6 +89,6 @@ class PartyBoardContinuityTest {
         assertEquals(1, back.budgetStepsOf(back.projects().get(0)).size());
 
         live.completed(trip, walker, ctx);
-        assertEquals(0, live.budgetSteps(trip), "spent on the success");
+        assertTrue(live.budgetStepsOf(gather).isEmpty(), "spent on the success");
     }
 }
