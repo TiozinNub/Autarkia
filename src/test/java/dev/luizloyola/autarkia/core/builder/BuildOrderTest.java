@@ -107,6 +107,74 @@ class BuildOrderTest {
         }
     }
 
+    /**
+     * Waves over every shipped selection: they never go back, the first is all floor, and no step
+     * hangs from or stands on a step of its own wave — any order inside a wave keeps what holds it.
+     */
+    @Test
+    void everyShippedSelectionIsCutIntoWaves() throws IOException {
+        StringBuilder widths = new StringBuilder();
+        for (String path : SHIPPED) {
+            Blueprint bp = bind(read(path));
+            List<Variants.Selection> selections = bp.variants().isEmpty() ? List.of(Variants.Selection.BASE)
+                    : bp.variants().selections();
+            for (Variants.Selection selection : selections) {
+                BuildPlan plan = plan(bp, pins(bp, selection));
+                String what = path.substring(path.lastIndexOf('/') + 1) + " " + plan.variants();
+                List<BuildOrder.Placed> order = BuildOrder.prove(plan, DICT).order();
+                Map<Cell, Integer> waveOf = new LinkedHashMap<>();
+                int last = 0;
+                for (BuildOrder.Placed placed : order) {
+                    assertTrue(placed.wave() >= last, what + ": waves go back at " + placed);
+                    last = placed.wave();
+                    for (Cell cell : placed.step().cells()) {
+                        waveOf.put(cell, placed.wave());
+                    }
+                }
+                for (BuildOrder.Placed placed : order) {
+                    Cell holder = placed.step().holder();
+                    Cell under = placed.step().cell().offset(-1, 0, 0);
+                    boolean own = placed.step().cells().contains(under);
+                    assertTrue(holder == null || waveOf.getOrDefault(holder, -1) < placed.wave(),
+                            what + ": " + placed + " hangs from its own wave");
+                    assertTrue(own || placed.step().section() == Section.FLOOR
+                                    || waveOf.getOrDefault(under, -1) != placed.wave()
+                                    || !blocksUnder(order, under),
+                            what + ": " + placed + " stands on its own wave");
+                    if (placed.wave() == 0) {
+                        assertEquals(Section.FLOOR, placed.step().section(), what + ": " + placed + " in the first wave");
+                    }
+                }
+                widths.append(what).append(": ").append(last + 1).append(" waves\n");
+            }
+        }
+        System.out.println(widths);
+    }
+
+    /** Whether a step fills {@code cell} — air under a step is no support to lose. */
+    private static boolean blocksUnder(List<BuildOrder.Placed> order, Cell cell) {
+        return order.stream().anyMatch(p -> p.step().cells().contains(cell));
+    }
+
+    /** The basic house cut into waves, wave by wave: section and size. */
+    @Test
+    void theBasicHouseWaves() throws IOException {
+        Blueprint bp = bind(read(SHIPPED.get(0)));
+        BuildPlan plan = plan(bp, Map.of("beds", "2", "base", "lv1", "attic", "has"));
+        Map<Integer, String> waves = new LinkedHashMap<>();
+        for (BuildOrder.Placed placed : BuildOrder.prove(plan, DICT).order()) {
+            waves.merge(placed.wave(), placed.step().section().name().toLowerCase() + " 1",
+                    (a, b) -> {
+                        String[] parts = a.split(" ");
+                        String section = placed.step().section().name().toLowerCase();
+                        return (parts[0].contains(section) ? parts[0] : parts[0] + "+" + section) + " "
+                                + (Integer.parseInt(parts[1]) + 1);
+                    });
+        }
+        System.out.println("basic house waves: " + waves);
+        assertTrue(waves.size() > 1);
+    }
+
     /** The basic house goes up floor, walls, lights, then the roof with its gables, doors, decor. */
     @Test
     void theBasicHouseGoesUpInItsSections() throws IOException {

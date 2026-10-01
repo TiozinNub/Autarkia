@@ -5,9 +5,13 @@ import dev.luizloyola.autarkia.core.bp.Dictionary;
 import dev.luizloyola.autarkia.core.bp.Dictionary.BlockInfo;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The order a plan goes up in, proved rather than assumed (builder spec, *The order that never
@@ -32,9 +36,14 @@ public final class BuildOrder {
     /** Room over the plan to stand on its top. */
     private static final int ABOVE = 3;
     private static final double SIGHT_STEP = 0.1;
+    /** A wave member no stand reached even alone. */
+    private static final int UNREACHED = -2;
 
-    /** A step, and where the builder stood to place it. */
-    public record Placed(Step step, Cell stand) {
+    /**
+     * A step, where the builder stood to place it, and its wave: the steps of one wave may go in in
+     * any order and by anyone once every earlier wave stands (builders-together spec, *Waves*).
+     */
+    public record Placed(Step step, Cell stand, int wave) {
     }
 
     /**
@@ -72,6 +81,11 @@ public final class BuildOrder {
     private final boolean[] floor;
     /** While flooding, count the plan's ladders as up. */
     private boolean assumeLadders;
+    /**
+     * Placed by the wave being cut, in no known order: each obstructs, none is footing, a ladder or
+     * something to place against — any of them may not be there yet.
+     */
+    private final boolean[] pending;
     private final List<Step> steps;
     private final int[][] cells;
     private final int[] holders;
@@ -94,6 +108,7 @@ public final class BuildOrder {
         climb = new boolean[size];
         ladder = new boolean[size];
         floor = new boolean[size];
+        pending = new boolean[size];
         for (int i = 0; i < size; i++) {
             int layer = layerOf(i);
             int x = xOf(i);
@@ -199,7 +214,7 @@ public final class BuildOrder {
             if (stand < 0 || !reach[stand] || sees(stand, chosen) == Double.MAX_VALUE) {
                 stand = bestStand(chosen, stand, done, reach);
             }
-            order.add(new Placed(steps.get(chosen), cellOf(stand)));
+            order.add(new Placed(steps.get(chosen), cellOf(stand), 0));
             last = cells[chosen][0];
             set(chosen, true);
             done[chosen] = true;
@@ -215,7 +230,85 @@ public final class BuildOrder {
                 unplaced.add(steps.get(s));
             }
         }
-        return new Result(order, unplaced);
+        return new Result(waves(order), unplaced);
+    }
+
+    /**
+     * The proved order again from an empty plan, cut into waves greedily: a step joins the wave
+     * being cut when what holds it and what it is placed against stand in earlier waves, and when
+     * every step of the wave, it included, still has a stand that reaches and sees it — standing
+     * only on earlier waves, with the whole wave in the way. That is the worst any order inside the
+     * wave can do. Otherwise it begins the next wave.
+     */
+    private List<Placed> waves(List<Placed> order) {
+        Arrays.fill(placed, false);
+        Arrays.fill(blocks, false);
+        Arrays.fill(passes, false);
+        Arrays.fill(climb, false);
+        Arrays.fill(pending, false);
+        Map<Step, Integer> index = new IdentityHashMap<>();
+        for (int s = 0; s < steps.size(); s++) {
+            index.put(steps.get(s), s);
+        }
+        List<Placed> out = new ArrayList<>();
+        Map<Integer, Integer> witness = new LinkedHashMap<>();
+        int wave = 0;
+        for (Placed p : order) {
+            int s = index.get(p.step());
+            if (!witness.isEmpty() && !joins(s, witness)) {
+                for (int member : witness.keySet()) {
+                    for (int c : cells[member]) {
+                        pending[c] = false;
+                    }
+                }
+                witness.clear();
+                wave++;
+            }
+            if (witness.isEmpty()) {
+                place(s);
+                int stand = search(s, flood(false));
+                // One the proof placed from a ladder it assumed: alone in its wave, and not asked again.
+                witness.put(s, stand < 0 ? UNREACHED : stand);
+            }
+            out.add(new Placed(p.step(), p.stand(), wave));
+        }
+        return out;
+    }
+
+    private boolean joins(int s, Map<Integer, Integer> witness) {
+        if (!supported(s)) {
+            return false;
+        }
+        place(s);
+        boolean[] reach = flood(false);
+        Map<Integer, Integer> next = new LinkedHashMap<>(witness);
+        next.put(s, -1);
+        for (Map.Entry<Integer, Integer> member : next.entrySet()) {
+            int r = member.getKey();
+            int stand = member.getValue();
+            if (stand == UNREACHED || stand >= 0 && stillSees(stand, r, reach)) {
+                continue;
+            }
+            int found = search(r, reach);
+            if (found < 0) {
+                set(s, false);
+                for (int c : cells[s]) {
+                    pending[c] = false;
+                }
+                return false;
+            }
+            member.setValue(found);
+        }
+        witness.clear();
+        witness.putAll(next);
+        return true;
+    }
+
+    private void place(int s) {
+        set(s, true);
+        for (int c : cells[s]) {
+            pending[c] = true;
+        }
     }
 
     /**
@@ -503,7 +596,7 @@ public final class BuildOrder {
             return false;
         }
         int below = indexOrMinus(layerOf(i) - 1, xOf(i), zOf(i));
-        return climbs(i) || below < 0 || ground[below] || blocks[below] || passes[below];
+        return climbs(i) || below < 0 || ground[below] || (blocks[below] || passes[below]) && !pending[below];
     }
 
     /** A body fits: no ground and nothing placed with collision, or a door it opens. Above the grid is air. */
@@ -512,11 +605,11 @@ public final class BuildOrder {
     }
 
     private boolean climbs(int i) {
-        return climb[i] || assumeLadders && ladder[i] && !placed[i];
+        return climb[i] && !pending[i] || assumeLadders && ladder[i] && !placed[i];
     }
 
     private boolean solid(int i) {
-        return ground[i] || placed[i];
+        return ground[i] || placed[i] && !pending[i];
     }
 
     // ── the grid ────────────────────────────────────────────────────────────────────────────
