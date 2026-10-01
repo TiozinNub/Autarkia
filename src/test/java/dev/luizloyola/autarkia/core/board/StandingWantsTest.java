@@ -30,34 +30,19 @@ class StandingWantsTest {
     }
 
     @Test
-    void theFirstTierOutranksTheSecond() {
+    void theFourToolsAreToolUpsNotThese() {
         List<ItemCall> calls = StandingWants.settlerDefaults().reserved();
 
-        int axe = rankOf(calls, "minecraft:stone_axe");
-        int shears = rankOf(calls, "minecraft:shears");
-        assertTrue(axe >= 0, "an axe is declared");
-        assertTrue(shears >= 0, "so are the second-tier tools");
-        assertTrue(axe < shears, "an axe outranks shears when the pack has to give something up");
+        for (String tool : List.of("sword", "pickaxe", "axe", "shovel")) {
+            assertEquals(-1, rankOf(calls, "minecraft:stone_" + tool));
+        }
     }
 
     @Test
-    void aToolIsKeptOneAtATime() {
-        ItemCall axe = StandingWants.settlerDefaults().reserved().stream()
-                .filter(call -> call.spec().matches("minecraft:stone_axe"))
-                .findFirst().orElseThrow();
-
-        assertEquals(1, axe.count(),
-                "one axe is kept and a second is cargo — what makes five shovels resolve");
-    }
-
-    @Test
-    void aToolIsKeptWhateverItIsMadeOf() {
+    void torchesOutrankTheSecondTier() {
         List<ItemCall> calls = StandingWants.settlerDefaults().reserved();
 
-        assertTrue(rankOf(calls, "minecraft:iron_pickaxe") >= 0);
-        assertTrue(rankOf(calls, "minecraft:wooden_pickaxe") >= 0);
-        assertEquals(rankOf(calls, "minecraft:iron_pickaxe"), rankOf(calls, "minecraft:wooden_pickaxe"),
-                "one call covers the whole family, so upgrading a tool does not orphan the want");
+        assertTrue(rankOf(calls, "minecraft:torch") < rankOf(calls, "minecraft:shears"));
     }
 
     @Test
@@ -67,17 +52,6 @@ class StandingWantsTest {
 
         assertTrue(torches.count() > 1,
                 "torches are spent, not carried — one is not a supply");
-    }
-
-    @Test
-    void oneSwordIsKeptOfAnyMaterialBelowTheWorkingTools() {
-        List<ItemCall> calls = StandingWants.settlerDefaults().reserved();
-        int sword = rankOf(calls, "minecraft:iron_sword");
-
-        assertEquals(sword, rankOf(calls, "minecraft:wooden_sword"));
-        assertEquals(1, calls.get(sword).count());
-        assertTrue(rankOf(calls, "minecraft:stone_shovel") < sword, "work before a fight");
-        assertTrue(sword < rankOf(calls, "minecraft:torch"));
     }
 
     /** Last, so it is the first thing a full pack gives up; kept, never sought. */

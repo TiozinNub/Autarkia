@@ -8,12 +8,12 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * What this body keeps — a project that posts nothing and only answers {@link #reserved()}.
+ * What this body keeps and never seeks — a project that posts nothing and only answers
+ * {@link #reserved()}: "if I have one, it is mine", which is what stops the stow machinery putting
+ * a settler's shears in a chest.
  *
- * <p><b>It never mints a {@link WorkItem}</b>, and that is deliberate. The personal board has been
- * empty since 2026-08-15 because work should come from real projects, and a settler who went
- * shopping for a tool nobody asked for would quietly reverse that. This says only "if I have one,
- * it is mine", which is what stops the stow machinery putting a settler's own axe in a chest.
+ * <p><b>It never mints a {@link WorkItem}.</b> The sword, pickaxe, axe and shovel moved to
+ * {@link ToolUp} on 2026-10-01, when Luiz ruled that a settler does go and make those four.
  *
  * <p><b>Order is the tiering</b> (decision: Luiz, 2026-08-20): the list is read top-down and the
  * first call that can claim a stack does, so what sits higher survives a pack that has to give
@@ -29,34 +29,19 @@ public final class StandingWants implements PersonalProject {
     }
 
     /**
-     * A fresh settler's kit, in tier order: the tools a day's work is made of, then the ones only
-     * a particular job wants.
+     * A fresh settler's kit, in tier order, after the four tools {@link ToolUp} keeps and reserves
+     * itself. Armour needs no call — worn, it is not in the pack for the stow machinery to take.
      *
-     * <p>Each call names a whole family, so upgrading a wooden axe to iron does not orphan the
-     * want. Torches are counted by the stack because they are spent rather than carried — the same
+     * <p>Torches are counted by the stack because they are spent rather than carried — the same
      * distinction {@link ItemCall} draws between a tool and a material.
      */
     public static StandingWants settlerDefaults() {
         return new StandingWants(List.of(
-                ItemCall.need(family("axe"), 1),
-                ItemCall.need(family("pickaxe"), 1),
-                ItemCall.need(family("shovel"), 1),
-                // Kept, never sought, whatever the age: a sword found is a sword carried. Armour
-                // needs no call — worn, it is not in the pack for the stow machinery to take.
-                ItemCall.want(family("sword"), 1),
                 ItemCall.need(ItemSpec.anyOf(Set.of("minecraft:torch")), 64),
                 ItemCall.want(ItemSpec.anyOf(Set.of("minecraft:shears")), 1),
                 ItemCall.want(ItemSpec.anyOf(Set.of("minecraft:flint_and_steel")), 1),
                 // Kept, never sought: what a carve or a cut put in the pack is a walk's next bridge.
                 ItemCall.want(Stock.BRIDGING, 16)));
-    }
-
-    /** Every material a vanilla tool of this kind comes in — netherite included, cheaply. */
-    private static ItemSpec family(String tool) {
-        return ItemSpec.anyOf(Set.of(
-                "minecraft:wooden_" + tool, "minecraft:stone_" + tool, "minecraft:iron_" + tool,
-                "minecraft:golden_" + tool, "minecraft:diamond_" + tool,
-                "minecraft:netherite_" + tool));
     }
 
     @Override

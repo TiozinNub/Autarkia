@@ -83,6 +83,15 @@ final class BoardBrainContext implements BrainContext {
         return TestSpecies.PROFILE;
     }
 
+    /** What this body may make — open unless a test binds a view to a policy it installed. */
+    dev.luizloyola.anima.core.brain.gate.Gate.View gate =
+            dev.luizloyola.anima.core.brain.gate.Gate.View.OPEN;
+
+    @Override
+    public dev.luizloyola.anima.core.brain.gate.Gate.View gate() {
+        return gate;
+    }
+
     @Override
     public ActuatorAccess actuators() {
         throw new UnsupportedOperationException("a board never acts");

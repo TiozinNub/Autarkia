@@ -94,6 +94,7 @@ public final class Directions {
         ServerTickEvents.END_SERVER_TICK.register(Directions::tick);
         PartyBoards.onClosed(Directions::closed);
         Gate.install(new Answers());
+        dev.luizloyola.autarkia.core.board.Tools.install(item -> tree.gatesItem(item));
         Depot.install(Directions::depotOf);
     }
 

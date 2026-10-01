@@ -13,6 +13,8 @@ import dev.luizloyola.autarkia.core.board.ClearStrip;
 import dev.luizloyola.autarkia.core.board.GatheringErrand;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
+import dev.luizloyola.autarkia.core.board.KeepTool;
+import dev.luizloyola.autarkia.core.board.Tools;
 import dev.luizloyola.autarkia.core.patch.PickPatch;
 import dev.luizloyola.autarkia.core.tree.Climb;
 import dev.luizloyola.autarkia.core.tree.FellTree;
@@ -147,12 +149,24 @@ public final class AutarkiaTasks {
                         POI_KIND.fieldOf("kind").forGetter(PickPatch::kind),
                         POS.fieldOf("anchor").forGetter(PickPatch::anchor)
                 ).apply(t, PickPatch::new)));
+        TaskCodecs.register("autarkia:keep_tool", KeepTool.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        TOOL_FAMILY.fieldOf("family").forGetter(KeepTool::family)
+                ).apply(t, KeepTool::new)));
         TaskCodecs.register("autarkia:clear_strip", ClearStrip.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         PartyBoardCodecs.REGION.fieldOf("strip").forGetter(ClearStrip::strip),
                         Codec.BOOL.optionalFieldOf("there", false).forGetter(ClearStrip::there)
                 ).apply(t, ClearStrip::new)));
     }
+
+    private static final Codec<Tools.Family> TOOL_FAMILY = Codec.STRING.comapFlatMap(name -> {
+        try {
+            return DataResult.success(Tools.Family.valueOf(name));
+        } catch (IllegalArgumentException unknown) {
+            return DataResult.error(() -> "no tool family is named \"" + name + "\"");
+        }
+    }, Tools.Family::name);
 
     /** By key, guarded like the stage: a kind nobody registered is an error, never a new kind. */
     private static final Codec<PoiKind> POI_KIND = Codec.STRING.comapFlatMap(

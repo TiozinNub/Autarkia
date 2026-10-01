@@ -23,7 +23,7 @@ import java.util.List;
  * {@link #FAIL_COOLDOWN} — not dead time, since wandering fills knowledge and is why the retry
  * succeeds.
  */
-public final class KeepStocked implements PersonalProject {
+public final class KeepStocked implements StandingProject {
 
     /** Ticks between re-evaluations. */
     public static final int CHECK_INTERVAL = 100;
@@ -192,11 +192,12 @@ public final class KeepStocked implements PersonalProject {
     public record State(int cooldown, int clock, int beats, boolean wanting, boolean claimed) {
     }
 
+    @Override
     public State snapshot() {
         return new State(cooldown, clock, beats, open != null, claimed);
     }
 
-    /** Puts the rhythm back, re-minting the open errand if one was out. */
+    @Override
     public void restore(State state) {
         this.cooldown = state.cooldown();
         this.clock = state.clock();
@@ -205,7 +206,7 @@ public final class KeepStocked implements PersonalProject {
         this.claimed = state.claimed();
     }
 
-    /** The errand currently on offer, or null — so a reload can point an arbiter back at it. */
+    @Override
     public WorkItem openItem() {
         return open;
     }

@@ -145,6 +145,8 @@ public final class PersonSpecies {
             .set(ProfileAspect.HANDLING_STACK_TICKS, 6)
             .set(ProfileAspect.HANDLING_SELECT_TICKS, 2)
             .set(ProfileAspect.HANDLING_CRAFT_TICKS, 10)
+            // 9 uses of a wooden pickaxe, 39 of an iron one: about a job's worth.
+            .set(ProfileAspect.HANDLING_SPARE_BELOW, 0.15)
             // --- stores: how far a settler trusts an old look inside a container -------------
             .set(ProfileAspect.STORES_STALENESS_WEIGHT, 0.5)
             // 2400 ticks, inherited from the chop's avoid-mark — the codebase's only precedent

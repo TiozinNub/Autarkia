@@ -48,8 +48,8 @@ public final class PersonalBoard extends Board {
     public List<KeepStocked.State> snapshot() {
         List<KeepStocked.State> saved = new ArrayList<>();
         for (Project project : projects()) {
-            if (project instanceof KeepStocked stocked) {
-                saved.add(stocked.snapshot());
+            if (project instanceof StandingProject standing) {
+                saved.add(standing.snapshot());
             }
         }
         return saved;
@@ -65,14 +65,15 @@ public final class PersonalBoard extends Board {
         java.util.Optional<WorkItem> held = java.util.Optional.empty();
         int i = 0;
         for (Project project : projects()) {
-            if (!(project instanceof KeepStocked stocked) || i >= saved.size()) {
+            if (!(project instanceof StandingProject standing) || i >= saved.size()) {
                 continue;
             }
             KeepStocked.State state = saved.get(i++);
-            stocked.restore(state);
-            if (state.claimed() && stocked.openItem() != null) {
-                reclaim(stocked.openItem(), owner, now);
-                held = java.util.Optional.of(stocked.openItem());
+            standing.restore(state);
+            WorkItem open = standing.openItem();
+            if (state.claimed() && open != null) {
+                reclaim(open, owner, now);
+                held = java.util.Optional.of(open);
             }
         }
         return held;
