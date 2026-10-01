@@ -202,6 +202,7 @@
   "autarkia.direction.status.no_base": "esperando a base",
   "autarkia.direction.base.ready": "a bancada e o baú estão montados",
   "autarkia.direction.base.missing": "%s de %s estações montadas",
+  "autarkia.direction.base.building": "a base saiu do terreno de uma construção, até a construção substituí-la",
   "autarkia.direction.line.home": "Encontrar um LAR",
   "autarkia.direction.home.claimed": "o grupo tem um LAR",
   "autarkia.direction.home.searching": "procurando um lugar para morar",

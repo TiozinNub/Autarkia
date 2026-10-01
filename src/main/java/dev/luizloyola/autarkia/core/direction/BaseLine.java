@@ -43,6 +43,10 @@ public final class BaseLine implements DirectionLine {
             return Status.NO_HOME;
         }
         List<SetUp.Station> missing = missing(party);
+        if (!missing.isEmpty() && party.building()) {
+            // The builder spec's *The base moves*: gone for the length of the build, which replaces it.
+            return Status.of(Status.Reading.WAITING, "autarkia.direction.base.building");
+        }
         return missing.isEmpty()
                 ? Status.of(Status.Reading.MET, "autarkia.direction.base.ready")
                 : Status.of(Status.Reading.UNMET, "autarkia.direction.base.missing",

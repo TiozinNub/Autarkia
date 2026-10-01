@@ -42,6 +42,15 @@ public interface PartyView {
         return java.util.List.of();
     }
 
+    /**
+     * Whether a building of the party's is about to go up or going up: its base is moved off the
+     * site for the length of it, and nothing is set up again until the building replaces it.
+     */
+    default boolean building() {
+        return structures().stream().anyMatch(s -> s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.LEVELLED
+                || s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILDING);
+    }
+
     int members();
 
     /**

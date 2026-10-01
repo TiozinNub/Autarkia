@@ -202,6 +202,7 @@
   "autarkia.direction.status.no_base": "waiting for the base",
   "autarkia.direction.base.ready": "the workbench and the chest are set up",
   "autarkia.direction.base.missing": "%s of %s stations set up",
+  "autarkia.direction.base.building": "the base is moved off a site being built, until the building replaces it",
   "autarkia.direction.line.home": "Find a HOME",
   "autarkia.direction.home.claimed": "the party has a HOME",
   "autarkia.direction.home.searching": "looking for somewhere to live",

@@ -11,10 +11,14 @@ import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.inv.StoreContents;
+import dev.luizloyola.autarkia.core.bp.Footprint;
+import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.core.direction.PartyView;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -72,8 +76,31 @@ final class HomeView implements PartyView {
         if (progress.home() == null) {
             return Optional.empty();
         }
-        Optional<Pos> store = placeAtHome(Store.POI);
-        return store.isPresent() ? store : Home.middle(area()).map(chunk -> ground(server, chunk));
+        // Never on a site being built: its base is being moved off it, and a store put back
+        // there would be broken again by the build.
+        List<Footprint> sites = new ArrayList<>();
+        for (Structure structure : structures()) {
+            if (structure.phase() != Structure.Phase.BUILT && structure.phase() != Structure.Phase.REFUSED) {
+                sites.add(structure.pad());
+            }
+        }
+        SortedSet<ChunkKey> area = area();
+        for (PlaceRow row : PlacesData.get(server).places().rows()) {
+            if (row.kind().equals(Store.POI) && party.equals(row.party()) && atHome(area, row.at())
+                    && !inside(sites, row.at().x(), row.at().z())) {
+                return Optional.of(row.at());
+            }
+        }
+        return Home.middle(area).map(chunk -> ground(server, chunk, sites));
+    }
+
+    private static boolean inside(List<Footprint> sites, int x, int z) {
+        for (Footprint f : sites) {
+            if (x >= f.minX() && x <= f.maxX() && z >= f.minZ() && z <= f.maxZ()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -83,7 +110,7 @@ final class HomeView implements PartyView {
      * itself when nothing in the chunk is open; sea level when the chunk is not loaded, since
      * reading it would load it.
      */
-    private static Pos ground(MinecraftServer server, ChunkKey chunk) {
+    private static Pos ground(MinecraftServer server, ChunkKey chunk, List<Footprint> sites) {
         net.minecraft.server.level.ServerLevel level = server.overworld();
         int midX = chunk.minBlockX() + 8;
         int midZ = chunk.minBlockZ() + 8;
@@ -95,7 +122,7 @@ final class HomeView implements PartyView {
         for (int x = chunk.minBlockX(); x <= chunk.maxBlockX(); x++) {
             for (int z = chunk.minBlockZ(); z <= chunk.maxBlockZ(); z++) {
                 int distance = (x - midX) * (x - midX) + (z - midZ) * (z - midZ);
-                if (distance >= bestDistance) {
+                if (distance >= bestDistance || inside(sites, x, z)) {
                     continue;
                 }
                 int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);

@@ -73,6 +73,9 @@ public final class Structures {
         StructuresData data = StructuresData.get(server);
         for (Map.Entry<PartyId, List<Structure>> entry : data.parties().entrySet()) {
             PartyId party = entry.getKey();
+            if (entry.getValue().stream().anyMatch(s -> s.phase() == Phase.LEVELLED || s.phase() == Phase.BUILDING)) {
+                BaseMove.holdSetUps(server, party);
+            }
             for (Structure structure : List.copyOf(entry.getValue())) {
                 Structure next = switch (structure.phase()) {
                     case SITED -> level(server, party, structure);
@@ -183,6 +186,10 @@ public final class Structures {
 
     /** Its pad level, the building's proved order goes on the board. */
     private static Structure build(MinecraftServer server, PartyId party, Structure structure) {
+        String waiting = BaseMove.inTheWay(server, party, structure);
+        if (waiting != null) {
+            return waiting.equals(structure.note()) ? structure : structure.at(Phase.LEVELLED, waiting);
+        }
         List<String> notes = new java.util.ArrayList<>();
         Build build = Builds.of(server.overworld(), structure, notes);
         if (build == null) {

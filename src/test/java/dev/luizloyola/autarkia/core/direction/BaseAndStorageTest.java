@@ -49,6 +49,14 @@ class BaseAndStorageTest {
         /** A HOME whose chunks were never claimed. */
         boolean noArea;
 
+        /** The party's buildings. */
+        final List<dev.luizloyola.autarkia.core.builder.Structure> structures = new java.util.ArrayList<>();
+
+        @Override
+        public List<dev.luizloyola.autarkia.core.builder.Structure> structures() {
+            return structures;
+        }
+
         @Override
         public SortedSet<ChunkKey> area() {
             return noArea ? new TreeSet<>()
@@ -140,6 +148,18 @@ class BaseAndStorageTest {
                 "the workbench first, so the chest is crafted at HOME's own table");
         assertEquals(SPOT, setUp.near());
         assertEquals(1, setUp.open().size(), "one station on offer at a time — one builder");
+    }
+
+    @Test
+    void aBaseMovedOffASiteWaitsForTheBuilding() {
+        dev.luizloyola.autarkia.core.bp.Footprint pad = new dev.luizloyola.autarkia.core.bp.Footprint(0, 0, 11, 12);
+        view.structures.add(new dev.luizloyola.autarkia.core.builder.Structure(new UUID(3, 3),
+                "autarkia:basic_wooden_house", 3, java.util.Map.of(), java.util.Map.of(), SPOT,
+                dev.luizloyola.autarkia.core.bp.Placement.AS_DRAWN, pad, pad,
+                dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILDING, 0L, ""));
+
+        assertTrue(beat().posted().isEmpty(),
+                "a workbench set up again now would go down where the build breaks it");
     }
 
     @Test
