@@ -135,8 +135,10 @@ public class AutarkiaMod implements ModInitializer {
         // the guard itself and registers its own three stores; this is the consumer's.
         StoreGuard.guard("identity", PersonDirectory.ID, PersonDirectory::get);
         // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
-        // this world, not about having a mind, so it belongs here rather than in the library.
-        Producers.register(Stock.LOGS, Stock.LOGS::matches, ChopForLogs::new);
+        // this world, not about having a mind, so it belongs here rather than in the library. The
+        // axe is asked for tree by tree: a wooden one wears out before a 64-log trip ends.
+        Producers.register(Stock.LOGS, Stock.LOGS::matches, Stock.gatheringKit(Stock.LOGS),
+                ChopForLogs::new);
         // What a walk may lay is Anima's tag; which of it a settler keeps is ours to spell.
         Stock.layableBy(dev.luizloyola.anima.mod.nav.Laying::layable);
         // And where no walk may lay or cut: a party's HOME and the places it keeps.
@@ -164,6 +166,7 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.core.person.Hunting.ACT.key();
         Producers.register(dev.luizloyola.anima.core.brain.task.Food.SPEC,
                 dev.luizloyola.anima.core.brain.sense.Yields::dropped,
+                Stock.gatheringKit(dev.luizloyola.anima.core.brain.task.Food.SPEC),
                 dev.luizloyola.autarkia.core.person.Hunting::create);
         // Picking a bush is Autarkia's to know; Anima only lends the empty hand that does it.
         dev.luizloyola.anima.mod.brain.BlockUses.register(
