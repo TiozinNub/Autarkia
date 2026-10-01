@@ -138,7 +138,7 @@ class ChopForLogsTest {
     @Test
     void obtainLogsOffersTheChopOnceRegistered() {
         // Registration puts the fell on ObtainItem's menu, after the always-present scavenge.
-        Producers.register(Stock.LOGS, ChopForLogs::new);
+        Producers.register(Stock.LOGS, Stock.LOGS::matches, ChopForLogs::new);
         ObtainItem obtain = new ObtainItem(Stock.LOGS, 16);
 
         assertTrue(obtain.methods().stream()
@@ -155,7 +155,7 @@ class ChopForLogsTest {
         // command builds a fresh anyOf spec for the item named, so asking whether THAT spec is a
         // registered key refuses every gather ever posted — including this one, for logs, which
         // ChopForLogs plainly knows how to make.
-        Producers.register(Stock.LOGS, ChopForLogs::new);
+        Producers.register(Stock.LOGS, Stock.LOGS::matches, ChopForLogs::new);
 
         assertTrue(Producers.knowsAnyOf(Set.of("minecraft:oak_log")),
                 "somebody here fells trees, whatever spec object the caller is holding");

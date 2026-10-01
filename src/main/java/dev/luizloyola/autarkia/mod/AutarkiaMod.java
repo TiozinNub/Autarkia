@@ -136,7 +136,7 @@ public class AutarkiaMod implements ModInitializer {
         StoreGuard.guard("identity", PersonDirectory.ID, PersonDirectory::get);
         // Teach the brain where logs come from. That wood comes of felling a tree is a fact about
         // this world, not about having a mind, so it belongs here rather than in the library.
-        Producers.register(Stock.LOGS, ChopForLogs::new);
+        Producers.register(Stock.LOGS, Stock.LOGS::matches, ChopForLogs::new);
         // What a walk may lay is Anima's tag; which of it a settler keeps is ours to spell.
         Stock.layableBy(dev.luizloyola.anima.mod.nav.Laying::layable);
         // And where no walk may lay or cut: a party's HOME and the places it keeps.
@@ -148,17 +148,21 @@ public class AutarkiaMod implements ModInitializer {
         // Under both specs: berries are ready, so a hungry body forages for a meal as well as for
         // the party's stores.
         Producers.register(dev.luizloyola.anima.core.brain.task.ReadyFood.SPEC,
+                dev.luizloyola.autarkia.core.patch.Forage::yields,
                 dev.luizloyola.autarkia.core.patch.Forage::new);
         Producers.register(dev.luizloyola.anima.core.brain.task.Food.SPEC,
+                dev.luizloyola.autarkia.core.patch.Forage::yields,
                 dev.luizloyola.autarkia.core.patch.Forage::new);
         // Stone a furnace is made of, from where it shows (decision 19); the tag only the mod reads.
         Stock.furnaceStoneBy(dev.luizloyola.autarkia.compat.inv.ItemTagged::stoneCrafting);
         dev.luizloyola.autarkia.core.patch.MineStone.ACT.key();
-        Producers.register(Stock.FURNACE_STONE, dev.luizloyola.autarkia.core.patch.MineStone::new);
+        Producers.register(Stock.FURNACE_STONE, Stock.FURNACE_STONE::matches,
+                dev.luizloyola.autarkia.core.patch.MineStone::new);
         // And by hunting, under food alone: raw meat is not a meal, so the party's need for food is
         // what sends a Person hunting — or starving (directions spec, decisions 16 and 17).
         dev.luizloyola.autarkia.core.person.Hunting.ACT.key();
         Producers.register(dev.luizloyola.anima.core.brain.task.Food.SPEC,
+                dev.luizloyola.anima.core.brain.sense.Yields::dropped,
                 dev.luizloyola.autarkia.core.person.Hunting::create);
         // Picking a bush is Autarkia's to know; Anima only lends the empty hand that does it.
         dev.luizloyola.anima.mod.brain.BlockUses.register(

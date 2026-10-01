@@ -46,6 +46,11 @@ public final class Forage implements Method {
             new Yield(Patches.BERRIES, "minecraft:sweet_berries"),
             new Yield(Patches.MELONS, "minecraft:melon_slice"));
 
+    /** Whether some patch yields {@code itemId} — what forage can ever make. */
+    public static boolean yields(String itemId) {
+        return YIELDS.stream().anyMatch(yield -> yield.itemId().equals(itemId));
+    }
+
     private final ItemSpec wanted;
 
     public Forage(ItemSpec wanted) {

@@ -58,6 +58,19 @@ class ForageTest {
     }
 
     @Test
+    void whatItSaysItYieldsIsWhatItForagesFor() {
+        // Reachability asks yields(); a drift sends crafts after what no patch gives.
+        remember(Patches.BERRIES, new Pos(12, 64, 0));
+        remember(Patches.MELONS, new Pos(-12, 64, 0));
+        for (String id : List.of("minecraft:sweet_berries", "minecraft:melon_slice",
+                "minecraft:dried_kelp", "minecraft:beetroot")) {
+            assertEquals(new Forage(ItemSpec.anyOf(Set.of(id))).applicable(ctx), Forage.yields(id),
+                    id);
+        }
+        assertFalse(Forage.yields("minecraft:dried_kelp"));
+    }
+
+    @Test
     void withNoPatchKnownThereIsNoWay() {
         assertFalse(forFood().applicable(ctx));
     }
