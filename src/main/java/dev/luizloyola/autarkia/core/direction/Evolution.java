@@ -64,6 +64,15 @@ public final class Evolution {
                     }
                 }
                 case UNMET -> {
+                    if (work.isPresent() && !work.get().finished()
+                            && line.get().givesWay(work.get(), direction, view)) {
+                        OptionalInt handle = board.handleOf(work.get());
+                        if (handle.isPresent()) {
+                            board.cancel(handle.getAsInt());
+                            withdrawn.add(new Withdrawn(direction, work.get()));
+                            work = Optional.empty();
+                        }
+                    }
                     if (work.isEmpty()) {
                         PartyProject project = line.get().post(direction, view,
                                 tree.priorityOf(direction, progress.reached()));

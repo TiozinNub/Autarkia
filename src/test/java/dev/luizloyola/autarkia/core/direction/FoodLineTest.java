@@ -178,6 +178,20 @@ class FoodLineTest {
     }
 
     @Test
+    void aGatherGivesWayOnceHomesRawFoodCouldBeCooked() {
+        Gather gather = assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4));
+        assertFalse(FoodLine.INSTANCE.givesWay(gather, FOOD, party), "nothing to cook yet");
+
+        party.raw = 12;
+        assertFalse(FoodLine.INSTANCE.givesWay(gather, FOOD, party), "no campfire and no charcoal for one");
+
+        party.campfire = Optional.of(FIRE);
+        assertTrue(FoodLine.INSTANCE.givesWay(gather, FOOD, party),
+                "a gather kept the hunters out after meat cooking at HOME could make good (2026-10-01)");
+        assertFalse(FoodLine.INSTANCE.givesWay(new Cook(FIRE, 12, 0.4), FOOD, party), "a cook never does");
+    }
+
+    @Test
     void nothingRawAtHomeGathers() {
         party.campfire = Optional.of(FIRE);
 

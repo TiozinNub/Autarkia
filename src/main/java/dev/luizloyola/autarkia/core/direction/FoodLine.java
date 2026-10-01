@@ -81,22 +81,33 @@ public final class FoodLine implements DirectionLine {
                 || project instanceof Cook cook && party.placeAtHome(Campfire.POI).filter(cook.at()::equals).isPresent();
     }
 
+    /** A gather out for food while what HOME holds raw could be cooked there instead. */
+    @Override
+    public boolean givesWay(Project work, Direction direction, PartyView party) {
+        return work instanceof Gather && canCook(party);
+    }
+
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        int raw = party.storedAtHome(RawFood.SPEC).orElse(0);
-        if (raw > 0) {
+        if (canCook(party)) {
+            int raw = party.storedAtHome(RawFood.SPEC).orElse(0);
             Optional<Pos> fire = party.placeAtHome(Campfire.POI);
             if (fire.isPresent()) {
                 return new Cook(fire.get(), raw, priority);
             }
-            if (party.storedAtHome(CharcoalLine.CHARCOAL).orElse(0) > 0 && party.spot().isPresent()) {
-                return new SetUp(List.of(SetUp.CAMPFIRE), party.spot().get(), Math.max(priority, Direction.BUILDING));
-            }
+            return new SetUp(List.of(SetUp.CAMPFIRE), party.spot().orElseThrow(), Math.max(priority, Direction.BUILDING));
         }
         int shortfall = Math.max(0, wanted(direction, party) - party.foodAtHome().orElse(0));
         int target = party.storedAtHome(Food.SPEC).orElse(0)
                 + (shortfall + POINTS_PER_ITEM - 1) / POINTS_PER_ITEM;
         return new Gather(Food.SPEC, Math.max(1, target), priority, party.party(), CarrySplit.INSTANCE);
+    }
+
+    /** HOME holds raw food, and a campfire to cook it on or the charcoal to make one. */
+    private static boolean canCook(PartyView party) {
+        return party.storedAtHome(RawFood.SPEC).orElse(0) > 0
+                && (party.placeAtHome(Campfire.POI).isPresent()
+                        || party.storedAtHome(CharcoalLine.CHARCOAL).orElse(0) > 0 && party.spot().isPresent());
     }
 
     private static int wanted(Direction direction, PartyView party) {

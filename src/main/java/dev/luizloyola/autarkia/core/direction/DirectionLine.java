@@ -40,6 +40,15 @@ public interface DirectionLine {
     PartyProject post(Direction direction, PartyView party, double priority);
 
     /**
+     * Whether this line's posted work, still unfinished, should give way to what it would post now
+     * — withdrawn, and posted afresh on the same beat. A gather sent out for food that cooking at
+     * HOME could make (decision 25). Never by default: work stays until it is done or not needed.
+     */
+    default boolean givesWay(Project work, Direction direction, PartyView party) {
+        return false;
+    }
+
+    /**
      * A project of this line's work closed having finished. Its ledger is gone with it, so this is
      * the line's one chance to keep what it learned. Nothing by default.
      */

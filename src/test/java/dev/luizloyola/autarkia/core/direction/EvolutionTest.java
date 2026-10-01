@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.Food;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
@@ -169,6 +170,61 @@ class EvolutionTest {
         assertEquals(1, outcome.withdrawn().size());
         assertTrue(board.projects().stream().noneMatch(p -> p instanceof Gather));
         assertEquals(List.of(), outcome.reached(), "the pool still wants the plot cleared");
+    }
+
+    @Test
+    void workThatGivesWayIsWithdrawnAndPostedAfreshOnTheSameBeat() {
+        boolean[] cook = {false};
+        Lines.register(new DirectionLine() {
+            @Override
+            public String id() {
+                return "swap";
+            }
+
+            @Override
+            public Optional<ItemSpec> seeks() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Status judge(Direction direction, PartyView party) {
+                return Status.of(Status.Reading.UNMET, "test.unmet");
+            }
+
+            @Override
+            public boolean isWork(dev.luizloyola.autarkia.core.board.Project project, Direction direction,
+                                  PartyView party) {
+                return project instanceof Gather gather && gather.spec() == Food.SPEC;
+            }
+
+            @Override
+            public boolean givesWay(dev.luizloyola.autarkia.core.board.Project work, Direction direction,
+                                    PartyView party) {
+                return cook[0] && work instanceof Gather gather && gather.target() == 1;
+            }
+
+            @Override
+            public dev.luizloyola.autarkia.core.board.PartyProject post(Direction direction, PartyView party,
+                                                                         double priority) {
+                return new Gather(Food.SPEC, cook[0] ? 2 : 1, priority, partyId,
+                        dev.luizloyola.autarkia.core.board.CarrySplit.INSTANCE);
+            }
+        });
+        Node only = new Node(WOOD, NodeKind.CORE, List.of(), true, Requirements.NONE,
+                List.of(new Direction(new DirectionId(WOOD, "swap"), 0, null)), Set.of(), Set.of());
+        tree = Tree.build(List.of(only), Set.of(), key -> false).tree();
+
+        beat();
+        assertEquals(1, ((Gather) board.projects().get(0)).target());
+        assertTrue(beat().posted().isEmpty(), "its own work, not giving way, stays");
+
+        cook[0] = true;
+        Evolution.Outcome outcome = beat();
+
+        assertEquals(1, outcome.withdrawn().size());
+        assertEquals(1, outcome.posted().size());
+        assertEquals(List.of(2), board.projects().stream().filter(p -> !p.finished())
+                .map(p -> ((Gather) p).target()).toList());
     }
 
     @Test
