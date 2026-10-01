@@ -52,6 +52,8 @@ public final class WorkDoings {
     /** Cutting and filling ground level. */
     public static final Doing LEVELLING = Doings.register(new Doing(
             "levelling", "autarkia.doing.levelling", List.of(), true));
+    public static final Doing DECONSTRUCTING = Doings.register(new Doing(
+            "deconstructing", "autarkia.doing.deconstructing", List.of(), true));
     public static final Doing EXPLORING = Doings.register(new Doing(
             "exploring", "autarkia.doing.exploring", List.of(), true));
     /** Putting a building up. */

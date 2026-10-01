@@ -63,6 +63,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Placing one run of a building's proved order. */
     String BUILD = "build";
 
+    /** Taking one block down, a container emptied first. */
+    String DECONSTRUCT = "deconstruct";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

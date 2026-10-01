@@ -12,7 +12,8 @@ package dev.luizloyola.autarkia.core.board;
  * hopefully so.
  */
 public sealed interface ProjectState permits FellTrees.State, Explore.State, Gather.State,
-        SetUp.State, Tend.State, Fire.State, Flatten.State, ClearPlants.State, SiteBuilding.State, Build.State {
+        SetUp.State, Tend.State, Fire.State, Flatten.State, ClearPlants.State, SiteBuilding.State, Build.State,
+        Deconstruct.State {
 
     /** The id this kind is saved and dispatched by — what {@link PartyProjects#byId} looks up. */
     String type();

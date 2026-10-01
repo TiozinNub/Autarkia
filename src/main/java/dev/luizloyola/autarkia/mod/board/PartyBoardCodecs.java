@@ -346,6 +346,54 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(ClearPlants.State::lastTick)
             ).apply(project, ClearPlants.State::new));
 
+    private static final Codec<dev.luizloyola.autarkia.core.board.Deconstruct.Target> DECONSTRUCT_TARGET =
+            RecordCodecBuilder.create(target -> target.group(
+                    POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.Deconstruct.Target::at),
+                    Codec.STRING.fieldOf("item").forGetter(dev.luizloyola.autarkia.core.board.Deconstruct.Target::item),
+                    Codec.BOOL.optionalFieldOf("container", false)
+                            .forGetter(dev.luizloyola.autarkia.core.board.Deconstruct.Target::container)
+            ).apply(target, dev.luizloyola.autarkia.core.board.Deconstruct.Target::new));
+
+    /** A block's tally: its trips so far, and, once settled, whether it came down. */
+    private record DeconstructTally(Pos at, int trips, Optional<Boolean> gone) {
+    }
+
+    private static final Codec<DeconstructTally> DECONSTRUCT_TALLY = RecordCodecBuilder.create(tally -> tally.group(
+            POS.fieldOf("at").forGetter(DeconstructTally::at),
+            Codec.INT.optionalFieldOf("trips", 0).forGetter(DeconstructTally::trips),
+            Codec.BOOL.optionalFieldOf("gone").forGetter(DeconstructTally::gone)
+    ).apply(tally, DeconstructTally::new));
+
+    /** Everything a {@code deconstruct} row carries: the blocks, why, and how far each has got. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.Deconstruct.State> DECONSTRUCT =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    DECONSTRUCT_TARGET.listOf().fieldOf("targets")
+                            .forGetter(dev.luizloyola.autarkia.core.board.Deconstruct.State::targets),
+                    Codec.STRING.optionalFieldOf("why", "").forGetter(dev.luizloyola.autarkia.core.board.Deconstruct.State::why),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.Deconstruct.State::priority),
+                    DECONSTRUCT_TALLY.listOf().optionalFieldOf("tally", List.of()).forGetter(state -> {
+                        List<DeconstructTally> rows = new java.util.ArrayList<>();
+                        for (var target : state.targets()) {
+                            Pos at = target.at();
+                            if (state.trips().containsKey(at) || state.gone().containsKey(at)) {
+                                rows.add(new DeconstructTally(at, state.trips().getOrDefault(at, 0),
+                                        Optional.ofNullable(state.gone().get(at))));
+                            }
+                        }
+                        return rows;
+                    })
+            ).apply(project, (targets, why, priority, tally) -> {
+                Map<Pos, Integer> trips = new java.util.LinkedHashMap<>();
+                Map<Pos, Boolean> gone = new java.util.LinkedHashMap<>();
+                for (DeconstructTally row : tally) {
+                    if (row.trips() > 0) {
+                        trips.put(row.at(), row.trips());
+                    }
+                    row.gone().ifPresent(g -> gone.put(row.at(), g));
+                }
+                return new dev.luizloyola.autarkia.core.board.Deconstruct.State(targets, why, priority, trips, gone);
+            }));
+
     /** Everything a {@code site_building} row carries: what to site, and whether it was. */
     public static final MapCodec<dev.luizloyola.autarkia.core.board.SiteBuilding.State> SITE_BUILDING =
             RecordCodecBuilder.mapCodec(project -> project.group(
@@ -515,6 +563,7 @@ public final class PartyBoardCodecs {
             case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
             case "site_building" -> DataResult.success(SITE_BUILDING);
             case "build" -> DataResult.success(BUILD);
+            case "deconstruct" -> DataResult.success(DECONSTRUCT);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }

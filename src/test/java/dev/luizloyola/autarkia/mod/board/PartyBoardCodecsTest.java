@@ -66,6 +66,18 @@ class PartyBoardCodecsTest {
     }
 
     @Test
+    void aDeconstructionComesBackWithItsTally() {
+        var targets = List.of(
+                new dev.luizloyola.autarkia.core.board.Deconstruct.Target(new Pos(4, 64, 4), "minecraft:chest", true),
+                new dev.luizloyola.autarkia.core.board.Deconstruct.Target(new Pos(6, 64, 4), "minecraft:crafting_table",
+                        false));
+        var state = new dev.luizloyola.autarkia.core.board.Deconstruct.State(targets, "moved in", 0.5,
+                java.util.Map.of(new Pos(4, 64, 4), 3), java.util.Map.of(new Pos(6, 64, 4), true));
+
+        assertEquals(state, roundTrip(new PartyBoard.Row(state, List.of())).project());
+    }
+
+    @Test
     void aRowNamesTheKindOfProjectItHolds() {
         PartyBoard.Row row = new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of());
         var encoded = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow();

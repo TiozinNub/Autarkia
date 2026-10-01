@@ -233,6 +233,8 @@ public class AutarkiaMod implements ModInitializer {
         // A sited building, put up in its proved order once its pad is level (Structures).
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Build.TYPE);
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Deconstruct.TYPE);
         dev.luizloyola.autarkia.mod.board.Tending.init();
         dev.luizloyola.autarkia.mod.direction.Directions.init();
         dev.luizloyola.autarkia.mod.bp.Blueprints.init();
