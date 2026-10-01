@@ -184,7 +184,7 @@ public final class MinePatch implements CompoundTask {
             }
             ctx.knowledge().avoid(Landmarks.STONE_POI, anchor, ctx.percepts().time() + BARREN_TICKS);
             ctx.journal().record(Category.BRAIN, "stone", "the stone at " + anchor.x() + ", " + anchor.y()
-                    + ", " + anchor.z() + " gives no " + wanted.name());
+                    + ", " + anchor.z() + " gives no " + said(wanted));
             return TaskStatus.FAILED;
         }
 
@@ -199,7 +199,14 @@ public final class MinePatch implements CompoundTask {
 
         @Override
         public String failureDetail() {
-            return "the stone gives no " + wanted.name();
+            return "the stone gives no " + said(wanted);
+        }
+
+        /** A recipe's ingredient is a list with a made-up name; say what is in it instead. */
+        private static String said(ItemSpec spec) {
+            return ItemSpec.literalIds(spec)
+                    .map(ids -> String.join(" or ", new java.util.TreeSet<>(ids)).replace("minecraft:", ""))
+                    .orElse(spec.name());
         }
     }
 }
