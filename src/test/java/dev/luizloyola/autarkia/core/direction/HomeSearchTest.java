@@ -100,6 +100,50 @@ class HomeSearchTest {
     }
 
     @Test
+    void onEvenGroundTheScoutSettlesWhereItStands() {
+        HomeSearch search = new HomeSearch();
+        HomeSearch.Terms impatient = new HomeSearch.Terms(2, 32, 30, 10, 40);
+        Pos at = HERE;
+        search.looked(at, look(List.of(plot(0, 0, 30, 0)), ways(at, EVEN)), TABLE, impatient, NO_NOISE);
+        for (int leg = 0; leg < 2; leg++) {
+            at = search.legEnd();
+            search.arrived();
+            search.looked(at, look(List.of(plot(at.x(), at.z(), 30, 0)), ways(at, EVEN)), TABLE,
+                    impatient, NO_NOISE);
+        }
+
+        assertEquals(Phase.SETTLE, search.phase());
+        assertEquals(new Pos(at.x(), 64, at.z()), search.yard(), "not back at the first stop");
+    }
+
+    @Test
+    void onEvenGroundTheScoutSometimesTurns() {
+        RandomGenerator random = new java.util.Random(7);
+        int straight = 0;
+        int turned = 0;
+        for (int trial = 0; trial < 200; trial++) {
+            HomeSearch search = new HomeSearch();
+            search.looked(HERE, look(List.of(plot(0, 0, 30, 0)), ways(HERE, EVEN)), TABLE, WALK,
+                    random);
+            Pos first = search.legEnd();
+            search.arrived();
+            search.looked(first, look(List.of(plot(first.x(), first.z(), 30, 0)), ways(first, EVEN)),
+                    TABLE, WALK, random);
+            Pos second = search.legEnd();
+            boolean sameWay = second.x() - first.x() == first.x() - HERE.x()
+                    && second.z() - first.z() == first.z() - HERE.z();
+            if (sameWay) {
+                straight++;
+            } else {
+                turned++;
+            }
+        }
+
+        assertTrue(turned > 20, "a flat world bends the walk now and then: " + turned + "/200");
+        assertTrue(straight > turned, "but momentum still wins most legs: " + straight + "/200");
+    }
+
+    @Test
     void patienceRunsOutAfterTheLastLeg() {
         HomeSearch search = new HomeSearch();
         HomeSearch.Terms impatient = new HomeSearch.Terms(2, 32, 30, 10, 40);

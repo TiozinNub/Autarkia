@@ -34,8 +34,12 @@ public final class HomeSearch {
     /** A leg may not end this near an earlier stop. */
     static final int REVISIT = 48;
 
-    /** Up to this much chance in a heading's score, so two parties from one spot part ways. */
-    static final double NOISE = 5;
+    /**
+     * Up to this much chance in a heading's score, so two parties from one spot part ways — and
+     * enough to beat momentum when the land does not choose: at 5 a scout on a flat world never
+     * turned once (2026-09-30). At 15, even ground bends a leg 45° about a third of the time.
+     */
+    static final double NOISE = 15;
 
     private static final String[] COMPASS = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
 
@@ -169,7 +173,9 @@ public final class HomeSearch {
         options.clear();
         List<Candidate> ranked = look.judgement().ranked();
         Candidate top = ranked.isEmpty() ? null : ranked.get(0);
-        if (top != null && (best == null || top.value() > best.value())) {
+        // A tie goes to the plot here, not the one legs back: on even ground every stop scores
+        // alike, and a strict win walked a scout 450 blocks back to its first stop (2026-09-30).
+        if (top != null && (best == null || top.value() >= best.value())) {
             if (firstAt < 0) {
                 firstAt = legs;
             }
