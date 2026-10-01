@@ -40,6 +40,8 @@ public final class HouseSite {
         PADDING,
         /** Lava near enough to set a wooden house alight. */
         LAVA,
+        /** Over the pad of a building already sited. */
+        SITED,
         /** No walk from the stores to the door. */
         NO_ROUTE
     }
@@ -90,6 +92,18 @@ public final class HouseSite {
 
         /** How many blocks a walk from {@code from} to {@code to} takes, or empty with no way. */
         OptionalInt route(Pos from, Pos to);
+
+        /**
+         * The buildings already sited and not yet built: each the same as built ground to a new
+         * one — its walls keep the gap, its pad is nobody else's.
+         */
+        default List<Planned> planned() {
+            return List.of();
+        }
+    }
+
+    /** A sited building: its walls and its pad, in the world. */
+    public record Planned(Footprint built, Footprint pad) {
     }
 
     /**
@@ -232,6 +246,14 @@ public final class HouseSite {
                 lavaMask[row * w + col] = ground.lava(x, z);
             }
         }
+        for (Planned planned : party.planned()) {
+            Footprint b = planned.built();
+            for (int x = Math.max(b.minX(), ground.minX()); x <= Math.min(b.maxX(), ground.minX() + w - 1); x++) {
+                for (int z = Math.max(b.minZ(), ground.minZ()); z <= Math.min(b.maxZ(), ground.minZ() + d - 1); z++) {
+                    usedMask[(z - ground.minZ()) * w + x - ground.minX()] = true;
+                }
+            }
+        }
         this.used = sat(usedMask, w, d);
         this.lava = sat(lavaMask, w, d);
     }
@@ -273,6 +295,10 @@ public final class HouseSite {
                     Footprint padAt = shift(pad, ax, az);
                     if (!rects.allowed(padAt.minX(), padAt.minZ())) {
                         refused.merge(Refusal.GROUND, 1, Integer::sum);
+                        continue;
+                    }
+                    if (party.planned().stream().anyMatch(p -> overlap(p.pad(), padAt))) {
+                        refused.merge(Refusal.SITED, 1, Integer::sum);
                         continue;
                     }
                     int gap = gap(shift(shape.built(), ax, az));

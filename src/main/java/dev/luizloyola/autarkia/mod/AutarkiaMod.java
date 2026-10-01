@@ -237,6 +237,9 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.mod.debug.FlattenPlanViewer.init();
         StoreGuard.guard("directions", dev.luizloyola.autarkia.mod.direction.DirectionsData.ID,
                 dev.luizloyola.autarkia.mod.direction.DirectionsData::get);
+        StoreGuard.guard("structures", dev.luizloyola.autarkia.mod.builder.StructuresData.ID,
+                dev.luizloyola.autarkia.mod.builder.StructuresData::get);
+        dev.luizloyola.autarkia.mod.builder.Structures.init();
         // Teach the debug wand what a block MEANS to a settler — Anima's wand can point at
         // anything and knows what none of it is. Unclaimed clicks still fall back to walking
         // there.

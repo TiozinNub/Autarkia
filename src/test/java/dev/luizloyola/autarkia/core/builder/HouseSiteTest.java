@@ -90,6 +90,12 @@ class HouseSiteTest {
     /** The party: the area grows by edge neighbours only, and every walk is its blocks. */
     private static final class Fake implements HouseSite.Party {
         boolean noWay;
+        List<HouseSite.Planned> planned = List.of();
+
+        @Override
+        public List<HouseSite.Planned> planned() {
+            return planned;
+        }
 
         @Override
         public SortedSet<ChunkKey> area() {
@@ -257,6 +263,26 @@ class HouseSiteTest {
             assertTrue(covered > 0, choice + " misses the base, which the patch should not allow");
             assertEquals(covered * HouseSite.Weights.DEFAULTS.baseMoved(), choice.terms().get("base_moved"), 1e-9,
                     choice.toString());
+        }
+    }
+
+    @Test
+    void aSitedBuildingIsTakenGround() {
+        Fake party = new Fake();
+        Choice first = choose(meadow(sample -> { }), party).best().get(0);
+        party.planned = List.of(new HouseSite.Planned(first.built(), first.pad()));
+        HouseSite.Result again = choose(meadow(sample -> { }), party);
+
+        assertTrue(again.refused().getOrDefault(Refusal.SITED, 0) > 0);
+        for (Choice choice : again.best()) {
+            Footprint a = choice.pad();
+            Footprint b = first.pad();
+            assertFalse(a.minX() <= b.maxX() && b.minX() <= a.maxX() && a.minZ() <= b.maxZ() && b.minZ() <= a.maxZ(),
+                    choice + " over the sited " + first);
+            Footprint f = choice.built();
+            Footprint w = first.built();
+            assertTrue(f.minX() > w.maxX() + 1 || w.minX() > f.maxX() + 1 || f.minZ() > w.maxZ() + 1
+                    || w.minZ() > f.maxZ() + 1, choice + " against the sited walls");
         }
     }
 

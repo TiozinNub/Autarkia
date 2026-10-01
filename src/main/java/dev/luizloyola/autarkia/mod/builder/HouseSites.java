@@ -23,6 +23,7 @@ import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.builder.HouseSite;
+import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +34,8 @@ import java.util.TreeSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The house-site chooser over the live world: the ground round a party's area, the party's
@@ -41,8 +44,12 @@ import net.minecraft.server.level.ServerLevel;
  */
 public final class HouseSites {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger("autarkia/house_site");
+
     /** How far past the area the ground is read: the ring, a pad's reach past its footprint, the view. */
     private static final int READ_MARGIN = HouseSite.RING + 16;
+    /** How near the door a walk must end, in blocks along each axis. */
+    private static final int NEAR_ENOUGH = 2;
 
     /** What the base lines put down at HOME: the stations a house may stand over, once moved. */
     private static final Set<PoiKind> STATIONS = Set.of(SetUp.WORKBENCH.kind(), SetUp.STORE.kind(),
@@ -93,12 +100,16 @@ public final class HouseSites {
             sample.unflag(place.x(), place.z(), GroundSample.USED);
         }
         Terrain ground = Terrain.analyse(sample, HouseSite.groundRules());
-        return new Inputs(ground, new Live(level, party, area, stores, places, ground));
+        List<HouseSite.Planned> planned = new ArrayList<>();
+        for (Structure structure : StructuresData.get(server).of(party)) {
+            planned.add(new HouseSite.Planned(structure.built(), structure.pad()));
+        }
+        return new Inputs(ground, new Live(level, party, area, stores, places, planned, ground));
     }
 
     /** The party as the world has it now. */
     private record Live(ServerLevel level, PartyId id, SortedSet<ChunkKey> area, List<Pos> stores, List<Pos> places,
-                        Terrain ground) implements HouseSite.Party {
+                        List<HouseSite.Planned> planned, Terrain ground) implements HouseSite.Party {
 
         @Override
         public OptionalInt growth(SortedSet<ChunkKey> footprint) {
@@ -110,27 +121,31 @@ public final class HouseSites {
 
         /**
          * A walk from beside the store to the ground before the door, on today's ground, with no
-         * blocks laid: a route that needs a bridge is no route to a front door.
+         * blocks laid: a route that needs a bridge is no route to a front door. One that ends
+         * within {@value #NEAR_ENOUGH} of the door counts — what stands there is cleared before
+         * anything is built, and in a wood the doorstep's own column is often a trunk.
          */
         @Override
         public OptionalInt route(Pos from, Pos to) {
             MoveCapabilities body = MoveCapabilities.of(AutarkiaConfig.PERSON);
             LevelGrid grid = new LevelGrid(level);
-            BlockPos start = null;
-            for (int[] side : new int[][] {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
-                if (Pathfinder.standable(grid, body, from.x() + side[0], from.y(), from.z() + side[1])) {
-                    start = new BlockPos(from.x() + side[0], from.y(), from.z() + side[1]);
-                    break;
-                }
-            }
+            BlockPos start = standBeside(grid, body, from);
             if (start == null || to.x() < ground.minX() || to.z() < ground.minZ()
                     || to.x() >= ground.minX() + ground.width() || to.z() >= ground.minZ() + ground.depth()) {
+                LOGGER.info("house site: no route to {} — {}", to, start == null ? "nowhere to stand by " + from
+                        : "the door is off the read");
                 return OptionalInt.empty();
             }
             BlockPos goal = new BlockPos(to.x(), ground.ground(to.x(), to.z()) + 1, to.z());
             Path path = PathfinderService.computeNow(level, null, start, goal, body, DangerField.NONE,
                     SetbackField.NONE).result().join();
-            if (path == null || !path.reachedGoal() || path.laid() > 0) {
+            boolean near = path != null && !path.isEmpty()
+                    && Math.abs(path.last().x() - goal.getX()) <= NEAR_ENOUGH
+                    && Math.abs(path.last().z() - goal.getZ()) <= NEAR_ENOUGH;
+            if (path == null || !(path.reachedGoal() || near) || path.laid() > 0) {
+                LOGGER.info("house site: no route {} -> {} — {}", start.toShortString(), goal.toShortString(),
+                        path == null ? "no path" : !path.reachedGoal() ? "stopped short at " + (path.isEmpty()
+                                ? "the start" : path.last()) : path.laid() + " blocks to lay");
                 return OptionalInt.empty();
             }
             double length = 0;
@@ -142,6 +157,26 @@ public final class HouseSites {
                 last = step;
             }
             return OptionalInt.of((int) Math.round(length));
+        }
+
+        /**
+         * A cell a body can stand in by the store: beside it first, then a ring further, each a
+         * block up or down — a chest is often set on a step, or on top of something.
+         */
+        private static BlockPos standBeside(LevelGrid grid, MoveCapabilities body, Pos at) {
+            for (int ring = 1; ring <= 2; ring++) {
+                for (int dy : new int[] {0, -1, 1}) {
+                    for (int dx = -ring; dx <= ring; dx++) {
+                        for (int dz = -ring; dz <= ring; dz++) {
+                            if (Math.max(Math.abs(dx), Math.abs(dz)) == ring
+                                    && Pathfinder.standable(grid, body, at.x() + dx, at.y() + dy, at.z() + dz)) {
+                                return new BlockPos(at.x() + dx, at.y() + dy, at.z() + dz);
+                            }
+                        }
+                    }
+                }
+            }
+            return null;
         }
     }
 }

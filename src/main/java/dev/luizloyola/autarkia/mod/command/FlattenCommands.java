@@ -30,10 +30,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class FlattenCommands {
 
-    /** The radius each column's ground is averaged over: a guess until flown on real ground. */
-    static final int SMOOTHING = 2;
-    /** The widest the eased ring outside the area may grow before the plan calls it a hillside. */
-    static final int MAX_RING = 8;
+    static final int SMOOTHING = FlattenPlan.Rules.SMOOTHING;
+    static final int MAX_RING = FlattenPlan.Rules.MAX_RING;
     /** A side longer than this is refused: the scan, the plan and the offers all grow with the area. */
     static final int MAX_SIDE = 128;
     static final int DEFAULT_TOLERANCE = 1;

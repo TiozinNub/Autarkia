@@ -44,6 +44,11 @@ public final class FlattenPlan {
      * @param maxRing   the widest the eased ring outside the area may grow
      */
     public record Rules(int tolerance, OptionalInt target, int smoothing, int maxRing) {
+        /** The radius each column's ground is averaged over: a guess until flown on real ground. */
+        public static final int SMOOTHING = 2;
+        /** The widest the eased ring outside the area may grow before the plan calls it a hillside. */
+        public static final int MAX_RING = 8;
+
         public Rules {
             if (tolerance < 0 || smoothing < 0 || maxRing < 0) {
                 throw new IllegalArgumentException("negative rule: " + tolerance + ", " + smoothing

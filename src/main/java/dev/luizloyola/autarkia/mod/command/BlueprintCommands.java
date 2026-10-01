@@ -6,6 +6,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.core.territory.Claimed;
@@ -13,6 +14,7 @@ import dev.luizloyola.anima.core.territory.Reason;
 import dev.luizloyola.anima.core.territory.Territory;
 import dev.luizloyola.anima.mod.command.AgentCommands;
 import dev.luizloyola.anima.mod.command.Replies;
+import dev.luizloyola.anima.mod.command.OpJournal;
 import dev.luizloyola.anima.mod.command.Subject;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.territory.Territories;
@@ -38,6 +40,9 @@ import dev.luizloyola.autarkia.core.bp.Ids;
 import dev.luizloyola.autarkia.core.bp.PlanArgs;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.builder.HouseSite;
+import dev.luizloyola.autarkia.core.builder.Structure;
+import dev.luizloyola.autarkia.mod.builder.Structures;
+import dev.luizloyola.autarkia.mod.builder.StructuresData;
 import dev.luizloyola.autarkia.mod.builder.HouseSites;
 import dev.luizloyola.autarkia.mod.debug.HouseSiteViewer;
 import dev.luizloyola.autarkia.core.bp.Planner;
@@ -140,6 +145,9 @@ public final class BlueprintCommands {
                 // Where the party's next building of this blueprint would go, painted; changes nothing.
                 .then(Commands.literal("site").then(id((source, entry) -> site(source, entry, ""))
                         .then(words(BlueprintCommands::site))))
+                // The party's buildings from the moment their site is chosen, and how far along.
+                .then(Commands.literal("sited").then(Commands.argument("words", StringArgumentType.greedyString())
+                        .executes(ctx -> sited(ctx.getSource(), StringArgumentType.getString(ctx, "words")))))
                 .then(Commands.literal("capture").then(Commands.argument("name", IdentifierArgument.id())
                         .executes(ctx -> capture(ctx, ""))
                         .then(Commands.argument("words", StringArgumentType.greedyString())
@@ -456,8 +464,11 @@ public final class BlueprintCommands {
             Replies.fail(source, Component.translatable("autarkia.command.bp.broken", entry.id()));
             return 0;
         }
+        // `apply` is this command's own word: the rest are the plan's.
+        List<String> rest = new ArrayList<>(List.of(words.trim().isEmpty() ? new String[0] : words.trim().split("\\s+")));
+        boolean apply = rest.remove("apply");
         Diagnostics out = new Diagnostics();
-        PlanArgs args = PlanArgs.parse(words, out);
+        PlanArgs args = PlanArgs.parse(String.join(" ", rest), out);
         if (out.hasErrors()) {
             failed(source, entry, out);
             return 0;
@@ -530,6 +541,53 @@ public final class BlueprintCommands {
                     choice.anchorX() + " " + choice.y() + " " + choice.anchorZ(),
                     placement.north().word() + (placement.flip() ? " flip" : ""), Math.round(choice.cost()),
                     terms.toString()), false);
+        }
+        return apply ? applySite(source, entry, plan, party, best.get(0)) : 1;
+    }
+
+    /**
+     * Takes the best site: the area grows to hold it and the party records it, sited. Its ground is
+     * cleared by the area line and its pad then flattened ({@code Structures}); nothing is built.
+     */
+    private static int applySite(CommandSourceStack source, Entry entry, BuildPlan plan, PartyId party,
+                                 HouseSite.Choice choice) {
+        MinecraftServer server = source.getServer();
+        String at = "(" + choice.anchorX() + ", " + choice.y() + ", " + choice.anchorZ() + ")";
+        Claimed grown = Territories.of(server).grow(party, choice.footprint().chunks(ChunkKey.OVERWORLD),
+                Territories.margin(), Reason.of(Reason.Kind.GROW, entry.id() + " at " + at + ", sited by "
+                        + source.getTextName()), Territories.now(server));
+        if (!grown.granted()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.site.not_grown", grown.describe()));
+            return 0;
+        }
+        Structure structure = new Structure(java.util.UUID.randomUUID(), entry.id(), plan.version(), plan.variants(),
+                plan.bindings(), new Pos(choice.anchorX(), choice.y(), choice.anchorZ()), choice.shape().placement(),
+                choice.built(), choice.pad(), Structure.Phase.SITED, server.overworld().getGameTime(), "");
+        StructuresData.get(server).add(party, structure);
+        OpJournal.record(source, PartyData.get(server).members(party), "sited " + Structures.describe(structure));
+        Replies.send(source, () -> Component.translatable("autarkia.command.bp.site.applied",
+                Structures.describe(structure), grown.added().size()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
+    /** {@code bp sited party=<person>}: the party's buildings, each with how far along it is. */
+    private static int sited(CommandSourceStack source, String words) {
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse(words, out);
+        if (out.hasErrors() || args.party() == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.site.no_party"));
+            return 0;
+        }
+        AgentId who = Subject.directoryId(source, args.party());
+        if (who == null) {
+            return 0;
+        }
+        MinecraftServer server = source.getServer();
+        List<Structure> structures = StructuresData.get(server).of(PartyData.get(server).partyOf(who));
+        Replies.send(source, () -> Component.translatable("autarkia.command.bp.sited.header",
+                AgentCommands.label(server, who), structures.size()), false);
+        for (Structure structure : structures) {
+            Replies.send(source, () -> Component.literal("  " + Structures.describe(structure)), false);
         }
         return 1;
     }
