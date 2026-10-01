@@ -108,8 +108,9 @@ class BuildOrderTest {
     }
 
     /**
-     * Waves over every shipped selection: they never go back, the first is all floor, and no step
-     * hangs from or stands on a step of its own wave — any order inside a wave keeps what holds it.
+     * Waves over every shipped selection: they never go back, the first is all floor, and a step
+     * held by its own wave is held by an earlier step of its own piece — the one thing any order of
+     * the pieces keeps.
      */
     @Test
     void everyShippedSelectionIsCutIntoWaves() throws IOException {
@@ -122,38 +123,35 @@ class BuildOrderTest {
                 BuildPlan plan = plan(bp, pins(bp, selection));
                 String what = path.substring(path.lastIndexOf('/') + 1) + " " + plan.variants();
                 List<BuildOrder.Placed> order = BuildOrder.prove(plan, DICT).order();
-                Map<Cell, Integer> waveOf = new LinkedHashMap<>();
+                Map<Cell, Integer> rankOf = new LinkedHashMap<>();
                 int last = 0;
-                for (BuildOrder.Placed placed : order) {
+                for (int rank = 0; rank < order.size(); rank++) {
+                    BuildOrder.Placed placed = order.get(rank);
                     assertTrue(placed.wave() >= last, what + ": waves go back at " + placed);
                     last = placed.wave();
                     for (Cell cell : placed.step().cells()) {
-                        waveOf.put(cell, placed.wave());
+                        rankOf.put(cell, rank);
                     }
-                }
-                for (BuildOrder.Placed placed : order) {
-                    Cell holder = placed.step().holder();
-                    Cell under = placed.step().cell().offset(-1, 0, 0);
-                    boolean own = placed.step().cells().contains(under);
-                    assertTrue(holder == null || waveOf.getOrDefault(holder, -1) < placed.wave(),
-                            what + ": " + placed + " hangs from its own wave");
-                    assertTrue(own || placed.step().section() == Section.FLOOR
-                                    || waveOf.getOrDefault(under, -1) != placed.wave()
-                                    || !blocksUnder(order, under),
-                            what + ": " + placed + " stands on its own wave");
                     if (placed.wave() == 0) {
                         assertEquals(Section.FLOOR, placed.step().section(), what + ": " + placed + " in the first wave");
                     }
                 }
-                widths.append(what).append(": ").append(last + 1).append(" waves\n");
+                for (int rank = 0; rank < order.size(); rank++) {
+                    BuildOrder.Placed placed = order.get(rank);
+                    Cell holder = placed.step().holder();
+                    if (holder == null || !rankOf.containsKey(holder)) {
+                        continue;
+                    }
+                    BuildOrder.Placed held = order.get(rankOf.get(holder));
+                    assertTrue(held.wave() < placed.wave() || held.piece() == placed.piece() && rankOf.get(holder) < rank,
+                            what + ": " + placed + " is held by " + held + " of its wave");
+                }
+                long pieces = order.stream().mapToInt(BuildOrder.Placed::piece).distinct().count();
+                widths.append(what).append(": ").append(last + 1).append(" waves, ").append(pieces)
+                        .append(" pieces\n");
             }
         }
         System.out.println(widths);
-    }
-
-    /** Whether a step fills {@code cell} — air under a step is no support to lose. */
-    private static boolean blocksUnder(List<BuildOrder.Placed> order, Cell cell) {
-        return order.stream().anyMatch(p -> p.step().cells().contains(cell));
     }
 
     /** The basic house cut into waves, wave by wave: section and size. */
@@ -162,7 +160,9 @@ class BuildOrderTest {
         Blueprint bp = bind(read(SHIPPED.get(0)));
         BuildPlan plan = plan(bp, Map.of("beds", "2", "base", "lv1", "attic", "has"));
         Map<Integer, String> waves = new LinkedHashMap<>();
+        Map<Integer, Set<Integer>> pieces = new LinkedHashMap<>();
         for (BuildOrder.Placed placed : BuildOrder.prove(plan, DICT).order()) {
+            pieces.computeIfAbsent(placed.wave(), w -> new HashSet<>()).add(placed.piece());
             waves.merge(placed.wave(), placed.step().section().name().toLowerCase() + " 1",
                     (a, b) -> {
                         String[] parts = a.split(" ");
@@ -172,6 +172,7 @@ class BuildOrderTest {
                     });
         }
         System.out.println("basic house waves: " + waves);
+        System.out.println("pieces per wave: " + pieces.values().stream().map(Set::size).toList());
         assertTrue(waves.size() > 1);
     }
 

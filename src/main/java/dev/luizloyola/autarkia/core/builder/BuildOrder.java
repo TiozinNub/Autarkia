@@ -40,11 +40,15 @@ public final class BuildOrder {
     private static final int UNREACHED = -2;
 
     /**
-     * A step, where the builder stood to place it, and its wave: the steps of one wave may go in in
-     * any order and by anyone once every earlier wave stands (builders-together spec, *Waves*).
+     * A step, where the builder stood to place it, its wave and its piece. The pieces of one wave go
+     * up side by side, each in its own order, once every earlier wave stands (builders-together
+     * spec, *Waves*); a piece is numbered across the whole order.
      */
-    public record Placed(Step step, Cell stand, int wave) {
+    public record Placed(Step step, Cell stand, int wave, int piece) {
     }
+
+    /** The most steps one piece holds: one builder's trip. */
+    public static final int PIECE = 24;
 
     /**
      * @param order    the steps in the order they go up
@@ -82,10 +86,16 @@ public final class BuildOrder {
     /** While flooding, count the plan's ladders as up. */
     private boolean assumeLadders;
     /**
-     * Placed by the wave being cut, in no known order: each obstructs, none is footing, a ladder or
-     * something to place against — any of them may not be there yet.
+     * Placed by the wave being cut. Another piece's block may or may not be there yet, so it is in
+     * the way and never footing or something to place against; one of the piece being judged is
+     * there when it comes before the step judged, and not when after.
      */
     private final boolean[] pending;
+    private final int[] pieceAt;
+    private final int[] rankAt;
+    /** The piece and the rank of the step being judged; -1 outside the cutting of waves. */
+    private int judgedPiece = -1;
+    private int judgedRank;
     private final List<Step> steps;
     private final int[][] cells;
     private final int[] holders;
@@ -109,6 +119,8 @@ public final class BuildOrder {
         ladder = new boolean[size];
         floor = new boolean[size];
         pending = new boolean[size];
+        pieceAt = new int[size];
+        rankAt = new int[size];
         for (int i = 0; i < size; i++) {
             int layer = layerOf(i);
             int x = xOf(i);
@@ -214,7 +226,7 @@ public final class BuildOrder {
             if (stand < 0 || !reach[stand] || sees(stand, chosen) == Double.MAX_VALUE) {
                 stand = bestStand(chosen, stand, done, reach);
             }
-            order.add(new Placed(steps.get(chosen), cellOf(stand), 0));
+            order.add(new Placed(steps.get(chosen), cellOf(stand), 0, 0));
             last = cells[chosen][0];
             set(chosen, true);
             done[chosen] = true;
@@ -234,11 +246,13 @@ public final class BuildOrder {
     }
 
     /**
-     * The proved order again from an empty plan, cut into waves greedily: a step joins the wave
-     * being cut when what holds it and what it is placed against stand in earlier waves, and when
-     * every step of the wave, it included, still has a stand that reaches and sees it — standing
-     * only on earlier waves, with the whole wave in the way. That is the worst any order inside the
-     * wave can do. Otherwise it begins the next wave.
+     * The proved order again from an empty plan, cut into waves of pieces greedily. A piece is a
+     * run of the order in one section, at most {@link #PIECE} long, and goes up in its order; a step
+     * joins the piece being cut, or begins the next piece of the same wave, when what holds it and
+     * what it is placed against stand in earlier waves or earlier in its piece, and when it and every
+     * step of the wave's other pieces still have a stand that reaches and sees them — standing on
+     * the same, with every other piece of the wave in the way. That is the worst any order of the
+     * pieces can do. Otherwise it begins the next wave.
      */
     private List<Placed> waves(List<Placed> order) {
         Arrays.fill(placed, false);
@@ -251,64 +265,138 @@ public final class BuildOrder {
             index.put(steps.get(s), s);
         }
         List<Placed> out = new ArrayList<>();
-        Map<Integer, Integer> witness = new LinkedHashMap<>();
-        int wave = 0;
-        for (Placed p : order) {
+        List<Member> wave = new ArrayList<>();
+        int waveNumber = 0;
+        int piece = -1;
+        int inPiece = 0;
+        for (int rank = 0; rank < order.size(); rank++) {
+            Placed p = order.get(rank);
             int s = index.get(p.step());
-            if (!witness.isEmpty() && !joins(s, witness)) {
-                for (int member : witness.keySet()) {
-                    for (int c : cells[member]) {
+            boolean sameSection = !wave.isEmpty()
+                    && steps.get(wave.get(wave.size() - 1).step).section() == p.step().section();
+            boolean full = inPiece >= PIECE || !sameSection;
+            if (!wave.isEmpty() && !full && joins(s, rank, piece, wave)) {
+                inPiece++;
+            } else if (!wave.isEmpty() && joins(s, rank, piece + 1, wave)) {
+                piece++;
+                inPiece = 1;
+            } else {
+                for (Member member : wave) {
+                    for (int c : cells[member.step]) {
                         pending[c] = false;
                     }
                 }
-                witness.clear();
-                wave++;
-            }
-            if (witness.isEmpty()) {
-                place(s);
+                wave.clear();
+                if (!out.isEmpty()) {
+                    waveNumber++;
+                }
+                piece++;
+                inPiece = 1;
+                place(s, rank, piece);
+                judge(piece, rank);
                 int stand = search(s, flood(false));
+                judgedPiece = -1;
                 // One the proof placed from a ladder it assumed: alone in its wave, and not asked again.
-                witness.put(s, stand < 0 ? UNREACHED : stand);
+                wave.add(new Member(s, rank, piece, stand < 0 ? UNREACHED : stand));
             }
-            out.add(new Placed(p.step(), p.stand(), wave));
+            out.add(new Placed(p.step(), p.stand(), waveNumber, piece));
         }
         return out;
     }
 
-    private boolean joins(int s, Map<Integer, Integer> witness) {
+    /** A step of the wave being cut, and the stand last found for it. */
+    private static final class Member {
+        final int step;
+        final int rank;
+        final int piece;
+        int stand;
+
+        Member(int step, int rank, int piece, int stand) {
+            this.step = step;
+            this.rank = rank;
+            this.piece = piece;
+            this.stand = stand;
+        }
+    }
+
+    /**
+     * Whether step {@code s} may join the wave as piece {@code piece}'s next step: held and reached
+     * as its piece leaves it, leaving every other piece's steps reached with it in the way.
+     */
+    private boolean joins(int s, int rank, int piece, List<Member> wave) {
+        judge(piece, rank);
         if (!supported(s)) {
+            judgedPiece = -1;
             return false;
         }
-        place(s);
-        boolean[] reach = flood(false);
-        Map<Integer, Integer> next = new LinkedHashMap<>(witness);
-        next.put(s, -1);
-        for (Map.Entry<Integer, Integer> member : next.entrySet()) {
-            int r = member.getKey();
-            int stand = member.getValue();
-            if (stand == UNREACHED || stand >= 0 && stillSees(stand, r, reach)) {
-                continue;
+        place(s, rank, piece);
+        Member joining = new Member(s, rank, piece, -1);
+        Map<Integer, Integer> found = new LinkedHashMap<>();
+        boolean ok = reached(joining, found);
+        for (Member member : wave) {
+            if (!ok) {
+                break;
             }
-            int found = search(r, reach);
-            if (found < 0) {
-                set(s, false);
-                for (int c : cells[s]) {
-                    pending[c] = false;
-                }
-                return false;
+            if (member.piece != piece) {
+                ok = reached(member, found);
             }
-            member.setValue(found);
         }
-        witness.clear();
-        witness.putAll(next);
+        judgedPiece = -1;
+        if (!ok) {
+            set(s, false);
+            for (int c : cells[s]) {
+                pending[c] = false;
+            }
+            return false;
+        }
+        joining.stand = found.get(s);
+        for (Member member : wave) {
+            member.stand = found.getOrDefault(member.step, member.stand);
+        }
+        wave.add(joining);
         return true;
     }
 
-    private void place(int s) {
+    /** Whether the member still has a stand, judged as its piece leaves it; a new one goes in {@code found}. */
+    private boolean reached(Member member, Map<Integer, Integer> found) {
+        if (member.stand == UNREACHED) {
+            return true;
+        }
+        judge(member.piece, member.rank);
+        boolean[] reach = flood(false);
+        if (member.stand >= 0 && stillSees(member.stand, member.step, reach)) {
+            return true;
+        }
+        int stand = search(member.step, reach);
+        if (stand < 0) {
+            return false;
+        }
+        found.put(member.step, stand);
+        return true;
+    }
+
+    private void judge(int piece, int rank) {
+        judgedPiece = piece;
+        judgedRank = rank;
+    }
+
+    private void place(int s, int rank, int piece) {
         set(s, true);
         for (int c : cells[s]) {
             pending[c] = true;
+            pieceAt[c] = piece;
+            rankAt[c] = rank;
         }
+    }
+
+    /** Whether a placed cell is there for the step being judged: always, but for its own piece's later steps. */
+    private boolean present(int i) {
+        return !pending[i] || pieceAt[i] != judgedPiece || rankAt[i] < judgedRank;
+    }
+
+    /** Whether a placed cell may be stood on or placed against by the step being judged. */
+    private boolean footing(int i) {
+        return !pending[i] || pieceAt[i] == judgedPiece && rankAt[i] < judgedRank;
     }
 
     /**
@@ -478,7 +566,7 @@ public final class BuildOrder {
             if (cell == target || cell == stand || cell == head) {
                 continue;
             }
-            if (cell >= 0 && (ground[cell] || blocks[cell])) {
+            if (cell >= 0 && (ground[cell] || blocks[cell] && present(cell))) {
                 return Double.MAX_VALUE;
             }
         }
@@ -596,20 +684,20 @@ public final class BuildOrder {
             return false;
         }
         int below = indexOrMinus(layerOf(i) - 1, xOf(i), zOf(i));
-        return climbs(i) || below < 0 || ground[below] || (blocks[below] || passes[below]) && !pending[below];
+        return climbs(i) || below < 0 || ground[below] || (blocks[below] || passes[below]) && footing(below);
     }
 
     /** A body fits: no ground and nothing placed with collision, or a door it opens. Above the grid is air. */
     private boolean open(int i) {
-        return i < 0 ? true : !ground[i] && (!blocks[i] || passes[i]);
+        return i < 0 ? true : !ground[i] && (!blocks[i] || passes[i] || !present(i));
     }
 
     private boolean climbs(int i) {
-        return climb[i] && !pending[i] || assumeLadders && ladder[i] && !placed[i];
+        return climb[i] && footing(i) || assumeLadders && ladder[i] && !placed[i];
     }
 
     private boolean solid(int i) {
-        return ground[i] || placed[i] && !pending[i];
+        return ground[i] || placed[i] && footing(i);
     }
 
     // ── the grid ────────────────────────────────────────────────────────────────────────────
