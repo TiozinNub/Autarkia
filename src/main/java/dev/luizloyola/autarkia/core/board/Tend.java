@@ -110,6 +110,11 @@ public final class Tend implements PartyProject {
 
     @Override
     public void failed(WorkItem offered, AgentId who, BrainContext ctx) {
+        if (Fire.furnaceGone(ctx, at)) {
+            done = true;
+            ctx.journal().record(Category.PROJECT, describe(), "withdrawn — no furnace there");
+            return;
+        }
         cooldownUntil.put(who, ctx.percepts().time() + SetUp.FAIL_COOLDOWN);
     }
 

@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.history.Slot;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.LoadFurnace;
 import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.craft.Furnace;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.store.Store;
@@ -86,7 +87,21 @@ public final class Fire implements PartyProject {
 
     @Override
     public void failed(WorkItem offered, AgentId who, BrainContext ctx) {
+        if (furnaceGone(ctx, at)) {
+            done = true;
+            ctx.journal().record(Category.PROJECT, describe(), "withdrawn — no furnace there");
+            return;
+        }
         cooldownUntil.put(who, ctx.percepts().time() + SetUp.FAIL_COOLDOWN);
+    }
+
+    /**
+     * Whether the party no longer has a furnace at {@code at} — struck by a body that stood there
+     * and found none. Work at it is then nobody's: a Direction knows its work by content, so a
+     * load at a furnace that moved was claimed and failed seven times more (2026-10-01).
+     */
+    static boolean furnaceGone(BrainContext ctx, Pos at) {
+        return Furnace.ours(ctx).stream().noneMatch(furnace -> furnace.anchor().equals(at));
     }
 
     @Override

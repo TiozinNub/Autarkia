@@ -57,6 +57,7 @@ class TendTest {
 
     @Test
     void aFailureSitsThatMemberOutAWhile() {
+        ctx.claim(dev.luizloyola.anima.core.craft.Furnace.POI, furnace);
         Tend tend = dueAt(0L);
         WorkItem item = tend.open().get(0);
         ctx.percepts.time = 100L;
@@ -65,6 +66,20 @@ class TendTest {
         assertFalse(tend.offerableTo(item, ana, ctx));
         tend.tick(100L + SetUp.FAIL_COOLDOWN + 1);
         assertTrue(tend.offerableTo(item, ana, ctx));
+    }
+
+    /** A furnace struck from the record leaves the trip nobody's: it closes, not cools down. */
+    @Test
+    void aFailureAtAFurnaceThatIsGoneClosesIt() {
+        ctx.claim(dev.luizloyola.anima.core.craft.Furnace.POI, new Pos(40, 64, 0));
+        Tend tend = dueAt(0L);
+        tend.failed(tend.open().get(0), ana, ctx);
+        assertTrue(tend.finished());
+        assertTrue(tend.open().isEmpty());
+
+        Fire fire = new Fire(furnace, Stock.LOGS, 16, Stock.PLANKS, 0.4);
+        fire.failed(fire.open().get(0), ana, ctx);
+        assertTrue(fire.finished(), "a load at the old spot, after the furnace moved");
     }
 
     @Test
