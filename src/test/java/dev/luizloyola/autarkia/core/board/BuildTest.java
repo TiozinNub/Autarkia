@@ -167,4 +167,43 @@ class BuildTest {
         assertEquals(saved, back.snapshot());
         assertFalse(back.finished());
     }
+
+    @Test
+    void aSlabHalfPlacedIsNotADoubleSlab() {
+        Laying slab = new Laying(Section.CEILING, new Placing(SLAB, new Pos(5, 64, 0), SLAB, Map.of("type", "double")),
+                List.of(), new Pos(5, 64, 2), 2);
+        Build build = build(List.of(slab));
+        FakeContext ctx = new FakeContext();
+        ctx.percepts.inventory.set(0, ItemStack.of(SLAB, 1, 64));
+        WorkItem piece = only(build);
+        ctx.percepts.blocks.setId(5, 64, 0, SLAB);
+        ctx.percepts.blocks.setState(5, 64, 0, Map.of("type", "bottom", "waterlogged", "false"));
+        build.completed(piece, ctx);
+        assertFalse(build.finished(), "one slab of two is not the step");
+
+        ctx.percepts.blocks.setState(5, 64, 0, Map.of("type", "double", "waterlogged", "false"));
+        build.completed(piece, ctx);
+        assertTrue(build.finished());
+    }
+
+    @Test
+    void theKitHoldsWhatTheClicksHoldAToolOnceAPlantEach() {
+        Laying.Use poppy = new Laying.Use(java.util.Set.of("minecraft:poppy"), true);
+        Laying.Use shovel = new Laying.Use(java.util.Set.of("minecraft:wooden_shovel", "minecraft:stone_shovel"), false);
+        List<Laying> order = List.of(
+                new Laying(Section.INTERIOR, new Placing("minecraft:flower_pot", new Pos(0, 65, 0), "minecraft:potted_poppy",
+                        Map.of()), List.of(), new Pos(0, 64, 2), 1, List.of(poppy)),
+                new Laying(Section.INTERIOR, new Placing("minecraft:flower_pot", new Pos(1, 65, 0), "minecraft:potted_poppy",
+                        Map.of()), List.of(), new Pos(1, 64, 2), 1, List.of(poppy)),
+                new Laying(Section.INTERIOR, new Placing("minecraft:dirt", new Pos(2, 64, 0), "minecraft:dirt_path",
+                        Map.of()), List.of(), new Pos(2, 64, 2), 1, List.of(shovel)),
+                new Laying(Section.INTERIOR, new Placing("minecraft:dirt", new Pos(3, 64, 0), "minecraft:dirt_path",
+                        Map.of()), List.of(), new Pos(3, 64, 2), 1, List.of(shovel)));
+        List<ItemCall> calls = only(build(order)).kit().calls();
+        assertEquals(4, calls.size(), calls.toString());
+        assertEquals(2, calls.get(2).count(), "a plant for each pot");
+        assertTrue(calls.get(2).spec().matches("minecraft:poppy"));
+        assertEquals(1, calls.get(3).count(), "one shovel digs both paths");
+        assertTrue(calls.get(3).spec().matches("minecraft:stone_shovel"));
+    }
 }

@@ -32,6 +32,7 @@ import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.SupportType;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -155,7 +156,22 @@ public final class Placer {
         Placing placing = new Placing(BuiltInRegistries.ITEM.getKey(item).toString(), cells.get(0),
                 BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString(), named);
         return Optional.of(new Laying(step.section(), placing, cells.subList(1, cells.size()),
-                pos(at(anchor, plan, placement, placed.stand())), Planner.count(step.state())));
+                pos(at(anchor, plan, placement, placed.stand())), Planner.count(step.state()),
+                making == null ? List.of() : List.of(use(making))));
+    }
+
+    /** What a made block's click holds, as every item that will do: a tool is used, the rest used up. */
+    private static Laying.Use use(Making making) {
+        java.util.Set<String> items = new java.util.TreeSet<>();
+        boolean tool = true;
+        for (Item item : BuiltInRegistries.ITEM) {
+            ItemStack stack = new ItemStack(item);
+            if (item != Items.AIR && making.click().test(stack)) {
+                items.add(BuiltInRegistries.ITEM.getKey(item).toString());
+                tool &= stack.isDamageableItem();
+            }
+        }
+        return new Laying.Use(items, !tool);
     }
 
     private static Pos pos(BlockPos at) {

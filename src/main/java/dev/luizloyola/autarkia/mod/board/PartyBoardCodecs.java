@@ -356,6 +356,13 @@ public final class PartyBoardCodecs {
                     Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.SiteBuilding.State::done)
             ).apply(project, dev.luizloyola.autarkia.core.board.SiteBuilding.State::new));
 
+    private static final Codec<dev.luizloyola.autarkia.core.builder.Laying.Use> LAYING_USE =
+            RecordCodecBuilder.create(use -> use.group(
+                    Codec.STRING.listOf().fieldOf("items").forGetter(u -> List.copyOf(new java.util.TreeSet<>(u.items()))),
+                    Codec.BOOL.fieldOf("consumed").forGetter(dev.luizloyola.autarkia.core.builder.Laying.Use::consumed)
+            ).apply(use, (items, consumed) -> new dev.luizloyola.autarkia.core.builder.Laying.Use(
+                    java.util.Set.copyOf(items), consumed)));
+
     /** One step of a build, in the world: the plan's copy is a list of these. */
     public static final Codec<dev.luizloyola.autarkia.core.builder.Laying> LAYING =
             RecordCodecBuilder.create(step -> step.group(
@@ -371,11 +378,13 @@ public final class PartyBoardCodecs {
                     POS.listOf().optionalFieldOf("also", List.of())
                             .forGetter(dev.luizloyola.autarkia.core.builder.Laying::also),
                     POS.fieldOf("stand").forGetter(dev.luizloyola.autarkia.core.builder.Laying::stand),
-                    Codec.INT.optionalFieldOf("count", 1).forGetter(dev.luizloyola.autarkia.core.builder.Laying::count)
-            ).apply(step, (section, item, at, block, state, also, stand, count) ->
+                    Codec.INT.optionalFieldOf("count", 1).forGetter(dev.luizloyola.autarkia.core.builder.Laying::count),
+                    LAYING_USE.listOf().optionalFieldOf("uses", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.builder.Laying::uses)
+            ).apply(step, (section, item, at, block, state, also, stand, count, uses) ->
                     new dev.luizloyola.autarkia.core.builder.Laying(section,
                             new dev.luizloyola.anima.core.brain.act.Placing(item, at, block, state), also, stand,
-                            count)));
+                            count, uses)));
 
     /** Everything a {@code build} row carries: the world steps, and which of them stand. */
     public static final MapCodec<dev.luizloyola.autarkia.core.board.Build.State> BUILD =

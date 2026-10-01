@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.mod.builder;
 
+import dev.luizloyola.anima.compat.sense.LevelProbe;
 import dev.luizloyola.autarkia.compat.bp.Placer;
 import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
@@ -15,7 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
 
@@ -65,10 +65,9 @@ public final class Builds {
             notes.add(itemless + " steps nothing places");
         }
         Build build = new Build(structure.id(), structure.blueprint(), order, PRIORITY);
-        build.standing(step -> {
-            BlockPos at = new BlockPos(step.cell().x(), step.cell().y(), step.cell().z());
-            return step.block().equals(BuiltInRegistries.BLOCK.getKey(level.getBlockState(at).getBlock()).toString());
-        });
+        LevelProbe probe = new LevelProbe(level);
+        build.standing(step -> step.standsAs(probe.idAt(step.cell().x(), step.cell().y(), step.cell().z()),
+                probe.stateAt(step.cell().x(), step.cell().y(), step.cell().z())));
         return build;
     }
 }

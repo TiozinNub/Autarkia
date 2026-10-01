@@ -114,7 +114,7 @@ public final class Build implements PartyProject {
 
     private static boolean stands(BlockProbe probe, Laying step) {
         Pos cell = step.cell();
-        return step.block().equals(probe.idAt(cell.x(), cell.y(), cell.z()));
+        return step.standsAs(probe.idAt(cell.x(), cell.y(), cell.z()), probe.stateAt(cell.x(), cell.y(), cell.z()));
     }
 
     @Override
@@ -291,6 +291,17 @@ public final class Build implements PartyProject {
             return bill;
         }
 
+        /** What the piece's clicks hold: a plant or a bucket for each step, a tool once for all. */
+        private Map<Set<String>, Integer> uses() {
+            Map<Set<String>, Integer> uses = new LinkedHashMap<>();
+            for (int i : steps) {
+                for (Laying.Use use : order.get(i).uses()) {
+                    uses.merge(use.items(), 1, use.consumed() ? Integer::sum : Math::max);
+                }
+            }
+            return uses;
+        }
+
         Map<String, Integer> missing(Inventory pack) {
             Map<String, Integer> missing = new LinkedHashMap<>();
             bill().forEach((id, count) -> {
@@ -325,6 +336,7 @@ public final class Build implements PartyProject {
         public Kit kit() {
             List<ItemCall> calls = new ArrayList<>();
             bill().forEach((id, count) -> calls.add(ItemCall.need(ItemSpec.anyOf(Set.of(id)), count)));
+            uses().forEach((items, count) -> calls.add(ItemCall.need(ItemSpec.anyOf(items), count)));
             return Kit.of(calls.toArray(ItemCall[]::new));
         }
 

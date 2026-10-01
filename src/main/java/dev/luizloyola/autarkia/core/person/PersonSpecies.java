@@ -156,6 +156,7 @@ public final class PersonSpecies {
             // A minute: long enough that a hungry settler does not reopen an empty HOME chest on
             // every retry, short enough to find what the party's gatherers put in it since.
             .set(ProfileAspect.STORES_RECHECK_TICKS, 1200)
+            .set(ProfileAspect.PLACE_COOLDOWN_TICKS, 10)
             .build();
 
     /** The same declaration as tunables in {@code autarkia.toml}, under {@code person.*}. */

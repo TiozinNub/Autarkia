@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.builder;
 
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.CompoundTask;
 import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.PlaceFrom;
@@ -38,9 +39,10 @@ public final class LayPiece implements CompoundTask {
         return "build " + steps.size() + (steps.size() == 1 ? " block" : " blocks");
     }
 
-    /** Whether the step's cell already holds what it places; a step placed by count is never. */
+    /** Whether the step's cell already holds what it places, as many as it counts. */
     static boolean standing(BlockProbe probe, Laying step) {
-        return step.count() == 1 && step.block().equals(probe.idAt(step.cell().x(), step.cell().y(), step.cell().z()));
+        Pos cell = step.cell();
+        return step.standsAs(probe.idAt(cell.x(), cell.y(), cell.z()), probe.stateAt(cell.x(), cell.y(), cell.z()));
     }
 
     private final class Lay implements Method {

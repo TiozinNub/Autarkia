@@ -479,8 +479,13 @@ class PartyBoardCodecsTest {
                 new dev.luizloyola.anima.core.brain.act.Placing("minecraft:oak_slab", new Pos(4, 69, 2),
                         "minecraft:oak_slab", java.util.Map.of("type", "double")),
                 List.of(), new Pos(4, 66, 1), 2);
+        var pot = new dev.luizloyola.autarkia.core.builder.Laying(dev.luizloyola.autarkia.core.builder.Section.INTERIOR,
+                new dev.luizloyola.anima.core.brain.act.Placing("minecraft:flower_pot", new Pos(5, 66, 2),
+                        "minecraft:potted_poppy", java.util.Map.of()),
+                List.of(), new Pos(5, 65, 4), 1, List.of(new dev.luizloyola.autarkia.core.builder.Laying.Use(
+                        java.util.Set.of("minecraft:poppy"), true)));
         var before = new dev.luizloyola.autarkia.core.board.Build.State(java.util.UUID.randomUUID(),
-                "autarkia:basic_wooden_house", 0.5, List.of(door, slab), List.of(0), List.of(0, 2), List.of(),
+                "autarkia:basic_wooden_house", 0.5, List.of(door, slab, pot), List.of(0), List.of(0, 2), List.of(),
                 List.of(dev.luizloyola.anima.core.agent.AgentId.random()), 900L, 0L, "");
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
         assertEquals(before, after.project());

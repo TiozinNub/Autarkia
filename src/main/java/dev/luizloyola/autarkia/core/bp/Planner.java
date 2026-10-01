@@ -45,7 +45,7 @@ public final class Planner {
     public static final String ATTACH = "attach";
 
     /** Properties that count items into one block: two slabs make a double, four candles share one. */
-    private static final List<String> COUNTS = List.of("candles", "pickles", "eggs", "flower_amount",
+    public static final List<String> COUNTS = List.of("candles", "pickles", "eggs", "flower_amount",
             "segment_amount", "layers");
 
     /**
