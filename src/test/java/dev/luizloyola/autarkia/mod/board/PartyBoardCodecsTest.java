@@ -351,6 +351,15 @@ class PartyBoardCodecsTest {
     }
 
     @Test
+    void aCookComesBackWithItsCampfireCountAndCooldowns() {
+        AgentId alice = AgentId.random();
+        dev.luizloyola.autarkia.core.board.Cook.State before = new dev.luizloyola.autarkia.core.board.Cook.State(
+                new Pos(3, 64, 2), 12, 0.4, false, List.of(new Gather.Cooldown(alice, 900L)), 450L);
+
+        assertEquals(before, roundTrip(new PartyBoard.Row(before, List.of())).project());
+    }
+
+    @Test
     void aGatherCooldownSurvivesTheFile() {
         // Without it a reload puts a failing member straight back in front of the same trip they
         // just proved impossible — the whole defect this pacing exists to close.

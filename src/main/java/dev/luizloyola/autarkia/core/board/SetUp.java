@@ -49,6 +49,8 @@ public final class SetUp implements PartyProject {
     public static final Station STORE = new Station(Store.POI, Store.ITEM_ID);
     public static final Station FURNACE = new Station(dev.luizloyola.anima.core.craft.Furnace.POI,
             dev.luizloyola.anima.core.craft.Furnace.ITEM_ID);
+    public static final Station CAMPFIRE = new Station(dev.luizloyola.anima.core.craft.Campfire.POI,
+            dev.luizloyola.anima.core.craft.Campfire.ITEM_ID);
 
     /** Ticks one member sits this project out after failing its item — {@code Gather}'s number. */
     public static final int FAIL_COOLDOWN = 600;

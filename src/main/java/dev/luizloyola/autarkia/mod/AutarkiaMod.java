@@ -225,6 +225,11 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.board.Tend.TYPE);
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Fire.TYPE);
+        // The food line cooks what HOME holds raw before it sends anybody out for more. The act is
+        // declared here, not on first use, because the node table names it as it loads.
+        dev.luizloyola.autarkia.core.board.Cook.ACT.key();
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Cook.TYPE);
         // Levelling ground to a plan read off the natural ground (/autarkia flatten).
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Flatten.TYPE);

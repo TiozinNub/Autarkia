@@ -1,11 +1,17 @@
 package dev.luizloyola.autarkia.core.direction;
 
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Food;
+import dev.luizloyola.anima.core.brain.task.RawFood;
+import dev.luizloyola.anima.core.craft.Campfire;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.CarrySplit;
+import dev.luizloyola.autarkia.core.board.Cook;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
+import dev.luizloyola.autarkia.core.board.SetUp;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -17,6 +23,10 @@ import java.util.OptionalInt;
  * <p>The condition is in points and a gather counts items, so the gather this posts asks for what
  * is there plus the shortfall at {@link #POINTS_PER_ITEM} a piece, a berry's or a melon slice's
  * worth. It errs long on anything richer, and the next beat withdraws it once the points are met.
+ *
+ * <p>Raw food at HOME is cooked before anybody is sent out for more (decision 25): a {@link Cook}
+ * at HOME's campfire, or with none, a campfire set up — when HOME holds the charcoal it is made
+ * from. Without charcoal there is no cooking yet, and the line gathers as it did before.
  */
 public final class FoodLine implements DirectionLine {
 
@@ -61,11 +71,28 @@ public final class FoodLine implements DirectionLine {
 
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        return project instanceof Gather gather && gather.spec() == Food.SPEC && party.home().isPresent();
+        if (party.home().isEmpty()) {
+            return false;
+        }
+        if (project instanceof SetUp setUp) {
+            return BaseLine.inArea(party, setUp.near()) && setUp.remaining().contains(SetUp.CAMPFIRE);
+        }
+        return project instanceof Gather gather && gather.spec() == Food.SPEC
+                || project instanceof Cook cook && party.placeAtHome(Campfire.POI).filter(cook.at()::equals).isPresent();
     }
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
+        int raw = party.storedAtHome(RawFood.SPEC).orElse(0);
+        if (raw > 0) {
+            Optional<Pos> fire = party.placeAtHome(Campfire.POI);
+            if (fire.isPresent()) {
+                return new Cook(fire.get(), raw, priority);
+            }
+            if (party.storedAtHome(CharcoalLine.CHARCOAL).orElse(0) > 0 && party.spot().isPresent()) {
+                return new SetUp(List.of(SetUp.CAMPFIRE), party.spot().get(), Math.max(priority, Direction.BUILDING));
+            }
+        }
         int shortfall = Math.max(0, wanted(direction, party) - party.foodAtHome().orElse(0));
         int target = party.storedAtHome(Food.SPEC).orElse(0)
                 + (shortfall + POINTS_PER_ITEM - 1) / POINTS_PER_ITEM;

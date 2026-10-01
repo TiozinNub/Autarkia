@@ -285,6 +285,18 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Fire.State::lastTick)
             ).apply(project, dev.luizloyola.autarkia.core.board.Fire.State::new));
 
+    /** Everything a {@code cook} row carries: the campfire and how much is to be cooked there. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.Cook.State> COOK =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.Cook.State::at),
+                    Codec.INT.fieldOf("count").forGetter(dev.luizloyola.autarkia.core.board.Cook.State::count),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.Cook.State::priority),
+                    Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.Cook.State::done),
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Cook.State::cooldowns),
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Cook.State::lastTick)
+            ).apply(project, dev.luizloyola.autarkia.core.board.Cook.State::new));
+
     /**
      * A flatten's columns packed six ints apiece — x, z, ground, goal, now, refused — since an area
      * of 64 a side is four thousand of them.
@@ -567,6 +579,7 @@ public final class PartyBoardCodecs {
             case "explore" -> DataResult.success(EXPLORE);
             case "tend" -> DataResult.success(TEND);
             case "fire" -> DataResult.success(FIRE);
+            case "cook" -> DataResult.success(COOK);
             case "flatten" -> DataResult.success(FLATTEN);
             case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
             case "site_building" -> DataResult.success(SITE_BUILDING);

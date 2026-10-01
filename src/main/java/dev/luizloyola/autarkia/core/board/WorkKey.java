@@ -51,6 +51,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Loading a furnace. */
     String FIRE = "fire";
 
+    /** Cooking HOME's raw food at its campfire. */
+    String COOK = "cook";
+
     /** Cutting one patch of a flatten at one layer. */
     String CUT = "cut";
 

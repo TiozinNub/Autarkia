@@ -13,5 +13,5 @@
     {"line": "charcoal", "count": 16}
   ],
   "items": ["#autarkia:node/wood"],
-  "acts": ["autarkia:forage", "autarkia:hunt", "autarkia:dig_stone"]
+  "acts": ["autarkia:forage", "autarkia:hunt", "autarkia:dig_stone", "autarkia:cook"]
 }

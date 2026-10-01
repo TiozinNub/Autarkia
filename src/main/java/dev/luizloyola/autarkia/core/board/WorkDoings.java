@@ -45,6 +45,9 @@ public final class WorkDoings {
     /** Slot: what was put in to smelt. */
     public static final Doing FIRING = Doings.register(new Doing(
             "firing", "autarkia.doing.firing", List.of("what"), true));
+    /** Slot: what was cooked — HOME's raw food at its campfire. */
+    public static final Doing COOKING = Doings.register(new Doing(
+            "cooking", "autarkia.doing.cooking", List.of("what"), true));
     /** Pulling up the ground's plants, so it is ready to build on. */
     public static final Doing CLEARING_PLANTS = Doings.register(new Doing(
             "clearing_plants", "autarkia.doing.clearing_plants", List.of(), true));

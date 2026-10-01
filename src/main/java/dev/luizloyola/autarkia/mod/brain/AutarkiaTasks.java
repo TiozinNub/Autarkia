@@ -150,6 +150,12 @@ public final class AutarkiaTasks {
                         Codec.BOOL.optionalFieldOf("container", false)
                                 .forGetter(dev.luizloyola.autarkia.core.board.DeconstructErrand::container)
                 ).apply(t, dev.luizloyola.autarkia.core.board.DeconstructErrand::new)));
+        TaskCodecs.register("autarkia:cook_errand", dev.luizloyola.autarkia.core.board.CookErrand.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.CookErrand::at),
+                        Codec.INT.fieldOf("count").forGetter(dev.luizloyola.autarkia.core.board.CookErrand::count)
+                ).apply(t, dev.luizloyola.autarkia.core.board.CookErrand::new)));
+
         TaskCodecs.register("autarkia:bring_back", BringBack.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),

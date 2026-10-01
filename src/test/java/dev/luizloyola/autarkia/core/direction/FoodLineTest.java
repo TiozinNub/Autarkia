@@ -8,9 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Food;
+import dev.luizloyola.anima.core.brain.task.RawFood;
+import dev.luizloyola.anima.core.craft.Campfire;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.CarrySplit;
+import dev.luizloyola.autarkia.core.board.Cook;
+import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.Optional;
@@ -24,6 +28,8 @@ import org.junit.jupiter.api.Test;
 class FoodLineTest {
 
     private static final Direction FOOD = new Direction(new DirectionId("test:wood", "food"), 32, null);
+    private static final Pos SPOT = new Pos(0, 64, 0);
+    private static final Pos FIRE = new Pos(3, 64, 2);
 
     /** A party of {@link #members} with HOME's stores holding {@link #points} of food as {@link #items}. */
     private static final class Party implements PartyView {
@@ -48,9 +54,29 @@ class FoodLineTest {
             return members;
         }
 
+        int raw = 0;
+        int charcoal = 0;
+        Optional<Pos> campfire = Optional.empty();
+
         @Override
         public OptionalInt storedAtHome(ItemSpec spec) {
-            return OptionalInt.of(items);
+            return OptionalInt.of(spec == RawFood.SPEC ? raw : spec == CharcoalLine.CHARCOAL ? charcoal : items);
+        }
+
+        @Override
+        public Optional<Pos> placeAtHome(PoiKind kind) {
+            return kind == Campfire.POI ? campfire : Optional.empty();
+        }
+
+        @Override
+        public Optional<Pos> spot() {
+            return Optional.of(SPOT);
+        }
+
+        @Override
+        public java.util.SortedSet<dev.luizloyola.anima.core.territory.ChunkKey> area() {
+            return new java.util.TreeSet<>(java.util.Set.of(dev.luizloyola.anima.core.territory.ChunkKey.at(
+                    dev.luizloyola.anima.core.territory.ChunkKey.OVERWORLD, SPOT.x(), SPOT.z())));
         }
 
         @Override
@@ -116,6 +142,46 @@ class FoodLineTest {
 
         assertTrue(FoodLine.INSTANCE.isWork(food, FOOD, party));
         assertFalse(FoodLine.INSTANCE.isWork(logs, FOOD, party));
+    }
+
+    @Test
+    void rawFoodAtHomeIsCookedBeforeAnybodyIsSentOut() {
+        party.raw = 12;
+        party.campfire = Optional.of(FIRE);
+
+        Cook cook = assertInstanceOf(Cook.class, FoodLine.INSTANCE.post(FOOD, party, 0.4));
+
+        assertEquals(FIRE, cook.at());
+        assertEquals(12, cook.count());
+        assertTrue(FoodLine.INSTANCE.isWork(cook, FOOD, party));
+        assertFalse(FoodLine.INSTANCE.isWork(new Cook(new Pos(40, 64, 0), 12, 0.4), FOOD, party),
+                "a campfire not HOME's is not the line's");
+    }
+
+    @Test
+    void withNoCampfireOneIsSetUpFromHomesCharcoal() {
+        party.raw = 12;
+        party.charcoal = 3;
+
+        SetUp setUp = assertInstanceOf(SetUp.class, FoodLine.INSTANCE.post(FOOD, party, 0.4));
+
+        assertEquals(java.util.List.of(SetUp.CAMPFIRE), setUp.stations());
+        assertTrue(FoodLine.INSTANCE.isWork(setUp, FOOD, party));
+    }
+
+    @Test
+    void withoutCharcoalThereIsNoCookingYet() {
+        party.raw = 12;
+
+        assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4),
+                "a campfire is made with charcoal; without it the line gathers as it did");
+    }
+
+    @Test
+    void nothingRawAtHomeGathers() {
+        party.campfire = Optional.of(FIRE);
+
+        assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4));
     }
 
     @Test
