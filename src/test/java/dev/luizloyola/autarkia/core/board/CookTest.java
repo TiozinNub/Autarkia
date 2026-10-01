@@ -27,9 +27,17 @@ class CookTest {
     private final FakeContext ctx = new FakeContext();
     private final Pos fire = new Pos(3, 64, 2);
 
+    @org.junit.jupiter.api.BeforeEach
+    void foods() {
+        ctx.percepts.food("minecraft:beef", new dev.luizloyola.anima.core.agent.FoodValue(3, 1.8F, false));
+        ctx.percepts.cooked("minecraft:beef", new dev.luizloyola.anima.core.agent.FoodValue(8, 12.8F, false));
+        ReadyFood.install(ctx.percepts.foods());
+    }
+
     @AfterEach
     void tearDown() {
         Gate.install(Gate.OPEN);
+        ReadyFood.install(null);
     }
 
     @Test
@@ -91,8 +99,19 @@ class CookTest {
     }
 
     @Test
+    void nothingRawLeftEndsIt() {
+        ctx.claim(Campfire.POI, fire);
+        Cook cook = new Cook(fire, 12, 0.4);
+
+        cook.failed(cook.open().get(0), ctx.self, ctx);
+
+        assertTrue(cook.finished(), "a job for twelve was offered for ever once the beef had gone (2026-10-01)");
+    }
+
+    @Test
     void aFailureWhileTheCampfireStandsRestsOnlyThatMember() {
         ctx.claim(Campfire.POI, fire);
+        ctx.percepts.inventory.set(0, dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:beef", 4, 64));
         Cook cook = new Cook(fire, 12, 0.4);
         WorkItem item = cook.open().get(0);
 

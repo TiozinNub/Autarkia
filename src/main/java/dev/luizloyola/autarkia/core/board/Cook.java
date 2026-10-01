@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.gate.Act;
 import dev.luizloyola.anima.core.brain.gate.Acts;
 import dev.luizloyola.anima.core.brain.task.RawFood;
+import dev.luizloyola.anima.core.brain.task.TakeFromStore;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.craft.Campfire;
 import dev.luizloyola.anima.core.log.Category;
@@ -90,6 +91,14 @@ public final class Cook implements PartyProject {
         if (campfireGone(ctx, at)) {
             done = true;
             ctx.journal().record(Category.PROJECT, describe(), "withdrawn — no campfire there");
+            return;
+        }
+        // Eaten, or carried off by another member: the line judges HOME again rather than this
+        // being offered for ever.
+        if (ctx.percepts().inventory().count(RawFood.SPEC.matcher()) == 0
+                && !TakeFromStore.seenHolding(ctx, RawFood.SPEC)) {
+            done = true;
+            ctx.journal().record(Category.PROJECT, describe(), "withdrawn — nothing raw left to cook");
             return;
         }
         cooldownUntil.put(who, ctx.percepts().time() + SetUp.FAIL_COOLDOWN);
