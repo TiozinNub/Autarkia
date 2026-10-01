@@ -11,7 +11,6 @@ import dev.luizloyola.autarkia.core.board.Tend;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.Set;
 
 /**
  * {@code charcoal}: HOME's stores hold at least {@code count} charcoal a member (decision 20) — a
@@ -23,7 +22,9 @@ public final class CharcoalLine implements DirectionLine {
 
     public static final CharcoalLine INSTANCE = new CharcoalLine();
 
-    public static final ItemSpec CHARCOAL = ItemSpec.anyOf(Set.of("minecraft:charcoal"));
+    /** Declared rather than literal, as {@code Stock.LOGS} is: charcoal is made in every age. */
+    public static final ItemSpec CHARCOAL =
+            ItemSpec.register(new ItemSpec("charcoal", id -> id.equals("minecraft:charcoal")));
 
     private CharcoalLine() {
     }
