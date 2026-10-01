@@ -123,8 +123,9 @@ public final class Placer {
 
     /**
      * A proved step as a body places it: the item, the block turned as the building faces, and of
-     * its properties those the plan names — a door's or a bed's half is which cell, never named.
-     * Empty when it does not resolve or nothing places it.
+     * its properties those the plan names and every orientation — a plan leaves a default facing
+     * unsaid, and a body left to choose takes the one it looks along. A door's or a bed's half is
+     * which cell, never set. Empty when it does not resolve or nothing places it.
      */
     public static Optional<Laying> laying(BlockPos anchor, BuildPlan plan, Placement placement, Placed placed) {
         Step step = placed.step();
@@ -141,7 +142,8 @@ public final class Placer {
         }
         Map<String, String> named = new TreeMap<>();
         for (Property<?> property : state.getProperties()) {
-            if (step.state().props().containsKey(property.getName())
+            if ((step.state().props().containsKey(property.getName())
+                    || Placing.ORIENTATION.contains(property.getName()))
                     && property != BlockStateProperties.DOUBLE_BLOCK_HALF && property != BlockStateProperties.BED_PART) {
                 named.put(property.getName(), valueName(state, property));
             }

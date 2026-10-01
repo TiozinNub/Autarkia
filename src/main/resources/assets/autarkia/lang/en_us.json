@@ -283,7 +283,7 @@
   "autarkia.command.bp.site.candidate": "  #%s at %s facing %s — cost %s: %s",
   "autarkia.command.bp.site.refused_none": "none",
   "autarkia.command.bp.site.applied": "Sited %s; the area grew by %s chunks. It is levelled once its ground is cleared.",
-  "autarkia.command.bp.build.recorded": "To be built by %2$s's party: %1$s. The build goes on their board within five seconds.",
+  "autarkia.command.bp.build.recorded": "To be built by %2$s's party: %1$s. Its ground is cleared and levelled first, then it is built.",
   "autarkia.command.bp.site.not_grown": "Not sited: the area cannot take it — %s",
   "autarkia.command.bp.sited.header": "%s's party has %s building(s) sited:",
   "autarkia.command.bp.place.party": "%s's party claims %s more chunks for it, and holds %s.",

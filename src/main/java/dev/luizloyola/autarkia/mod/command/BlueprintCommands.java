@@ -567,9 +567,10 @@ public final class BlueprintCommands {
     }
 
     /**
-     * {@code bp build <id> [pos] party=<person> [pins]}: the party's building, sited here and taken
-     * as levelled as the ground stands, so {@code Structures} posts its build next beat. The site
-     * scorer and the flatten are skipped, not the area: it grows to hold the footprint.
+     * {@code bp build <id> [pos] party=<person> [pins]}: the party's building, sited here rather than
+     * by the scorer. From there it goes as the house line's does: its chunks cleared, its footprint
+     * levelled at this height, then built. Building before the clearing lost a house's posts to it
+     * as logs nobody could name.
      */
     private static int build(CommandSourceStack source, Entry entry, @Nullable BlockPos pos, String words) {
         Blueprint bp = entry.compiled().blueprint();
@@ -603,7 +604,7 @@ public final class BlueprintCommands {
         Footprint footprint = Footprint.of(anchor.getX(), anchor.getZ(), plan, placement);
         Structure structure = new Structure(java.util.UUID.randomUUID(), entry.id(), plan.version(), plan.variants(),
                 plan.bindings(), new Pos(anchor.getX(), anchor.getY(), anchor.getZ()), placement, footprint, footprint,
-                Structure.Phase.LEVELLED, server.overworld().getGameTime(), "");
+                Structure.Phase.SITED, server.overworld().getGameTime(), "");
         StructuresData.get(server).add(building.party(), structure);
         OpJournal.record(source, PartyData.get(server).members(building.party()),
                 "to build " + Structures.describe(structure));

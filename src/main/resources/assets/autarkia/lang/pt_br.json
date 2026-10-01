@@ -283,7 +283,7 @@
   "autarkia.command.bp.site.candidate": "  #%s em %s virado para %s — custo %s: %s",
   "autarkia.command.bp.site.refused_none": "nenhum",
   "autarkia.command.bp.site.applied": "Lugar escolhido: %s; a área cresceu %s chunks. O terreno é nivelado quando estiver limpo.",
-  "autarkia.command.bp.build.recorded": "A ser construída pelo grupo de %2$s: %1$s. A obra entra no quadro deles em até cinco segundos.",
+  "autarkia.command.bp.build.recorded": "A ser construída pelo grupo de %2$s: %1$s. O terreno é limpo e nivelado antes, depois ela é construída.",
   "autarkia.command.bp.site.not_grown": "Nada escolhido: a área não pode recebê-lo — %s",
   "autarkia.command.bp.sited.header": "O grupo de %s tem %s construção(ões) com lugar escolhido:",
   "autarkia.command.bp.place.party": "O grupo de %s reivindica mais %s chunks para ela, e tem %s.",
