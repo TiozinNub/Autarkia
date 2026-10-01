@@ -468,4 +468,21 @@ class PartyBoardCodecsTest {
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
         assertEquals(before, after.project());
     }
+
+    @Test
+    void aBuildComesBackWithItsStepsAndWhichStand() {
+        var door = new dev.luizloyola.autarkia.core.builder.Laying(dev.luizloyola.autarkia.core.builder.Section.DOORS,
+                new dev.luizloyola.anima.core.brain.act.Placing("minecraft:oak_door", new Pos(4, 65, 2),
+                        "minecraft:oak_door", java.util.Map.of("facing", "east", "hinge", "left")),
+                List.of(new Pos(4, 66, 2)), new Pos(6, 65, 2), 1);
+        var slab = new dev.luizloyola.autarkia.core.builder.Laying(dev.luizloyola.autarkia.core.builder.Section.CEILING,
+                new dev.luizloyola.anima.core.brain.act.Placing("minecraft:oak_slab", new Pos(4, 69, 2),
+                        "minecraft:oak_slab", java.util.Map.of("type", "double")),
+                List.of(), new Pos(4, 66, 1), 2);
+        var before = new dev.luizloyola.autarkia.core.board.Build.State(java.util.UUID.randomUUID(),
+                "autarkia:basic_wooden_house", 0.5, List.of(door, slab), List.of(0), List.of(0, 2), List.of(),
+                List.of(dev.luizloyola.anima.core.agent.AgentId.random()), 900L, 0L, "");
+        PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
+        assertEquals(before, after.project());
+    }
 }

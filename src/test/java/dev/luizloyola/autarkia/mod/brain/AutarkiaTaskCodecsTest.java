@@ -206,4 +206,15 @@ class AutarkiaTaskCodecsTest {
         assertEquals(fill.cells(), fillBack.cells());
         assertEquals(fill.tops(), fillBack.tops());
     }
+
+    @Test
+    void aPieceOfABuildComesBackWithItsSteps() {
+        var piece = new dev.luizloyola.autarkia.core.builder.LayPiece(java.util.List.of(
+                new dev.luizloyola.autarkia.core.builder.Laying(dev.luizloyola.autarkia.core.builder.Section.WALLS,
+                        new dev.luizloyola.anima.core.brain.act.Placing("minecraft:oak_log", new Pos(1, 65, 2),
+                                "minecraft:oak_log", java.util.Map.of("axis", "y")),
+                        java.util.List.of(), new Pos(1, 64, 4), 1)));
+        var back = assertInstanceOf(dev.luizloyola.autarkia.core.builder.LayPiece.class, roundTrip(piece));
+        assertEquals(piece.steps(), back.steps());
+    }
 }
