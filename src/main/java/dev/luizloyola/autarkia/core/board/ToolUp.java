@@ -174,7 +174,7 @@ public final class ToolUp implements StandingProject {
 
     @Override
     public String describe() {
-        return "keep a " + family.tool() + (cooldown > 0 ? " (retry cooldown " + cooldown + "t)" : "");
+        return "keep " + family.one() + (cooldown > 0 ? " (retry cooldown " + cooldown + "t)" : "");
     }
 
     private void clear() {
@@ -210,7 +210,11 @@ public final class ToolUp implements StandingProject {
 
         @Override
         public String progress(BrainContext ctx) {
-            return hasTier(ctx.percepts().inventory()) ? "worn" : "none at the tier";
+            Inventory pack = ctx.percepts().inventory();
+            if (Tools.covered(family, tier, pack, ctx.profile().d(ProfileAspect.HANDLING_SPARE_BELOW))) {
+                return "has one";
+            }
+            return hasTier(pack) ? "worn" : "none at the tier";
         }
     }
 

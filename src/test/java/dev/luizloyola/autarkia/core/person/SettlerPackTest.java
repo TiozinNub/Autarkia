@@ -45,12 +45,33 @@ class SettlerPackTest {
     }
 
     @Test
-    void anOldToolSitsBesideItsSuccessor() {
+    void anOldToolSitsPastTheFour() {
         pack.add(one("stone_axe"));
         pack.add(one("wooden_axe"));
         assertEquals("minecraft:stone_axe", pack.get(2).id());
-        assertTrue(pack.get(1).id().equals("minecraft:wooden_axe")
-                || pack.get(3).id().equals("minecraft:wooden_axe"), "one slot over, still on the hotbar");
+        assertEquals("minecraft:wooden_axe", pack.get(4).id(), "on the hotbar, out of the four's way");
+    }
+
+    @Test
+    void aTidySettlesAnUpgradeIntoOrder() {
+        // What a settler upgraded to stone carried in-world (2026-10-01), before the tidy.
+        pack.set(0, one("stone_sword"));
+        pack.set(1, one("wooden_pickaxe"));
+        pack.set(2, one("stone_pickaxe"));
+        pack.set(3, one("wooden_shovel"));
+        pack.set(4, one("stone_axe"));
+        pack.set(5, one("stone_shovel"));
+        for (dev.luizloyola.anima.core.inv.Tidy.Swap swap
+                : dev.luizloyola.anima.core.inv.Tidy.plan(pack, SettlerPack.INSTANCE, 18)) {
+            ItemStack moved = pack.get(swap.from());
+            pack.set(swap.from(), pack.get(swap.to()));
+            pack.set(swap.to(), moved);
+        }
+        assertEquals("minecraft:stone_sword", pack.get(0).id());
+        assertEquals("minecraft:stone_pickaxe", pack.get(1).id());
+        assertEquals("minecraft:stone_axe", pack.get(2).id());
+        assertEquals("minecraft:stone_shovel", pack.get(3).id());
+        assertTrue(pack.emptyHotbar() >= 1);
     }
 
     @Test

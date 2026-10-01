@@ -40,7 +40,7 @@ public final class KeepTool implements AchieveTask {
 
     @Override
     public String describe() {
-        return "keep a " + family.tool();
+        return "keep " + family.one();
     }
 
     private final class Make implements Method {

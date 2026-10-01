@@ -31,6 +31,11 @@ public final class Tools {
             return tool;
         }
 
+        /** "a sword", "an axe" — for the journal and the board readout. */
+        public String one() {
+            return (tool.startsWith("a") ? "an " : "a ") + tool;
+        }
+
         /** This family's item at {@code tier}, e.g. {@code minecraft:stone_axe}. */
         public String at(String tier) {
             return "minecraft:" + tier + "_" + tool;
