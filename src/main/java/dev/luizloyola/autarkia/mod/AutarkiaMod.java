@@ -232,6 +232,7 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.mod.bp.SlowPlacements.init();
         dev.luizloyola.autarkia.mod.bp.SectionViews.init();
         dev.luizloyola.autarkia.mod.debug.HomeChoiceViewer.init();
+        dev.luizloyola.autarkia.mod.debug.HouseSiteViewer.init();
         dev.luizloyola.autarkia.mod.debug.HomeAreaViewer.init();
         dev.luizloyola.autarkia.mod.debug.FlattenPlanViewer.init();
         StoreGuard.guard("directions", dev.luizloyola.autarkia.mod.direction.DirectionsData.ID,

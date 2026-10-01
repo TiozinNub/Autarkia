@@ -37,6 +37,9 @@ import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Ids;
 import dev.luizloyola.autarkia.core.bp.PlanArgs;
 import dev.luizloyola.autarkia.core.bp.Placement;
+import dev.luizloyola.autarkia.core.builder.HouseSite;
+import dev.luizloyola.autarkia.mod.builder.HouseSites;
+import dev.luizloyola.autarkia.mod.debug.HouseSiteViewer;
 import dev.luizloyola.autarkia.core.bp.Planner;
 import dev.luizloyola.autarkia.core.bp.Variants;
 import dev.luizloyola.autarkia.core.builder.BuildOrder;
@@ -134,6 +137,9 @@ public final class BlueprintCommands {
                                             return withEntry(ctx, (source, entry) -> sections(source, entry, pos,
                                                     words));
                                         })))))
+                // Where the party's next building of this blueprint would go, painted; changes nothing.
+                .then(Commands.literal("site").then(id((source, entry) -> site(source, entry, ""))
+                        .then(words(BlueprintCommands::site))))
                 .then(Commands.literal("capture").then(Commands.argument("name", IdentifierArgument.id())
                         .executes(ctx -> capture(ctx, ""))
                         .then(Commands.argument("words", StringArgumentType.greedyString())
@@ -431,6 +437,100 @@ public final class BlueprintCommands {
         }
         plan.itemless().forEach((block, count) -> send(source, indent(Component.translatable(
                 "autarkia.command.bp.bill.itemless", count, block).withStyle(ChatFormatting.GRAY))));
+        return 1;
+    }
+
+    /** Sites painted, best first; the reply names the best few. */
+    private static final int SITES_SHOWN = 8;
+    private static final int SITES_TOLD = 5;
+    private static final int SITE_SHORTLIST = 16;
+
+    /**
+     * Where {@code party=<person>}'s party would put this blueprint's next building
+     * (docs/superpowers/specs/2026-10-01-house-site-design.md), painted for a minute with each
+     * term's price in the reply. Every allowed facing is tried unless the words name one.
+     */
+    private static int site(CommandSourceStack source, Entry entry, String words) {
+        Blueprint bp = entry.compiled().blueprint();
+        if (bp == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.broken", entry.id()));
+            return 0;
+        }
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse(words, out);
+        if (out.hasErrors()) {
+            failed(source, entry, out);
+            return 0;
+        }
+        if (args.party() == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.site.no_party"));
+            return 0;
+        }
+        BuildPlan plan = plan(source, entry, bp, args, out);
+        if (plan == null) {
+            return 0;
+        }
+        AgentId who = Subject.directoryId(source, args.party());
+        if (who == null) {
+            return 0;
+        }
+        MinecraftServer server = source.getServer();
+        PartyId party = PartyData.get(server).partyOf(who);
+        HouseSites.Inputs inputs = HouseSites.inputs(server.overworld(), party);
+        if (inputs == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.site.no_area",
+                    AgentCommands.label(server, who)));
+            return 0;
+        }
+        List<Placement> placements = new ArrayList<>();
+        for (Blueprint.Facing facing : Blueprint.Facing.values()) {
+            if (!bp.headers().orientation().contains(facing) || (args.facing() != null && args.facing() != facing)) {
+                continue;
+            }
+            for (boolean flip : new boolean[] {false, true}) {
+                if ((!flip || bp.headers().flippable()) && (!args.flip() || flip)) {
+                    placements.add(new Placement(facing, flip));
+                }
+            }
+        }
+        long started = System.nanoTime();
+        HouseSite.Result result = HouseSite.choose(inputs.ground(), HouseSite.Shape.of(plan, Blueprints.dictionary(),
+                placements), inputs.party(), HouseSite.Weights.DEFAULTS, SITE_SHORTLIST);
+        long millis = (System.nanoTime() - started) / 1_000_000;
+        List<HouseSite.Choice> best = result.best();
+        ServerPlayer viewer = source.getPlayer();
+        if (viewer != null) {
+            HouseSiteViewer.show(viewer, best.subList(0, Math.min(SITES_SHOWN, best.size())));
+        }
+        StringBuilder reasons = new StringBuilder();
+        result.refused().forEach((why, n) -> reasons.append(reasons.isEmpty() ? "" : ", ")
+                .append(why.name().toLowerCase(java.util.Locale.ROOT)).append(' ').append(n));
+        Component refused = reasons.isEmpty() ? Component.translatable("autarkia.command.bp.site.refused_none")
+                : Component.literal(reasons.toString());
+        if (best.isEmpty()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.site.none", entry.id(),
+                    AgentCommands.label(server, who), refused));
+            return 0;
+        }
+        Replies.send(source, () -> Component.translatable("autarkia.command.bp.site.header", entry.id(),
+                AgentCommands.label(server, who), best.size(), millis, refused)
+                .withStyle(ChatFormatting.LIGHT_PURPLE), false);
+        for (int i = 0; i < Math.min(SITES_TOLD, best.size()); i++) {
+            HouseSite.Choice choice = best.get(i);
+            StringBuilder terms = new StringBuilder();
+            choice.terms().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(term -> {
+                if (Math.abs(term.getValue()) >= 0.5) {
+                    terms.append(terms.isEmpty() ? "" : ", ").append(term.getKey()).append(' ')
+                            .append(Math.round(term.getValue()));
+                }
+            });
+            Placement placement = choice.shape().placement();
+            int rank = i + 1;
+            Replies.send(source, () -> Component.translatable("autarkia.command.bp.site.candidate", rank,
+                    choice.anchorX() + " " + choice.y() + " " + choice.anchorZ(),
+                    placement.north().word() + (placement.flip() ? " flip" : ""), Math.round(choice.cost()),
+                    terms.toString()), false);
+        }
         return 1;
     }
 
