@@ -174,6 +174,7 @@ public class Person extends Avatar implements AgentBody {
     /** What fight or flight remembers: the gear each target has shown, the fights it gave up. */
     private static final String TAG_FIGHT_MEMORY = "FightMemory";
     private static final String TAG_WORK_SPOTS = "WorkSpots";
+    private static final String TAG_FIELD_TABLES = "FieldTables";
     private static final String TAG_BRAIN_HISTORY = "BrainHistory";
     /** The plan in progress and the grant that owns it — one tag, never two. */
     private static final String TAG_BRAIN_PLAN = "BrainPlan";
@@ -1438,6 +1439,8 @@ public class Person extends Avatar implements AgentBody {
         output.store(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY, this.brain.fightMemory());
         // Where its work let things fall: a restart mid-sweep still knows which drops are its own.
         output.store(TAG_WORK_SPOTS, BrainState.WORK_SPOTS, this.brain.workSpots().snapshot());
+        // Tables it put down to craft on: a restart between the craft and the pickup leaves none.
+        output.store(TAG_FIELD_TABLES, BrainState.FIELD_TABLES, this.brain.fieldTables().snapshot());
         // What they did lately — what they talk about. Losing it on a restart would leave a whole
         // settlement with nothing to say about the day it just had.
         List<History.Entry> history = this.brain.history();
@@ -1508,6 +1511,7 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY)
                 .ifPresent(this.brain::restoreFightMemory);
         input.read(TAG_WORK_SPOTS, BrainState.WORK_SPOTS).ifPresent(this.brain.workSpots()::restore);
+        input.read(TAG_FIELD_TABLES, BrainState.FIELD_TABLES).ifPresent(this.brain.fieldTables()::restore);
         input.read(TAG_BRAIN_HISTORY, BrainState.HISTORY).ifPresent(this.brain::restoreHistory);
         this.pendingBrain = input.read(TAG_BRAIN_PLAN, BrainState.brain()).orElse(null);
         this.pendingBoard = input.read(TAG_BOARD, AutarkiaTasks.PERSONAL_BOARD).orElse(null);
