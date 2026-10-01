@@ -7,6 +7,7 @@ import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PlaceBlock;
+import dev.luizloyola.anima.core.brain.task.TakeFromStore;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemCall;
@@ -58,8 +59,8 @@ public final class Build implements PartyProject {
     private final Set<AgentId> builders = new LinkedHashSet<>();
     /** A piece paced after a fruitless trip, by piece number: when it may be offered again. */
     private final Map<Integer, Long> retryAfter = new LinkedHashMap<>();
-    private long materialWaitUntil;
-    private String shortOf = "";
+    /** A piece whose builder came back without its blocks, by piece number. */
+    private final Map<Integer, Shortage> shortages = new LinkedHashMap<>();
     private long lastTick;
 
     /** The pieces on offer or held, by piece number. */
@@ -129,9 +130,6 @@ public final class Build implements PartyProject {
 
     @Override
     public List<WorkItem> open() {
-        if (materialWaitUntil > lastTick) {
-            return List.of();
-        }
         List<WorkItem> items = new ArrayList<>();
         open.forEach((piece, item) -> {
             if (retryAfter.getOrDefault(piece, Long.MIN_VALUE) <= lastTick) {
@@ -192,6 +190,28 @@ public final class Build implements PartyProject {
         open.putAll(next);
     }
 
+    /**
+     * A piece waiting on blocks is for nobody until the wait is over — unless the asker carries them
+     * or saw them in a store since. Only that piece waits: the rest of the wave goes on.
+     */
+    @Override
+    public boolean offerableTo(WorkItem item, AgentId asker, BrainContext ctx) {
+        if (!(item instanceof PieceItem piece)) {
+            return true;
+        }
+        Shortage shortage = shortages.get(piece.piece);
+        if (shortage == null || shortage.until() <= lastTick) {
+            return true;
+        }
+        for (String id : shortage.missing().keySet()) {
+            if (ctx.percepts().inventory().count(id) == 0
+                    && !TakeFromStore.seenHolding(ctx, ItemSpec.anyOf(Set.of(id)))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public void claimed(WorkItem item, AgentId who) {
         if (item instanceof PieceItem piece && open.get(piece.piece) == piece) {
@@ -232,7 +252,7 @@ public final class Build implements PartyProject {
             }
         }
         if (moved > 0) {
-            shortOf = "";
+            shortages.remove(piece.piece);
             retryAfter.remove(piece.piece);
         } else {
             fruitless(piece, ctx, now);
@@ -252,9 +272,8 @@ public final class Build implements PartyProject {
     private void fruitless(PieceItem piece, BrainContext ctx, long now) {
         Map<String, Integer> missing = piece.missing(ctx.percepts().inventory());
         if (!missing.isEmpty()) {
-            shortOf = words(missing);
-            materialWaitUntil = now + MATERIAL_WAIT;
-            ctx.journal().record(Category.PROJECT, describe(), "short of " + shortOf);
+            shortages.put(piece.piece, new Shortage(piece.piece, missing, now + MATERIAL_WAIT));
+            ctx.journal().record(Category.PROJECT, describe(), "short of " + words(missing));
             return;
         }
         int first = piece.steps.stream().filter(i -> !done[i]).findFirst().orElse(piece.steps.get(0));
@@ -304,8 +323,14 @@ public final class Build implements PartyProject {
         if (!refused.isEmpty()) {
             line.append(", ").append(refused.size()).append(" handed back");
         }
-        if (materialWaitUntil > lastTick && !shortOf.isEmpty()) {
-            line.append(" · short of ").append(shortOf);
+        Map<String, Integer> shortOf = new LinkedHashMap<>();
+        for (Shortage shortage : shortages.values()) {
+            if (shortage.until() > lastTick) {
+                shortage.missing().forEach((id, count) -> shortOf.merge(id, count, Integer::sum));
+            }
+        }
+        if (!shortOf.isEmpty()) {
+            line.append(" · short of ").append(words(shortOf));
         }
         return line.toString();
     }
@@ -408,7 +433,7 @@ public final class Build implements PartyProject {
     /** Everything a build carries between ticks: the world steps are the plan's copy. */
     public record State(UUID structure, String name, double priority, List<Laying> order, List<Integer> done,
                         List<Integer> failures, List<Integer> refused, List<AgentId> builders,
-                        List<Cooldown> cooldowns, long materialWaitUntil, String shortOf) implements ProjectState {
+                        List<Cooldown> cooldowns, List<Shortage> shortages) implements ProjectState {
 
         @Override
         public String type() {
@@ -418,6 +443,13 @@ public final class Build implements PartyProject {
 
     /** A piece paced after a fruitless trip, and when it may be offered again. */
     public record Cooldown(int piece, long until) {
+    }
+
+    /** A piece whose builder came back without these blocks, and until when it waits for them. */
+    public record Shortage(int piece, Map<String, Integer> missing, long until) {
+        public Shortage {
+            missing = Map.copyOf(missing);
+        }
     }
 
     @Override
@@ -433,7 +465,7 @@ public final class Build implements PartyProject {
         List<Cooldown> cooldowns = new ArrayList<>();
         retryAfter.forEach((piece, until) -> cooldowns.add(new Cooldown(piece, until)));
         return new State(structure, name, priority, order, placed, tries, List.copyOf(refused),
-                List.copyOf(builders), cooldowns, materialWaitUntil, shortOf);
+                List.copyOf(builders), cooldowns, List.copyOf(shortages.values()));
     }
 
     public static Build restore(State state, long now) {
@@ -451,8 +483,9 @@ public final class Build implements PartyProject {
         for (Cooldown cooldown : state.cooldowns()) {
             project.retryAfter.put(cooldown.piece(), cooldown.until());
         }
-        project.materialWaitUntil = state.materialWaitUntil();
-        project.shortOf = state.shortOf();
+        for (Shortage shortage : state.shortages()) {
+            project.shortages.put(shortage.piece(), shortage);
+        }
         project.lastTick = now;
         project.refresh();
         return project;

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.act.Placing;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -144,17 +145,27 @@ class BuildTest {
     }
 
     @Test
-    void aBuilderShortOfBlocksMakesThePieceWait() {
-        Build build = build(house(3, 0));
-        FakeContext ctx = new FakeContext();
-        ctx.percepts.time = 100;
-        build.failed(only(build), ctx);
+    void aPieceShortOfBlocksWaitsAloneAndForAnyoneWithoutThem() {
+        List<Laying> order = house(30, 0);
+        Build build = build(order);
+        WorkItem first = build.open().get(0);
+        WorkItem second = build.open().get(1);
+        FakeContext empty = new FakeContext();
+        empty.percepts.time = 100;
+        build.failed(first, empty);
         build.tick(100);
-        assertTrue(build.open().isEmpty());
-        assertTrue(build.describe().contains("short of 3 " + PLANKS), build.describe());
+        assertEquals(2, build.open().size(), "the rest of the wave goes on");
+        assertTrue(build.describe().contains("short of 24 " + PLANKS), build.describe());
+        AgentId asker = AgentId.random();
+        assertFalse(build.offerableTo(first, asker, empty), "nobody without planks gets it back yet");
+        assertTrue(build.offerableTo(second, asker, empty), "the other piece is not waiting");
+
+        FakeContext carrying = new FakeContext();
+        carrying.percepts.inventory.set(0, ItemStack.of(PLANKS, 5, 64));
+        assertTrue(build.offerableTo(first, asker, carrying), "a builder carrying planks may take it now");
 
         build.tick(100 + Build.MATERIAL_WAIT);
-        assertEquals(1, build.open().size());
+        assertTrue(build.offerableTo(first, asker, empty), "after the wait, anyone may look again");
     }
 
     @Test

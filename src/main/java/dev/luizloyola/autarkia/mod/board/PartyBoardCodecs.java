@@ -454,6 +454,14 @@ public final class PartyBoardCodecs {
                     Codec.LONG.fieldOf("until").forGetter(dev.luizloyola.autarkia.core.board.Build.Cooldown::until)
             ).apply(cooldown, dev.luizloyola.autarkia.core.board.Build.Cooldown::new));
 
+    private static final Codec<dev.luizloyola.autarkia.core.board.Build.Shortage> BUILD_SHORTAGE =
+            RecordCodecBuilder.create(shortage -> shortage.group(
+                    Codec.INT.fieldOf("piece").forGetter(dev.luizloyola.autarkia.core.board.Build.Shortage::piece),
+                    Codec.unboundedMap(Codec.STRING, Codec.INT).fieldOf("missing")
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.Shortage::missing),
+                    Codec.LONG.fieldOf("until").forGetter(dev.luizloyola.autarkia.core.board.Build.Shortage::until)
+            ).apply(shortage, dev.luizloyola.autarkia.core.board.Build.Shortage::new));
+
     /** Everything a {@code build} row carries: the world steps, and which of them stand. */
     public static final MapCodec<dev.luizloyola.autarkia.core.board.Build.State> BUILD =
             RecordCodecBuilder.mapCodec(project -> project.group(
@@ -471,14 +479,12 @@ public final class PartyBoardCodecs {
                             .forGetter(state -> state.builders().stream().map(AgentId::value).toList()),
                     BUILD_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(dev.luizloyola.autarkia.core.board.Build.State::cooldowns),
-                    Codec.LONG.optionalFieldOf("material_wait_until", 0L)
-                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::materialWaitUntil),
-                    Codec.STRING.optionalFieldOf("short_of", "")
-                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::shortOf)
+                    BUILD_SHORTAGE.listOf().optionalFieldOf("shortages", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::shortages)
             ).apply(project, (structure, name, priority, order, done, failures, refused, builders, cooldowns,
-                    materialWaitUntil, shortOf) -> new dev.luizloyola.autarkia.core.board.Build.State(structure, name,
+                    shortages) -> new dev.luizloyola.autarkia.core.board.Build.State(structure, name,
                     priority, order, done, failures, refused, builders.stream().map(AgentId::new).toList(), cooldowns,
-                    materialWaitUntil, shortOf)));
+                    shortages)));
 
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {

@@ -508,7 +508,9 @@ class PartyBoardCodecsTest {
         var before = new dev.luizloyola.autarkia.core.board.Build.State(java.util.UUID.randomUUID(),
                 "autarkia:basic_wooden_house", 0.5, List.of(door, slab, pot), List.of(0), List.of(0, 2), List.of(),
                 List.of(dev.luizloyola.anima.core.agent.AgentId.random()),
-                List.of(new dev.luizloyola.autarkia.core.board.Build.Cooldown(3, 900L)), 0L, "");
+                List.of(new dev.luizloyola.autarkia.core.board.Build.Cooldown(3, 900L)),
+                List.of(new dev.luizloyola.autarkia.core.board.Build.Shortage(5,
+                        java.util.Map.of("minecraft:oak_stairs", 7), 1200L)));
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
         assertEquals(before, after.project());
     }
