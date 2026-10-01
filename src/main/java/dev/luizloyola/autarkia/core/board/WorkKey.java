@@ -60,6 +60,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Pulling up the plants on one strip of a box. */
     String CLEAR_PLANTS = "clear_plants";
 
+    /** Placing one run of a building's proved order. */
+    String BUILD = "build";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

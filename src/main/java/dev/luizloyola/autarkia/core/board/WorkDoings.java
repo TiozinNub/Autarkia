@@ -54,6 +54,9 @@ public final class WorkDoings {
             "levelling", "autarkia.doing.levelling", List.of(), true));
     public static final Doing EXPLORING = Doings.register(new Doing(
             "exploring", "autarkia.doing.exploring", List.of(), true));
+    /** Putting a building up. */
+    public static final Doing BUILDING = Doings.register(new Doing(
+            "building", "autarkia.doing.building", List.of(), true));
 
     /**
      * What every gather delivers to today. A building project that starts gathers will pass what it

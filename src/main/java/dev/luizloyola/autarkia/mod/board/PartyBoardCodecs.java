@@ -356,6 +356,53 @@ public final class PartyBoardCodecs {
                     Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.SiteBuilding.State::done)
             ).apply(project, dev.luizloyola.autarkia.core.board.SiteBuilding.State::new));
 
+    /** One step of a build, in the world: the plan's copy is a list of these. */
+    public static final Codec<dev.luizloyola.autarkia.core.builder.Laying> LAYING =
+            RecordCodecBuilder.create(step -> step.group(
+                    Codec.STRING.xmap(name -> dev.luizloyola.autarkia.core.builder.Section.valueOf(
+                                    name.toUpperCase(java.util.Locale.ROOT)),
+                            section -> section.name().toLowerCase(java.util.Locale.ROOT))
+                            .fieldOf("section").forGetter(dev.luizloyola.autarkia.core.builder.Laying::section),
+                    Codec.STRING.fieldOf("item").forGetter(l -> l.placing().itemId()),
+                    POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.builder.Laying::cell),
+                    Codec.STRING.optionalFieldOf("block", "").forGetter(l -> l.placing().block()),
+                    Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("state", Map.of())
+                            .forGetter(l -> l.placing().state()),
+                    POS.listOf().optionalFieldOf("also", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.builder.Laying::also),
+                    POS.fieldOf("stand").forGetter(dev.luizloyola.autarkia.core.builder.Laying::stand),
+                    Codec.INT.optionalFieldOf("count", 1).forGetter(dev.luizloyola.autarkia.core.builder.Laying::count)
+            ).apply(step, (section, item, at, block, state, also, stand, count) ->
+                    new dev.luizloyola.autarkia.core.builder.Laying(section,
+                            new dev.luizloyola.anima.core.brain.act.Placing(item, at, block, state), also, stand,
+                            count)));
+
+    /** Everything a {@code build} row carries: the world steps, and which of them stand. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.Build.State> BUILD =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    UUIDUtil.CODEC.fieldOf("structure").forGetter(dev.luizloyola.autarkia.core.board.Build.State::structure),
+                    Codec.STRING.fieldOf("name").forGetter(dev.luizloyola.autarkia.core.board.Build.State::name),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.Build.State::priority),
+                    LAYING.listOf().fieldOf("order").forGetter(dev.luizloyola.autarkia.core.board.Build.State::order),
+                    Codec.INT.listOf().optionalFieldOf("done", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::done),
+                    Codec.INT.listOf().optionalFieldOf("failures", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::failures),
+                    Codec.INT.listOf().optionalFieldOf("refused", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::refused),
+                    UUIDUtil.CODEC.listOf().optionalFieldOf("builders", List.of())
+                            .forGetter(state -> state.builders().stream().map(AgentId::value).toList()),
+                    Codec.LONG.optionalFieldOf("retry_after", 0L)
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::retryAfter),
+                    Codec.LONG.optionalFieldOf("material_wait_until", 0L)
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::materialWaitUntil),
+                    Codec.STRING.optionalFieldOf("short_of", "")
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::shortOf)
+            ).apply(project, (structure, name, priority, order, done, failures, refused, builders, retryAfter,
+                    materialWaitUntil, shortOf) -> new dev.luizloyola.autarkia.core.board.Build.State(structure, name,
+                    priority, order, done, failures, refused, builders.stream().map(AgentId::new).toList(), retryAfter,
+                    materialWaitUntil, shortOf)));
+
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {
             for (E value : type.getEnumConstants()) {
@@ -458,6 +505,7 @@ public final class PartyBoardCodecs {
             case "flatten" -> DataResult.success(FLATTEN);
             case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
             case "site_building" -> DataResult.success(SITE_BUILDING);
+            case "build" -> DataResult.success(BUILD);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }

@@ -31,6 +31,10 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         LEVELLING,
         /** The pad is level; waiting for the builder. */
         LEVELLED,
+        /** Its build is on the board. */
+        BUILDING,
+        /** It stands. */
+        BUILT,
         /** The pad cannot be levelled; {@link #note} says why. */
         REFUSED
     }

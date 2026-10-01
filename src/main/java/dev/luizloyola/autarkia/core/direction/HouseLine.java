@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.direction;
 
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SiteBuilding;
@@ -13,8 +14,7 @@ import java.util.Optional;
  * (docs/superpowers/specs/2026-10-01-house-site-design.md, decisions 6–9). Until one is sited the
  * line posts the choice of where; then it waits — for the ground to be cleared, for the pad to be
  * levelled, for the builder. A refused site is no house, and the next choice keeps off its pad.
- *
- * <p>Nothing builds yet, so the line is never met: that waits for the builder's project.
+ * The line is met once the house stands.
  */
 public final class HouseLine implements DirectionLine {
 
@@ -61,6 +61,12 @@ public final class HouseLine implements DirectionLine {
                 case LEVELLED -> {
                     return Status.of(Status.Reading.WAITING, "autarkia.direction.house.levelled");
                 }
+                case BUILDING -> {
+                    return Status.of(Status.Reading.WAITING, "autarkia.direction.house.building");
+                }
+                case BUILT -> {
+                    return Status.of(Status.Reading.MET, "autarkia.direction.house.built");
+                }
                 case REFUSED -> {
                 }
             }
@@ -70,7 +76,8 @@ public final class HouseLine implements DirectionLine {
 
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        return project instanceof SiteBuilding site && site.blueprint().equals(BLUEPRINT);
+        return project instanceof SiteBuilding site && site.blueprint().equals(BLUEPRINT)
+                || project instanceof Build build && build.name().equals(BLUEPRINT);
     }
 
     @Override

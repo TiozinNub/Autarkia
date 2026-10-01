@@ -117,6 +117,11 @@ public final class AutarkiaTasks {
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.listOf().fieldOf("cells").forGetter(dev.luizloyola.autarkia.core.earthwork.CutCells::cells)
                 ).apply(t, dev.luizloyola.autarkia.core.earthwork.CutCells::new)));
+        TaskCodecs.register("autarkia:lay_piece", dev.luizloyola.autarkia.core.builder.LayPiece.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        dev.luizloyola.autarkia.mod.board.PartyBoardCodecs.LAYING.listOf().fieldOf("steps")
+                                .forGetter(dev.luizloyola.autarkia.core.builder.LayPiece::steps)
+                ).apply(t, dev.luizloyola.autarkia.core.builder.LayPiece::new)));
         TaskCodecs.register("autarkia:fill_cells", dev.luizloyola.autarkia.core.earthwork.FillCells.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.listOf().fieldOf("cells").forGetter(dev.luizloyola.autarkia.core.earthwork.FillCells::cells),

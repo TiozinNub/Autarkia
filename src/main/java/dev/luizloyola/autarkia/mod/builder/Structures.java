@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.territory.Territories;
+import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
@@ -39,7 +40,8 @@ import net.minecraft.server.level.ServerLevel;
 /**
  * Moves a party's sited buildings along (docs/superpowers/specs/2026-10-01-house-site-design.md,
  * *After the choice*): a site waits for its ground to be cleared, then its pad is flattened, dead
- * level at the height it was chosen at. The building itself waits for the builder.
+ * level at the height it was chosen at, and then the building goes up in its proved order (builder
+ * spec, rung 2).
  */
 public final class Structures {
 
@@ -75,7 +77,9 @@ public final class Structures {
                 Structure next = switch (structure.phase()) {
                     case SITED -> level(server, party, structure);
                     case LEVELLING -> stillLevelling(server, party, structure);
-                    case LEVELLED, REFUSED -> structure;
+                    case LEVELLED -> build(server, party, structure);
+                    case BUILDING -> stillBuilding(server, party, structure);
+                    case BUILT, REFUSED -> structure;
                 };
                 if (next != structure) {
                     data.replace(party, next);
@@ -177,17 +181,44 @@ public final class Structures {
         return structure.at(Phase.SITED, "");
     }
 
+    /** Its pad level, the building's proved order goes on the board. */
+    private static Structure build(MinecraftServer server, PartyId party, Structure structure) {
+        List<String> notes = new java.util.ArrayList<>();
+        Build build = Builds.of(server.overworld(), structure, notes);
+        if (build == null) {
+            return structure.at(Phase.REFUSED, String.join("; ", notes));
+        }
+        PartyBoards.of(server, party).post(build);
+        PartyBoards.touch(server);
+        return structure.at(Phase.BUILDING, String.join("; ", notes));
+    }
+
+    /** A build gone from the board without finishing was cancelled: it is posted again over what stands. */
+    private static Structure stillBuilding(MinecraftServer server, PartyId party, Structure structure) {
+        for (Project project : PartyBoards.of(server, party).projects()) {
+            if (project instanceof Build build && build.structure().equals(structure.id())) {
+                return structure;
+            }
+        }
+        return structure.at(Phase.LEVELLED, "");
+    }
+
     private static void closed(MinecraftServer server, PartyId party, List<Project> finished) {
         StructuresData data = StructuresData.get(server);
         for (Structure structure : data.of(party)) {
-            if (structure.phase() != Phase.LEVELLING) {
-                continue;
-            }
             for (Project project : finished) {
-                if (project instanceof Flatten flatten && levels(flatten, structure)) {
-                    Structure levelled = structure.at(Phase.LEVELLED, "");
-                    data.replace(party, levelled);
-                    tell(server, party, levelled);
+                Structure next = structure;
+                if (structure.phase() == Phase.LEVELLING && project instanceof Flatten flatten
+                        && levels(flatten, structure)) {
+                    next = structure.at(Phase.LEVELLED, "");
+                } else if (structure.phase() == Phase.BUILDING && project instanceof Build build
+                        && build.structure().equals(structure.id())) {
+                    next = structure.at(Phase.BUILT, build.refused().isEmpty() ? ""
+                            : build.refused().size() + " steps handed back");
+                }
+                if (next != structure) {
+                    data.replace(party, next);
+                    tell(server, party, next);
                 }
             }
         }

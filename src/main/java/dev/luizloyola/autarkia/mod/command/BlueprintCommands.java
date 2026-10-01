@@ -145,6 +145,19 @@ public final class BlueprintCommands {
                 // Where the party's next building of this blueprint would go, painted; changes nothing.
                 .then(Commands.literal("site").then(id((source, entry) -> site(source, entry, ""))
                         .then(words(BlueprintCommands::site))))
+                // A site named here, taken as level: the party's builders put the building up.
+                .then(Commands.literal("build").then(id((source, entry) -> build(source, entry, null, ""))
+                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .executes(ctx -> {
+                                    BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+                                    return withEntry(ctx, (source, entry) -> build(source, entry, pos, ""));
+                                })
+                                .then(Commands.argument("words", StringArgumentType.greedyString())
+                                        .executes(ctx -> {
+                                            BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+                                            String words = StringArgumentType.getString(ctx, "words");
+                                            return withEntry(ctx, (source, entry) -> build(source, entry, pos, words));
+                                        })))))
                 // The party's buildings from the moment their site is chosen, and how far along.
                 .then(Commands.literal("sited").then(Commands.argument("words", StringArgumentType.greedyString())
                         .executes(ctx -> sited(ctx.getSource(), StringArgumentType.getString(ctx, "words")))))
@@ -550,6 +563,52 @@ public final class BlueprintCommands {
         Replies.send(source, () -> Component.translatable("autarkia.command.bp.site.applied",
                 Structures.describe(structure), applied.grown().added().size())
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
+    /**
+     * {@code bp build <id> [pos] party=<person> [pins]}: the party's building, sited here and taken
+     * as levelled as the ground stands, so {@code Structures} posts its build next beat. The site
+     * scorer and the flatten are skipped, not the area: it grows to hold the footprint.
+     */
+    private static int build(CommandSourceStack source, Entry entry, @Nullable BlockPos pos, String words) {
+        Blueprint bp = entry.compiled().blueprint();
+        if (bp == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.broken", entry.id()));
+            return 0;
+        }
+        Diagnostics out = new Diagnostics();
+        PlanArgs args = PlanArgs.parse(words, out);
+        Placement placement = out.hasErrors() ? null : args.placement(bp, out);
+        if (placement == null) {
+            failed(source, entry, out);
+            return 0;
+        }
+        if (args.party() == null) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.site.no_party"));
+            return 0;
+        }
+        BuildPlan plan = plan(source, entry, bp, args, out);
+        if (plan == null) {
+            return 0;
+        }
+        BlockPos anchor = pos != null ? pos : BlockPos.containing(source.getPosition()).below();
+        Building building = building(source, entry, args.party(), anchor, plan, placement);
+        if (building == null) {
+            return 0;
+        }
+        MinecraftServer server = source.getServer();
+        Territories.of(server).grow(building.party(), building.footprint(), Territories.margin(), building.why(),
+                Territories.now(server));
+        Footprint footprint = Footprint.of(anchor.getX(), anchor.getZ(), plan, placement);
+        Structure structure = new Structure(java.util.UUID.randomUUID(), entry.id(), plan.version(), plan.variants(),
+                plan.bindings(), new Pos(anchor.getX(), anchor.getY(), anchor.getZ()), placement, footprint, footprint,
+                Structure.Phase.LEVELLED, server.overworld().getGameTime(), "");
+        StructuresData.get(server).add(building.party(), structure);
+        OpJournal.record(source, PartyData.get(server).members(building.party()),
+                "to build " + Structures.describe(structure));
+        Replies.send(source, () -> Component.translatable("autarkia.command.bp.build.recorded",
+                Structures.describe(structure), building.who()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
 

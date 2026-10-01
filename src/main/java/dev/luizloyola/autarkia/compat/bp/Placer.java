@@ -5,13 +5,20 @@ import dev.luizloyola.autarkia.core.bp.Blueprint.Outcome;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Support;
+import dev.luizloyola.anima.core.brain.act.Placing;
+import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.mod.brain.Making;
+import dev.luizloyola.autarkia.core.bp.Planner;
+import dev.luizloyola.autarkia.core.builder.BuildOrder.Placed;
 import dev.luizloyola.autarkia.core.builder.Cell;
+import dev.luizloyola.autarkia.core.builder.Laying;
 import dev.luizloyola.autarkia.core.builder.Step;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -24,7 +31,10 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.SupportType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Property;
 import org.jspecify.annotations.Nullable;
 
@@ -109,6 +119,49 @@ public final class Placer {
             shape(level, write.pos());
         }
         return true;
+    }
+
+    /**
+     * A proved step as a body places it: the item, the block turned as the building faces, and of
+     * its properties those the plan names — a door's or a bed's half is which cell, never named.
+     * Empty when it does not resolve or nothing places it.
+     */
+    public static Optional<Laying> laying(BlockPos anchor, BuildPlan plan, Placement placement, Placed placed) {
+        Step step = placed.step();
+        Optional<BlockState> resolved = resolve(step.state());
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        BlockState state = resolved.get().mirror(placement.flip() ? Mirror.FRONT_BACK : Mirror.NONE)
+                .rotate(TURNS[placement.turns()]);
+        Making making = Making.of(state.getBlock());
+        Item item = making != null ? making.base().asItem() : state.getBlock().asItem();
+        if (item == Items.AIR) {
+            return Optional.empty();
+        }
+        Map<String, String> named = new TreeMap<>();
+        for (Property<?> property : state.getProperties()) {
+            if (step.state().props().containsKey(property.getName())
+                    && property != BlockStateProperties.DOUBLE_BLOCK_HALF && property != BlockStateProperties.BED_PART) {
+                named.put(property.getName(), valueName(state, property));
+            }
+        }
+        List<Pos> cells = new ArrayList<>();
+        for (Cell cell : step.cells()) {
+            cells.add(pos(at(anchor, plan, placement, cell)));
+        }
+        Placing placing = new Placing(BuiltInRegistries.ITEM.getKey(item).toString(), cells.get(0),
+                BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString(), named);
+        return Optional.of(new Laying(step.section(), placing, cells.subList(1, cells.size()),
+                pos(at(anchor, plan, placement, placed.stand())), Planner.count(step.state())));
+    }
+
+    private static Pos pos(BlockPos at) {
+        return new Pos(at.getX(), at.getY(), at.getZ());
+    }
+
+    private static <T extends Comparable<T>> String valueName(BlockState state, Property<T> property) {
+        return property.getName(state.getValue(property));
     }
 
     /** Where a cell of the drawing lands, the plan turned and mirrored as placed; cells outside it too. */

@@ -663,7 +663,8 @@ public final class Planner {
         return bill;
     }
 
-    private static int count(Outcome state) {
+    /** The items one cell of this block takes: two for a double slab, the candles in it. */
+    public static int count(Outcome state) {
         if ("double".equals(state.props().get("type")) && Ids.path(state.block()).endsWith("_slab")) {
             return 2;
         }
