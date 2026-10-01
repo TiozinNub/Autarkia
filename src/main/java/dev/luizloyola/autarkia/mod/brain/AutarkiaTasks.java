@@ -103,6 +103,20 @@ public final class AutarkiaTasks {
                         Codec.INT.fieldOf("count").forGetter(GatheringErrand::count),
                         POS.fieldOf("yard").forGetter(GatheringErrand::yard)
                 ).apply(t, GatheringErrand::new)));
+        TaskCodecs.register("autarkia:mine_patch", dev.luizloyola.autarkia.core.patch.MinePatch.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::anchor),
+                        POS.fieldOf("min").forGetter(m -> m.bounds().min()),
+                        POS.fieldOf("max").forGetter(m -> m.bounds().max()),
+                        ITEM_SPEC.fieldOf("wanted").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::wanted)
+                ).apply(t, (anchor, min, max, wanted) -> new dev.luizloyola.autarkia.core.patch.MinePatch(
+                        anchor, new dev.luizloyola.anima.core.brain.knowledge.Region(min, max), wanted))));
+        TaskCodecs.register("autarkia:stone_yield", dev.luizloyola.autarkia.core.patch.MinePatch.Yield.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::anchor),
+                        ITEM_SPEC.fieldOf("wanted").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::wanted),
+                        Codec.INT.fieldOf("before").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::before)
+                ).apply(t, dev.luizloyola.autarkia.core.patch.MinePatch.Yield::new)));
         TaskCodecs.register("autarkia:tend_errand", dev.luizloyola.autarkia.core.board.TendErrand.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.TendErrand::at),

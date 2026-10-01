@@ -36,6 +36,16 @@ public interface PartyView {
     /** Whether the party claims a place of this kind at HOME — on the plot or at its yard. */
     boolean hasAtHome(PoiKind kind);
 
+    /** Where the party's place of this kind at HOME is, the first claimed if it has several. */
+    default Optional<dev.luizloyola.anima.core.brain.sense.Pos> placeAtHome(PoiKind kind) {
+        return Optional.empty();
+    }
+
+    /** Whether something is running at the party's place of this kind at HOME — a furnace smelting. */
+    default boolean runningAtHome(PoiKind kind) {
+        return false;
+    }
+
     /**
      * How many empty slots HOME's stores have between them. Empty when one of them could not be
      * read this beat, or there is no HOME.

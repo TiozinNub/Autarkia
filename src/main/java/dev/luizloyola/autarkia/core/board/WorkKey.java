@@ -48,6 +48,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Coming back to a place where a process fell due. */
     String TEND = "tend";
 
+    /** Loading a furnace. */
+    String FIRE = "fire";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

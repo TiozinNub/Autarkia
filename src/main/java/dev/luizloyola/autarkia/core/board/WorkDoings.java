@@ -36,6 +36,9 @@ public final class WorkDoings {
     /** Slot: what was taken out — coming back to a furnace. */
     public static final Doing TENDING = Doings.register(new Doing(
             "tending", "autarkia.doing.tending", List.of("what"), true));
+    /** Slot: what was put in to smelt. */
+    public static final Doing FIRING = Doings.register(new Doing(
+            "firing", "autarkia.doing.firing", List.of("what"), true));
     /** Looking for somewhere to live. */
     public static final Doing EXPLORING = Doings.register(new Doing(
             "exploring", "autarkia.doing.exploring", List.of(), true));

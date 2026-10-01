@@ -269,6 +269,20 @@ public final class PartyBoardCodecs {
                     new dev.luizloyola.autarkia.core.board.Tend.State(at, output, fuel, yard, AgentId.of(starter),
                             dueAt, done, cooldowns, lastTick)));
 
+    /** Everything a {@code fire} row carries: the furnace, the load and its fuel. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.Fire.State> FIRE =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.Fire.State::at),
+                    SPEC.fieldOf("input").forGetter(dev.luizloyola.autarkia.core.board.Fire.State::input),
+                    Codec.INT.fieldOf("count").forGetter(dev.luizloyola.autarkia.core.board.Fire.State::count),
+                    SPEC.fieldOf("fuel").forGetter(dev.luizloyola.autarkia.core.board.Fire.State::fuel),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.Fire.State::priority),
+                    Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.Fire.State::done),
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Fire.State::cooldowns),
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Fire.State::lastTick)
+            ).apply(project, dev.luizloyola.autarkia.core.board.Fire.State::new));
+
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {
             for (E value : type.getEnumConstants()) {
@@ -366,6 +380,7 @@ public final class PartyBoardCodecs {
             case "set_up" -> DataResult.success(SET_UP);
             case "explore" -> DataResult.success(EXPLORE);
             case "tend" -> DataResult.success(TEND);
+            case "fire" -> DataResult.success(FIRE);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }

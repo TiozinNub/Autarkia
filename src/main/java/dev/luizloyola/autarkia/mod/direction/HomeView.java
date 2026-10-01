@@ -88,6 +88,26 @@ final class HomeView implements PartyView {
         return false;
     }
 
+    @Override
+    public java.util.Optional<dev.luizloyola.anima.core.brain.sense.Pos> placeAtHome(PoiKind kind) {
+        Home home = progress.home();
+        if (home == null) {
+            return java.util.Optional.empty();
+        }
+        for (PlaceRow row : PlacesData.get(server).places().rows()) {
+            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(home, row.at())) {
+                return java.util.Optional.of(row.at());
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    @Override
+    public boolean runningAtHome(PoiKind kind) {
+        return placeAtHome(kind).map(at -> PlacesData.get(server).places().processes().keySet().stream()
+                .anyMatch(row -> row.kind().equals(kind) && row.at().equals(at))).orElse(false);
+    }
+
     /** One number summed over HOME's stores, or empty when any of them could not be read. */
     private OptionalInt readHome(Predicate<String> ids, ToIntFunction<StoreContents.Reading> part) {
         Home home = progress.home();

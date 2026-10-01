@@ -12,7 +12,7 @@ package dev.luizloyola.autarkia.core.board;
  * hopefully so.
  */
 public sealed interface ProjectState permits ClearArea.State, Explore.State, Gather.State,
-        SetUp.State, Tend.State {
+        SetUp.State, Tend.State, Fire.State {
 
     /** The id this kind is saved and dispatched by — what {@link PartyProjects#byId} looks up. */
     String type();

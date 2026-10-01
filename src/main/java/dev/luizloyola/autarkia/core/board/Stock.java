@@ -23,6 +23,24 @@ public final class Stock {
     public static final ItemSpec PLANKS =
             ItemSpec.register(new ItemSpec("planks", id -> id.endsWith("_planks")));
 
+    /** Any pickaxe, any tier — what mining stone needs, since stone mined bare-handed drops nothing. */
+    public static final ItemSpec PICKAXES =
+            ItemSpec.register(new ItemSpec("pickaxes", id -> id.endsWith("_pickaxe")));
+
+    /**
+     * What a furnace is crafted from — vanilla's {@code #minecraft:stone_crafting_materials}, which
+     * only the mod layer can read, so it installs the rule ({@link #furnaceStoneBy}).
+     */
+    public static final ItemSpec FURNACE_STONE =
+            ItemSpec.register(new ItemSpec("furnace_stone", id -> Stock.furnaceStone.test(id)));
+
+    private static volatile java.util.function.Predicate<String> furnaceStone = id -> false;
+
+    /** Sets what {@link #FURNACE_STONE} matches. */
+    public static void furnaceStoneBy(java.util.function.Predicate<String> rule) {
+        furnaceStone = rule;
+    }
+
     /** Any axe, any tier — what chopping WANTS (never needs: a chop works bare-handed, slower).
      *  Same string-level convention as {@link #LOGS}; the wield step never reads this — it
      *  measures — so the spec only has to be right where there is no block to measure against. */

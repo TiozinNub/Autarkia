@@ -151,6 +151,10 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.patch.Forage::new);
         Producers.register(dev.luizloyola.anima.core.brain.task.Food.SPEC,
                 dev.luizloyola.autarkia.core.patch.Forage::new);
+        // Stone a furnace is made of, from where it shows (decision 19); the tag only the mod reads.
+        Stock.furnaceStoneBy(dev.luizloyola.autarkia.compat.inv.ItemTagged::stoneCrafting);
+        dev.luizloyola.autarkia.core.patch.MineStone.ACT.key();
+        Producers.register(Stock.FURNACE_STONE, dev.luizloyola.autarkia.core.patch.MineStone::new);
         // And by hunting, under food alone: raw meat is not a meal, so the party's need for food is
         // what sends a Person hunting — or starving (directions spec, decisions 16 and 17).
         dev.luizloyola.autarkia.core.person.Hunting.ACT.key();
@@ -192,6 +196,8 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.direction.StorageLine.INSTANCE);
         dev.luizloyola.autarkia.core.direction.Lines.register(
                 dev.luizloyola.autarkia.core.direction.FoodLine.INSTANCE);
+        dev.luizloyola.autarkia.core.direction.Lines.register(
+                dev.luizloyola.autarkia.core.direction.CharcoalLine.INSTANCE);
         // The line a party with no HOME works on: a search for one, which reads the world through
         // the mod's looks.
         dev.luizloyola.autarkia.core.direction.Lines.register(
@@ -205,6 +211,8 @@ public class AutarkiaMod implements ModInitializer {
         // And somebody comes back to a furnace when what it was given should be done.
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Tend.TYPE);
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Fire.TYPE);
         dev.luizloyola.autarkia.mod.board.Tending.init();
         dev.luizloyola.autarkia.mod.direction.Directions.init();
         dev.luizloyola.autarkia.mod.bp.Blueprints.init();
