@@ -53,6 +53,31 @@ class SettlerPackTest {
     }
 
     @Test
+    void aSpareOfTheSameTierIsNotASecondSwordAtHome() {
+        // In-world (2026-10-01): the spare took slot 1 and the pickaxe, axe and shovel shuffled
+        // round it for nothing.
+        pack.set(0, one("stone_sword"));
+        pack.set(1, one("stone_sword"));
+        pack.set(2, one("stone_pickaxe"));
+        pack.set(3, one("stone_shovel"));
+        pack.set(4, one("stone_axe"));
+        settle();
+        assertEquals("minecraft:stone_sword", pack.get(0).id());
+        assertEquals("minecraft:stone_pickaxe", pack.get(1).id());
+        assertEquals("minecraft:stone_axe", pack.get(2).id());
+        assertEquals("minecraft:stone_shovel", pack.get(3).id());
+    }
+
+    private void settle() {
+        for (dev.luizloyola.anima.core.inv.Tidy.Swap swap
+                : dev.luizloyola.anima.core.inv.Tidy.plan(pack, SettlerPack.INSTANCE, 18)) {
+            ItemStack moved = pack.get(swap.from());
+            pack.set(swap.from(), pack.get(swap.to()));
+            pack.set(swap.to(), moved);
+        }
+    }
+
+    @Test
     void aTidySettlesAnUpgradeIntoOrder() {
         // What a settler upgraded to stone carried in-world (2026-10-01), before the tidy.
         pack.set(0, one("stone_sword"));
@@ -61,12 +86,7 @@ class SettlerPackTest {
         pack.set(3, one("wooden_shovel"));
         pack.set(4, one("stone_axe"));
         pack.set(5, one("stone_shovel"));
-        for (dev.luizloyola.anima.core.inv.Tidy.Swap swap
-                : dev.luizloyola.anima.core.inv.Tidy.plan(pack, SettlerPack.INSTANCE, 18)) {
-            ItemStack moved = pack.get(swap.from());
-            pack.set(swap.from(), pack.get(swap.to()));
-            pack.set(swap.to(), moved);
-        }
+        settle();
         assertEquals("minecraft:stone_sword", pack.get(0).id());
         assertEquals("minecraft:stone_pickaxe", pack.get(1).id());
         assertEquals("minecraft:stone_axe", pack.get(2).id());

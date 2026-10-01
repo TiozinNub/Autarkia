@@ -11,7 +11,7 @@ import dev.luizloyola.autarkia.core.board.Tools;
  * sword, pickaxe, axe, shovel, everything else in the backpack, and one hotbar slot free.
  *
  * <p>The numbers are a first guess. What matters is their order: the newest tool of a family in its
- * own slot beats it one slot over, an older one sits past the four, any tool on the hotbar beats
+ * own slot beats it one slot over, an older one or a spare sits past the four, any tool on the hotbar beats
  * the backpack, and anything that is not a tool is better off in the backpack.
  */
 public final class SettlerPack implements PackLayout {
@@ -20,7 +20,7 @@ public final class SettlerPack implements PackLayout {
 
     /** The newest tool of a family in its own slot, less one per slot away from it. */
     static final double HOME = 10.0;
-    /** An older tool of a family, or a golden one, past the four. */
+    /** An older tool of a family, a spare, or a golden one, past the four. */
     static final double OLD = 6.0;
     /** Any other tool, anywhere on the hotbar. */
     static final double TOOL = 3.0;
@@ -34,7 +34,7 @@ public final class SettlerPack implements PackLayout {
     public double[] weights(ItemStack stack, Inventory pack) {
         double[] fit = new double[Inventory.ARMOR_START];
         Tools.Family family = familyOf(stack.id());
-        boolean newest = family != null && isNewest(family, stack, pack);
+        boolean newest = family != null && isHome(family, stack, pack);
         boolean tool = family != null || Wear.wears(stack);
         for (int slot = Inventory.HOTBAR_START; slot < Inventory.MAIN_START; slot++) {
             int fours = Tools.Family.values().length;
@@ -59,14 +59,25 @@ public final class SettlerPack implements PackLayout {
         return null;
     }
 
-    /** Whether no tool of the family in the pack has a better tier; golden never is. */
-    private static boolean isNewest(Tools.Family family, ItemStack stack, Inventory pack) {
+    /**
+     * Whether this is the one tool of its family that sits at home: the best tier in the pack, and
+     * of two at that tier the one in the lower slot. A stack not yet in the pack (a pickup) loses
+     * that tie, so a second sword lands as a spare. Golden never is.
+     */
+    private static boolean isHome(Tools.Family family, ItemStack stack, Inventory pack) {
         int tier = Tools.tierOf(family, stack.id());
         if (tier < 0) {
             return false;
         }
+        int at = Integer.MAX_VALUE;
         for (int slot = 0; slot < Inventory.ARMOR_START; slot++) {
-            if (Tools.tierOf(family, pack.get(slot).id()) > tier) {
+            if (pack.get(slot) == stack) {
+                at = slot;
+            }
+        }
+        for (int slot = 0; slot < Inventory.ARMOR_START; slot++) {
+            int other = Tools.tierOf(family, pack.get(slot).id());
+            if (other > tier || other == tier && slot < at) {
                 return false;
             }
         }
