@@ -126,6 +126,16 @@ public final class ComposedBoards implements WorkSource {
     }
 
     @Override
+    public void pricedOut(WorkItem item, BrainContext ctx) {
+        sourceOf(item).pricedOut(item, ctx);
+    }
+
+    @Override
+    public int budgetSteps(WorkItem item) {
+        return sourceOf(item).budgetSteps(item);
+    }
+
+    @Override
     public void failed(WorkItem item, BrainContext ctx) {
         WorkSource from = sourceOf(item);
         offeredBy.remove(item);

@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.board;
 import dev.luizloyola.anima.core.continuity.Ephemeral;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.WorkToleranceCurve;
 import dev.luizloyola.anima.core.brain.board.SiteClaims;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
@@ -368,6 +369,9 @@ public class Board {
         flailing.remove(who); // anything at all going right ends the streak
         leases.remove(item);
         Project owner = ownerOf(item);
+        if (owner instanceof PartyProject party && budgetSteps.containsKey(owner)) {
+            party.keyOf(item).ifPresent(budgetSteps.get(owner)::remove);
+        }
         if (owner != null) {
             owner.completed(item, ctx);
         }
@@ -588,6 +592,49 @@ public class Board {
         for (WorkItem item : project.open()) {
             leases.remove(item);
         }
+        budgetSteps.remove(project);
+    }
+
+    /**
+     * Steps of budget each errand has earned by being priced out, until it succeeds — see
+     * {@link WorkToleranceCurve}. By project and {@link WorkKey}, so {@link PartyBoard} saves it
+     * with the row; a personal project has no key and earns nothing.
+     */
+    private final Map<Project, Map<WorkKey, Integer>> budgetSteps = new IdentityHashMap<>();
+
+    /** Every priced-out failure of {@code item} earns it a step, journalled with the new budget. */
+    public void pricedOut(WorkItem item, BrainContext ctx) {
+        Project owner = ownerOf(item);
+        if (!(owner instanceof PartyProject party)) {
+            return;
+        }
+        party.keyOf(item).ifPresent(key -> {
+            int steps = budgetSteps.computeIfAbsent(owner, project -> new java.util.HashMap<>())
+                    .merge(key, 1, (was, one) -> Math.min(WorkToleranceCurve.MAX_STEPS, was + one));
+            ctx.journal().record(Category.PROJECT, item.describe(), "priced out — its budget grows to "
+                    + Math.round(WorkToleranceCurve.tolerance(item.priority(), steps)) + " blocks");
+        });
+    }
+
+    public int budgetSteps(WorkItem item) {
+        Project owner = ownerOf(item);
+        if (!(owner instanceof PartyProject party)) {
+            return 0;
+        }
+        Map<WorkKey, Integer> steps = budgetSteps.get(owner);
+        return steps == null ? 0 : party.keyOf(item).map(key -> steps.getOrDefault(key, 0)).orElse(0);
+    }
+
+    /** The steps {@code project}'s errands have earned, for its saved row. */
+    public Map<WorkKey, Integer> budgetStepsOf(Project project) {
+        return Map.copyOf(budgetSteps.getOrDefault(project, Map.of()));
+    }
+
+    /** Puts saved steps back on a restored project. */
+    void restoreBudgetSteps(Project project, Map<WorkKey, Integer> steps) {
+        if (!steps.isEmpty()) {
+            budgetSteps.put(project, new java.util.HashMap<>(steps));
+        }
     }
 
     /**
@@ -633,6 +680,16 @@ public class Board {
             Board.this.completed(item, member.get(), ctx);
             ctx.journal().record(Category.PROJECT, item.describe(),
                     "closed (" + item.progress(ctx) + ")");
+        }
+
+        @Override
+        public void pricedOut(WorkItem item, BrainContext ctx) {
+            Board.this.pricedOut(item, ctx);
+        }
+
+        @Override
+        public int budgetSteps(WorkItem item) {
+            return Board.this.budgetSteps(item);
         }
 
         @Override

@@ -486,11 +486,18 @@ public final class PartyBoardCodecs {
             Codec.LONG.optionalFieldOf("until", 0L).forGetter(PartyBoard.Hold::until)
     ).apply(hold, (key, who, until) -> new PartyBoard.Hold(key, AgentId.of(who), until)));
 
+    /** Since 2026-10-01; a save without it reads as no steps earned. */
+    public static final Codec<PartyBoard.Steps> STEPS = RecordCodecBuilder.create(steps -> steps.group(
+            WORK_KEY.fieldOf("item").forGetter(PartyBoard.Steps::key),
+            Codec.INT.fieldOf("steps").forGetter(PartyBoard.Steps::steps)
+    ).apply(steps, PartyBoard.Steps::new));
+
     /** One posted project and every hold on it — the row a party's board is a list of. */
     public static final Codec<PartyBoard.Row> ROW = RecordCodecBuilder.create(row -> row.group(
             PROJECT.fieldOf("project").forGetter(PartyBoard.Row::project),
             HOLD.listOf().optionalFieldOf("holds", List.of()).forGetter(PartyBoard.Row::holds),
-            Codec.INT.optionalFieldOf("handle", 0).forGetter(PartyBoard.Row::handle)
+            Codec.INT.optionalFieldOf("handle", 0).forGetter(PartyBoard.Row::handle),
+            STEPS.listOf().optionalFieldOf("budget_steps", List.of()).forGetter(PartyBoard.Row::steps)
     ).apply(row, PartyBoard.Row::new));
 
     /** A board's pacing — its next handle, and who is failing and stood down. */

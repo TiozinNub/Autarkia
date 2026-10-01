@@ -74,11 +74,19 @@ public final class PartyBoard extends Board {
      * <p>Holds travel with the project because a {@link WorkKey} names an item <em>within</em> the
      * project that minted it: two projects clearing overlapping boxes would write the same key.
      */
-    public record Row(ProjectState project, List<Hold> holds, int handle) {
+    public record Row(ProjectState project, List<Hold> holds, int handle, List<Steps> steps) {
         /** A row saved before handles were: numbered afresh on restore. */
         public Row(ProjectState project, List<Hold> holds) {
             this(project, holds, 0);
         }
+
+        public Row(ProjectState project, List<Hold> holds, int handle) {
+            this(project, holds, handle, List.of());
+        }
+    }
+
+    /** Budget an errand has earned by being priced out — see {@link Board#pricedOut}. */
+    public record Steps(WorkKey key, int steps) {
     }
 
     /** Who was holding which item when the world stopped, and until when; 0 is "a fresh TTL". */
@@ -106,7 +114,9 @@ public final class PartyBoard extends Board {
                 party.keyOf(hold.getKey()).ifPresent(key -> holds.add(
                         new Hold(key, hold.getValue(), leaseUntil(hold.getKey()))));
             }
-            rows.add(new Row(party.snapshot(), List.copyOf(holds), handleOf(project).orElse(0)));
+            List<Steps> steps = new ArrayList<>();
+            budgetStepsOf(project).forEach((key, n) -> steps.add(new Steps(key, n)));
+            rows.add(new Row(party.snapshot(), List.copyOf(holds), handleOf(project).orElse(0), List.copyOf(steps)));
         }
         return List.copyOf(rows);
     }
@@ -160,6 +170,9 @@ public final class PartyBoard extends Board {
                 });
             }
             project.holdsRestored();
+            Map<WorkKey, Integer> steps = new java.util.HashMap<>();
+            row.steps().forEach(saved -> steps.put(saved.key(), saved.steps()));
+            restoreBudgetSteps(project, steps);
         }
         return unknown;
     }
