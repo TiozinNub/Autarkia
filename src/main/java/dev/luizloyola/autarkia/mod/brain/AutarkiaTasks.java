@@ -9,12 +9,14 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
 import dev.luizloyola.autarkia.core.board.BringBack;
+import dev.luizloyola.autarkia.core.board.ClearStrip;
 import dev.luizloyola.autarkia.core.board.GatheringErrand;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.patch.PickPatch;
 import dev.luizloyola.autarkia.core.tree.Climb;
 import dev.luizloyola.autarkia.core.tree.FellTree;
+import dev.luizloyola.autarkia.mod.board.PartyBoardCodecs;
 import java.util.HashSet;
 import java.util.List;
 import java.util.TreeSet;
@@ -146,6 +148,11 @@ public final class AutarkiaTasks {
                         POI_KIND.fieldOf("kind").forGetter(PickPatch::kind),
                         POS.fieldOf("anchor").forGetter(PickPatch::anchor)
                 ).apply(t, PickPatch::new)));
+        TaskCodecs.register("autarkia:clear_strip", ClearStrip.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        PartyBoardCodecs.REGION.fieldOf("strip").forGetter(ClearStrip::strip),
+                        Codec.BOOL.optionalFieldOf("there", false).forGetter(ClearStrip::there)
+                ).apply(t, ClearStrip::new)));
     }
 
     /** By key, guarded like the stage: a kind nobody registered is an error, never a new kind. */

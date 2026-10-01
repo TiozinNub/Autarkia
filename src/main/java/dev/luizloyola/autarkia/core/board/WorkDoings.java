@@ -42,6 +42,9 @@ public final class WorkDoings {
     /** Slot: what was put in to smelt. */
     public static final Doing FIRING = Doings.register(new Doing(
             "firing", "autarkia.doing.firing", List.of("what"), true));
+    /** Pulling up the ground's plants, so it is ready to build on. */
+    public static final Doing CLEARING_PLANTS = Doings.register(new Doing(
+            "clearing_plants", "autarkia.doing.clearing_plants", List.of(), true));
     /** Looking for somewhere to live. */
     /** Cutting and filling ground level. */
     public static final Doing LEVELLING = Doings.register(new Doing(

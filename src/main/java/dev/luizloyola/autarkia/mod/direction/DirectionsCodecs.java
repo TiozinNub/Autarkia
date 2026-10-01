@@ -38,10 +38,13 @@ public final class DirectionsCodecs {
 
     public static final Codec<SavedHome> HOME = RecordCodecBuilder.create(home -> home.group(
             PartyBoardCodecs.POS.fieldOf("yard").forGetter(saved -> saved.home().yard()),
+            TerritoryData.CHUNKS.optionalFieldOf("felled_chunks", Set.of())
+                    .forGetter(saved -> saved.home().felled()),
             TerritoryData.CHUNKS.optionalFieldOf("cleared_chunks", Set.of())
                     .forGetter(saved -> saved.home().cleared()),
             PartyBoardCodecs.REGION.optionalFieldOf("plot").forGetter(saved -> Optional.empty())
-    ).apply(home, (yard, cleared, plot) -> new SavedHome(new Home(yard, new TreeSet<>(cleared)), plot)));
+    ).apply(home, (yard, felled, cleared, plot) -> new SavedHome(
+            new Home(yard, new TreeSet<>(felled), new TreeSet<>(cleared)), plot)));
 
     /** One party's climb. Node ids travel as strings: a node the table no longer names stays reached. */
     public record PartyRow(UUID party, List<String> reached, List<DirectionId> checkpoints,

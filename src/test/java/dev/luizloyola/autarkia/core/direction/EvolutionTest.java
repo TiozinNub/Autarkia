@@ -10,6 +10,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
+import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Fellings;
 import dev.luizloyola.autarkia.core.board.Gather;
@@ -187,9 +188,13 @@ class EvolutionTest {
         board.post(done);
         assertEquals(List.of(new DirectionId(WOOD, "area")),
                 Evolution.collect(tree, progress, view, board.closeFinished()));
+        assertTrue(progress.home().felled().contains(HERE), "the finished felling is the party's knowledge");
+        assertTrue(progress.home().cleared().isEmpty(), "felled is not yet cleared: the plants are next");
 
+        beat();
+        finish(plantsOnTheBoard());
         Evolution.Outcome outcome = beat();
-        assertTrue(progress.home().cleared().contains(HERE), "the finished clearing is the party's knowledge");
+        assertTrue(progress.home().cleared().contains(HERE));
         assertTrue(outcome.completed().contains(new DirectionId(WOOD, "area")));
         assertEquals(List.of(STONE), outcome.reached());
         assertTrue(progress.reached().contains(STONE));
@@ -200,6 +205,11 @@ class EvolutionTest {
                 "Stone's version of the line is in force now");
         assertEquals(Direction.UPKEEP, next.posted().get(0).project().priority(),
                 "and it leads nowhere new in a two-node tree");
+    }
+
+    private ClearPlants plantsOnTheBoard() {
+        return (ClearPlants) board.projects().stream().filter(p -> p instanceof ClearPlants)
+                .findFirst().orElseThrow();
     }
 
     private FellTrees clearingOnTheBoard() {
@@ -231,20 +241,30 @@ class EvolutionTest {
         assertTrue(progress.home().cleared().isEmpty(), "cancelled is not finished");
     }
 
-    /** A chunk at a time, the nearest the yard first; a chunk the area grows into is uncleared. */
+    /**
+     * A chunk at a time, the nearest the yard first, felled and then its plants pulled up; a chunk
+     * the area grows into is uncleared.
+     */
     @Test
     void eachChunkOfTheAreaIsClearedInTurn() {
         view.area.add(EAST);
         beat();
         assertEquals(PLOT, clearingOnTheBoard().bounds(), "the yard's own chunk first");
         finish(clearingOnTheBoard());
+        assertEquals(Set.of(HERE), progress.home().felled());
+
+        beat();
+        assertEquals(PLOT, plantsOnTheBoard().bounds(), "its plants before the next chunk's trees");
+        assertTrue(Evolution.ownWork(tree, progress, view, board).contains(plantsOnTheBoard()),
+                "a plant clearing is this HOME's work too");
+        finish(plantsOnTheBoard());
         assertEquals(Set.of(HERE), progress.home().cleared());
 
         beat();
         assertEquals(Home.at(YARD).region(EAST), clearingOnTheBoard().bounds());
-        assertTrue(Evolution.ownWork(tree, progress, view, board).contains(clearingOnTheBoard()),
-                "the second chunk's clearing is this HOME's work too");
         finish(clearingOnTheBoard());
+        beat();
+        finish(plantsOnTheBoard());
         assertEquals(Set.of(HERE, EAST), progress.home().cleared());
     }
 
@@ -253,6 +273,14 @@ class EvolutionTest {
         FellTrees done = FellTrees.restore(new FellTrees.State("trees", posted.bounds(), 0.5,
                 FellTrees.Phase.DONE, List.of(), List.of(), 0, List.of(), YARD, List.of(), List.of()), 0L)
                 .orElseThrow();
+        board.post(done);
+        Evolution.collect(tree, progress, view, board.closeFinished());
+    }
+
+    private void finish(ClearPlants posted) {
+        board.cancel(board.handleOf(posted).orElseThrow());
+        ClearPlants done = ClearPlants.restore(new ClearPlants.State(posted.bounds(), 0.5,
+                List.of(0, 1, 2, 3), List.of(), List.of(), 0L), 0L).orElseThrow();
         board.post(done);
         Evolution.collect(tree, progress, view, board.closeFinished());
     }

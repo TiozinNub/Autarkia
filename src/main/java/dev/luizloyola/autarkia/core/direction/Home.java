@@ -18,27 +18,32 @@ import java.util.TreeSet;
  * itself is the party's territory, Anima's (docs/superpowers/specs/2026-10-01-home-area-design.md);
  * HOME is what the area means to a party of Persons.
  *
- * @param cleared the chunks whose clearing has finished — all the party can know about the trees on
- *                them, since nobody shares what they merely walked past. A chunk the area no longer
- *                holds may linger here; read it against the area.
+ * <p>A chunk is cleared in two steps, its trees felled and then its plants pulled up, and only then
+ * is it ready to build on.
+ *
+ * @param felled  the chunks whose felling has finished — all the party can know about the trees on
+ *                them, since nobody shares what they merely walked past
+ * @param cleared the chunks whose plants were pulled up after the felling: ready to build on. A
+ *                chunk the area no longer holds may linger in either set; read them against the area.
  */
-public record Home(Pos yard, SortedSet<ChunkKey> cleared) {
+public record Home(Pos yard, SortedSet<ChunkKey> felled, SortedSet<ChunkKey> cleared) {
 
     public Home {
         Objects.requireNonNull(yard, "yard");
+        felled = Collections.unmodifiableSortedSet(new TreeSet<>(felled));
         cleared = Collections.unmodifiableSortedSet(new TreeSet<>(cleared));
     }
 
     /**
-     * How far a chunk's clearing reaches below and above the yard. The ground is ground, but a
-     * clearing must take in a whole tree standing on it, crown and all, and the ground is rarely flat.
+     * How far work on a chunk reaches below and above the yard. The ground is ground, but a felling
+     * must take in a whole tree standing on it, crown and all, and the ground is rarely flat.
      */
     private static final int BELOW = 16;
     private static final int ABOVE = 48;
 
     /** A new HOME, nothing cleared. */
     public static Home at(Pos yard) {
-        return new Home(yard, new TreeSet<>());
+        return new Home(yard, new TreeSet<>(), new TreeSet<>());
     }
 
     /** The chunks a square of {@code radius} round {@code centre} touches: a new HOME's first claim. */
@@ -47,10 +52,16 @@ public record Home(Pos yard, SortedSet<ChunkKey> cleared) {
                 centre.x() + radius, centre.z() + radius);
     }
 
+    public Home withFelled(ChunkKey chunk) {
+        SortedSet<ChunkKey> now = new TreeSet<>(felled);
+        now.add(chunk);
+        return new Home(yard, now, cleared);
+    }
+
     public Home withCleared(ChunkKey chunk) {
         SortedSet<ChunkKey> now = new TreeSet<>(cleared);
         now.add(chunk);
-        return new Home(yard, now);
+        return new Home(yard, felled, now);
     }
 
     /** The chunks of {@code area} not yet cleared, nearest the yard first. */
@@ -65,13 +76,13 @@ public record Home(Pos yard, SortedSet<ChunkKey> cleared) {
         return left;
     }
 
-    /** What a clearing of this chunk covers: its columns, from below the yard to above it. */
+    /** What work on this chunk covers: its columns, from below the yard to above it. */
     public Region region(ChunkKey chunk) {
         return new Region(new Pos(chunk.minBlockX(), yard.y() - BELOW, chunk.minBlockZ()),
                 new Pos(chunk.maxBlockX(), yard.y() + ABOVE, chunk.maxBlockZ()));
     }
 
-    /** The chunk a clearing's bounds are this HOME's clearing of, if they are one. */
+    /** The chunk a felling's or a plant clearing's bounds are this HOME's work on, if they are one. */
     public Optional<ChunkKey> chunkOf(Region bounds) {
         ChunkKey chunk = ChunkKey.at(ChunkKey.OVERWORLD, bounds.min().x(), bounds.min().z());
         return region(chunk).equals(bounds) ? Optional.of(chunk) : Optional.empty();

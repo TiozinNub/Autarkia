@@ -220,6 +220,8 @@ public class AutarkiaMod implements ModInitializer {
         // Levelling ground to a plan read off the natural ground (/autarkia flatten).
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Flatten.TYPE);
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.ClearPlants.TYPE);
         dev.luizloyola.autarkia.mod.board.Tending.init();
         dev.luizloyola.autarkia.mod.direction.Directions.init();
         dev.luizloyola.autarkia.mod.bp.Blueprints.init();
@@ -254,6 +256,7 @@ public class AutarkiaMod implements ModInitializer {
         // And what makes a place worth living in, for the HOME search: stone and bee nests.
         Landmarks.init();
         LandmarkBlocks.register();
+        dev.luizloyola.autarkia.compat.sense.PlantBlocks.register();
         GrowthRules.register(Landmarks.STONE, StoneRule.INSTANCE);
         GrowthRules.register(Landmarks.BEE_NEST, NestRule.INSTANCE);
         KnowledgeViewer.particle(Landmarks.STONE_POI, ParticleTypes.CRIT);

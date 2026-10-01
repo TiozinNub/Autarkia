@@ -14,6 +14,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
@@ -233,6 +234,16 @@ class PartyBoardCodecsTest {
 
         assertEquals("fell_trees", read.type());
         assertTrue(read instanceof FellTrees.State, "no type field predates a second kind existing");
+    }
+
+    @Test
+    void aPlantClearingComesBackWithItsStripsAndWhoFailed() {
+        ClearPlants.State before = new ClearPlants.State(new Region(new Pos(0, 48, 0), new Pos(15, 112, 15)),
+                0.5, List.of(0, 2), List.of(new ClearPlants.Failure(1, CREW)),
+                List.of(new Gather.Cooldown(CREW, 900L)), 400L);
+        var encoded = PartyBoardCodecs.PROJECT.encodeStart(JsonOps.INSTANCE, before).getOrThrow();
+        assertEquals("clear_plants", encoded.getAsJsonObject().get("type").getAsString());
+        assertEquals(before, PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, encoded).getOrThrow());
     }
 
     @Test

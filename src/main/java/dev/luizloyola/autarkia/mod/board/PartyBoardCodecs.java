@@ -13,6 +13,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.Board;
+import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Explore;
 import dev.luizloyola.autarkia.core.board.Flatten;
@@ -326,6 +327,24 @@ public final class PartyBoardCodecs {
                     Codec.LONG.optionalFieldOf("material_wait_until", 0L)
                             .forGetter(Flatten.State::materialWaitUntil)
             ).apply(project, Flatten.State::new));
+    private static final Codec<ClearPlants.Failure> PLANT_FAILURE = RecordCodecBuilder.create(failure ->
+            failure.group(
+                    Codec.INT.fieldOf("strip").forGetter(ClearPlants.Failure::strip),
+                    UUIDUtil.CODEC.fieldOf("who").forGetter(f -> f.who().value())
+            ).apply(failure, (strip, who) -> new ClearPlants.Failure(strip, AgentId.of(who))));
+
+    /** Everything a {@code clear_plants} row carries: the box, and which strips are done or failed. */
+    public static final MapCodec<ClearPlants.State> CLEAR_PLANTS =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    REGION.fieldOf("bounds").forGetter(ClearPlants.State::bounds),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(ClearPlants.State::priority),
+                    Codec.INT.listOf().optionalFieldOf("done", List.of()).forGetter(ClearPlants.State::done),
+                    PLANT_FAILURE.listOf().optionalFieldOf("failures", List.of())
+                            .forGetter(ClearPlants.State::failures),
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(ClearPlants.State::cooldowns),
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(ClearPlants.State::lastTick)
+            ).apply(project, ClearPlants.State::new));
 
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {
@@ -427,6 +446,7 @@ public final class PartyBoardCodecs {
             case "tend" -> DataResult.success(TEND);
             case "fire" -> DataResult.success(FIRE);
             case "flatten" -> DataResult.success(FLATTEN);
+            case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }
