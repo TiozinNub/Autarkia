@@ -26,6 +26,14 @@ public final class Stock {
     public static final ItemSpec PLANKS =
             ItemSpec.register(new ItemSpec("planks", id -> id.endsWith("_planks")));
 
+    /**
+     * What a furnace burns before planks: vanilla fuels a clearing sweeps up and nothing else uses
+     * yet. Saplings are left out — they are for planting once anybody plants.
+     */
+    public static final ItemSpec KINDLING = ItemSpec.register(new ItemSpec("kindling", id ->
+            id.equals("minecraft:leaf_litter") || id.equals("minecraft:dead_bush")
+                    || id.equals("minecraft:short_dry_grass") || id.equals("minecraft:tall_dry_grass")));
+
     /** Any pickaxe, any tier — what mining stone needs, since stone mined bare-handed drops nothing. */
     public static final ItemSpec PICKAXES =
             ItemSpec.register(new ItemSpec("pickaxes", id -> id.endsWith("_pickaxe")));

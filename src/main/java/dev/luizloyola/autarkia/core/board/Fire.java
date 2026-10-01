@@ -145,7 +145,7 @@ public final class Fire implements PartyProject {
 
         @Override
         public Task root() {
-            return new LoadFurnace(at, input, count, fuel);
+            return new LoadFurnace(at, input, count, fuel, Stock.KINDLING);
         }
 
         @Override
