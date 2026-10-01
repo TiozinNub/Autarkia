@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.builder;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.luizloyola.anima.compat.SavedDatas;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.mod.store.StoreGuard;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Facing;
@@ -59,6 +60,14 @@ public final class StructuresData extends SavedData implements StoreGuard.Checke
                 return out;
             });
 
+    private static final Codec<Structure.Work> WORK = RecordCodecBuilder.create(w -> w.group(
+            UUIDUtil.CODEC.listOf().optionalFieldOf("builders", List.of())
+                    .forGetter(work -> work.builders().stream().map(AgentId::value).toList()),
+            Codec.LONG.optionalFieldOf("begun_at", -1L).forGetter(Structure.Work::begunAt),
+            Codec.LONG.optionalFieldOf("built_at", -1L).forGetter(Structure.Work::builtAt)
+    ).apply(w, (builders, begunAt, builtAt) -> new Structure.Work(builders.stream().map(AgentId::new).toList(),
+            begunAt, builtAt)));
+
     static final Codec<Structure> STRUCTURE = RecordCodecBuilder.create(s -> s.group(
             UUIDUtil.CODEC.fieldOf("id").forGetter(Structure::id),
             Codec.STRING.fieldOf("blueprint").forGetter(Structure::blueprint),
@@ -74,10 +83,11 @@ public final class StructuresData extends SavedData implements StoreGuard.Checke
             Codec.STRING.xmap(Structure.Phase::valueOf, Structure.Phase::name).fieldOf("phase")
                     .forGetter(Structure::phase),
             Codec.LONG.optionalFieldOf("sited_at", 0L).forGetter(Structure::sitedAt),
-            Codec.STRING.optionalFieldOf("note", "").forGetter(Structure::note)
-    ).apply(s, (id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt, note) ->
-            new Structure(id, blueprint, version, variants, bindings, anchor, placement, built.orElse(pad), pad, phase,
-                    sitedAt, note)));
+            Codec.STRING.optionalFieldOf("note", "").forGetter(Structure::note),
+            WORK.optionalFieldOf("work", Structure.Work.NONE).forGetter(Structure::work)
+    ).apply(s, (id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt, note,
+            work) -> new Structure(id, blueprint, version, variants, bindings, anchor, placement, built.orElse(pad), pad,
+            phase, sitedAt, note, work)));
 
     record Row(UUID party, Structure structure) {
     }

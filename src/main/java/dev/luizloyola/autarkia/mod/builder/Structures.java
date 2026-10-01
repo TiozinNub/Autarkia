@@ -190,7 +190,10 @@ public final class Structures {
         }
         PartyBoards.of(server, party).post(build);
         PartyBoards.touch(server);
-        return structure.at(Phase.BUILDING, String.join("; ", notes));
+        Structure.Work work = structure.work();
+        long begun = work.begunAt() >= 0 ? work.begunAt() : server.overworld().getGameTime();
+        return structure.at(Phase.BUILDING, String.join("; ", notes))
+                .with(new Structure.Work(work.builders(), begun, -1));
     }
 
     /** A build gone from the board without finishing was cancelled: it is posted again over what stands. */
@@ -214,7 +217,9 @@ public final class Structures {
                 } else if (structure.phase() == Phase.BUILDING && project instanceof Build build
                         && build.structure().equals(structure.id())) {
                     next = structure.at(Phase.BUILT, build.refused().isEmpty() ? ""
-                            : build.refused().size() + " steps handed back");
+                            : build.refused().size() + " steps handed back")
+                            .with(new Structure.Work(List.copyOf(build.builders()), structure.work().begunAt(),
+                                    server.overworld().getGameTime()));
                 }
                 if (next != structure) {
                     data.replace(party, next);
@@ -250,6 +255,16 @@ public final class Structures {
         String phase = structure.phase().name().toLowerCase(java.util.Locale.ROOT);
         return structure.blueprint() + " at " + at + " facing "
                 + structure.placement().north().word() + (structure.placement().flip() ? " flipped" : "")
-                + " — " + phase + (structure.note().isEmpty() ? "" : ": " + structure.note());
+                + " — " + phase + (structure.note().isEmpty() ? "" : ": " + structure.note()) + made(structure.work());
+    }
+
+    /** Who built it and how long it took, once it stands. */
+    private static String made(Structure.Work work) {
+        if (work.builtAt() < 0) {
+            return "";
+        }
+        long ticks = work.builtAt() - work.begunAt();
+        return " — by " + work.builders().size() + (work.builders().size() == 1 ? " builder" : " builders") + " in "
+                + ticks + " ticks";
     }
 }

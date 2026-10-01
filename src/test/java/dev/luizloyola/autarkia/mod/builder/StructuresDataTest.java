@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.JsonOps;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Facing;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.builder.Structure;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,15 @@ class StructuresDataTest {
         Structure refused = SITED.at(Structure.Phase.REFUSED, "the pad cannot be levelled: {fluid=3}");
         assertEquals(refused, StructuresData.STRUCTURE.parse(JsonOps.INSTANCE,
                 StructuresData.STRUCTURE.encodeStart(JsonOps.INSTANCE, refused).getOrThrow()).getOrThrow());
+    }
+
+    @Test
+    void aBuiltBuildingKeepsWhoBuiltItAndWhen() {
+        Structure built = SITED.at(Structure.Phase.BUILT, "2 steps handed back").with(new Structure.Work(
+                List.of(new AgentId(new UUID(7, 1)), new AgentId(new UUID(7, 2))), 200_000L, 214_800L));
+        assertEquals(built, StructuresData.STRUCTURE.parse(JsonOps.INSTANCE,
+                StructuresData.STRUCTURE.encodeStart(JsonOps.INSTANCE, built).getOrThrow()).getOrThrow());
+        assertEquals(built.work(), built.at(Structure.Phase.BUILT, "").work(), "a phase change keeps the work");
     }
 
     @Test

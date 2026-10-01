@@ -1,9 +1,11 @@
 package dev.luizloyola.autarkia.core.builder;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SortedSet;
@@ -19,10 +21,23 @@ import java.util.UUID;
  * @param built  the bounds of its walls, in the world
  * @param pad    the ground levelled for it
  * @param note   why it was refused, or empty
+ * @param work   who built it and when
  */
 public record Structure(UUID id, String blueprint, int version, Map<String, String> variants,
                         Map<Integer, String> bindings, Pos anchor, Placement placement, Footprint built,
-                        Footprint pad, Phase phase, long sitedAt, String note) {
+                        Footprint pad, Phase phase, long sitedAt, String note, Work work) {
+
+    /**
+     * The building's making: the members who placed any of it, and the game times its build was
+     * posted and finished, -1 until then. A game day is 24000 of them.
+     */
+    public record Work(List<AgentId> builders, long begunAt, long builtAt) {
+        public static final Work NONE = new Work(List.of(), -1, -1);
+
+        public Work {
+            builders = List.copyOf(builders);
+        }
+    }
 
     public enum Phase {
         /** Chosen and its ground claimed; waiting for its chunks to be cleared. */
@@ -47,11 +62,23 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         variants = Map.copyOf(variants);
         bindings = Map.copyOf(bindings);
         note = note == null ? "" : note;
+        work = work == null ? Work.NONE : work;
+    }
+
+    public Structure(UUID id, String blueprint, int version, Map<String, String> variants,
+                     Map<Integer, String> bindings, Pos anchor, Placement placement, Footprint built, Footprint pad,
+                     Phase phase, long sitedAt, String note) {
+        this(id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt, note, Work.NONE);
     }
 
     public Structure at(Phase next, String why) {
         return new Structure(id, blueprint, version, variants, bindings, anchor, placement, built, pad, next, sitedAt,
-                why);
+                why, work);
+    }
+
+    public Structure with(Work next) {
+        return new Structure(id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt,
+                note, next);
     }
 
     /** The chunks that must be cleared before the pad is levelled: the pad and the ring round it. */
