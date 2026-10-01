@@ -4,9 +4,11 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.gate.Act;
 import dev.luizloyola.anima.core.brain.gate.Acts;
 import dev.luizloyola.anima.core.brain.gate.Gate;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.log.JournalService;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.store.Depot;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.autarkia.compat.inv.ItemIds;
@@ -83,6 +85,7 @@ public final class Directions {
         ServerTickEvents.END_SERVER_TICK.register(Directions::tick);
         PartyBoards.onClosed(Directions::closed);
         Gate.install(new Answers());
+        Depot.install(Directions::depotOf);
     }
 
     public static Tree tree() {
@@ -332,6 +335,18 @@ public final class Directions {
         PartyData.get(server).currentPartyOf(who).flatMap(data::find)
                 .ifPresent(progress -> reached.addAll(progress.reached()));
         return reached;
+    }
+
+    /** Where a body's goods go: its party's HOME yard, and nowhere before it has one. */
+    private static Optional<Pos> depotOf(AgentId body) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return Optional.empty();
+        }
+        return PartyData.get(server).currentPartyOf(body)
+                .flatMap(DirectionsData.get(server)::find)
+                .map(PartyProgress::home)
+                .map(Home::yard);
     }
 
     /** Anima's two questions, answered from the node table. */

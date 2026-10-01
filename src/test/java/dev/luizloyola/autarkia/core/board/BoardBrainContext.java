@@ -89,6 +89,14 @@ final class BoardBrainContext implements BrainContext {
         return reserved;
     }
 
+    /** Where this body's goods go; null, the default, is a body with no HOME. */
+    Pos depot;
+
+    @Override
+    public java.util.Optional<Pos> depot() {
+        return java.util.Optional.ofNullable(depot);
+    }
+
     /** The world these percepts read. Tests place logs and leaves in it directly. */
     public final dev.luizloyola.anima.core.brain.knowledge.FakeProbe blocks =
             new dev.luizloyola.anima.core.brain.knowledge.FakeProbe();

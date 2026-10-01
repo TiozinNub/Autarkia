@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.brain.history.Deed;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.inv.ItemCall;
@@ -30,6 +31,15 @@ class StowSurplusTest {
         }
     }
 
+    private static final Pos YARD = new Pos(40, 64, -12);
+
+    /** A body whose party has a HOME, so its goods have somewhere to go. */
+    private static BoardBrainContext settled() {
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.depot = YARD;
+        return ctx;
+    }
+
     /** Runs {@code n} whole cadence beats. */
     private static void beats(StowSurplus stow, BoardBrainContext ctx, int n) {
         for (int tick = 0; tick < n * StowSurplus.CHECK_INTERVAL; tick++) {
@@ -39,7 +49,7 @@ class StowSurplusTest {
 
     @Test
     void itPostsOnceWhenTheCargoCrossesTheLine() {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         StowSurplus stow = new StowSurplus(0);
 
@@ -52,7 +62,7 @@ class StowSurplusTest {
 
     @Test
     void itSaysNothingWhileTheCargoIsBelowTheLine() {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS - 1);
         StowSurplus stow = new StowSurplus(0);
 
@@ -63,7 +73,7 @@ class StowSurplusTest {
 
     @Test
     void itWithdrawsWhenThePackDropsBackUnder() {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         StowSurplus stow = new StowSurplus(0);
         beats(stow, ctx, 2);
@@ -79,7 +89,7 @@ class StowSurplusTest {
 
     @Test
     void itNeverYanksAnErrandSomebodyIsAlreadyWalking() {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         StowSurplus stow = new StowSurplus(0);
         beats(stow, ctx, 2);
@@ -97,7 +107,7 @@ class StowSurplusTest {
 
     @Test
     void aPackOfSpokenForGoodsIsNeverWorthATrip() {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         ctx.reserved = List.of(ItemCall.need(LOGS, 64 * 36));
         StowSurplus stow = new StowSurplus(0);
@@ -108,8 +118,43 @@ class StowSurplusTest {
     }
 
     @Test
-    void theErrandIsTheSameGoalTheInstinctRuns() {
+    void withNoHomeNothingIsOffloaded() {
         BoardBrainContext ctx = new BoardBrainContext();
+        cargo(ctx, 36);
+        StowSurplus stow = new StowSurplus(0);
+
+        beats(stow, ctx, 4);
+
+        assertTrue(stow.open().isEmpty(), "no base, no offloading: a chest away from it is lost");
+    }
+
+    @Test
+    void aPostedStowIsWithdrawnWhenTheHomeIsGone() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        StowSurplus stow = new StowSurplus(0);
+        beats(stow, ctx, 2);
+        ctx.depot = null;
+
+        beats(stow, ctx, 1);
+
+        assertTrue(stow.open().isEmpty());
+    }
+
+    @Test
+    void theLoadGoesHome() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        StowSurplus stow = new StowSurplus(0);
+        beats(stow, ctx, 2);
+
+        PutAwaySurplus goal = (PutAwaySurplus) stow.open().get(0).root();
+        assertEquals(YARD, goal.hint(), "to HOME's yard, never the nearest chest");
+    }
+
+    @Test
+    void theErrandIsTheSameGoalTheInstinctRuns() {
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         StowSurplus stow = new StowSurplus(0);
         beats(stow, ctx, 2);
@@ -124,7 +169,7 @@ class StowSurplusTest {
      */
     @Test
     void itBeatsDoingNothingAndLosesToRealWork() {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         StowSurplus stow = new StowSurplus(0);
         beats(stow, ctx, 2);
@@ -139,7 +184,7 @@ class StowSurplusTest {
 
     @Test
     void theErrandTellsOfStowing() {
-        BoardBrainContext ctx = new BoardBrainContext();
+        BoardBrainContext ctx = settled();
         cargo(ctx, StowSurplus.SURPLUS_SLOTS);
         StowSurplus stow = new StowSurplus(0);
         beats(stow, ctx, 2);

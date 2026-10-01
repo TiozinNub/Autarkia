@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.history.Deed;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.brain.task.Task;
@@ -22,6 +23,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A condition, not an outcome: {@link #finished()} is always false, and the errand is WITHDRAWN
  * rather than completed when the pack drops back under the line by some other route.
+ *
+ * <p><b>Only home.</b> The load goes to the body's {@link BrainContext#depot() depot}, HOME's yard,
+ * and with none nothing is posted: no base, no offloading (decision: Luiz, 2026-09-30). A scout
+ * once stowed 458 items into a chest it built at a stop 450 blocks from where it settled.
  */
 public final class StowSurplus implements PersonalProject {
 
@@ -87,14 +92,16 @@ public final class StowSurplus implements PersonalProject {
         if (++beats == 1) {
             return; // the warm-up beat: a newborn's first look lands before anything is carried
         }
-        boolean worthATrip = cargo(ctx) >= SURPLUS_SLOTS;
+        Pos depot = ctx.depot().orElse(null);
+        boolean worthATrip = depot != null && cargo(ctx) >= SURPLUS_SLOTS;
         if (open == null && cooldown <= 0 && worthATrip) {
-            open = new StowItem();
+            open = new StowItem(depot);
             ctx.journal().record(Category.PROJECT, open.describe(), "posted");
         } else if (open != null && !claimed && !worthATrip) {
             // Only while UNCLAIMED, for KeepStocked's reason: an errand somebody is already
             // walking to is theirs to finish, and yanking it teaches them to ignore the board.
-            ctx.journal().record(Category.PROJECT, open.describe(), "withdrawn (nothing spare)");
+            ctx.journal().record(Category.PROJECT, open.describe(),
+                    depot == null ? "withdrawn (no home)" : "withdrawn (nothing spare)");
             open = null;
         }
     }
@@ -142,6 +149,12 @@ public final class StowSurplus implements PersonalProject {
 
     /** The errand itself — the same goal the unburden instinct roots. */
     private static final class StowItem implements WorkItem {
+        private final Pos depot;
+
+        private StowItem(Pos depot) {
+            this.depot = depot;
+        }
+
         @Override
         public boolean buildsOnTheWay() {
             return true;
@@ -154,7 +167,7 @@ public final class StowSurplus implements PersonalProject {
 
         @Override
         public Task root() {
-            return new PutAwaySurplus();
+            return new PutAwaySurplus(depot, 0);
         }
 
         @Override
