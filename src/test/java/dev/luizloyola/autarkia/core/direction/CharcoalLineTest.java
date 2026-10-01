@@ -109,6 +109,11 @@ class CharcoalLineTest {
         assertEquals(List.of(SetUp.FURNACE), setUp.stations());
         assertEquals(SPOT, setUp.near());
         assertTrue(CharcoalLine.INSTANCE.isWork(setUp, CHARCOAL, party), "its own, so it is not posted twice");
+        assertEquals(Direction.BUILDING, assertInstanceOf(SetUp.class,
+                CharcoalLine.INSTANCE.post(CHARCOAL, party, Direction.UPKEEP)).priority(), 1e-9,
+                "a station going down bids above the upkeep its Direction would");
+        assertEquals(0.6, assertInstanceOf(SetUp.class, CharcoalLine.INSTANCE.post(CHARCOAL, party, 0.6))
+                .priority(), 1e-9, "and never below what the table asks");
     }
 
     @Test

@@ -82,7 +82,7 @@ public final class CharcoalLine implements DirectionLine {
     public PartyProject post(Direction direction, PartyView party, double priority) {
         Optional<dev.luizloyola.anima.core.brain.sense.Pos> furnace = party.placeAtHome(Furnace.POI);
         if (furnace.isEmpty()) {
-            return new SetUp(List.of(SetUp.FURNACE), party.spot().orElseThrow(), priority);
+            return new SetUp(List.of(SetUp.FURNACE), party.spot().orElseThrow(), Math.max(priority, Direction.BUILDING));
         }
         int shortfall = wanted(direction, party) - party.storedAtHome(CHARCOAL).orElse(0);
         return new Fire(furnace.get(), Stock.LOGS, Math.min(64, Math.max(1, shortfall)), Stock.PLANKS, priority);

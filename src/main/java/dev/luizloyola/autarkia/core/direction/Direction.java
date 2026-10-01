@@ -24,6 +24,13 @@ public record Direction(DirectionId id, int count, @Nullable Double priority) {
      */
     public static final double UPKEEP = 0.4;
 
+    /**
+     * The least a station going down bids, whatever its Direction would: a base is what the rest
+     * is done from (Luiz, 2026-10-01). Above every other Direction's work, under coming back to a
+     * furnace ({@code Tend.PRIORITY}).
+     */
+    public static final double BUILDING = 0.52;
+
     public Direction {
         Objects.requireNonNull(id, "id");
     }

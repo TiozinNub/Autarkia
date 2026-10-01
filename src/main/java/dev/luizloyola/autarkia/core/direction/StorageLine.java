@@ -61,6 +61,6 @@ public final class StorageLine implements DirectionLine {
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        return new SetUp(List.of(SetUp.STORE), party.spot().orElseThrow(), priority);
+        return new SetUp(List.of(SetUp.STORE), party.spot().orElseThrow(), Math.max(priority, Direction.BUILDING));
     }
 }

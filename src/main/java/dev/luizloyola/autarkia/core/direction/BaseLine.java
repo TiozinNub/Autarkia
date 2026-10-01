@@ -65,7 +65,7 @@ public final class BaseLine implements DirectionLine {
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        return new SetUp(missing(party), party.spot().orElseThrow(), priority);
+        return new SetUp(missing(party), party.spot().orElseThrow(), Math.max(priority, Direction.BUILDING));
     }
 
     /** Whether a set-up's spot is in the party's area: how a line knows the set-up is HOME's. */
