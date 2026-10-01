@@ -158,6 +158,7 @@
   "autarkia.direction.line.area": "Clear the plot",
   "autarkia.direction.line.wood": "Stock wood",
   "autarkia.direction.line.food": "Stock food",
+  "autarkia.direction.line.charcoal": "Make charcoal",
   "autarkia.direction.status.no_home": "waiting for a HOME",
   "autarkia.direction.status.unread": "a store at HOME is out of reach this beat",
   "autarkia.direction.area.cleared": "the plot is cleared",
