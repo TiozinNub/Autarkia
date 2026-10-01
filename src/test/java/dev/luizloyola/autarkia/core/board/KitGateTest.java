@@ -125,6 +125,34 @@ class KitGateTest {
     }
 
     @Test
+    void aNeedAStoreWasSeenHoldingClaimsThrough() {
+        dev.luizloyola.anima.core.social.PartyId party = dev.luizloyola.anima.core.social.PartyId.random();
+        dev.luizloyola.anima.core.social.Places places = new dev.luizloyola.anima.core.social.Places();
+        places.asks(new dev.luizloyola.anima.core.social.Places.Parties() {
+            @Override
+            public java.util.Optional<dev.luizloyola.anima.core.social.PartyId> current(AgentId who) {
+                return java.util.Optional.of(party);
+            }
+
+            @Override
+            public dev.luizloyola.anima.core.social.PartyId of(AgentId who) {
+                return party;
+            }
+        });
+        ctx.knowledge().sees(places.viewFor(asker), ctx::now);
+        dev.luizloyola.anima.core.brain.sense.Pos at = new dev.luizloyola.anima.core.brain.sense.Pos(4, 64, 4);
+        places.viewFor(asker).foundCommunal(dev.luizloyola.anima.core.store.Store.POI, at, 0L);
+        KitProject project = new KitProject();
+        WorkItem mine = project.add(new KittedItem("mine stone", Kit.of(ItemCall.need(PICKAXES, 1))));
+        board.post(project);
+        assertTrue(board.bestFor(asker, ctx, ctx.now()).isEmpty(), "a store nobody looked in is no way");
+
+        ctx.knowledge().sawInside(at, List.of(pickaxe()), ctx.now(), 64);
+        assertSame(mine, board.bestFor(asker, ctx, ctx.now()).orElseThrow(),
+                "a store seen holding it is a way: the errand takes it from there");
+    }
+
+    @Test
     void aWantGatesNothing() {
         KitProject project = new KitProject();
         WorkItem chop = project.add(new KittedItem("chop", Kit.of(ItemCall.want(AXES, 1))));

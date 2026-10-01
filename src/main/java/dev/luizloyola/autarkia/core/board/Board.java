@@ -255,9 +255,10 @@ public class Board {
 
     /**
      * The needs among {@code missing} this asker cannot get at all: one the gate will not let them
-     * seek, or one with no registered producer and no REACHABLE recipe — the same recursive
-     * question {@code CraftFor} asks of its own book, so an item is only claimed toward a craft
-     * some plan can finish.
+     * seek, or one with no registered producer, no REACHABLE recipe — the same recursive question
+     * {@code CraftFor} asks of its own book, so an item is only claimed toward a craft some plan can
+     * finish — and no store seen holding it. A build's oak logs stowed at HOME are none of the first
+     * two, and were passed over for ever (2026-10-01).
      */
     private static List<ItemCall> uncoverable(List<ItemCall> missing, BrainContext ctx) {
         List<ItemCall> unreachable = new ArrayList<>();
@@ -265,7 +266,8 @@ public class Board {
             if (!ctx.gate().maySeek(need.spec())) {
                 unreachable.add(need);
             } else if (!Producers.knows(need.spec())
-                    && !dev.luizloyola.anima.core.brain.task.CraftFor.anyReachable(need.spec(), ctx)) {
+                    && !dev.luizloyola.anima.core.brain.task.CraftFor.anyReachable(need.spec(), ctx)
+                    && !dev.luizloyola.anima.core.brain.task.TakeFromStore.seenHolding(ctx, need.spec())) {
                 unreachable.add(need);
             }
         }
