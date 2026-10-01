@@ -451,7 +451,6 @@ public final class BlueprintCommands {
     /** Sites painted, best first; the reply names the best few. */
     private static final int SITES_SHOWN = 8;
     private static final int SITES_TOLD = 5;
-    private static final int SITE_SHORTLIST = 16;
 
     /**
      * Where {@code party=<person>}'s party would put this blueprint's next building
@@ -493,20 +492,8 @@ public final class BlueprintCommands {
                     AgentCommands.label(server, who)));
             return 0;
         }
-        List<Placement> placements = new ArrayList<>();
-        for (Blueprint.Facing facing : Blueprint.Facing.values()) {
-            if (!bp.headers().orientation().contains(facing) || (args.facing() != null && args.facing() != facing)) {
-                continue;
-            }
-            for (boolean flip : new boolean[] {false, true}) {
-                if ((!flip || bp.headers().flippable()) && (!args.flip() || flip)) {
-                    placements.add(new Placement(facing, flip));
-                }
-            }
-        }
         long started = System.nanoTime();
-        HouseSite.Result result = HouseSite.choose(inputs.ground(), HouseSite.Shape.of(plan, Blueprints.dictionary(),
-                placements), inputs.party(), HouseSite.Weights.DEFAULTS, SITE_SHORTLIST);
+        HouseSite.Result result = HouseSites.choose(inputs, plan, HouseSites.placements(bp, args.facing(), args.flip()));
         long millis = (System.nanoTime() - started) / 1_000_000;
         List<HouseSite.Choice> best = result.best();
         ServerPlayer viewer = source.getPlayer();
@@ -552,21 +539,17 @@ public final class BlueprintCommands {
     private static int applySite(CommandSourceStack source, Entry entry, BuildPlan plan, PartyId party,
                                  HouseSite.Choice choice) {
         MinecraftServer server = source.getServer();
-        String at = "(" + choice.anchorX() + ", " + choice.y() + ", " + choice.anchorZ() + ")";
-        Claimed grown = Territories.of(server).grow(party, choice.footprint().chunks(ChunkKey.OVERWORLD),
-                Territories.margin(), Reason.of(Reason.Kind.GROW, entry.id() + " at " + at + ", sited by "
-                        + source.getTextName()), Territories.now(server));
-        if (!grown.granted()) {
-            Replies.fail(source, Component.translatable("autarkia.command.bp.site.not_grown", grown.describe()));
+        HouseSites.Applied applied = HouseSites.apply(server, party, entry.id(), plan, choice, source.getTextName());
+        if (!applied.grown().granted()) {
+            Replies.fail(source, Component.translatable("autarkia.command.bp.site.not_grown",
+                    applied.grown().describe()));
             return 0;
         }
-        Structure structure = new Structure(java.util.UUID.randomUUID(), entry.id(), plan.version(), plan.variants(),
-                plan.bindings(), new Pos(choice.anchorX(), choice.y(), choice.anchorZ()), choice.shape().placement(),
-                choice.built(), choice.pad(), Structure.Phase.SITED, server.overworld().getGameTime(), "");
-        StructuresData.get(server).add(party, structure);
+        Structure structure = applied.structure();
         OpJournal.record(source, PartyData.get(server).members(party), "sited " + Structures.describe(structure));
         Replies.send(source, () -> Component.translatable("autarkia.command.bp.site.applied",
-                Structures.describe(structure), grown.added().size()).withStyle(ChatFormatting.LIGHT_PURPLE), true);
+                Structures.describe(structure), applied.grown().added().size())
+                .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
 

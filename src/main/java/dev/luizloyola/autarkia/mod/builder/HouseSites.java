@@ -21,19 +21,30 @@ import dev.luizloyola.anima.core.territory.Reason;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
 import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.anima.mod.territory.Territories;
+import dev.luizloyola.autarkia.compat.bp.Placer;
 import dev.luizloyola.autarkia.core.board.SetUp;
+import dev.luizloyola.autarkia.core.bp.Blueprint;
+import dev.luizloyola.autarkia.core.bp.BuildPlan;
+import dev.luizloyola.autarkia.core.bp.Chooser;
+import dev.luizloyola.autarkia.core.bp.Diagnostics;
+import dev.luizloyola.autarkia.core.bp.Placement;
+import dev.luizloyola.autarkia.core.bp.Planner;
 import dev.luizloyola.autarkia.core.builder.HouseSite;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
+import dev.luizloyola.autarkia.mod.bp.Blueprints;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalInt;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +71,65 @@ public final class HouseSites {
 
     /** The ground and the party a choice for {@code party} is made over, or null with no area. */
     public record Inputs(Terrain ground, HouseSite.Party party) {
+    }
+
+    /** How many sites are refined in full: the dear part, so a few, but enough to differ. */
+    public static final int SHORTLIST = 16;
+
+    /**
+     * The placements a blueprint allows, narrowed to {@code facing} when one is named and to the
+     * mirrored ones when {@code flip}.
+     */
+    public static List<Placement> placements(Blueprint bp, Blueprint.@Nullable Facing facing, boolean flip) {
+        List<Placement> placements = new ArrayList<>();
+        for (Blueprint.Facing f : Blueprint.Facing.values()) {
+            if (!bp.headers().orientation().contains(f) || (facing != null && facing != f)) {
+                continue;
+            }
+            for (boolean mirrored : new boolean[] {false, true}) {
+                if ((!mirrored || bp.headers().flippable()) && (!flip || mirrored)) {
+                    placements.add(new Placement(f, mirrored));
+                }
+            }
+        }
+        return placements;
+    }
+
+    /** The plan's sites over these inputs, best first. */
+    public static HouseSite.Result choose(Inputs inputs, BuildPlan plan, List<Placement> placements) {
+        return HouseSite.choose(inputs.ground(), HouseSite.Shape.of(plan, Blueprints.dictionary(), placements),
+                inputs.party(), HouseSite.Weights.DEFAULTS, SHORTLIST);
+    }
+
+    /** What taking a site did: the growth, and the record when the area could take it. */
+    public record Applied(Claimed grown, @Nullable Structure structure) {
+    }
+
+    /**
+     * Takes {@code choice}: the area grows by its footprint and margin and the party records it,
+     * sited. Its ground is cleared by the area line and its pad then flattened ({@link Structures}).
+     */
+    public static Applied apply(MinecraftServer server, PartyId party, String blueprint, BuildPlan plan,
+                                HouseSite.Choice choice, String by) {
+        String at = "(" + choice.anchorX() + ", " + choice.y() + ", " + choice.anchorZ() + ")";
+        Claimed grown = Territories.of(server).grow(party, choice.footprint().chunks(ChunkKey.OVERWORLD),
+                Territories.margin(), Reason.of(Reason.Kind.GROW, blueprint + " at " + at + ", sited by " + by),
+                Territories.now(server));
+        if (!grown.granted()) {
+            return new Applied(grown, null);
+        }
+        Structure structure = new Structure(java.util.UUID.randomUUID(), blueprint, plan.version(), plan.variants(),
+                plan.bindings(), new Pos(choice.anchorX(), choice.y(), choice.anchorZ()), choice.shape().placement(),
+                choice.built(), choice.pad(), Structure.Phase.SITED, server.overworld().getGameTime(), "");
+        StructuresData.get(server).add(party, structure);
+        return new Applied(grown, structure);
+    }
+
+    /** A plan of {@code bp} with these variants and no pinned materials, or null with why in {@code out}. */
+    public static @Nullable BuildPlan plan(Blueprint bp, Map<String, String> variants, Diagnostics out) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        return Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, Map.of(), variants, Chooser.random(random),
+                random, out);
     }
 
     public static Inputs inputs(ServerLevel level, PartyId party) {
