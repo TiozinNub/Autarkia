@@ -43,6 +43,7 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.CarrySplit;
 import dev.luizloyola.autarkia.core.board.ClearArea;
+import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Stock;
@@ -183,6 +184,7 @@ public final class AutarkiaCommands {
                         List.of(AgentCommands::list, AgentCommands::debug,
                                 AutarkiaCommands::whoisTargets, AutarkiaCommands::tree,
                                 AutarkiaCommands::spawn, AutarkiaCommands::boardViewNode, BlueprintCommands::bp,
+                                FlattenCommands::flatten,
                                 () -> ConfigCommands.tree(AutarkiaConfig.store(), configFile)),
                         // asOnly — must name its subject; see erase().
                         List.of(AutarkiaCommands::erase))));
@@ -313,6 +315,9 @@ public final class AutarkiaCommands {
                                                                                 corner(ctx, "from"), corner(ctx, "to"),
                                                                                 DoubleArgumentType.getDouble(ctx, "priority"),
                                                                                 corner(ctx, "yard")))))))))
+                        // Level a cleared area: the plan `flatten plan` paints, posted.
+                        .then(Commands.literal("flatten").then(FlattenCommands.area(
+                                AutarkiaCommands::boardPostFlatten)))
                         // Get this many of this item into that yard. `at` is MANDATORY here (unlike
                         // clear's) — a gather with nowhere to put the goods has no completion rule —
                         // so this is two leaves, not four.
@@ -603,6 +608,46 @@ public final class AutarkiaCommands {
         // it — the same reason cancel below is logged.
         Replies.send(source, () -> Component.translatable("autarkia.command.clear.posted",
                         handle, person.getName(), project.describe(), project.slices().size())
+                .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
+    /**
+     * Posts a flatten of the area between two corners to the resolved Person's party board — the
+     * plan {@code flatten plan} paints, refused with its reasons when the plan is.
+     */
+    private static int boardPostFlatten(CommandContext<CommandSourceStack> ctx, BlockPos from, BlockPos to,
+                                        int tolerance, java.util.OptionalInt y) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
+        if (person == null) return 0;
+        AgentId who = person.getAgentId();
+        if (who == null || !(person.level() instanceof ServerLevel level)) {
+            Replies.fail(source, Component.translatable(
+                    "autarkia.command.no_identity", person.getName()));
+            return 0;
+        }
+        FlattenCommands.Planned planned = FlattenCommands.plan(source, level, from, to, tolerance, y);
+        if (planned == null) {
+            return 0;
+        }
+        if (planned.plan().refused()) {
+            FlattenCommands.report(source, planned);
+            return 0;
+        }
+        MinecraftServer server = level.getServer();
+        PartyId party = PartyData.get(server).partyOf(who);
+        PartyBoard board = PartyBoards.of(server, party);
+        Flatten project = Flatten.of(planned.plan(), planned.min().getX(), planned.min().getZ(),
+                planned.max().getX(), planned.max().getZ(), tolerance, CLEAR_PRIORITY);
+        int handle = board.post(project);
+        PartyBoards.touch(server);
+        // LOGGED, as a clear is: durable, shared state that outlives everyone who works it.
+        OpJournal.record(source, PartyData.get(server).members(party),
+                "posted #" + handle + " " + project.describe());
+        FlattenCommands.report(source, planned);
+        Replies.send(source, () -> Component.translatable("autarkia.command.flatten.posted",
+                        handle, person.getName(), project.describe())
                 .withStyle(ChatFormatting.LIGHT_PURPLE), true);
         return 1;
     }
