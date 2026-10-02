@@ -15,6 +15,8 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.store.Store;
+import dev.luizloyola.autarkia.core.bp.Footprint;
+import dev.luizloyola.autarkia.core.builder.Structure;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,6 +57,33 @@ public final class SetUp implements PartyProject {
     /** Ticks one member sits this project out after failing its item — {@code Gather}'s number. */
     public static final int FAIL_COOLDOWN = 600;
 
+    /**
+     * How many times the wait doubles for failures in a row: up to 4,800 ticks. Flat, a lone
+     * settler with no stone to be had, or stranded in a cave below HOME, tried the furnace again
+     * every 600 ticks, hundreds of times (forest, 2026-10-02).
+     */
+    static final int MOST_DOUBLINGS = 3;
+
+    /** How far from its place a station may go down: {@code PutDown}'s three rings. */
+    static final int REACH = 3;
+
+    /**
+     * Whether a station set up near {@code near} could land on a building being levelled or going
+     * up, where the build would break it (the builder spec's *The base moves*). Only those wait out
+     * the build: a furnace held back for its length left a house waiting on its torches for ever.
+     */
+    public static boolean onASite(List<Structure> structures, Pos near) {
+        for (Structure structure : structures) {
+            Footprint pad = structure.pad();
+            if ((structure.phase() == Structure.Phase.LEVELLED || structure.phase() == Structure.Phase.BUILDING)
+                    && near.x() >= pad.minX() - REACH && near.x() <= pad.maxX() + REACH
+                    && near.z() >= pad.minZ() - REACH && near.z() <= pad.maxZ() + REACH) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** The same distance-to-cost mapping every party project bids with. */
     public static final int COST_RANGE = 128;
     public static final double COST_AT_RANGE = 0.25;
@@ -67,6 +96,9 @@ public final class SetUp implements PartyProject {
     private int next;
 
     private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
+
+    /** Each member's failures at the station on offer since one last went down. */
+    private final Map<AgentId, Integer> failures = new LinkedHashMap<>();
 
     /** The one item on offer, rebuilt as {@link #next} moves. The board leases by identity. */
     private StationItem current;
@@ -133,6 +165,7 @@ public final class SetUp implements PartyProject {
             return;
         }
         next++;
+        failures.clear();
         if (finished()) {
             ctx.journal().record(Category.PROJECT, describe(), "done");
             return;
@@ -142,7 +175,14 @@ public final class SetUp implements PartyProject {
 
     @Override
     public void failed(WorkItem item, AgentId who, BrainContext ctx) {
-        cooldownUntil.put(who, ctx.percepts().time() + FAIL_COOLDOWN);
+        long wait = cooldownAfter(failures.merge(who, 1, Integer::sum));
+        cooldownUntil.put(who, ctx.percepts().time() + wait);
+        ctx.journal().record(Category.PROJECT, item.describe(), "tries again in " + wait + "t");
+    }
+
+    /** {@link #FAIL_COOLDOWN} doubled for each failure in a row, {@link #MOST_DOUBLINGS} times at most. */
+    static long cooldownAfter(int failures) {
+        return (long) FAIL_COOLDOWN << Math.min(Math.max(failures, 1) - 1, MOST_DOUBLINGS);
     }
 
     @Override
@@ -153,7 +193,9 @@ public final class SetUp implements PartyProject {
     public ProjectState snapshot() {
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
-        return new State(stations, near, priority, next, List.copyOf(cooldowns), lastTick);
+        List<Failures> failed = new ArrayList<>();
+        failures.forEach((who, count) -> failed.add(new Failures(who, count)));
+        return new State(stations, near, priority, next, List.copyOf(cooldowns), lastTick, List.copyOf(failed));
     }
 
     @Override
@@ -236,14 +278,25 @@ public final class SetUp implements PartyProject {
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
+    /** One member's failures in a row at the station on offer. */
+    public record Failures(AgentId who, int count) {
+    }
+
     /** Everything this project is: what to put down, where, how far it got, and who is paced. */
     public record State(List<Station> stations, Pos near, double priority, int next,
-                        List<Gather.Cooldown> cooldowns, long lastTick) implements ProjectState {
+                        List<Gather.Cooldown> cooldowns, long lastTick, List<Failures> failures)
+            implements ProjectState {
 
         /** A state saved before the clock was: the restore's own tick stands in for it. */
         public State(List<Station> stations, Pos near, double priority, int next,
                      List<Gather.Cooldown> cooldowns) {
             this(stations, near, priority, next, cooldowns, -1L);
+        }
+
+        /** A state saved before failures were counted: each member starts from one wait. */
+        public State(List<Station> stations, Pos near, double priority, int next,
+                     List<Gather.Cooldown> cooldowns, long lastTick) {
+            this(stations, near, priority, next, cooldowns, lastTick, List.of());
         }
 
         @Override
@@ -263,6 +316,9 @@ public final class SetUp implements PartyProject {
         }
         for (Gather.Cooldown cooldown : state.cooldowns()) {
             project.cooldownUntil.put(cooldown.who(), cooldown.retryAfter());
+        }
+        for (Failures failed : state.failures()) {
+            project.failures.put(failed.who(), failed.count());
         }
         // The clock it had: it paces who may be offered the station again.
         project.lastTick = state.lastTick() >= 0 ? state.lastTick() : now;

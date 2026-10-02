@@ -77,7 +77,7 @@ public final class Structures {
         for (Map.Entry<PartyId, List<Structure>> entry : data.parties().entrySet()) {
             PartyId party = entry.getKey();
             if (entry.getValue().stream().anyMatch(s -> s.phase() == Phase.LEVELLED || s.phase() == Phase.BUILDING)) {
-                BaseMove.holdSetUps(server, party);
+                BaseMove.holdSetUps(server, party, entry.getValue());
             }
             for (Structure structure : List.copyOf(entry.getValue())) {
                 Structure next = switch (structure.phase()) {

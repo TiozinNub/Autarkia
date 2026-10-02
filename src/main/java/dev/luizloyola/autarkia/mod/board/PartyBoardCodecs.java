@@ -239,6 +239,12 @@ public final class PartyBoardCodecs {
             Codec.STRING.fieldOf("item").forGetter(SetUp.Station::itemId)
     ).apply(station, SetUp.Station::new));
 
+    /** One member's failures in a row, which set how long its next wait is. */
+    public static final Codec<SetUp.Failures> SET_UP_FAILURES = RecordCodecBuilder.create(failed -> failed.group(
+            UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
+            Codec.INT.fieldOf("count").forGetter(SetUp.Failures::count)
+    ).apply(failed, (who, count) -> new SetUp.Failures(AgentId.of(who), count)));
+
     /** Everything a {@code set_up} row carries beyond its kind. */
     public static final MapCodec<SetUp.State> SET_UP =
             RecordCodecBuilder.mapCodec(project -> project.group(
@@ -248,7 +254,9 @@ public final class PartyBoardCodecs {
                     Codec.INT.optionalFieldOf("next", 0).forGetter(SetUp.State::next),
                     GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(SetUp.State::cooldowns),
-                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(SetUp.State::lastTick)
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(SetUp.State::lastTick),
+                    SET_UP_FAILURES.listOf().optionalFieldOf("failures", List.of())
+                            .forGetter(SetUp.State::failures)
             ).apply(project, SetUp.State::new));
 
     /** Everything a {@code tend} row carries: where, what, who came first, and when it fell due. */

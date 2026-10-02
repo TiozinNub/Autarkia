@@ -163,6 +163,29 @@ class BaseAndStorageTest {
     }
 
     @Test
+    void noSetUpIsPostedOnASiteWhileItsBuildingGoesUpAndOneIsAfter() {
+        view.stations.add(SetUp.WORKBENCH.kind());
+        view.stations.add(SetUp.STORE.kind());
+        view.free = OptionalInt.of(0);
+        dev.luizloyola.autarkia.core.bp.Footprint pad = new dev.luizloyola.autarkia.core.bp.Footprint(0, 0, 11, 12);
+        view.structures.add(new dev.luizloyola.autarkia.core.builder.Structure(new UUID(3, 3),
+                "autarkia:basic_wooden_house", 3, java.util.Map.of(), java.util.Map.of(), SPOT,
+                dev.luizloyola.autarkia.core.bp.Placement.AS_DRAWN, pad, pad,
+                dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILDING, 0L, ""));
+
+        for (int i = 0; i < 3; i++) {
+            assertTrue(beat().posted().stream().noneMatch(p -> p.project() instanceof SetUp),
+                    "the build withdraws a set-up on its site, so posting one now only churns");
+        }
+        assertTrue(board.projects().stream().noneMatch(SetUp.class::isInstance));
+
+        view.structures.clear();
+        assertEquals(List.of("storage"), beat().posted().stream().filter(p -> p.project() instanceof SetUp)
+                .map(p -> p.direction().line()).toList());
+        assertTrue(beat().posted().stream().noneMatch(p -> p.project() instanceof SetUp), "once");
+    }
+
+    @Test
     void aHomeWithNoAreaPostsNoBase() {
         view.noArea = true;
 

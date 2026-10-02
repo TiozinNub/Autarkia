@@ -34,6 +34,12 @@ class CharcoalLineTest {
         int charcoal = 0;
         boolean furnace = true;
         boolean running = false;
+        final List<dev.luizloyola.autarkia.core.builder.Structure> structures = new java.util.ArrayList<>();
+
+        @Override
+        public List<dev.luizloyola.autarkia.core.builder.Structure> structures() {
+            return structures;
+        }
 
         @Override
         public PartyId party() {
@@ -144,6 +150,56 @@ class CharcoalLineTest {
         assertTrue(CharcoalLine.INSTANCE.isWork(tend, CHARCOAL, party));
         Tend elsewhere = new Tend(new Pos(90, 64, 90), "minecraft:charcoal", Stock.PLANKS, true, AgentId.random(), 0L);
         assertFalse(CharcoalLine.INSTANCE.isWork(elsewhere, CHARCOAL, party));
+    }
+
+    private static dev.luizloyola.autarkia.core.builder.Structure houseGoingUp(
+            dev.luizloyola.autarkia.core.bp.Footprint pad) {
+        return new dev.luizloyola.autarkia.core.builder.Structure(new java.util.UUID(3, 3),
+                "autarkia:basic_wooden_house", 3, java.util.Map.of(), java.util.Map.of(),
+                new Pos(pad.minX(), 64, pad.minZ()), dev.luizloyola.autarkia.core.bp.Placement.AS_DRAWN, pad, pad,
+                dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILDING, 0L, "");
+    }
+
+    private List<Evolution.Posted> beats(dev.luizloyola.autarkia.core.board.PartyBoard board, int times) {
+        Lines.register(CharcoalLine.INSTANCE);
+        try {
+            Node wood = new Node("test:wood", NodeKind.CORE, List.of(), true, Requirements.NONE,
+                    List.of(CHARCOAL), java.util.Set.of("minecraft:charcoal"), java.util.Set.of());
+            Tree tree = Tree.build(List.of(wood), java.util.Set.of("minecraft:charcoal"), key -> false).tree();
+            PartyProgress progress = new PartyProgress();
+            List<Evolution.Posted> posted = new java.util.ArrayList<>();
+            for (int i = 0; i < times; i++) {
+                posted.addAll(Evolution.beat(tree, progress, party, board).posted());
+            }
+            return posted;
+        } finally {
+            Lines.clear();
+        }
+    }
+
+    /**
+     * The house's torches wait on charcoal, and charcoal on this furnace: held for the length of
+     * the build, the house never stood (forest, 2026-10-02).
+     */
+    @Test
+    void aHouseGoingUpElsewhereStillGetsItsFurnaceOnce() {
+        party.furnace = false;
+        party.structures.add(houseGoingUp(new dev.luizloyola.autarkia.core.bp.Footprint(40, 40, 51, 52)));
+        var board = new dev.luizloyola.autarkia.core.board.PartyBoard(party.id);
+
+        List<Evolution.Posted> posted = beats(board, 3);
+
+        assertEquals(1, posted.size(), "posted once, not once a beat");
+        assertInstanceOf(SetUp.class, posted.get(0).project());
+    }
+
+    @Test
+    void aFurnaceThatWouldGoDownOnTheSiteWaitsForTheBuilding() {
+        party.furnace = false;
+        party.structures.add(houseGoingUp(new dev.luizloyola.autarkia.core.bp.Footprint(0, 0, 11, 12)));
+
+        assertTrue(beats(new dev.luizloyola.autarkia.core.board.PartyBoard(party.id), 3).isEmpty(),
+                "the build would break it, and withdraws it every beat");
     }
 
     @Test

@@ -483,7 +483,8 @@ class PartyBoardCodecsTest {
     void aSetUpComesBackAtTheStationItWasOn() {
         SetUp.State state = new SetUp.State(List.of(SetUp.WORKBENCH, SetUp.STORE),
                 new Pos(10, 64, 10), 0.5, 1,
-                List.of(new Gather.Cooldown(AgentId.of(new java.util.UUID(1, 2)), 900L)));
+                List.of(new Gather.Cooldown(AgentId.of(new java.util.UUID(1, 2)), 900L)), 400L,
+                List.of(new SetUp.Failures(AgentId.of(new java.util.UUID(1, 2)), 3)));
         PartyBoard.Row row = new PartyBoard.Row(state, List.of());
 
         PartyBoard.Row back = roundTrip(row);

@@ -77,6 +77,64 @@ class SetUpTest {
     }
 
     @Test
+    void failuresInARowWaitLongerEachTimeUpToAPoint() {
+        SetUp setUp = base();
+        FakeContext ctx = new FakeContext();
+        AgentId juno = AgentId.random();
+        WorkItem bench = setUp.open().get(0);
+        long[] waits = {600, 1_200, 2_400, 4_800, 4_800};
+        long now = 1_000L;
+
+        for (long wait : waits) {
+            ctx.percepts.time = now;
+            setUp.failed(bench, juno, ctx);
+            setUp.tick(now + wait - 1);
+            assertFalse(setUp.offerableTo(bench, juno, ctx), "still waiting " + wait);
+            setUp.tick(now + wait);
+            assertTrue(setUp.offerableTo(bench, juno, ctx), "offered again after " + wait);
+            now += wait;
+        }
+    }
+
+    @Test
+    void aStationDownStartsTheNextFromOneWait() {
+        SetUp setUp = base();
+        FakeContext ctx = new FakeContext();
+        AgentId juno = AgentId.random();
+        setUp.failed(setUp.open().get(0), juno, ctx);
+        setUp.failed(setUp.open().get(0), juno, ctx);
+        setUp.completed(setUp.open().get(0), ctx);
+
+        ctx.percepts.time = 10_000L;
+        WorkItem chest = setUp.open().get(0);
+        setUp.failed(chest, juno, ctx);
+        setUp.tick(10_000L + SetUp.FAIL_COOLDOWN);
+        assertTrue(setUp.offerableTo(chest, juno, ctx));
+    }
+
+    @Test
+    void aRestartKeepsTheWaitAndHowLongTheNextIs() {
+        SetUp setUp = base();
+        FakeContext ctx = new FakeContext();
+        AgentId juno = AgentId.random();
+        WorkItem bench = setUp.open().get(0);
+        setUp.failed(bench, juno, ctx);
+        setUp.failed(bench, juno, ctx);
+
+        SetUp back = SetUp.restore((SetUp.State) setUp.snapshot(), 0L).orElseThrow();
+        WorkItem again = back.open().get(0);
+        back.tick(1_199L);
+        assertFalse(back.offerableTo(again, juno, ctx), "the second wait is not forgiven");
+
+        ctx.percepts.time = 1_200L;
+        back.failed(again, juno, ctx);
+        back.tick(1_200L + 2_399L);
+        assertFalse(back.offerableTo(again, juno, ctx), "the third failure waits twice as long again");
+        back.tick(1_200L + 2_400L);
+        assertTrue(back.offerableTo(again, juno, ctx));
+    }
+
+    @Test
     void aReloadPicksUpAtTheStationItWasOn() {
         SetUp setUp = base();
         setUp.completed(setUp.open().get(0), new FakeContext());

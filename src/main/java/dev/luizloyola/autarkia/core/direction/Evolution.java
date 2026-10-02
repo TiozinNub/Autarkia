@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.direction;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
+import dev.luizloyola.autarkia.core.board.SetUp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -76,8 +77,12 @@ public final class Evolution {
                     if (work.isEmpty()) {
                         PartyProject project = line.get().post(direction, view,
                                 tree.priorityOf(direction, progress.reached()));
-                        int handle = board.post(project);
-                        posted.add(new Posted(direction, project, handle));
+                        // A building going up withdraws a set-up on its site: one posted there went
+                        // again each beat, 4,451 times in five minutes (forest, 2026-10-02).
+                        if (!(project instanceof SetUp setUp && SetUp.onASite(view.structures(), setUp.near()))) {
+                            int handle = board.post(project);
+                            posted.add(new Posted(direction, project, handle));
+                        }
                     }
                 }
                 case UNKNOWN, WAITING -> {

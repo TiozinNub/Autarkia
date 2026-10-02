@@ -35,15 +35,15 @@ final class BaseMove {
     }
 
     /**
-     * Station set-ups still on the board while a building is levelled or going up: withdrawn, or one
-     * would put a station down on the site and the build break it. A line waiting on the base keeps
-     * what it posted, so they are taken off here.
+     * Station set-ups on a site while its building is levelled or going up: withdrawn, or one would
+     * put a station down there and the build break it. A line waiting on the base keeps what it
+     * posted, so they are taken off here. One elsewhere stays: the house's torches wait on a furnace.
      */
-    static void holdSetUps(MinecraftServer server, PartyId party) {
+    static void holdSetUps(MinecraftServer server, PartyId party, List<Structure> structures) {
         PartyBoard board = PartyBoards.of(server, party);
         boolean changed = false;
         for (Project project : List.copyOf(board.projects())) {
-            if (project instanceof SetUp setUp && !setUp.finished()) {
+            if (project instanceof SetUp setUp && !setUp.finished() && SetUp.onASite(structures, setUp.near())) {
                 java.util.OptionalInt handle = board.handleOf(setUp);
                 if (handle.isPresent()) {
                     board.cancel(handle.getAsInt());
