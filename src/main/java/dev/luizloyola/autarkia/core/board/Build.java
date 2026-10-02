@@ -51,6 +51,9 @@ public final class Build implements PartyProject {
     /** How long a piece waits for a body to step out of where it goes next. */
     static final long IN_THE_WAY_WAIT = 100;
 
+    /** How long an item goes passed over, nobody claiming a piece of it, before it counts as unobtainable. */
+    public static final long UNOBTAINABLE_AFTER = 1200;
+
     private final UUID structure;
     private final String name;
     private final List<Laying> order;
@@ -63,6 +66,8 @@ public final class Build implements PartyProject {
     private final Map<Integer, Long> retryAfter = new LinkedHashMap<>();
     /** A piece whose builder came back without its blocks, by piece number. */
     private final Map<Integer, Shortage> shortages = new LinkedHashMap<>();
+    /** An item the board passed a piece over for, no way to get it: since when, until a piece of it is claimed. */
+    private final Map<String, Long> unobtainable = new LinkedHashMap<>();
     private long lastTick;
 
     /** The pieces on offer or held, by piece number. */
@@ -219,7 +224,53 @@ public final class Build implements PartyProject {
         if (item instanceof PieceItem piece && open.get(piece.piece) == piece) {
             builders.add(who);
             held.add(piece.piece);
+            unobtainable.keySet().removeAll(piece.bill().keySet());
         }
+    }
+
+    @Override
+    public void passedOver(WorkItem item, List<ItemCall> unreachable, long now) {
+        if (!(item instanceof PieceItem piece)) {
+            return;
+        }
+        Set<String> bill = piece.bill().keySet();
+        for (ItemCall call : unreachable) {
+            ItemSpec.literalIds(call.spec()).ifPresent(ids -> ids.stream().filter(bill::contains)
+                    .forEach(id -> unobtainable.putIfAbsent(id, now)));
+        }
+    }
+
+    /** The items passed over for {@link #UNOBTAINABLE_AFTER} with no piece of them claimed since. */
+    public Set<String> unobtainable(long now) {
+        Set<String> proved = new TreeSet<>();
+        unobtainable.forEach((id, since) -> {
+            if (now - since >= UNOBTAINABLE_AFTER) {
+                proved.add(id);
+            }
+        });
+        return proved;
+    }
+
+    /** The items of the steps that stand. */
+    public Set<String> placedItems() {
+        Set<String> items = new TreeSet<>();
+        for (int i = 0; i < order.size(); i++) {
+            if (done[i]) {
+                items.add(order.get(i).placing().itemId());
+            }
+        }
+        return items;
+    }
+
+    /** Item id to how many the steps still to place take. */
+    public Map<String, Integer> left() {
+        Map<String, Integer> left = new LinkedHashMap<>();
+        for (int i = 0; i < order.size(); i++) {
+            if (!done[i] && !refused.contains(i)) {
+                left.merge(order.get(i).placing().itemId(), order.get(i).count(), Integer::sum);
+            }
+        }
+        return left;
     }
 
     @Override
@@ -439,7 +490,18 @@ public final class Build implements PartyProject {
     /** Everything a build carries between ticks: the world steps are the plan's copy. */
     public record State(UUID structure, String name, double priority, List<Laying> order, List<Integer> done,
                         List<Integer> failures, List<Integer> refused, List<AgentId> builders,
-                        List<Cooldown> cooldowns, List<Shortage> shortages) implements ProjectState {
+                        List<Cooldown> cooldowns, List<Shortage> shortages, Map<String, Long> unobtainable)
+            implements ProjectState {
+
+        public State {
+            unobtainable = Map.copyOf(unobtainable);
+        }
+
+        public State(UUID structure, String name, double priority, List<Laying> order, List<Integer> done,
+                     List<Integer> failures, List<Integer> refused, List<AgentId> builders, List<Cooldown> cooldowns,
+                     List<Shortage> shortages) {
+            this(structure, name, priority, order, done, failures, refused, builders, cooldowns, shortages, Map.of());
+        }
 
         @Override
         public String type() {
@@ -471,7 +533,7 @@ public final class Build implements PartyProject {
         List<Cooldown> cooldowns = new ArrayList<>();
         retryAfter.forEach((piece, until) -> cooldowns.add(new Cooldown(piece, until)));
         return new State(structure, name, priority, order, placed, tries, List.copyOf(refused),
-                List.copyOf(builders), cooldowns, List.copyOf(shortages.values()));
+                List.copyOf(builders), cooldowns, List.copyOf(shortages.values()), Map.copyOf(unobtainable));
     }
 
     public static Build restore(State state, long now) {
@@ -492,6 +554,7 @@ public final class Build implements PartyProject {
         for (Shortage shortage : state.shortages()) {
             project.shortages.put(shortage.piece(), shortage);
         }
+        project.unobtainable.putAll(state.unobtainable());
         project.lastTick = now;
         project.refresh();
         return project;

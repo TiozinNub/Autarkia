@@ -258,4 +258,32 @@ class BuildTest {
         assertEquals(1, calls.get(3).count(), "one shovel digs both paths");
         assertTrue(calls.get(3).spec().matches("minecraft:stone_shovel"));
     }
+
+    /**
+     * A piece the board passes over for a log nobody can get marks it unobtainable once the wait is
+     * up, a restart keeps the mark, and a claim of a piece of it clears it.
+     */
+    @Test
+    void aLogNobodyCanGetIsUnobtainableUntilSomebodyClaimsIt() {
+        String darkOak = "minecraft:dark_oak_log";
+        Build build = build(List.of(step(Section.FLOOR, darkOak, 0, 64, 1)));
+        Board board = new Board();
+        board.post(build);
+        BoardBrainContext ctx = new BoardBrainContext();
+        AgentId asker = AgentId.random();
+
+        assertTrue(board.bestFor(asker, ctx, ctx.now()).isEmpty(), "no way to get dark oak: passed over");
+        assertTrue(build.unobtainable(ctx.now()).isEmpty(), "one pass is not proof");
+        ctx.advance(Build.UNOBTAINABLE_AFTER);
+        board.bestFor(asker, ctx, ctx.now());
+        assertEquals(java.util.Set.of(darkOak), build.unobtainable(ctx.now()));
+
+        Build back = Build.restore(build.snapshot(), ctx.now());
+        assertEquals(java.util.Set.of(darkOak), back.unobtainable(ctx.now()), "a restart changes nothing");
+
+        ctx.inventory().add(ItemStack.of(darkOak, 1, 64));
+        WorkItem piece = board.bestFor(asker, ctx, ctx.now()).orElseThrow();
+        assertTrue(board.claim(piece, asker, ctx.now()));
+        assertTrue(build.unobtainable(ctx.now() + Build.UNOBTAINABLE_AFTER).isEmpty(), "somebody could get it");
+    }
 }

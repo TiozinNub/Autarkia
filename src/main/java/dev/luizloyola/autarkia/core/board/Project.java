@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.board;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.inv.ItemCall;
 import java.util.List;
 
 /**
@@ -115,6 +116,13 @@ public interface Project {
      */
     default void failed(WorkItem item, AgentId who, BrainContext ctx) {
         failed(item, ctx);
+    }
+
+    /**
+     * The board passed {@code item} over: the asker had no way to get {@code unreachable}. Nothing
+     * by default; a build counts it toward re-binding a material nobody can get.
+     */
+    default void passedOver(WorkItem item, List<ItemCall> unreachable, long now) {
     }
 
     /**

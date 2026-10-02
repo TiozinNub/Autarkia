@@ -29,6 +29,7 @@ import dev.luizloyola.autarkia.core.bp.Chooser;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Planner;
+import dev.luizloyola.autarkia.core.bp.Stock;
 import dev.luizloyola.autarkia.core.builder.HouseSite;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
@@ -125,11 +126,15 @@ public final class HouseSites {
         return new Applied(grown, structure);
     }
 
-    /** A plan of {@code bp} with these variants and no pinned materials, or null with why in {@code out}. */
-    public static @Nullable BuildPlan plan(Blueprint bp, Map<String, String> variants, Diagnostics out) {
+    /**
+     * A plan of {@code bp} with these variants and no pinned materials, each slot bound to what
+     * {@code stock} has most of, or null with why in {@code out}. A random binding waited on dark
+     * oak in a jungle for good (2026-10-01).
+     */
+    public static @Nullable BuildPlan plan(Blueprint bp, Map<String, String> variants, Stock stock, Diagnostics out) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        return Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, Map.of(), variants, Chooser.random(random),
-                random, out);
+        return Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, Map.of(), variants,
+                Chooser.stocked(stock, Chooser.random(random)), random, out);
     }
 
     public static Inputs inputs(ServerLevel level, PartyId party) {

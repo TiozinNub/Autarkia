@@ -222,6 +222,7 @@ public class Board {
                     // through and the KittedErrand fetches it under the lease. Only a need with no
                     // WAY to get it declines (not in the pack, no producer, nothing craftable),
                     // since claiming that spins the claim-fail-cooldown wheel. Wants gate nothing.
+                    entry.project().passedOver(item, unreachable, now);
                     notePassedOver(item, unreachable, ctx, now);
                     continue;
                 }

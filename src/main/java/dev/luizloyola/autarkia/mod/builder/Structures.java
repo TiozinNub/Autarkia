@@ -17,6 +17,7 @@ import dev.luizloyola.autarkia.core.board.SiteBuilding;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
+import dev.luizloyola.autarkia.core.bp.Rebind;
 import dev.luizloyola.autarkia.core.builder.HouseSite;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.builder.Structure;
@@ -30,12 +31,14 @@ import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Moves a party's sited buildings along (docs/superpowers/specs/2026-10-01-house-site-design.md,
@@ -105,7 +108,7 @@ public final class Structures {
         NEXT_TRY.put(ask, now + RETRY_TICKS);
         Blueprint bp = Blueprints.find(ask.blueprint()).map(entry -> entry.compiled().blueprint()).orElse(null);
         Diagnostics out = new Diagnostics();
-        BuildPlan plan = bp == null ? null : HouseSites.plan(bp, ask.variants(), out);
+        BuildPlan plan = bp == null ? null : HouseSites.plan(bp, ask.variants(), PartyStock.of(server, party), out);
         if (plan == null) {
             journal(server, party, "cannot plan " + ask.blueprint() + ": " + out.list());
             return;
@@ -203,14 +206,42 @@ public final class Structures {
                 .with(new Structure.Work(work.builders(), begun, -1));
     }
 
-    /** A build gone from the board without finishing was cancelled: it is posted again over what stands. */
+    /**
+     * A build gone from the board without finishing was cancelled: it is posted again over what
+     * stands. One whose material nobody can get is bound again and posted afresh ({@link Rebind}).
+     */
     private static Structure stillBuilding(MinecraftServer server, PartyId party, Structure structure) {
-        for (Project project : PartyBoards.of(server, party).projects()) {
+        PartyBoard board = PartyBoards.of(server, party);
+        for (Project project : board.projects()) {
             if (project instanceof Build build && build.structure().equals(structure.id())) {
-                return structure;
+                Structure rebound = rebind(server, party, structure, build);
+                if (rebound == null) {
+                    return structure;
+                }
+                board.handleOf(build).ifPresent(board::cancel);
+                PartyBoards.touch(server);
+                return build(server, party, rebound);
             }
         }
         return structure.at(Phase.LEVELLED, "");
+    }
+
+    /** The structure with a slot bound again, said once in the journals, or null when none should be. */
+    private static @Nullable Structure rebind(MinecraftServer server, PartyId party, Structure structure, Build build) {
+        Set<String> unobtainable = build.unobtainable(server.overworld().getGameTime());
+        if (unobtainable.isEmpty()) {
+            return null;
+        }
+        Blueprint bp = Blueprints.find(structure.blueprint()).map(entry -> entry.compiled().blueprint()).orElse(null);
+        Rebind.Rebound rebound = bp == null ? null : Rebind.of(bp, Blueprints.dictionary(), structure.bindings(),
+                unobtainable, build.placedItems(), build.left(), PartyStock.of(server, party)).orElse(null);
+        if (rebound == null) {
+            return null;
+        }
+        journal(server, party, structure.blueprint() + ": slot " + rebound.slot() + " bound again from "
+                + rebound.from() + " to " + rebound.to() + " — no way to get " + String.join(", ",
+                rebound.unobtainable()));
+        return structure.rebound(rebound.bindings()).at(Phase.LEVELLED, "");
     }
 
     private static void closed(MinecraftServer server, PartyId party, List<Project> finished) {

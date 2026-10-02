@@ -183,7 +183,7 @@ public final class Planner {
             }
             choices.add(new Choice(selection.describe(), blocks, 1.0 / allowed.size()));
         }
-        int picked = chooser.choose("variants", choices);
+        int picked = chooser.choose(Chooser.VARIANTS, choices);
         return allowed.get(Math.max(0, Math.min(picked, allowed.size() - 1)));
     }
 
@@ -232,12 +232,13 @@ public final class Planner {
         if (out.hasErrors()) {
             return null;
         }
+        Map<String, Integer> needs = needs();
         // In file order, so a slot's choices read what the slots above it already settled.
         for (Union union : slots.values()) {
-            settle(union, chooser);
+            settle(union, chooser, needs.getOrDefault(union.name, 0));
         }
         for (Union union : entries.values()) {
-            settle(union, chooser);
+            settle(union, chooser, needs.getOrDefault(union.name, 0));
         }
 
         int cells = bp.layers() * bp.depth() * bp.width();
@@ -358,7 +359,43 @@ public final class Planner {
         }
     }
 
-    private void settle(Union union, Chooser chooser) {
+    /**
+     * Cells per union: a legend entry's own, and a slot's through every entry naming it outright.
+     * A slot read only through another slot counts nothing.
+     */
+    private Map<String, Integer> needs() {
+        Map<Character, Integer> cells = new HashMap<>();
+        for (int layer = bp.minLayer(); layer <= bp.maxLayer(); layer++) {
+            for (int z = 0; z < bp.depth(); z++) {
+                for (int x = 0; x < bp.width(); x++) {
+                    EntryInfo entry = bp.entryAt(layer, x, z);
+                    if (entry != null) {
+                        cells.merge(entry.glyph(), 1, Integer::sum);
+                    }
+                }
+            }
+        }
+        Map<String, Integer> needs = new HashMap<>();
+        cells.forEach((glyph, count) -> {
+            Union entry = entries.get(glyph);
+            needs.merge(entry.name, count, Integer::sum);
+            Set<Integer> named = new LinkedHashSet<>();
+            for (Term term : bp.legend().get(glyph).terms()) {
+                if (term instanceof SlotRef ref) {
+                    named.add(ref.slot());
+                }
+            }
+            for (int slot : named) {
+                Union union = slots.get(slot);
+                if (union != null) {
+                    needs.merge(union.name, count, Integer::sum);
+                }
+            }
+        });
+        return needs;
+    }
+
+    private void settle(Union union, Chooser chooser, int need) {
         if (union.fixed != null || union.binding != Binding.OPTION || union.ways.isEmpty()) {
             return;
         }
@@ -374,7 +411,7 @@ public final class Planner {
             } else {
                 blocks(way).forEach(outcome -> blocks.add(outcome.block()));
             }
-            choices.add(new Choice(label(union, way), blocks, way.weight()));
+            choices.add(new Choice(label(union, way), blocks, way.weight(), need));
         }
         int picked = chooser.choose(union.name, choices);
         union.fixed = union.ways.get(Math.max(0, Math.min(picked, union.ways.size() - 1)));

@@ -81,6 +81,11 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
                 note, next);
     }
 
+    public Structure rebound(Map<Integer, String> next) {
+        return new Structure(id, blueprint, version, variants, next, anchor, placement, built, pad, phase, sitedAt,
+                note, work);
+    }
+
     /** The chunks that must be cleared before the pad is levelled: the pad and the ring round it. */
     public SortedSet<ChunkKey> groundChunks() {
         return ChunkKey.covering(ChunkKey.OVERWORLD, pad.minX() - RING, pad.minZ() - RING, pad.maxX() + RING,

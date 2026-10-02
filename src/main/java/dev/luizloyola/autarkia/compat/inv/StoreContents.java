@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.compat.inv;
 
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -14,6 +15,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What a store holds, read with nobody's hands — a party reading its own chests, which a Direction
@@ -48,17 +50,7 @@ public final class StoreContents {
         if (!counted.add(pos)) {
             return Optional.of(new Reading(0, 0, 0));
         }
-        BlockState state = level.getBlockState(pos);
-        Container container;
-        if (state.getBlock() instanceof ChestBlock chest) {
-            if (state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
-                counted.add(ChestBlock.getConnectedBlockPos(pos, state));
-            }
-            // `true`: a cat on the lid shuts the chest to a hand, not to a count.
-            container = ChestBlock.getContainer(chest, state, level, pos, true);
-        } else {
-            container = level.getBlockEntity(pos) instanceof Container found ? found : null;
-        }
+        Container container = container(level, pos, counted);
         if (container == null) {
             return Optional.of(new Reading(0, 0, 0));
         }
@@ -78,5 +70,43 @@ public final class StoreContents {
             }
         }
         return Optional.of(new Reading(matching, free, nutrition));
+    }
+
+    /**
+     * Adds what this store holds to {@code into}, item id to count, read as {@link #read} reads.
+     *
+     * @return false when its chunk is not loaded
+     */
+    public static boolean tally(ServerLevel level, Pos at, Set<BlockPos> counted, Map<String, Integer> into) {
+        BlockPos pos = new BlockPos(at.x(), at.y(), at.z());
+        if (!level.isLoaded(pos)) {
+            return false;
+        }
+        if (!counted.add(pos)) {
+            return true;
+        }
+        Container container = container(level, pos, counted);
+        if (container != null) {
+            for (int slot = 0; slot < container.getContainerSize(); slot++) {
+                ItemStack held = container.getItem(slot);
+                if (!held.isEmpty()) {
+                    into.merge(BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount(),
+                            Integer::sum);
+                }
+            }
+        }
+        return true;
+    }
+
+    private static @Nullable Container container(ServerLevel level, BlockPos pos, Set<BlockPos> counted) {
+        BlockState state = level.getBlockState(pos);
+        if (state.getBlock() instanceof ChestBlock chest) {
+            if (state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
+                counted.add(ChestBlock.getConnectedBlockPos(pos, state));
+            }
+            // `true`: a cat on the lid shuts the chest to a hand, not to a count.
+            return ChestBlock.getContainer(chest, state, level, pos, true);
+        }
+        return level.getBlockEntity(pos) instanceof Container found ? found : null;
     }
 }

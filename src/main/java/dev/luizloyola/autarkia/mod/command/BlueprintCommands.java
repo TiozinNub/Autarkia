@@ -44,8 +44,10 @@ import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.mod.builder.Structures;
 import dev.luizloyola.autarkia.mod.builder.StructuresData;
 import dev.luizloyola.autarkia.mod.builder.HouseSites;
+import dev.luizloyola.autarkia.mod.builder.PartyStock;
 import dev.luizloyola.autarkia.mod.debug.HouseSiteViewer;
 import dev.luizloyola.autarkia.core.bp.Planner;
+import dev.luizloyola.autarkia.core.bp.Stock;
 import dev.luizloyola.autarkia.core.bp.Variants;
 import dev.luizloyola.autarkia.core.builder.BuildOrder;
 import dev.luizloyola.autarkia.core.builder.Section;
@@ -489,16 +491,16 @@ public final class BlueprintCommands {
             Replies.fail(source, Component.translatable("autarkia.command.bp.site.no_party"));
             return 0;
         }
-        BuildPlan plan = plan(source, entry, bp, args, out);
-        if (plan == null) {
-            return 0;
-        }
         AgentId who = Subject.directoryId(source, args.party());
         if (who == null) {
             return 0;
         }
         MinecraftServer server = source.getServer();
         PartyId party = PartyData.get(server).partyOf(who);
+        BuildPlan plan = plan(source, entry, bp, args, PartyStock.of(server, party), out);
+        if (plan == null) {
+            return 0;
+        }
         HouseSites.Inputs inputs = HouseSites.inputs(server.overworld(), party);
         if (inputs == null) {
             Replies.fail(source, Component.translatable("autarkia.command.bp.site.no_area",
@@ -589,7 +591,12 @@ public final class BlueprintCommands {
             Replies.fail(source, Component.translatable("autarkia.command.bp.site.no_party"));
             return 0;
         }
-        BuildPlan plan = plan(source, entry, bp, args, out);
+        AgentId who = Subject.directoryId(source, args.party());
+        if (who == null) {
+            return 0;
+        }
+        BuildPlan plan = plan(source, entry, bp, args,
+                PartyStock.of(source.getServer(), PartyData.get(source.getServer()).partyOf(who)), out);
         if (plan == null) {
             return 0;
         }
@@ -853,10 +860,16 @@ public final class BlueprintCommands {
     /** A command's chooser is random (reader spec): the bindings it prints are what to pin for a repeat. */
     private static @Nullable BuildPlan plan(CommandSourceStack source, Entry entry, Blueprint bp, PlanArgs args,
                                             Diagnostics out) {
+        return plan(source, entry, bp, args, Stock.NONE, out);
+    }
+
+    /** For a party's building: what the pins leave goes to what the party has, as the house line's does. */
+    private static @Nullable BuildPlan plan(CommandSourceStack source, Entry entry, Blueprint bp, PlanArgs args,
+                                            Stock stock, Diagnostics out) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         BuildPlan plan = out.hasErrors() ? null
                 : Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, args.pins(), args.variants(),
-                        Chooser.random(random), random, out);
+                        Chooser.stocked(stock, Chooser.random(random)), random, out);
         if (plan == null) {
             failed(source, entry, out);
         }

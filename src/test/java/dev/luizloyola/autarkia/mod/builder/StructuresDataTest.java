@@ -46,6 +46,15 @@ class StructuresDataTest {
     }
 
     @Test
+    void aSlotBoundAgainIsSavedBoundAgain() {
+        Structure rebound = SITED.at(Structure.Phase.BUILDING, "").rebound(Map.of(1, "jungle", 2, "spruce"));
+        Structure back = StructuresData.STRUCTURE.parse(JsonOps.INSTANCE,
+                StructuresData.STRUCTURE.encodeStart(JsonOps.INSTANCE, rebound).getOrThrow()).getOrThrow();
+        assertEquals(Map.of(1, "jungle", 2, "spruce"), back.bindings());
+        assertEquals(rebound, back);
+    }
+
+    @Test
     void itWaitsOnThePadAndTheRingAFlattenEasesInto() {
         // The pad spans x -194..-182, z -187..-175; eight more each way is -202..-174, -195..-167.
         assertEquals(ChunkKey.covering(ChunkKey.OVERWORLD, -202, -195, -174, -167), SITED.groundChunks());
