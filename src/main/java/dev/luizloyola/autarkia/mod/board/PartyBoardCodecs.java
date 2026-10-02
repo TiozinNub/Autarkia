@@ -350,8 +350,10 @@ public final class PartyBoardCodecs {
     private static final Codec<ClearPlants.Failure> PLANT_FAILURE = RecordCodecBuilder.create(failure ->
             failure.group(
                     Codec.INT.fieldOf("strip").forGetter(ClearPlants.Failure::strip),
-                    UUIDUtil.CODEC.fieldOf("who").forGetter(f -> f.who().value())
-            ).apply(failure, (strip, who) -> new ClearPlants.Failure(strip, AgentId.of(who))));
+                    UUIDUtil.CODEC.fieldOf("who").forGetter(f -> f.who().value()),
+                    // A failure saved before members were counted is one.
+                    Codec.INT.optionalFieldOf("times", 1).forGetter(ClearPlants.Failure::times)
+            ).apply(failure, (strip, who, times) -> new ClearPlants.Failure(strip, AgentId.of(who), times)));
 
     /** Everything a {@code clear_plants} row carries: the box, and which strips are done or failed. */
     public static final MapCodec<ClearPlants.State> CLEAR_PLANTS =

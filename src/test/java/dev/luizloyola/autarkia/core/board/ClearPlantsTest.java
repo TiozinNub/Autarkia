@@ -53,6 +53,29 @@ class ClearPlantsTest {
     }
 
     @Test
+    void aMemberWhoFailedAStripThreeTimesIsNeverOfferedItAgain() {
+        ClearPlants project = new ClearPlants(CHUNK, 0.5);
+        WorkItem strip = project.open().get(0);
+        WorkItem other = project.open().get(1);
+        AgentId ruth = AgentId.random();
+        for (int i = 0; i < ClearPlants.STRIKE - 1; i++) {
+            project.failed(strip, ruth, ctx);
+        }
+        project.tick(Long.MAX_VALUE); // past every cooldown
+        assertTrue(project.offerableTo(strip, ruth, ctx), "two failures are bad luck");
+        project.failed(strip, ruth, ctx);
+        project.tick(Long.MAX_VALUE);
+        assertFalse(project.offerableTo(strip, ruth, ctx));
+        assertTrue(project.offerableTo(other, ruth, ctx), "only that strip");
+        assertTrue(project.offerableTo(strip, AgentId.random(), ctx), "and only for her");
+        assertEquals(4, project.open().size(), "the strip stays open for the rest");
+
+        ClearPlants back = ClearPlants.restore((ClearPlants.State) project.snapshot(), 0L).orElseThrow();
+        back.tick(Long.MAX_VALUE);
+        assertFalse(back.offerableTo(back.open().get(0), ruth, ctx), "a restart changes nothing");
+    }
+
+    @Test
     void aRestartChangesNothing() {
         ClearPlants project = new ClearPlants(CHUNK, 0.5);
         project.completed(project.open().get(1), ctx);

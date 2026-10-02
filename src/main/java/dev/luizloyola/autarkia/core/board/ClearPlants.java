@@ -10,7 +10,6 @@ import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.store.Store;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,18 +26,22 @@ import java.util.TreeSet;
  * <p>The box is cut into strips {@value #STRIP} blocks deep, one item each, so a crew works a chunk
  * side by side. A strip is done when its worker has pulled up everything it saw there; one that
  * {@value #GIVE_UP} members have failed at is written off, so a plant nobody can reach never keeps
- * the box open.
+ * the box open, and one a member has failed at {@value #STRIKE} times is never offered to them
+ * again: a settler cut off from it by a ravine claimed it 268 times in ten minutes (forest,
+ * 2026-10-02).
  */
 public final class ClearPlants implements PartyProject {
 
     static final int STRIP = 4;
     static final int GIVE_UP = 3;
+    static final int STRIKE = 3;
 
     private final Region bounds;
     private final double priority;
     private final List<Region> strips;
     private final Set<Integer> done = new TreeSet<>();
-    private final Map<Integer, Set<AgentId>> failedBy = new LinkedHashMap<>();
+    /** Each strip's failures, by member. */
+    private final Map<Integer, Map<AgentId, Integer>> failedBy = new LinkedHashMap<>();
     private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
     private final List<StripItem> items = new ArrayList<>();
     private long lastTick;
@@ -93,8 +96,15 @@ public final class ClearPlants implements PartyProject {
 
     @Override
     public boolean offerableTo(WorkItem offered, AgentId asker, BrainContext ctx) {
+        if (offered instanceof StripItem item && failures(item.index, asker) >= STRIKE) {
+            return false;
+        }
         Long until = cooldownUntil.get(asker);
         return until == null || until <= lastTick;
+    }
+
+    private int failures(int strip, AgentId who) {
+        return failedBy.getOrDefault(strip, Map.of()).getOrDefault(who, 0);
     }
 
     @Override
@@ -110,12 +120,18 @@ public final class ClearPlants implements PartyProject {
     @Override
     public void failed(WorkItem offered, AgentId who, BrainContext ctx) {
         cooldownUntil.put(who, ctx.percepts().time() + SetUp.FAIL_COOLDOWN);
-        if (offered instanceof StripItem item
-                && failedBy.computeIfAbsent(item.index, key -> new HashSet<>()).add(who)
-                && failedBy.get(item.index).size() >= GIVE_UP) {
+        if (!(offered instanceof StripItem item)) {
+            return;
+        }
+        Map<AgentId, Integer> by = failedBy.computeIfAbsent(item.index, key -> new LinkedHashMap<>());
+        int times = by.merge(who, 1, Integer::sum);
+        if (times == 1 && by.size() >= GIVE_UP) {
             done.add(item.index);
             ctx.journal().record(Category.PROJECT, describe(), "wrote off " + item.describe() + " after "
                     + GIVE_UP + " of us failed at it");
+        } else if (times == STRIKE) {
+            ctx.journal().record(Category.PROJECT, describe(), "gave up " + item.describe() + " after "
+                    + STRIKE + " tries");
         }
     }
 
@@ -199,13 +215,17 @@ public final class ClearPlants implements PartyProject {
         }
     }
 
-    public record Failure(int strip, AgentId who) {
+    /** @param times how often {@code who} failed at the strip, so a member's strike survives too */
+    public record Failure(int strip, AgentId who, int times) {
+        public Failure(int strip, AgentId who) {
+            this(strip, who, 1);
+        }
     }
 
     @Override
     public ProjectState snapshot() {
         List<Failure> failures = new ArrayList<>();
-        failedBy.forEach((strip, who) -> who.forEach(member -> failures.add(new Failure(strip, member))));
+        failedBy.forEach((strip, by) -> by.forEach((member, times) -> failures.add(new Failure(strip, member, times))));
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
         return new State(bounds, priority, List.copyOf(done), failures, cooldowns, lastTick);
@@ -219,7 +239,8 @@ public final class ClearPlants implements PartyProject {
             }
         }
         for (Failure failure : state.failures()) {
-            project.failedBy.computeIfAbsent(failure.strip(), key -> new HashSet<>()).add(failure.who());
+            project.failedBy.computeIfAbsent(failure.strip(), key -> new LinkedHashMap<>())
+                    .merge(failure.who(), Math.max(1, failure.times()), Integer::sum);
         }
         for (Gather.Cooldown cooldown : state.cooldowns()) {
             project.cooldownUntil.put(cooldown.who(), cooldown.retryAfter());

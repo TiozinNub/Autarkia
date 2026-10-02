@@ -291,7 +291,7 @@ class PartyBoardCodecsTest {
     @Test
     void aPlantClearingComesBackWithItsStripsAndWhoFailed() {
         ClearPlants.State before = new ClearPlants.State(new Region(new Pos(0, 48, 0), new Pos(15, 112, 15)),
-                0.5, List.of(0, 2), List.of(new ClearPlants.Failure(1, CREW)),
+                0.5, List.of(0, 2), List.of(new ClearPlants.Failure(1, CREW, 3)),
                 List.of(new Gather.Cooldown(CREW, 900L)), 400L);
         var encoded = PartyBoardCodecs.PROJECT.encodeStart(JsonOps.INSTANCE, before).getOrThrow();
         assertEquals("clear_plants", encoded.getAsJsonObject().get("type").getAsString());
