@@ -381,7 +381,7 @@ public final class Flatten implements PartyProject {
             }
         }
         return wanted == 0 ? List.of()
-                : List.of(ItemCall.want(Stock.BRIDGING, Math.min(wanted, 64)));
+                : List.of(ItemCall.want(Stock.FILL, Math.min(wanted, 64)));
     }
 
     // ── the readout ──────────────────────────────────────────────────────────────────────────
@@ -454,15 +454,15 @@ public final class Flatten implements PartyProject {
             return cut ? new CutCells(cells) : new FillCells(cells, tops);
         }
 
-        /** Tools for a cut, wanted not needed; spoil for a fill, from the pack or the store. */
+        /** Tools for a cut, wanted not needed; fill for a fill, from the pack, the store or the ground. */
         @Override
         public Kit kit() {
             if (cut) {
                 return Kit.of(ItemCall.want(Stock.SHOVELS, 1), ItemCall.want(Stock.PICKAXES, 1));
             }
-            return tops.isEmpty() ? Kit.of(ItemCall.want(Stock.BRIDGING, cells.size()))
+            return tops.isEmpty() ? Kit.of(ItemCall.want(Stock.FILL, cells.size()))
                     : Kit.of(ItemCall.want(Stock.DIRT, tops.size()),
-                            ItemCall.want(Stock.BRIDGING, cells.size()));
+                            ItemCall.want(Stock.FILL, cells.size()));
         }
 
         @Override

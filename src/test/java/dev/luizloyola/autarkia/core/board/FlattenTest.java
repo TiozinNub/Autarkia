@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.brain.act.BreakState;
 import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
@@ -15,13 +16,21 @@ import dev.luizloyola.anima.core.brain.task.FakePlacer;
 import dev.luizloyola.anima.core.brain.task.KittedErrand;
 import dev.luizloyola.anima.core.brain.task.TaskExecutor;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
+import dev.luizloyola.anima.core.continuity.StateGraph;
 import dev.luizloyola.anima.core.inv.ItemStack;
+import dev.luizloyola.anima.core.nav.HandsOff;
 import dev.luizloyola.anima.core.terrain.NaturalGround;
+import dev.luizloyola.anima.mod.brain.AnimaTasks;
+import dev.luizloyola.anima.mod.brain.BrainState;
+import dev.luizloyola.autarkia.core.earthwork.DigDirt;
 import dev.luizloyola.autarkia.core.earthwork.FlattenPlan;
+import dev.luizloyola.autarkia.mod.brain.AutarkiaTasks;
+import java.util.List;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.IntBinaryOperator;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -34,8 +43,16 @@ class FlattenTest {
 
     @BeforeAll
     static void dirtIsDirt() {
-        Stock.dirtBy(id -> id.equals("minecraft:dirt"));
+        Stock.dirtBy(id -> id.equals("minecraft:dirt") || id.equals("minecraft:grass_block"));
         Stock.layableBy(id -> id.equals("minecraft:dirt") || id.equals("minecraft:cobblestone"));
+        DigDirt.register();
+        AnimaTasks.install();
+        AutarkiaTasks.install();
+    }
+
+    @AfterEach
+    void unfence() {
+        DigDirt.fenceBy((near, reach) -> HandsOff.NONE);
     }
 
     private static Flatten flatten(IntBinaryOperator height) {
@@ -189,7 +206,7 @@ class FlattenTest {
 
     // ── a fill errand played out ─────────────────────────────────────────────────────────────
 
-    /** A hole one deep at (5, 5) and its fill errand. */
+    /** A hole one deep at (5, 5), its fill errand, and the flatten's ground fenced as the mod fences it. */
     private record Fill(Flatten project, WorkItem item, FakeContext ctx) {
     }
 
@@ -199,7 +216,18 @@ class FlattenTest {
         FakeContext ctx = world(hole);
         ctx.percepts.position = new Pos(5, G + 1, 3);
         ctx.mover.setState(MoveState.ARRIVED);
+        DigDirt.fenceBy((near, reach) -> HandsOff.columns(List.of(new int[] {-RING, -RING, HI + RING, HI + RING})));
         return new Fill(project, offer(project, "fill 1 at (4, 4) y 63"), ctx);
+    }
+
+    /** A grass ridge two high, far enough out that neither the fence nor its margin holds it. */
+    private static void grassOutside(FakeContext ctx) {
+        int x = HI + RING + DigDirt.MARGIN + 1;
+        for (int z = 3; z <= 5; z++) {
+            ctx.percepts.blocks.set(x, G + 1, z, BlockKind.OTHER);
+            ctx.percepts.blocks.set(x, G + 2, z, BlockKind.OTHER);
+            ctx.percepts.blocks.setId(x, G + 2, z, "minecraft:grass_block");
+        }
     }
 
     /**
@@ -220,7 +248,7 @@ class FlattenTest {
                     return;
                 }
                 Pos dug = ctx.breaker.target;
-                ctx.percepts.blocks.set(dug.x(), dug.y(), dug.z(), BlockKind.AIR);
+                ctx.percepts.blocks.clear(dug.x(), dug.y(), dug.z());
                 ctx.percepts.blocks.setId(dug.x(), dug.y(), dug.z(), "");
                 ctx.percepts.inventory.add(ItemStack.of("minecraft:dirt", 1, 64));
                 ctx.breaker.state = BreakState.FINISHED;
@@ -251,6 +279,40 @@ class FlattenTest {
         assertTrue(fill.ctx().placer.placed.isEmpty());
         fill.project().failed(fill.item(), fill.ctx());
         assertTrue(fill.project().describe().contains("waiting on dirt"));
+    }
+
+    @Test
+    void aFillDigsItsDirtOutsideTheFenceWhenNoStoreHasAny() {
+        Fill fill = aHole();
+        grassOutside(fill.ctx());
+        TaskExecutor executor = started(fill);
+        play(executor, fill.ctx(), false);
+
+        assertEquals(TaskStatus.SUCCESS, executor.lastStatus().orElseThrow(), executor.failureReason().orElse(""));
+        assertTrue(fill.ctx().breaker.targets.stream().allMatch(c -> c.x() > HI + RING + DigDirt.MARGIN),
+                "dug outside the flatten and its ring: " + fill.ctx().breaker.targets);
+        assertEquals(List.of(new FakePlacer.Placement("minecraft:dirt", new Pos(5, G, 5))), fill.ctx().placer.placed);
+        fill.project().completed(fill.item(), fill.ctx());
+        assertTrue(fill.project().finished());
+    }
+
+    @Test
+    void aRestartMidDigCarriesOnToTheFill() {
+        Fill fill = aHole();
+        grassOutside(fill.ctx());
+        TaskExecutor live = started(fill);
+        play(live, fill.ctx(), true);
+        assertEquals(BreakState.BREAKING, fill.ctx().breaker.state, "stopped mid-dig");
+
+        var codec = BrainState.executor();
+        TaskExecutor back = new TaskExecutor();
+        back.restore(codec.parse(JsonOps.INSTANCE, codec.encodeStart(JsonOps.INSTANCE, live.snapshot())
+                .getOrThrow()).getOrThrow());
+        assertEquals(List.of(), StateGraph.capture(live).diff(StateGraph.capture(back)));
+
+        play(back, fill.ctx(), false);
+        assertEquals(TaskStatus.SUCCESS, back.lastStatus().orElseThrow(), back.failureReason().orElse(""));
+        assertEquals(List.of(new FakePlacer.Placement("minecraft:dirt", new Pos(5, G, 5))), fill.ctx().placer.placed);
     }
 
     @Test

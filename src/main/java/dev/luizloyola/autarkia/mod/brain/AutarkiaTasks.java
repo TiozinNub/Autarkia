@@ -127,6 +127,10 @@ public final class AutarkiaTasks {
                         POS.listOf().fieldOf("cells").forGetter(dev.luizloyola.autarkia.core.earthwork.FillCells::cells),
                         POS.listOf().fieldOf("tops").forGetter(dev.luizloyola.autarkia.core.earthwork.FillCells::tops)
                 ).apply(t, dev.luizloyola.autarkia.core.earthwork.FillCells::new)));
+        TaskCodecs.register("autarkia:dirt_dug", dev.luizloyola.autarkia.core.earthwork.DigDirt.Dug.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        Codec.INT.fieldOf("before").forGetter(dev.luizloyola.autarkia.core.earthwork.DigDirt.Dug::before)
+                ).apply(t, dev.luizloyola.autarkia.core.earthwork.DigDirt.Dug::new)));
         TaskCodecs.register("autarkia:stone_yield", dev.luizloyola.autarkia.core.patch.MinePatch.Yield.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::anchor),

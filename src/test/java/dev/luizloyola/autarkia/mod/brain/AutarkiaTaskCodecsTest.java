@@ -205,6 +205,9 @@ class AutarkiaTaskCodecsTest {
         var fillBack = assertInstanceOf(dev.luizloyola.autarkia.core.earthwork.FillCells.class, roundTrip(fill));
         assertEquals(fill.cells(), fillBack.cells());
         assertEquals(fill.tops(), fillBack.tops());
+        var dug = assertInstanceOf(dev.luizloyola.autarkia.core.earthwork.DigDirt.Dug.class,
+                roundTrip(new dev.luizloyola.autarkia.core.earthwork.DigDirt.Dug(7)));
+        assertEquals(7, dug.before(), "what the pack held before the dig");
     }
 
     @Test

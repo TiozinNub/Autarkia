@@ -45,9 +45,14 @@ public final class SettledGround {
 
     /** Anima's {@code WorkFence} rule. HOME and the places are the overworld's. */
     public static HandsOff around(ServerLevel level, BlockPos start, BlockPos goal) {
+        return HandsOff.columns(boxes(level, start, goal));
+    }
+
+    /** {@link #around}'s boxes, each {@code {x1, z1, x2, z2}}, for a caller that adds its own. */
+    static List<int[]> boxes(ServerLevel level, BlockPos start, BlockPos goal) {
         MinecraftServer server = level.getServer();
         if (level != server.overworld()) {
-            return HandsOff.NONE;
+            return new ArrayList<>();
         }
         int x1 = Math.min(start.getX(), goal.getX()) - REACH;
         int z1 = Math.min(start.getZ(), goal.getZ()) - REACH;
@@ -69,6 +74,6 @@ public final class SettledGround {
                         at.x() + PLACE_MARGIN, at.z() + PLACE_MARGIN});
             }
         }
-        return HandsOff.columns(boxes);
+        return boxes;
     }
 }

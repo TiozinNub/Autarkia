@@ -282,7 +282,7 @@ public final class FlattenPlan {
                     }
                 }
                 double mean = (double) sum / count;
-                base[i] = Math.abs(ground[i] - mean) < 1 ? ground[i] : (int) Math.round(mean);
+                base[i] = Math.abs(ground[i] - mean) < LocalGround.NEAR ? ground[i] : (int) Math.round(mean);
             }
         }
 

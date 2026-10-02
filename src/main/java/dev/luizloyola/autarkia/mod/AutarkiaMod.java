@@ -158,6 +158,10 @@ public class AutarkiaMod implements ModInitializer {
         // Stone a furnace is made of, from where it shows (decision 19); the tag only the mod reads.
         Stock.furnaceStoneBy(dev.luizloyola.autarkia.compat.inv.ItemTagged::stoneCrafting);
         Stock.dirtBy(dev.luizloyola.autarkia.compat.inv.ItemTagged::dirt);
+        // And dirt from the ground, outside settled ground and every site, when no store has any.
+        dev.luizloyola.autarkia.core.earthwork.DigDirt.ACT.key();
+        dev.luizloyola.autarkia.core.earthwork.DigDirt.register();
+        dev.luizloyola.autarkia.mod.direction.DigFence.init();
         dev.luizloyola.autarkia.core.patch.MineStone.ACT.key();
         Producers.register(Stock.FURNACE_STONE, Stock.FURNACE_STONE::matches,
                 dev.luizloyola.autarkia.core.patch.MineStone::new);

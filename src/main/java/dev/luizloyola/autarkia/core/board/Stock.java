@@ -114,6 +114,14 @@ public final class Stock {
         dirt = rule;
     }
 
+    /**
+     * What a flatten's buried cells take: anything a walk lays, or dirt. Its own spec rather than
+     * {@link #BRIDGING} so digging can produce it without every settler's standing stack of
+     * bridging blocks sending them out to dig.
+     */
+    public static final ItemSpec FILL =
+            ItemSpec.register(new ItemSpec("fill", id -> BRIDGING.matches(id) || DIRT.matches(id)));
+
     private Stock() {
     }
 }
