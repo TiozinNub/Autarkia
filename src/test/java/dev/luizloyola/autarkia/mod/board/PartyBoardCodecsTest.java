@@ -66,6 +66,21 @@ class PartyBoardCodecsTest {
     }
 
     @Test
+    void aSearchForAHomeComesBackWithItsFailedSettleWalks() {
+        var plot = new dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate(10, 0, 63, 17, 90,
+                List.of(new dev.luizloyola.autarkia.core.direction.HomeJudge.Line(
+                        dev.luizloyola.autarkia.core.direction.HomeJudge.Want.WATER, 4, 40)));
+        var search = new dev.luizloyola.autarkia.core.direction.HomeSearch.State(new Pos(0, 64, 0),
+                List.of(new Pos(0, 64, 0)), 1, 0, 2, List.of(), plot, null,
+                dev.luizloyola.autarkia.core.direction.HomeSearch.Phase.SETTLE, List.of(), 2,
+                List.of(plot));
+        var state = new dev.luizloyola.autarkia.core.board.Explore.State(PartyId.random(), 0.5, search,
+                java.util.Optional.of(CREW), List.of(), 100, List.of(), List.of(), true, 90);
+
+        assertEquals(state, roundTrip(new PartyBoard.Row(state, List.of())).project());
+    }
+
+    @Test
     void aDeconstructionComesBackWithItsTally() {
         var targets = List.of(
                 new dev.luizloyola.autarkia.core.board.Deconstruct.Target(new Pos(4, 64, 4), "minecraft:chest", true),

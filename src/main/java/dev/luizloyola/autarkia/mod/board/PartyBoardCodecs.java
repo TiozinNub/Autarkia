@@ -532,10 +532,13 @@ public final class PartyBoardCodecs {
             CANDIDATE.optionalFieldOf("best").forGetter(s -> Optional.ofNullable(s.best())),
             POS.optionalFieldOf("leg_end").forGetter(s -> Optional.ofNullable(s.legEnd())),
             lowerCase(HomeSearch.Phase.class).fieldOf("phase").forGetter(HomeSearch.State::phase),
-            HEADING.listOf().optionalFieldOf("options", List.of()).forGetter(HomeSearch.State::options)
-    ).apply(search, (start, stops, legs, firstAt, heading, blocked, best, legEnd, phase, options) ->
+            HEADING.listOf().optionalFieldOf("options", List.of()).forGetter(HomeSearch.State::options),
+            Codec.INT.optionalFieldOf("settle_fails", 0).forGetter(HomeSearch.State::settleFails),
+            CANDIDATE.listOf().optionalFieldOf("unreached", List.of()).forGetter(HomeSearch.State::unreached)
+    ).apply(search, (start, stops, legs, firstAt, heading, blocked, best, legEnd, phase, options,
+            settleFails, unreached) ->
             new HomeSearch.State(start.orElse(null), stops, legs, firstAt, heading, blocked,
-                    best.orElse(null), legEnd.orElse(null), phase, options)));
+                    best.orElse(null), legEnd.orElse(null), phase, options, settleFails, unreached)));
 
     /** Everything an {@code explore} row carries beyond its kind. */
     public static final MapCodec<Explore.State> EXPLORE =

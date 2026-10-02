@@ -48,6 +48,17 @@ public final class HomeSearch {
      */
     static final double BACK = 1_000_000;
 
+    /**
+     * A settle walk that fails this near the plot's centre counts as arrived. The claim judges the
+     * plot, not where the scout stands, so the scout need only be on its ground — and within 6 is
+     * well inside the default 17-wide footprint. On the forest (2026-10-02) the centre cell had
+     * leaves at head height and the walk stranded 137 times, its bodies 4 blocks off.
+     */
+    public static final int SETTLE_NEAR = 6;
+
+    /** Settle walks that may fail away from the plot before it is given up as out of reach. */
+    public static final int SETTLE_TRIES = 3;
+
     private static final String[] COMPASS = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
 
     public enum Phase {
@@ -83,15 +94,18 @@ public final class HomeSearch {
      * @param heading the last leg's heading, -1 before the first
      * @param blocked headings whose leg stranded short from the current stop
      * @param options the current stop's headings, scored, for another pick after a stranded leg
+     * @param settleFails the walks to the best plot that failed away from it
+     * @param unreached plots given up as out of reach, never taken again
      */
     public record State(@Nullable Pos start, List<Pos> stops, int legs, int firstAt, int heading,
                         List<Integer> blocked, @Nullable Candidate best, @Nullable Pos legEnd,
-                        Phase phase, List<Option> options) {
+                        Phase phase, List<Option> options, int settleFails, List<Candidate> unreached) {
 
         public State {
             stops = List.copyOf(stops);
             blocked = List.copyOf(blocked);
             options = List.copyOf(options);
+            unreached = List.copyOf(unreached);
         }
     }
 
@@ -105,6 +119,8 @@ public final class HomeSearch {
     private @Nullable Pos legEnd;
     private Phase phase = Phase.LOOK;
     private final List<Option> options = new ArrayList<>();
+    private int settleFails;
+    private final List<Candidate> unreached = new ArrayList<>();
 
     public static HomeSearch restore(State state) {
         HomeSearch search = new HomeSearch();
@@ -118,12 +134,14 @@ public final class HomeSearch {
         search.legEnd = state.legEnd();
         search.phase = state.phase();
         search.options.addAll(state.options());
+        search.settleFails = state.settleFails();
+        search.unreached.addAll(state.unreached());
         return search;
     }
 
     public State snapshot() {
         return new State(start, stops, legs, firstAt, heading, List.copyOf(blocked), best, legEnd,
-                phase, options);
+                phase, options, settleFails, unreached);
     }
 
     public Phase phase() {
@@ -179,7 +197,13 @@ public final class HomeSearch {
         blocked.clear();
         options.clear();
         List<Candidate> ranked = look.judgement().ranked();
-        Candidate top = ranked.isEmpty() ? null : ranked.get(0);
+        Candidate top = null;
+        for (Candidate plot : ranked) {
+            if (unreached.stream().noneMatch(plot::overlaps)) {
+                top = plot;
+                break;
+            }
+        }
         // A tie goes to the plot here, not the one legs back: on even ground every stop scores
         // alike, and a strict win walked a scout 450 blocks back to its first stop (2026-09-30).
         if (top != null && (best == null || top.value() >= best.value())) {
@@ -233,8 +257,31 @@ public final class HomeSearch {
         return "the leg " + compass(heading) + " is blocked; " + pick();
     }
 
+    /** Whether {@code at} is near enough the best plot's centre to claim it from. */
+    public boolean nearPlot(Pos at) {
+        Pos plot = settleAt();
+        return plot != null && distance(at, plot) <= SETTLE_NEAR;
+    }
+
+    /**
+     * The walk to the best plot failed away from it. After {@link #SETTLE_TRIES} the plot is out of
+     * reach: it is dropped as a refused one is, and no plot over it is taken again — else the next
+     * look, from beside it, picks it once more. Returns the journal line when it is given up.
+     */
+    public @Nullable String failedSettle(Pos at) {
+        if (best == null || ++settleFails < SETTLE_TRIES) {
+            return null;
+        }
+        String line = "could not reach the plot at " + plot(best) + " in " + SETTLE_TRIES
+                + " tries; looking again from " + at(at);
+        unreached.add(best);
+        claimRefused();
+        return line;
+    }
+
     /** The plot was refused when the scout stood on it: drop it and judge again from there. */
     public void claimRefused() {
+        settleFails = 0;
         best = null;
         legEnd = null;
         phase = Phase.LOOK;
@@ -329,6 +376,7 @@ public final class HomeSearch {
     }
 
     private void settle() {
+        settleFails = 0;
         legEnd = null;
         phase = Phase.SETTLE;
     }

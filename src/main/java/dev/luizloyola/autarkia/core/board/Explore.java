@@ -245,20 +245,24 @@ public final class Explore implements PartyProject {
                 gathered = false;
             }
             case WALK -> search.arrived();
-            case SETTLE -> {
-                Candidate best = search.best();
-                if (best != null && world != null && world.claim(party, best, ctx.knowledge())) {
-                    search.claimed();
-                    journal(ctx, "settled at " + at(search.settleAt()) + ": " + breakdown(best));
-                } else {
-                    search.claimRefused();
-                    journal(ctx, "the plot at " + at(search.settleAt()) + " was refused on a second look");
-                }
-            }
+            case SETTLE -> claim(world, ctx);
             case DONE, STRANDED -> {
             }
         }
         current = step();
+    }
+
+    /** The second judge of the best plot, and HOME if it passes. */
+    private void claim(@Nullable HomeLooking world, BrainContext ctx) {
+        Candidate best = search.best();
+        Pos plot = search.settleAt();
+        if (best != null && world != null && world.claim(party, best, ctx.knowledge())) {
+            search.claimed();
+            journal(ctx, "settled at " + at(plot) + ": " + breakdown(best));
+        } else {
+            search.claimRefused(); // drops the plot, so its place is read first
+            journal(ctx, "the plot at " + at(plot) + " was refused on a second look");
+        }
     }
 
     @Override
@@ -280,6 +284,21 @@ public final class Explore implements PartyProject {
             journal(ctx, search.failedLeg(ctx.percepts().position()));
             current = step();
             return;
+        }
+        if (search.phase() == Phase.SETTLE) {
+            Pos at = ctx.percepts().position();
+            if (search.nearPlot(at)) {
+                stepSince = lastTick;
+                claim(looking, ctx); // on the plot's ground, though its centre cell cannot be stood in
+                current = step();
+                return;
+            }
+            String gaveUp = search.failedSettle(at);
+            if (gaveUp != null) {
+                journal(ctx, gaveUp);
+                current = step();
+                return;
+            }
         }
         cooldownUntil.put(who, ctx.percepts().time() + FAIL_COOLDOWN);
     }

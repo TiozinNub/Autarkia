@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.board;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.luizloyola.anima.core.brain.board.WorkItem;
@@ -165,6 +166,65 @@ class ExploreTest {
         assertFalse(explore.finished());
         assertEquals(Phase.LOOK, explore.search().phase());
         assertInstanceOf(LookRound.class, only(explore).root());
+    }
+
+    /** A search gone straight to settle on a plot worth 90 at (10, 0), its centre (10, 64, 0). */
+    private Explore settling(Stub world, FakeContext ctx) {
+        world.looks.add(List.of(plot(10, 0, 90)));
+        Explore.install(world);
+        Explore explore = new Explore(party, 0.5);
+        explore.completed(only(explore), ctx);
+        assertEquals(Phase.SETTLE, explore.search().phase());
+        return explore;
+    }
+
+    @Test
+    void aSettleWalkStrandedBesideThePlotClaimsIt() {
+        Stub world = new Stub();
+        FakeContext ctx = new FakeContext();
+        Explore explore = settling(world, ctx);
+        ctx.percepts.position = new Pos(13, 64, 0); // leaves at head height on the centre cell
+
+        explore.failed(only(explore), ctx.self, ctx);
+
+        assertTrue(explore.finished());
+        assertEquals(List.of(plot(10, 0, 90)), world.claimed);
+    }
+
+    @Test
+    void aSettleWalkStrandedFarAwayGivesThePlotUpAfterItsTries() {
+        Stub world = new Stub();
+        FakeContext ctx = new FakeContext();
+        Explore explore = settling(world, ctx);
+        ctx.percepts.position = new Pos(40, 64, 0);
+
+        for (int i = 1; i < HomeSearch.SETTLE_TRIES; i++) {
+            explore.failed(only(explore), ctx.self, ctx);
+            assertEquals(Phase.SETTLE, explore.search().phase(), "tried again");
+        }
+        explore.failed(only(explore), ctx.self, ctx);
+
+        assertEquals(Phase.LOOK, explore.search().phase());
+        assertTrue(world.claimed.isEmpty());
+        world.looks.add(List.of(plot(12, 2, 95)));
+        explore.completed(only(explore), ctx);
+        assertNull(explore.search().best(), "a plot over the unreached one is not taken again");
+    }
+
+    @Test
+    void theSettleWalksFailedSurviveARestart() {
+        Stub world = new Stub();
+        FakeContext ctx = new FakeContext();
+        Explore explore = settling(world, ctx);
+        ctx.percepts.position = new Pos(40, 64, 0);
+        for (int i = 1; i < HomeSearch.SETTLE_TRIES; i++) {
+            explore.failed(only(explore), ctx.self, ctx);
+        }
+
+        Explore restored = Explore.restore((Explore.State) explore.snapshot(), 0).orElseThrow();
+        restored.failed(only(restored), ctx.self, ctx);
+
+        assertEquals(Phase.LOOK, restored.search().phase());
     }
 
     @Test
