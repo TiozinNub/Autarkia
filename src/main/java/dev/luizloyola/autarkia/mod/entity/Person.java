@@ -174,6 +174,8 @@ public class Person extends Avatar implements AgentBody {
     private static final String TAG_BRAIN_RANDOM = "BrainRandom";
     /** Drives sitting out a fail-cooldown, by name, with the ticks they have left. */
     private static final String TAG_BRAIN_COOLDOWNS = "BrainCooldowns";
+    /** Why a drive's cooldown is long: its failures priced out in a row, and what would end it. */
+    private static final String TAG_BRAIN_BACK_OFFS = "BrainBackOffs";
     /** What fight or flight remembers: the gear each target has shown, the fights it gave up. */
     private static final String TAG_FIGHT_MEMORY = "FightMemory";
     private static final String TAG_WORK_SPOTS = "WorkSpots";
@@ -1454,6 +1456,10 @@ public class Person extends Avatar implements AgentBody {
         if (!cooldowns.isEmpty()) {
             output.store(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS, cooldowns);
         }
+        Map<String, dev.luizloyola.anima.core.brain.Arbiter.BackOff> backOffs = this.brain.backOffs();
+        if (!backOffs.isEmpty()) {
+            output.store(TAG_BRAIN_BACK_OFFS, BrainState.BACK_OFFS, backOffs);
+        }
         output.store(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY, this.brain.fightMemory());
         // Where its work let things fall: a restart mid-sweep still knows which drops are its own.
         output.store(TAG_WORK_SPOTS, BrainState.WORK_SPOTS, this.brain.workSpots().snapshot());
@@ -1529,6 +1535,7 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_BRAIN_RANDOM, Codec.LONG).ifPresent(this.brain.random()::restore);
         input.read(TAG_BRAIN_COOLDOWNS, BrainState.COOLDOWNS)
                 .ifPresent(this.brain::restoreCooldowns);
+        input.read(TAG_BRAIN_BACK_OFFS, BrainState.BACK_OFFS).ifPresent(this.brain::restoreBackOffs);
         input.read(TAG_FIGHT_MEMORY, BrainState.FIGHT_MEMORY)
                 .ifPresent(this.brain::restoreFightMemory);
         input.read(TAG_WORK_SPOTS, BrainState.WORK_SPOTS).ifPresent(this.brain.workSpots()::restore);

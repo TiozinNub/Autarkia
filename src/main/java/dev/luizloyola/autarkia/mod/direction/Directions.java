@@ -96,6 +96,7 @@ public final class Directions {
         Gate.install(new Answers());
         dev.luizloyola.autarkia.core.board.Tools.install(item -> tree.gatesItem(item));
         Depot.install(Directions::depotOf);
+        Depot.install(Directions::heldAtHome);
         dev.luizloyola.autarkia.core.board.StowSurplus.install(Directions::roomAt);
     }
 
@@ -445,6 +446,31 @@ public final class Directions {
     }
 
     /**
+     * How much of a spec the body's party holds at HOME, for a drive waiting on it: food a cook
+     * carried home ends a hungry member's back-off though it never looked in the chest. Read once a
+     * tick per party and spec, as {@link #depotOf} is.
+     */
+    private static long heldAtHome(AgentId body, dev.luizloyola.anima.core.inv.ItemSpec spec) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return 0L;
+        }
+        Optional<PartyId> party = PartyData.get(server).currentPartyOf(body);
+        if (party.isEmpty()) {
+            return 0L;
+        }
+        long now = server.overworld().getGameTime();
+        if (now != heldAt) {
+            held.clear();
+            heldAt = now;
+        }
+        return held.computeIfAbsent(party.get().value() + "/" + spec.name(), key -> DirectionsData.get(server)
+                .find(party.get()).filter(progress -> progress.home() != null)
+                .map(progress -> (long) view(server, party.get(), progress).storedAtHome(spec).orElse(0))
+                .orElse(0L));
+    }
+
+    /**
      * The empty slots in the stores of the party whose HOME a depot is — its area is the party's
      * claim, so any of its chunks names the owner. Worked out once a tick per party, like
      * {@link #depotOf}: every member's stow asks on its own beat.
@@ -475,6 +501,8 @@ public final class Directions {
     /** {@link #depotOf}'s answers this tick; the server thread is the only one asking. */
     private static final Map<PartyId, Optional<Depot.Site>> depots = new HashMap<>();
     private static long depotsAt = Long.MIN_VALUE;
+    private static final Map<String, Long> held = new HashMap<>();
+    private static long heldAt = Long.MIN_VALUE;
 
     /** Anima's two questions, answered from the node table. */
     private static final class Answers implements Gate.Policy {
