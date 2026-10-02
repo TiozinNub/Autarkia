@@ -97,15 +97,27 @@ class DigDirtTest {
         assertEquals(List.of(new Pos(6, G + 2, 0)), scrape(probe, HandsOff.NONE, here));
         probe.clear(6, G + 2, 0);
         probe.setId(6, G + 1, 0, "minecraft:dirt");
-        assertEquals(List.of(), scrape(probe, HandsOff.NONE, here),
-                "one above flat ground is within the flatten's deadband: left");
+        assertEquals(List.of(new Pos(6, G + 1, 0)), scrape(probe, HandsOff.NONE, here));
+        probe.clear(6, G + 1, 0);
+        probe.setId(6, G, 0, "minecraft:dirt");
+        assertEquals(List.of(), scrape(probe, HandsOff.NONE, here), "level with the flat: left");
+    }
+
+    @Test
+    void aLoneBumpOneHighIsDugToTheFlat() {
+        grass(6, 0, G + 1);
+        assertEquals(List.of(new Pos(6, G + 1, 0)), scrape(probe, HandsOff.NONE, here));
+        probe.clear(6, G + 1, 0);
+        probe.setId(6, G, 0, "minecraft:dirt");
+        assertEquals(List.of(), scrape(probe, HandsOff.NONE, here));
     }
 
     @Test
     void aHolesRimIsCutAndItsFloorIsNot() {
-        // A plateau one up round (10, 0), a hole to the old ground at its middle, a rim two up round it.
-        for (int x = 5; x <= 15; x++) {
-            for (int z = -5; z <= 5; z++) {
+        // A plateau one up round (10, 0), a hole to the old ground at its middle, a rim two up round
+        // it; the plateau runs far enough that its corners, which are cut too, lie beyond the rim.
+        for (int x = 5; x <= 25; x++) {
+            for (int z = -15; z <= 15; z++) {
                 int dx = Math.abs(x - 10);
                 int dz = Math.abs(z);
                 grass(x, z, dx == 0 && dz == 0 ? G : Math.max(dx, dz) == 1 ? G + 3 : G + 1);

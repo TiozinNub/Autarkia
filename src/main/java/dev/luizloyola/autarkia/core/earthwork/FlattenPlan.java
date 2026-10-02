@@ -58,6 +58,8 @@ public final class FlattenPlan {
     }
 
     private static final int UNKNOWN = NaturalGround.UNKNOWN;
+    /** How far from its square's mean a column's ground still counts as at it. */
+    private static final double NEAR = 1.0;
     private static final int MOST_DESPIKE_PASSES = 32;
 
     private final int y;
@@ -282,7 +284,7 @@ public final class FlattenPlan {
                     }
                 }
                 double mean = (double) sum / count;
-                base[i] = Math.abs(ground[i] - mean) < LocalGround.NEAR ? ground[i] : (int) Math.round(mean);
+                base[i] = Math.abs(ground[i] - mean) < NEAR ? ground[i] : (int) Math.round(mean);
             }
         }
 

@@ -142,7 +142,9 @@ class MineStoneTest {
         stone(12, 0, G + 2);
         assertEquals(List.of(new Pos(12, G + 2, 0)), exposed());
         ctx.percepts.blocks.clear(12, G + 2, 0);
-        assertEquals(List.of(), exposed(), "one above the flat is within the flatten's deadband");
+        assertEquals(List.of(new Pos(12, G + 1, 0)), exposed(), "one above the flat is a bump too");
+        ctx.percepts.blocks.clear(12, G + 1, 0);
+        assertEquals(List.of(), exposed(), "level with the flat: left");
     }
 
     @Test
@@ -161,8 +163,9 @@ class MineStoneTest {
 
     @Test
     void aHolesRimIsMinedAndItsFloorIsNot() {
-        for (int x = 7; x <= 17; x++) {
-            for (int z = -5; z <= 5; z++) {
+        // The plateau runs past the patch so its corners, which are cut too, lie outside it.
+        for (int x = 2; x <= 22; x++) {
+            for (int z = -10; z <= 10; z++) {
                 int ring = Math.max(Math.abs(x - 12), Math.abs(z));
                 stone(x, z, ring == 0 ? G : ring == 1 ? G + 3 : G + 1);
             }
