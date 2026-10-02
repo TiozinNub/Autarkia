@@ -119,7 +119,8 @@ class BuildTest {
         assertEquals(2, calls.size());
         assertEquals(2, calls.get(0).count());
         assertEquals(2, calls.get(1).count(), "a double slab is two");
-        assertTrue(calls.stream().allMatch(c -> c.strength() == ItemCall.Strength.NEED));
+        assertTrue(calls.stream().allMatch(c -> c.strength() == ItemCall.Strength.NEED),
+                "a floor wants no scaffold: " + calls);
     }
 
     @Test
@@ -249,7 +250,9 @@ class BuildTest {
                 new Laying(Section.INTERIOR, new Placing("minecraft:dirt", new Pos(3, 64, 0), "minecraft:dirt_path",
                         Map.of()), List.of(), new Pos(3, 64, 2), 1, List.of(shovel)));
         List<ItemCall> calls = only(build(order)).kit().calls();
-        assertEquals(4, calls.size(), calls.toString());
+        assertEquals(5, calls.size(), calls.toString());
+        assertEquals(ItemCall.Strength.WANT, calls.get(4).strength(), "and a scaffold, wanted not needed");
+        assertEquals(Stock.BRIDGING, calls.get(4).spec());
         assertEquals(2, calls.get(2).count(), "a plant for each pot");
         assertTrue(calls.get(2).spec().matches("minecraft:poppy"));
         assertEquals(1, calls.get(3).count(), "one shovel digs both paths");
