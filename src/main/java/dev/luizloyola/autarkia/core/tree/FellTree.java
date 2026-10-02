@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.Mover;
 import dev.luizloyola.anima.core.brain.act.RiseState;
 import dev.luizloyola.anima.core.brain.act.Riser;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
@@ -118,12 +119,16 @@ public final class FellTree implements PrimitiveTask {
     public static final int NO_WAY_IN_TICKS = 100;
 
     /**
-     * How long a tree that beat the chop stays off {@link ChopForLogs}' menu. An achieve-goal's
-     * next round assumes the last attempt changed something; without the mark it picks the same
-     * nearest unreachable tree every round until the rounds cap (lost in the 2026-09-06 rewrite,
-     * found 2026-09-23).
+     * How long a tree that beat the chop stays off {@link ChopForLogs}' menu the first time. An
+     * achieve-goal's next round assumes the last attempt changed something; without the mark it
+     * picks the same nearest unreachable tree every round until the rounds cap (lost in the
+     * 2026-09-06 rewrite, found 2026-09-23). Doubled for each give-up after, to
+     * {@link #AVOID_CAP_TICKS}.
      */
     public static final int AVOID_TICKS = 2400;
+
+    /** The longest a tree is struck for: a day. Water round a trunk does not drain. */
+    public static final int AVOID_CAP_TICKS = 24_000;
 
     /**
      * How long a body may hang with nothing under its feet before its position is believed
@@ -387,6 +392,10 @@ public final class FellTree implements PrimitiveTask {
             ctx.actuators().mover().stop();
             if (noWayInSince < 0) {
                 noWayInSince = ticks;
+                // Struck now, not at the give-up: a drive that cut in every 100 ticks re-planned
+                // the errand onto the same water-locked tree 3,836 times, never once waiting the
+                // five seconds out (forest, 2026-10-02).
+                strike(ctx);
             } else if (ticks - noWayInSince >= NO_WAY_IN_TICKS) {
                 return fail(ctx, "no way in — " + approach.summary() + (refusedSides.isEmpty() ? ""
                         : " — " + refusedSides.size() + " side(s) given up on"));
@@ -1634,8 +1643,20 @@ public final class FellTree implements PrimitiveTask {
         phase = "gave up — " + why;
         say(ctx, phase);
         release(ctx);
-        ctx.knowledge().avoid(Pois.TREE, anchor, ctx.percepts().time() + AVOID_TICKS);
+        strike(ctx);
         return TaskStatus.FAILED;
+    }
+
+    /** Off {@link ChopForLogs}' menu for a while, longer each time; a strike already standing holds. */
+    private void strike(BrainContext ctx) {
+        long now = ctx.percepts().time();
+        boolean standing = ctx.knowledge().isAvoided(Pois.TREE, anchor, now);
+        AgentKnowledge.Avoid mark = ctx.knowledge().strike(Pois.TREE, anchor, now, AVOID_TICKS,
+                AVOID_CAP_TICKS);
+        if (!standing) {
+            say(ctx, "struck the tree at " + where(anchor) + " for " + mark.length() + "t ("
+                    + mark.strikes() + (mark.strikes() == 1 ? " time)" : " times running)"));
+        }
     }
 
     /**

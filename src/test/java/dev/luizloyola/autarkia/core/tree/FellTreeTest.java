@@ -1150,6 +1150,83 @@ class FellTreeTest {
                 "for a while: the ground may change");
     }
 
+    /** Water on every side of the stump, at the feet's level and under them. */
+    private void waterAllRound() {
+        for (Pos cell : List.of(new Pos(0, BASE, -1), new Pos(1, BASE, 0), new Pos(0, BASE, 1),
+                new Pos(-1, BASE, 0))) {
+            ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.WATER);
+            ctx.percepts.blocks.set(cell.x(), cell.y() - 1, cell.z(), BlockKind.WATER);
+        }
+    }
+
+    @Test
+    void aWaterLockedTreeIsStruckEvenWhenADriveCutsTheWaitShort() {
+        // Elsie's loop (forest, 2026-10-02): hunger cut the furnace errand in every 100 ticks, the
+        // resume re-planned it onto the same tree, and the five-second wait never once ran out.
+        trunk();
+        standSouth();
+        waterAllRound();
+        remember(ANCHOR);
+        remember(FAR);
+        ChopForLogs chop = new ChopForLogs(Stock.LOGS);
+        FellTree first = (FellTree) chop.decompose(ctx).get(0);
+        assertEquals(ANCHOR, first.anchor());
+
+        for (int i = 0; i < FellTree.NO_WAY_IN_TICKS - 1; i++) {
+            assertEquals(TaskStatus.RUNNING, first.tick(ctx));
+            ctx.percepts.time++;
+        }
+        first.cancel(ctx);
+
+        assertEquals(FAR, ((FellTree) chop.decompose(ctx).get(0)).anchor(),
+                "the resume took the same water-locked tree again");
+        assertEquals(1, said("struck the tree").size());
+    }
+
+    @Test
+    void aTreeGivenUpOnAgainIsStruckForLonger() {
+        trunk();
+        standSouth();
+        waterAllRound();
+        remember(ANCHOR);
+        List<Long> lengths = new ArrayList<>();
+        for (int round = 0; round < 5; round++) {
+            FellTree fell = new FellTree(ANCHOR);
+            TaskStatus status = TaskStatus.RUNNING;
+            for (int i = 0; status == TaskStatus.RUNNING && i < 2 * FellTree.NO_WAY_IN_TICKS; i++) {
+                status = fell.tick(ctx);
+                ctx.percepts.time++;
+            }
+            assertEquals(TaskStatus.FAILED, status);
+            var mark = ctx.knowledge().avoids(Pois.TREE).get(ANCHOR);
+            lengths.add(mark.length());
+            ctx.percepts.time = mark.until(); // the next round's pick, the moment it lapses
+            assertTrue(new ChopForLogs(Stock.LOGS).applicable(ctx));
+        }
+        assertEquals(List.of(2400L, 4800L, 9600L, 19200L, 24000L), lengths);
+    }
+
+    @Test
+    void aTreeEverySideOfWhichStrandedIsStruckToo() {
+        trunk();
+        standSouth();
+        onlyTheSouth();
+        remember(ANCHOR);
+        task.tick(ctx);
+        ctx.mover.setState(MoveState.FAILED);
+        ctx.mover.setFailure(MoveFailure.STRANDED);
+
+        TaskStatus status = TaskStatus.RUNNING;
+        for (int i = 0; status == TaskStatus.RUNNING && i < 2_000; i++) {
+            status = task.tick(ctx);
+            ctx.percepts.time++;
+        }
+
+        assertEquals(TaskStatus.FAILED, status);
+        assertTrue(task.failureDetail().contains("1 side(s) given up on"), task.failureDetail());
+        assertFalse(new ChopForLogs(Stock.LOGS).applicable(ctx), "struck: nothing else to offer");
+    }
+
     @Test
     void aRiseRefusedIsTheEndOfIt() {
         trunk(12);
