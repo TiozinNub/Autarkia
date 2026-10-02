@@ -96,6 +96,7 @@ public final class Directions {
         Gate.install(new Answers());
         dev.luizloyola.autarkia.core.board.Tools.install(item -> tree.gatesItem(item));
         Depot.install(Directions::depotOf);
+        dev.luizloyola.autarkia.core.board.StowSurplus.install(Directions::roomAt);
     }
 
     public static Tree tree() {
@@ -442,6 +443,34 @@ public final class Directions {
                             : view.spot().map(spot -> new Depot.Site(spot, area));
                 }));
     }
+
+    /**
+     * The empty slots in the stores of the party whose HOME a depot is — its area is the party's
+     * claim, so any of its chunks names the owner. Worked out once a tick per party, like
+     * {@link #depotOf}: every member's stow asks on its own beat.
+     */
+    private static java.util.OptionalInt roomAt(Depot.Site site) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return java.util.OptionalInt.empty();
+        }
+        Optional<PartyId> party = Territories.of(server).owner(site.area().iterator().next());
+        if (party.isEmpty()) {
+            return java.util.OptionalInt.empty();
+        }
+        long now = server.overworld().getGameTime();
+        if (now != roomsAt) {
+            rooms.clear();
+            roomsAt = now;
+        }
+        return rooms.computeIfAbsent(party.get(), id -> DirectionsData.get(server).find(id)
+                .filter(progress -> progress.home() != null)
+                .map(progress -> view(server, id, progress).freeSlotsAtHome())
+                .orElse(java.util.OptionalInt.empty()));
+    }
+
+    private static final Map<PartyId, java.util.OptionalInt> rooms = new HashMap<>();
+    private static long roomsAt = Long.MIN_VALUE;
 
     /** {@link #depotOf}'s answers this tick; the server thread is the only one asking. */
     private static final Map<PartyId, Optional<Depot.Site>> depots = new HashMap<>();

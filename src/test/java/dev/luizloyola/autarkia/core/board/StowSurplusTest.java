@@ -13,7 +13,9 @@ import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -45,6 +47,19 @@ class StowSurplusTest {
         for (int tick = 0; tick < n * StowSurplus.CHECK_INTERVAL; tick++) {
             stow.tick(ctx);
         }
+    }
+
+    /** Empty slots HOME's stores have, as the mod would read them; null is unread. */
+    private Integer free;
+
+    private void room(Integer slots) {
+        free = slots;
+        StowSurplus.install(site -> free == null ? OptionalInt.empty() : OptionalInt.of(free));
+    }
+
+    @AfterEach
+    void uninstall() {
+        StowSurplus.install(null);
     }
 
     @Test
@@ -192,5 +207,88 @@ class StowSurplusTest {
         beats(stow, ctx, 2);
 
         assertEquals(Deed.of(WorkDoings.STOWING), stow.open().get(0).doing());
+    }
+
+    @Test
+    void aFullHomeHoldsTheStowBackInsteadOfLooping() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        room(0);
+        StowSurplus stow = new StowSurplus(0);
+
+        beats(stow, ctx, 20);
+
+        assertTrue(stow.open().isEmpty(),
+                "every chest is full: the trip would end in the hauler building its own beside them");
+    }
+
+    @Test
+    void theNewChestLetsTheStowGo() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        room(0);
+        StowSurplus stow = new StowSurplus(0);
+        beats(stow, ctx, 4);
+
+        room(27);
+        beats(stow, ctx, 1);
+
+        assertEquals(1, stow.open().size(), "storage's chest is down, and the load can go");
+    }
+
+    @Test
+    void anUnreadHomeNeverHoldsTheStowBack() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        room(null);
+        StowSurplus stow = new StowSurplus(0);
+
+        beats(stow, ctx, 2);
+
+        assertEquals(1, stow.open().size());
+    }
+
+    @Test
+    void anUntakenStowIsWithdrawnWhenHomeFills() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        room(5);
+        StowSurplus stow = new StowSurplus(0);
+        beats(stow, ctx, 2);
+        assertEquals(1, stow.open().size());
+
+        room(0);
+        beats(stow, ctx, 1);
+
+        assertTrue(stow.open().isEmpty());
+    }
+
+    @Test
+    void aStowAlreadyTakenIsNotYankedWhenHomeFills() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        room(5);
+        StowSurplus stow = new StowSurplus(0);
+        beats(stow, ctx, 2);
+        stow.claimed(stow.open().get(0));
+
+        room(0);
+        beats(stow, ctx, 2);
+
+        assertEquals(1, stow.open().size(), "theirs to finish, for KeepStocked's reason");
+    }
+
+    /** A restart builds the personal board afresh: the wait must come back from the world alone. */
+    @Test
+    void aRestartedStowStillWaitsForRoom() {
+        BoardBrainContext ctx = settled();
+        cargo(ctx, StowSurplus.SURPLUS_SLOTS);
+        room(0);
+        beats(new StowSurplus(0), ctx, 4);
+
+        StowSurplus restarted = new StowSurplus(0);
+        beats(restarted, ctx, 4);
+
+        assertTrue(restarted.open().isEmpty());
     }
 }

@@ -7,7 +7,9 @@ import dev.luizloyola.anima.core.brain.task.PutAwaySurplus;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.Surplus;
 import dev.luizloyola.anima.core.log.Category;
+import dev.luizloyola.anima.core.store.Depot;
 import java.util.List;
+import java.util.OptionalInt;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -26,8 +28,28 @@ import org.jspecify.annotations.Nullable;
  * <p><b>Only home.</b> The load goes to the body's {@link BrainContext#depot() depot}, HOME's stores,
  * and with none nothing is posted: no base, no offloading (decision: Luiz, 2026-09-30). A scout
  * once stowed 458 items into a chest it built at a stop 450 blocks from where it settled.
+ *
+ * <p><b>Not into a full HOME</b> (Luiz, 2026-10-02: "surplus leaf litter should cause more
+ * storage"): while HOME's stores have no empty slot, nothing is posted and an untaken errand is
+ * withdrawn — the party's {@code storage} Direction is setting up the next chest, and a trip now
+ * finds every chest full and ends in the hauler building one of its own beside it. Read from the
+ * world each beat, so a restart holds nothing to forget.
  */
 public final class StowSurplus implements PersonalProject {
+
+    /**
+     * How many empty slots a depot's stores have between them — installed by the mod, which can
+     * read chests. Empty when it cannot say, and an unread HOME never holds a stow back.
+     */
+    public interface Room {
+        OptionalInt free(Depot.Site site);
+    }
+
+    private static volatile Room room = site -> OptionalInt.empty();
+
+    public static void install(@Nullable Room installed) {
+        room = installed == null ? site -> OptionalInt.empty() : installed;
+    }
 
     /**
      * Cargo slots that make a trip worth taking — a third of the pack, which is about a chest row
@@ -93,16 +115,25 @@ public final class StowSurplus implements PersonalProject {
         }
         boolean home = ctx.depot().isPresent();
         boolean worthATrip = home && cargo(ctx) >= SURPLUS_SLOTS;
-        if (open == null && cooldown <= 0 && worthATrip) {
+        // Asked only when it could change what happens: it reads every chest at HOME.
+        boolean full = worthATrip && (open == null ? cooldown <= 0 : !claimed)
+                && full(ctx.depot().get());
+        if (open == null && cooldown <= 0 && worthATrip && !full) {
             open = new StowItem();
             ctx.journal().record(Category.PROJECT, open.describe(), "posted");
-        } else if (open != null && !claimed && !worthATrip) {
+        } else if (open != null && !claimed && (!worthATrip || full)) {
             // Only while UNCLAIMED, for KeepStocked's reason: an errand somebody is already
             // walking to is theirs to finish, and yanking it teaches them to ignore the board.
             ctx.journal().record(Category.PROJECT, open.describe(),
-                    !home ? "withdrawn (no home)" : "withdrawn (nothing spare)");
+                    !home ? "withdrawn (no home)" : full ? "withdrawn (HOME's stores are full)"
+                            : "withdrawn (nothing spare)");
             open = null;
         }
+    }
+
+    private static boolean full(Depot.Site site) {
+        OptionalInt free = room.free(site);
+        return free.isPresent() && free.getAsInt() <= 0;
     }
 
     /** Storage slots holding things nobody has spoken for. */
