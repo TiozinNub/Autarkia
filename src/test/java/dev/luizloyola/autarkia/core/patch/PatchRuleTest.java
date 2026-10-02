@@ -13,8 +13,10 @@ import dev.luizloyola.anima.core.brain.knowledge.Anchors;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
 import dev.luizloyola.anima.core.brain.knowledge.GrowthRules;
+import dev.luizloyola.anima.core.brain.knowledge.PlaceIndex;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.PoiSensorCore;
+import dev.luizloyola.anima.core.brain.knowledge.RegionCache;
 import dev.luizloyola.anima.core.brain.knowledge.SenseEvent;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import java.util.ArrayList;
@@ -100,17 +102,20 @@ class PatchRuleTest {
         }
 
         AgentKnowledge knowledge = new AgentKnowledge();
-        PoiSensorCore sensor = new PoiSensorCore(knowledge, eyed());
+        RegionCache regions = new RegionCache();
+        PoiSensorCore sensor = new PoiSensorCore(knowledge, eyed(), regions, new PlaceIndex());
         List<SenseEvent> events = new ArrayList<>();
         for (int tick = 1; tick <= 120; tick++) {
             events.addAll(sensor.tick(HERE, AHEAD, tick, probe));
         }
 
-        // Four separate discoveries — asserted, or this whole test could pass by noticing one
+        // Four separate growths — asserted, or this whole test could pass by noticing one
         // pumpkin and never proving the merge did anything at all.
-        assertEquals(4, events.stream()
+        assertEquals(4, regions.misses(),
+                "each clump is its own growth: the flood cannot cross the grass");
+        assertEquals(1, events.stream()
                 .filter(e -> e.type() == SenseEvent.Type.NOTED && e.kind() == Patches.PUMPKINS)
-                .count(), "each clump is its own growth: the flood cannot cross the grass");
+                .count(), "and one discovery: the later clumps re-measure a place already held");
 
         Collection<PoiMemory> remembered = knowledge.all(Patches.PUMPKINS);
         assertEquals(1, remembered.size(),
