@@ -126,6 +126,7 @@ public final class PersonSpecies {
             .set(ProfileAspect.BODY_CAN_OPEN_DOORS, true)
             .set(ProfileAspect.BODY_CAN_CLIMB, true)
             .set(ProfileAspect.BODY_CAN_BUILD, true)
+            .set(ProfileAspect.BODY_ANCHORS_SPAWNS, true)
             .set(ProfileAspect.ESCAPE_PRESSURE, 0.9)
             // --- gaze: a person's neck, and how long a person's eye rests -------------------
             // 12°/tick is a head that arrives in about half a second from anywhere it can reach:
