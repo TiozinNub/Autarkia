@@ -17,15 +17,17 @@ import java.util.UUID;
  * its blueprint, version, variants and bindings, which plan the same building again; the plan copy
  * itself waits for the build project.
  *
- * @param anchor where the footprint's centre sits on layer 0, at the height the pad is levelled to
- * @param built  the bounds of its walls, in the world
- * @param pad    the ground levelled for it
- * @param note   why it was refused, or empty
- * @param work   who built it and when
+ * @param anchor    where the footprint's centre sits on layer 0, at the height the pad is levelled to
+ * @param built     the bounds of its walls, in the world
+ * @param pad       the ground levelled for it
+ * @param note      why it was refused, or empty
+ * @param work      who built it and when
+ * @param grownFrom the variants it stood with before the growth under way, empty when none is
  */
 public record Structure(UUID id, String blueprint, int version, Map<String, String> variants,
                         Map<Integer, String> bindings, Pos anchor, Placement placement, Footprint built,
-                        Footprint pad, Phase phase, long sitedAt, String note, Work work) {
+                        Footprint pad, Phase phase, long sitedAt, String note, Work work,
+                        Map<String, String> grownFrom) {
 
     /**
      * The building's making: the members who placed any of it, and the game times its build was
@@ -50,6 +52,8 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         BUILDING,
         /** It stands. */
         BUILT,
+        /** It stands, and grows into {@link #variants} from {@link #grownFrom}: its diff is being built. */
+        GROWING,
         /** The pad cannot be levelled; {@link #note} says why. */
         REFUSED
     }
@@ -63,6 +67,14 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         bindings = Map.copyOf(bindings);
         note = note == null ? "" : note;
         work = work == null ? Work.NONE : work;
+        grownFrom = grownFrom == null ? Map.of() : Map.copyOf(grownFrom);
+    }
+
+    public Structure(UUID id, String blueprint, int version, Map<String, String> variants,
+                     Map<Integer, String> bindings, Pos anchor, Placement placement, Footprint built, Footprint pad,
+                     Phase phase, long sitedAt, String note, Work work) {
+        this(id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt, note, work,
+                Map.of());
     }
 
     public Structure(UUID id, String blueprint, int version, Map<String, String> variants,
@@ -71,19 +83,42 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         this(id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt, note, Work.NONE);
     }
 
+    /** Whether it stands, growing or not: lived in, its stations the party's. */
+    public boolean stands() {
+        return phase == Phase.BUILT || phase == Phase.GROWING;
+    }
+
     public Structure at(Phase next, String why) {
         return new Structure(id, blueprint, version, variants, bindings, anchor, placement, built, pad, next, sitedAt,
-                why, work);
+                why, work, grownFrom);
     }
 
     public Structure with(Work next) {
         return new Structure(id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt,
-                note, next);
+                note, next, grownFrom);
     }
 
     public Structure rebound(Map<Integer, String> next) {
         return new Structure(id, blueprint, version, variants, next, anchor, placement, built, pad, phase, sitedAt,
-                note, work);
+                note, work, grownFrom);
+    }
+
+    /** Growing into {@code next} from the variants it stands with. */
+    public Structure growing(Map<String, String> next, String why) {
+        return new Structure(id, blueprint, version, next, bindings, anchor, placement, built, pad, Phase.GROWING,
+                sitedAt, why, work, variants);
+    }
+
+    /** Its growth given up: it stands as it did. */
+    public Structure notGrown(String why) {
+        return new Structure(id, blueprint, version, grownFrom, bindings, anchor, placement, built, pad, Phase.BUILT,
+                sitedAt, why, work, Map.of());
+    }
+
+    /** Its growth stands. */
+    public Structure grown(String why) {
+        return new Structure(id, blueprint, version, variants, bindings, anchor, placement, built, pad, Phase.BUILT,
+                sitedAt, why, work, Map.of());
     }
 
     /** The chunks that must be cleared before the pad is levelled: the pad and the ring round it. */

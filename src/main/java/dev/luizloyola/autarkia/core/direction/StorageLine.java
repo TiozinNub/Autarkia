@@ -1,9 +1,11 @@
 package dev.luizloyola.autarkia.core.direction;
 
 import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.autarkia.core.board.GrowBuilding;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SetUp;
+import dev.luizloyola.autarkia.core.builder.Growth;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -19,6 +21,10 @@ import java.util.OptionalInt;
  *
  * <p>Posts one more chest at a time. A Direction never posts the same work twice, so a party short
  * of room gets one chest, not one per member who noticed.
+ *
+ * <p><b>A house grows first</b> (2026-10-02): while a building of the party's can grow into more
+ * chests — the basic house's {@code base=lv2} — the room is asked of it, and a chest is set up loose
+ * only once none can. Set up beside the house's chests, they had filled its floor.
  */
 public final class StorageLine implements DirectionLine {
 
@@ -55,6 +61,9 @@ public final class StorageLine implements DirectionLine {
             return Status.UNREAD;
         }
         int wanted = direction.count() * party.members();
+        if (free.getAsInt() < wanted && party.growing()) {
+            return Status.of(Status.Reading.WAITING, "autarkia.direction.storage.growing", free.getAsInt(), wanted);
+        }
         return Status.of(free.getAsInt() >= wanted ? Status.Reading.MET : Status.Reading.UNMET,
                 "autarkia.direction.storage.free", free.getAsInt(), wanted);
     }
@@ -62,11 +71,17 @@ public final class StorageLine implements DirectionLine {
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
         return project instanceof SetUp setUp && setUp.remaining().contains(SetUp.STORE)
-                && party.home().isPresent() && BaseLine.inArea(party, setUp.near());
+                && party.home().isPresent() && BaseLine.inArea(party, setUp.near())
+                || project instanceof GrowBuilding grow && grow.station().equals(SetUp.STORE.itemId());
     }
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
+        Optional<Growth> growth = party.growth(SetUp.STORE);
+        if (growth.isPresent()) {
+            return new GrowBuilding(growth.get().structure(), growth.get().variants(), SetUp.STORE.itemId(),
+                    Math.max(priority, Direction.BUILDING));
+        }
         return new SetUp(List.of(SetUp.STORE), party.spot().orElseThrow(), Math.max(priority, Direction.BUILDING));
     }
 }

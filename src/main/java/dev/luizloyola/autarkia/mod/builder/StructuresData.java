@@ -84,10 +84,12 @@ public final class StructuresData extends SavedData implements StoreGuard.Checke
                     .forGetter(Structure::phase),
             Codec.LONG.optionalFieldOf("sited_at", 0L).forGetter(Structure::sitedAt),
             Codec.STRING.optionalFieldOf("note", "").forGetter(Structure::note),
-            WORK.optionalFieldOf("work", Structure.Work.NONE).forGetter(Structure::work)
+            WORK.optionalFieldOf("work", Structure.Work.NONE).forGetter(Structure::work),
+            Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("grown_from", Map.of())
+                    .forGetter(Structure::grownFrom)
     ).apply(s, (id, blueprint, version, variants, bindings, anchor, placement, built, pad, phase, sitedAt, note,
-            work) -> new Structure(id, blueprint, version, variants, bindings, anchor, placement, built.orElse(pad), pad,
-            phase, sitedAt, note, work)));
+            work, grownFrom) -> new Structure(id, blueprint, version, variants, bindings, anchor, placement,
+            built.orElse(pad), pad, phase, sitedAt, note, work, grownFrom)));
 
     record Row(UUID party, Structure structure) {
     }

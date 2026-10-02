@@ -66,6 +66,14 @@ class PartyBoardCodecsTest {
     }
 
     @Test
+    void anAskToGrowABuildingComesBackAsItWasAsked() {
+        var ask = new dev.luizloyola.autarkia.core.board.GrowBuilding.State(new java.util.UUID(4, 2),
+                java.util.Map.of("base", "lv3", "beds", "none"), "minecraft:furnace", 0.5, false);
+
+        assertEquals(ask, roundTrip(new PartyBoard.Row(ask, List.of())).project());
+    }
+
+    @Test
     void aSearchForAHomeComesBackWithItsFailedSettleWalks() {
         var plot = new dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate(10, 0, 63, 17, 90,
                 List.of(new dev.luizloyola.autarkia.core.direction.HomeJudge.Line(

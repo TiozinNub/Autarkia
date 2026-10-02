@@ -3,11 +3,13 @@ package dev.luizloyola.autarkia.core.direction;
 import dev.luizloyola.anima.core.craft.Furnace;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.autarkia.core.board.Fire;
+import dev.luizloyola.autarkia.core.board.GrowBuilding;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.board.Tend;
+import dev.luizloyola.autarkia.core.builder.Growth;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -17,6 +19,9 @@ import java.util.OptionalInt;
  * kit's 64 torches is 16. Waits for the base. With no furnace at HOME it posts one; then a load of
  * logs for the shortfall, at most a furnace's stack. While the furnace smelts it waits: coming back
  * for the charcoal is a {@link Tend}'s, and the line judges again once it is in the chest.
+ *
+ * <p>A furnace is asked of a building first, as the storage line asks room of it: the basic house's
+ * {@code base=lv3} holds one. Only with no building that can grow into one is a furnace set up loose.
  */
 public final class CharcoalLine implements DirectionLine {
 
@@ -57,6 +62,9 @@ public final class CharcoalLine implements DirectionLine {
             return Status.UNREAD;
         }
         int wanted = wanted(direction, party);
+        if (stored.getAsInt() < wanted && !party.hasAtHome(Furnace.POI) && party.growing()) {
+            return Status.of(Status.Reading.WAITING, "autarkia.direction.charcoal.growing", stored.getAsInt(), wanted);
+        }
         if (stored.getAsInt() < wanted && party.runningAtHome(Furnace.POI)) {
             return Status.of(Status.Reading.WAITING, "autarkia.direction.charcoal.smelting",
                     stored.getAsInt(), wanted);
@@ -74,6 +82,10 @@ public final class CharcoalLine implements DirectionLine {
             return BaseLine.inArea(party, setUp.near()) && setUp.remaining().contains(SetUp.FURNACE);
         }
         Optional<dev.luizloyola.anima.core.brain.sense.Pos> furnace = party.placeAtHome(Furnace.POI);
+        if (project instanceof GrowBuilding grow) {
+            // Only while there is no furnace: the house line's growth for a furnace standing outside is its own.
+            return furnace.isEmpty() && grow.station().equals(SetUp.FURNACE.itemId());
+        }
         return furnace.isPresent() && (project instanceof Fire fire && fire.at().equals(furnace.get())
                 || project instanceof Tend tend && tend.at().equals(furnace.get()));
     }
@@ -82,6 +94,11 @@ public final class CharcoalLine implements DirectionLine {
     public PartyProject post(Direction direction, PartyView party, double priority) {
         Optional<dev.luizloyola.anima.core.brain.sense.Pos> furnace = party.placeAtHome(Furnace.POI);
         if (furnace.isEmpty()) {
+            Optional<Growth> growth = party.growth(SetUp.FURNACE);
+            if (growth.isPresent()) {
+                return new GrowBuilding(growth.get().structure(), growth.get().variants(), SetUp.FURNACE.itemId(),
+                        Math.max(priority, Direction.BUILDING));
+            }
             return new SetUp(List.of(SetUp.FURNACE), party.spot().orElseThrow(), Math.max(priority, Direction.BUILDING));
         }
         int shortfall = wanted(direction, party) - party.storedAtHome(CHARCOAL).orElse(0);

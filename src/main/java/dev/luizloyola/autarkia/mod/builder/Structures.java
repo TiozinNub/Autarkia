@@ -11,6 +11,7 @@ import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.Flatten;
+import dev.luizloyola.autarkia.core.board.GrowBuilding;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SiteBuilding;
@@ -70,6 +71,8 @@ public final class Structures {
             for (Project project : board.projects()) {
                 if (project instanceof SiteBuilding site && !site.finished()) {
                     site(server, board.party(), site);
+                } else if (project instanceof GrowBuilding grow && !grow.finished()) {
+                    grow(server, board.party(), grow);
                 }
             }
         }
@@ -85,6 +88,7 @@ public final class Structures {
                     case LEVELLING -> stillLevelling(server, party, structure);
                     case LEVELLED -> build(server, party, structure);
                     case BUILDING -> stillBuilding(server, party, structure);
+                    case GROWING -> Growths.step(server, party, structure);
                     case BUILT, REFUSED -> structure;
                 };
                 if (next != structure) {
@@ -131,6 +135,17 @@ public final class Structures {
         ask.sited();
         PartyBoards.touch(server);
         tell(server, party, applied.structure());
+    }
+
+    /** A line asked for a building to grow: it records the growth, and what is in the way goes on the board. */
+    private static void grow(MinecraftServer server, PartyId party, GrowBuilding ask) {
+        List<String> said = new java.util.ArrayList<>();
+        Structure next = Growths.start(server, party, ask, said);
+        said.forEach(line -> journal(server, party, line));
+        if (next != null) {
+            StructuresData.get(server).replace(party, next);
+            tell(server, party, next);
+        }
     }
 
     /** When an ask with nowhere to go may look again; lost on a restart, which only looks sooner. */
@@ -252,6 +267,10 @@ public final class Structures {
                 if (structure.phase() == Phase.LEVELLING && project instanceof Flatten flatten
                         && levels(flatten, structure)) {
                     next = structure.at(Phase.LEVELLED, "");
+                } else if (structure.phase() == Phase.GROWING && project instanceof Build build
+                        && build.structure().equals(structure.id())) {
+                    next = structure.grown(build.refused().isEmpty() ? ""
+                            : build.refused().size() + " steps handed back");
                 } else if (structure.phase() == Phase.BUILDING && project instanceof Build build
                         && build.structure().equals(structure.id())) {
                     next = structure.at(Phase.BUILT, build.refused().isEmpty() ? ""
@@ -263,7 +282,8 @@ public final class Structures {
                     data.replace(party, next);
                     tell(server, party, next);
                     if (next.phase() == Phase.BUILT) {
-                        MovingIn.moveIn(server, party, next).forEach(line -> journal(server, party, line));
+                        MovingIn.moveIn(server, party, next, structure.phase() == Phase.GROWING)
+                                .forEach(line -> journal(server, party, line));
                         Scaffolds.takeDown(server, party, next).forEach(line -> journal(server, party, line));
                     }
                 }

@@ -16,6 +16,7 @@ import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -69,6 +70,13 @@ class BaseAndStorageTest {
         }
         final Set<PoiKind> stations = new HashSet<>();
         OptionalInt free = OptionalInt.of(27);
+        /** A growth of the party's house that adds chests. */
+        Optional<dev.luizloyola.autarkia.core.builder.Growth> moreChests = Optional.empty();
+
+        @Override
+        public Optional<dev.luizloyola.autarkia.core.builder.Growth> growth(SetUp.Station station) {
+            return station == SetUp.STORE ? moreChests : Optional.empty();
+        }
 
         @Override
         public PartyId party() {
@@ -302,5 +310,42 @@ class BaseAndStorageTest {
 
         assertTrue(!lines(after).contains("storage"), "the restored chest is still storage's work");
         assertEquals(1, restored.projects().stream().filter(p -> p instanceof SetUp).count());
+    }
+
+    @Test
+    void aHouseThatCanGrowChestsIsAskedForRoomBeforeAChestGoesDownLoose() {
+        view.stations.add(SetUp.WORKBENCH.kind());
+        view.stations.add(SetUp.STORE.kind());
+        view.free = OptionalInt.of(0);
+        UUID house = new UUID(3, 3);
+        Map<String, String> lv2 = Map.of("base", "lv2", "beds", "none", "attic", "none");
+        view.moreChests = Optional.of(new dev.luizloyola.autarkia.core.builder.Growth(house, lv2));
+
+        beat();
+
+        assertTrue(board.projects().stream().noneMatch(p -> p instanceof SetUp), "no chest by the house's chests");
+        var grow = board.projects().stream().filter(p -> p instanceof dev.luizloyola.autarkia.core.board.GrowBuilding)
+                .map(p -> (dev.luizloyola.autarkia.core.board.GrowBuilding) p).findFirst().orElseThrow();
+        assertEquals(house, grow.structure());
+        assertEquals(lv2, grow.variants());
+        assertTrue(!lines(beat()).contains("storage"), "asked once");
+    }
+
+    @Test
+    void whileTheHouseGrowsStorageWaits() {
+        view.stations.add(SetUp.WORKBENCH.kind());
+        view.stations.add(SetUp.STORE.kind());
+        view.free = OptionalInt.of(0);
+        dev.luizloyola.autarkia.core.builder.Structure built = new dev.luizloyola.autarkia.core.builder.Structure(
+                new UUID(3, 3), HouseLine.BLUEPRINT, 3, HouseLine.VARIANTS, Map.of(), SPOT,
+                dev.luizloyola.autarkia.core.bp.Placement.AS_DRAWN,
+                new dev.luizloyola.autarkia.core.bp.Footprint(0, 0, 8, 9),
+                new dev.luizloyola.autarkia.core.bp.Footprint(0, 0, 8, 9),
+                dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILT, 0L, "");
+        view.structures.add(built.growing(Map.of("base", "lv2"), ""));
+
+        Status storage = StorageLine.INSTANCE.judge(new Direction(new DirectionId(WOOD, "storage"), 9, null), view);
+        assertEquals(Status.Reading.WAITING, storage.reading());
+        assertTrue(!lines(beat()).contains("storage"));
     }
 }

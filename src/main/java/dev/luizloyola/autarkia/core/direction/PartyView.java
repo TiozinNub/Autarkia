@@ -51,6 +51,25 @@ public interface PartyView {
                 || s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILDING);
     }
 
+    /**
+     * The least growth of one of the party's standing buildings that would hold one more of this
+     * station: the house's {@code base=lv2} for room, {@code base=lv3} for a furnace. Empty when no
+     * building can, or a test view never asks.
+     */
+    default Optional<dev.luizloyola.autarkia.core.builder.Growth> growth(SetUp.Station station) {
+        return Optional.empty();
+    }
+
+    /** Whether a place of this kind at HOME stands inside one of the party's standing buildings. */
+    default boolean housed(PoiKind kind) {
+        return false;
+    }
+
+    /** Whether one of the party's buildings is growing: what a growth adds is on its way. */
+    default boolean growing() {
+        return structures().stream().anyMatch(s -> s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.GROWING);
+    }
+
     int members();
 
     /**

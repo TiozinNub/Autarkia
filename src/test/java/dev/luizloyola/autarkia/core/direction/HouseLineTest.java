@@ -10,10 +10,12 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
+import dev.luizloyola.autarkia.core.board.GrowBuilding;
 import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.SiteBuilding;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
+import dev.luizloyola.autarkia.core.builder.Growth;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +40,20 @@ class HouseLineTest {
     private static final class Party implements PartyView {
         boolean home = true;
         boolean base = true;
+        boolean furnace;
+        boolean furnaceHoused;
+        Optional<Growth> growth = Optional.empty();
         final List<Structure> structures = new ArrayList<>();
+
+        @Override
+        public Optional<Growth> growth(SetUp.Station station) {
+            return station == SetUp.FURNACE ? growth : Optional.empty();
+        }
+
+        @Override
+        public boolean housed(PoiKind kind) {
+            return !kind.equals(SetUp.FURNACE.kind()) || furnaceHoused;
+        }
 
         @Override
         public PartyId party() {
@@ -77,7 +92,8 @@ class HouseLineTest {
 
         @Override
         public boolean hasAtHome(PoiKind kind) {
-            return base && (kind.equals(SetUp.WORKBENCH.kind()) || kind.equals(SetUp.STORE.kind()));
+            return base && (kind.equals(SetUp.WORKBENCH.kind()) || kind.equals(SetUp.STORE.kind()))
+                    || furnace && kind.equals(SetUp.FURNACE.kind());
         }
 
         @Override
@@ -147,5 +163,68 @@ class HouseLineTest {
 
         assertEquals(Status.Reading.UNMET, reading(party));
         assertFalse(HouseLine.INSTANCE.isWork(new SiteBuilding("autarkia:shed", Map.of(), 0.5), DIRECTION, party));
+    }
+
+    @Test
+    void aStandingHouseHoldingEveryStationIsMet() {
+        Party party = new Party();
+        party.structures.add(house(Structure.Phase.BUILT));
+        party.furnace = true;
+        party.furnaceHoused = true;
+        party.growth = Optional.of(new Growth(party.structures.get(0).id(), Map.of("base", "lv3")));
+
+        assertEquals(Status.Reading.MET, reading(party));
+    }
+
+    @Test
+    void aFurnaceKeptOutsideWantsTheHouseGrownToHoldOne() {
+        Party party = new Party();
+        Structure built = house(Structure.Phase.BUILT);
+        party.structures.add(built);
+        party.furnace = true;
+        Map<String, String> lv3 = Map.of("base", "lv3", "beds", "none", "attic", "none");
+        party.growth = Optional.of(new Growth(built.id(), lv3));
+
+        Status status = HouseLine.INSTANCE.judge(DIRECTION, party);
+        assertEquals(Status.Reading.UNMET, status.reading());
+        assertEquals("autarkia.direction.house.grow.furnace", status.langKey());
+        GrowBuilding ask = assertInstanceOf(GrowBuilding.class, HouseLine.INSTANCE.post(DIRECTION, party, 0.5));
+        assertEquals(built.id(), ask.structure());
+        assertEquals(lv3, ask.variants());
+        assertEquals(SetUp.FURNACE.itemId(), ask.station());
+        assertTrue(HouseLine.INSTANCE.isWork(ask, DIRECTION, party), "so it is never posted twice");
+        assertFalse(HouseLine.INSTANCE.isWork(new GrowBuilding(built.id(), lv3, SetUp.STORE.itemId(), 0.5),
+                DIRECTION, party), "a growth for room is the storage line's");
+    }
+
+    @Test
+    void aFurnaceOutsideAHouseThatCannotGrowIsLeftBe() {
+        Party party = new Party();
+        party.structures.add(house(Structure.Phase.BUILT));
+        party.furnace = true;
+
+        assertEquals(Status.Reading.MET, reading(party));
+    }
+
+    @Test
+    void aGrowingHouseIsWaitedOn() {
+        Party party = new Party();
+        party.structures.add(house(Structure.Phase.BUILT).growing(Map.of("base", "lv3"), ""));
+        party.furnace = true;
+
+        assertEquals(Status.Reading.WAITING, reading(party));
+        assertTrue(party.growing());
+    }
+
+    @Test
+    void aStandingHouseIsJudgedBeforeOneSitedAfterIt() {
+        Party party = new Party();
+        party.structures.add(house(Structure.Phase.SITED));
+        Structure built = house(Structure.Phase.BUILT);
+        party.structures.add(built);
+        party.furnace = true;
+        party.growth = Optional.of(new Growth(built.id(), Map.of("base", "lv3")));
+
+        assertEquals("autarkia.direction.house.grow.furnace", HouseLine.INSTANCE.judge(DIRECTION, party).langKey());
     }
 }

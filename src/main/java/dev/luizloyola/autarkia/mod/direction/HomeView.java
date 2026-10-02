@@ -79,10 +79,13 @@ final class HomeView implements PartyView {
             return Optional.empty();
         }
         // Never on a site being built: its base is being moved off it, and a store put back
-        // there would be broken again by the build.
+        // there would be broken again by the build. Never inside a building that stands either:
+        // what it holds is its blueprint's, and grows by its variants (2026-10-02).
         List<Footprint> sites = new ArrayList<>();
         for (Structure structure : structures()) {
-            if (structure.phase() != Structure.Phase.BUILT && structure.phase() != Structure.Phase.REFUSED) {
+            if (structure.stands()) {
+                sites.add(structure.built());
+            } else if (structure.phase() != Structure.Phase.REFUSED) {
                 sites.add(structure.pad());
             }
         }
@@ -138,6 +141,29 @@ final class HomeView implements PartyView {
         }
         return best != null ? best
                 : new Pos(midX, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, midX, midZ), midZ);
+    }
+
+    @Override
+    public boolean housed(PoiKind kind) {
+        List<Footprint> walls = new ArrayList<>();
+        for (Structure structure : structures()) {
+            if (structure.stands()) {
+                walls.add(structure.built());
+            }
+        }
+        SortedSet<ChunkKey> area = area();
+        for (PlaceRow row : PlacesData.get(server).places().rows()) {
+            if (row.kind().equals(kind) && party.equals(row.party()) && atHome(area, row.at())
+                    && inside(walls, row.at().x(), row.at().z())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public Optional<dev.luizloyola.autarkia.core.builder.Growth> growth(dev.luizloyola.autarkia.core.board.SetUp.Station station) {
+        return dev.luizloyola.autarkia.mod.builder.Growths.of(structures(), station);
     }
 
     @Override

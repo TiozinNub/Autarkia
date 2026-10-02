@@ -428,6 +428,18 @@ public final class PartyBoardCodecs {
                     Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.SiteBuilding.State::done)
             ).apply(project, dev.luizloyola.autarkia.core.board.SiteBuilding.State::new));
 
+    /** Everything a {@code grow_building} row carries: which building, into what, for which station. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.GrowBuilding.State> GROW_BUILDING =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    UUIDUtil.CODEC.fieldOf("structure")
+                            .forGetter(dev.luizloyola.autarkia.core.board.GrowBuilding.State::structure),
+                    Codec.unboundedMap(Codec.STRING, Codec.STRING).fieldOf("variants")
+                            .forGetter(dev.luizloyola.autarkia.core.board.GrowBuilding.State::variants),
+                    Codec.STRING.fieldOf("station").forGetter(dev.luizloyola.autarkia.core.board.GrowBuilding.State::station),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.GrowBuilding.State::priority),
+                    Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.GrowBuilding.State::done)
+            ).apply(project, dev.luizloyola.autarkia.core.board.GrowBuilding.State::new));
+
     private static final Codec<dev.luizloyola.autarkia.core.builder.Laying.Use> LAYING_USE =
             RecordCodecBuilder.create(use -> use.group(
                     Codec.STRING.listOf().fieldOf("items").forGetter(u -> List.copyOf(new java.util.TreeSet<>(u.items()))),
@@ -606,6 +618,7 @@ public final class PartyBoardCodecs {
             case "flatten" -> DataResult.success(FLATTEN);
             case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
             case "site_building" -> DataResult.success(SITE_BUILDING);
+            case "grow_building" -> DataResult.success(GROW_BUILDING);
             case "build" -> DataResult.success(BUILD);
             case "deconstruct" -> DataResult.success(DECONSTRUCT);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");

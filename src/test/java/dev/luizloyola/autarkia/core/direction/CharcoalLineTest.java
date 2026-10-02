@@ -34,7 +34,13 @@ class CharcoalLineTest {
         int charcoal = 0;
         boolean furnace = true;
         boolean running = false;
+        Optional<dev.luizloyola.autarkia.core.builder.Growth> growth = Optional.empty();
         final List<dev.luizloyola.autarkia.core.builder.Structure> structures = new java.util.ArrayList<>();
+
+        @Override
+        public Optional<dev.luizloyola.autarkia.core.builder.Growth> growth(SetUp.Station station) {
+            return station == SetUp.FURNACE ? growth : Optional.empty();
+        }
 
         @Override
         public List<dev.luizloyola.autarkia.core.builder.Structure> structures() {
@@ -211,5 +217,38 @@ class CharcoalLineTest {
             }
         };
         assertEquals(Status.NO_BASE, CharcoalLine.INSTANCE.judge(CHARCOAL, noBase));
+    }
+
+    @Test
+    void withNoFurnaceAHouseThatCanHoldOneGrowsInstead() {
+        party.furnace = false;
+        java.util.UUID house = new java.util.UUID(5, 5);
+        java.util.Map<String, String> lv3 = java.util.Map.of("base", "lv3", "beds", "none", "attic", "none");
+        party.growth = Optional.of(new dev.luizloyola.autarkia.core.builder.Growth(house, lv3));
+
+        var grow = assertInstanceOf(dev.luizloyola.autarkia.core.board.GrowBuilding.class,
+                CharcoalLine.INSTANCE.post(CHARCOAL, party, 0.5));
+        assertEquals(house, grow.structure());
+        assertEquals(lv3, grow.variants());
+        assertEquals(SetUp.FURNACE.itemId(), grow.station());
+        assertTrue(CharcoalLine.INSTANCE.isWork(grow, CHARCOAL, party), "its own, so it is not posted twice");
+
+        party.furnace = true;
+        assertTrue(!CharcoalLine.INSTANCE.isWork(grow, CHARCOAL, party),
+                "with a furnace outside, the growth is the house line's");
+    }
+
+    @Test
+    void whileAHouseGrowsAFurnaceTheLineWaits() {
+        party.furnace = false;
+        party.structures.add(new dev.luizloyola.autarkia.core.builder.Structure(new java.util.UUID(5, 5),
+                HouseLine.BLUEPRINT, 3, HouseLine.VARIANTS, java.util.Map.of(), SPOT,
+                dev.luizloyola.autarkia.core.bp.Placement.AS_DRAWN,
+                new dev.luizloyola.autarkia.core.bp.Footprint(0, 0, 8, 9),
+                new dev.luizloyola.autarkia.core.bp.Footprint(0, 0, 8, 9),
+                dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILT, 0L, "")
+                .growing(java.util.Map.of("base", "lv3"), ""));
+
+        assertEquals(Status.Reading.WAITING, CharcoalLine.INSTANCE.judge(CHARCOAL, party).reading());
     }
 }

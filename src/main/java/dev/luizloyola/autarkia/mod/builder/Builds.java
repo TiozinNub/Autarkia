@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.builder;
 
 import dev.luizloyola.anima.compat.sense.LevelProbe;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.autarkia.compat.bp.Placer;
 import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
@@ -33,6 +34,15 @@ public final class Builds {
      * @return null, with why in {@code notes}, when the plan cannot be made
      */
     public static @Nullable Build of(ServerLevel level, Structure structure, List<String> notes) {
+        return of(level, structure, notes, null);
+    }
+
+    /**
+     * @param only the cells a growth changes: the steps that place nothing else are left out. Null
+     *             for the whole building.
+     */
+    public static @Nullable Build of(ServerLevel level, Structure structure, List<String> notes,
+                                     java.util.@Nullable Set<Pos> only) {
         Blueprint bp = Blueprints.find(structure.blueprint()).map(entry -> entry.compiled().blueprint()).orElse(null);
         if (bp == null) {
             notes.add("no blueprint " + structure.blueprint());
@@ -55,6 +65,10 @@ public final class Builds {
         int itemless = 0;
         for (BuildOrder.Placed placed : proved.order()) {
             var laying = Placer.laying(anchor, plan, structure.placement(), placed);
+            if (laying.isPresent() && only != null && !only.contains(laying.get().cell())
+                    && laying.get().also().stream().noneMatch(only::contains)) {
+                continue;
+            }
             if (laying.isPresent()) {
                 order.add(laying.get());
             } else {
