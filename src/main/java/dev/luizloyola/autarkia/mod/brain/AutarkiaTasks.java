@@ -241,6 +241,8 @@ public final class AutarkiaTasks {
                     Codec.INT.fieldOf("clock").forGetter(KeepStocked.State::clock),
                     Codec.INT.fieldOf("beats").forGetter(KeepStocked.State::beats),
                     Codec.BOOL.fieldOf("wanting").forGetter(KeepStocked.State::wanting),
-                    Codec.BOOL.fieldOf("claimed").forGetter(KeepStocked.State::claimed)
+                    Codec.BOOL.fieldOf("claimed").forGetter(KeepStocked.State::claimed),
+                    Codec.INT.optionalFieldOf("steps", 0).forGetter(KeepStocked.State::steps),
+                    Codec.INT.optionalFieldOf("failures", 0).forGetter(KeepStocked.State::failures)
             ).apply(k, KeepStocked.State::new)).listOf();
 }

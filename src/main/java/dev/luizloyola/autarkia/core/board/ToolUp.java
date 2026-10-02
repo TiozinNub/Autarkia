@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.WorkToleranceCurve;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.task.AtOneBench;
@@ -28,16 +29,19 @@ import org.jspecify.annotations.Nullable;
  * well as the current one.
  *
  * <p>Shaped after {@link KeepStocked}: a beat every {@link #CHECK_INTERVAL} ticks after a warm-up,
- * withdrawn only while unclaimed, and a failure sits out {@link #FAIL_COOLDOWN}.
+ * withdrawn only while unclaimed, and a failure sits out {@link SetUp#cooldownAfter SetUp's wait},
+ * doubled for each failure in a row. A tool priced out earns budget as a party errand does
+ * ({@link GrowsBudget}): a lone settler whose only stone lay past an axe's budget re-posted it
+ * every 600 ticks, 2,014 times (forest, 2026-10-02). Both reset when the tool is had or the age
+ * names another.
  *
  * <p>One item per family, so a tool that cannot be made does not hold up the others; but the one
  * claimed makes every family posted beside it too, {@link AtOneBench at one bench}, so the table
  * goes down once for them all (in-world, 2026-10-01: three put-downs in 3 s).
  */
-public final class ToolUp implements StandingProject {
+public final class ToolUp implements StandingProject, GrowsBudget {
 
     public static final int CHECK_INTERVAL = 100;
-    public static final int FAIL_COOLDOWN = 600;
 
     /**
      * No tool of the tier at all — missing, or an age just reached. Above upkeep (0.4) and a side
@@ -65,6 +69,9 @@ public final class ToolUp implements StandingProject {
     private int tier;
     private int worn;
     private boolean seen;
+    /** Budget earned priced out, and failures in a row — both for the tool at {@link #tier}. */
+    private int steps;
+    private int failures;
 
     public ToolUp(Tools.Family family) {
         this.family = family;
@@ -108,6 +115,10 @@ public final class ToolUp implements StandingProject {
         double spareBelow = ctx.profile().d(ProfileAspect.HANDLING_SPARE_BELOW);
         Inventory pack = ctx.percepts().inventory();
         boolean covered = Tools.covered(family, tier, pack, spareBelow);
+        if (covered) {
+            steps = 0;
+            failures = 0;
+        }
         if (open == null && cooldown <= 0 && !covered) {
             open = new ToolItem();
             ctx.journal().record(Category.PROJECT, open.describe(), "posted");
@@ -120,7 +131,14 @@ public final class ToolUp implements StandingProject {
     }
 
     private void read(BrainContext ctx) {
+        int was = tier;
         tier = Tools.currentTier(family, ctx.gate());
+        if (seen && tier != was) {
+            // Another tool, another price: what the last one earned and waited says nothing of it.
+            steps = 0;
+            failures = 0;
+            cooldown = 0;
+        }
         double spareBelow = ctx.profile().d(ProfileAspect.HANDLING_SPARE_BELOW);
         Inventory pack = ctx.percepts().inventory();
         worn = 0;
@@ -182,10 +200,11 @@ public final class ToolUp implements StandingProject {
     @Override
     public void completed(WorkItem item, BrainContext ctx) {
         clear();
-        if (!coveredNow(ctx)) {
-            ctx.journal().record(Category.PROJECT, item.describe(),
-                    "not made, retry cooldown (" + FAIL_COOLDOWN + "t)");
-            cooldown = FAIL_COOLDOWN;
+        if (coveredNow(ctx)) {
+            steps = 0;
+            failures = 0;
+        } else {
+            ctx.journal().record(Category.PROJECT, item.describe(), "not made, retry cooldown (" + backOff() + "t)");
         }
         for (ToolUp other : bench) {
             if (other != this && other.open != null && !other.claimed && other.coveredNow(ctx)) {
@@ -196,10 +215,25 @@ public final class ToolUp implements StandingProject {
 
     @Override
     public void failed(WorkItem item, BrainContext ctx) {
-        ctx.journal().record(Category.PROJECT, item.describe(),
-                "unclaimed, retry cooldown (" + FAIL_COOLDOWN + "t)");
+        ctx.journal().record(Category.PROJECT, item.describe(), "unclaimed, retry cooldown (" + backOff() + "t)");
         clear();
-        cooldown = FAIL_COOLDOWN;
+    }
+
+    /** One more failure in a row: sets the wait, {@link SetUp#cooldownAfter}'s, and returns it. */
+    private int backOff() {
+        cooldown = (int) SetUp.cooldownAfter(++failures);
+        return cooldown;
+    }
+
+    @Override
+    public int pricedOut(WorkItem item) {
+        steps = Math.min(WorkToleranceCurve.MAX_STEPS, steps + 1);
+        return steps;
+    }
+
+    @Override
+    public int budgetSteps(WorkItem item) {
+        return steps;
     }
 
     @Override
@@ -266,7 +300,7 @@ public final class ToolUp implements StandingProject {
     /** {@link KeepStocked}'s rhythm. The tier and the priority are re-read on the first tick. */
     @Override
     public KeepStocked.State snapshot() {
-        return new KeepStocked.State(cooldown, clock, beats, open != null, claimed);
+        return new KeepStocked.State(cooldown, clock, beats, open != null, claimed, steps, failures);
     }
 
     @Override
@@ -276,6 +310,8 @@ public final class ToolUp implements StandingProject {
         this.beats = state.beats();
         this.open = state.wanting() ? new ToolItem() : null;
         this.claimed = state.claimed();
+        this.steps = state.steps();
+        this.failures = state.failures();
     }
 
     @Override

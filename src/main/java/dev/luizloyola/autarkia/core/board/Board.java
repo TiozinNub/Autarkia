@@ -601,26 +601,37 @@ public class Board {
     /**
      * Steps of budget each errand has earned by being priced out, until it succeeds — see
      * {@link WorkToleranceCurve}. By project and {@link WorkKey}, so {@link PartyBoard} saves it
-     * with the row; a personal project has no key and earns nothing.
+     * with the row; a personal project has no key and earns nothing unless it {@link GrowsBudget
+     * keeps its own}.
      */
     private final Map<Project, Map<WorkKey, Integer>> budgetSteps = new IdentityHashMap<>();
 
     /** Every priced-out failure of {@code item} earns it a step, journalled with the new budget. */
     public void pricedOut(WorkItem item, BrainContext ctx) {
         Project owner = ownerOf(item);
+        if (owner instanceof GrowsBudget own) {
+            budgetGrew(item, own.pricedOut(item), ctx);
+            return;
+        }
         if (!(owner instanceof PartyProject party)) {
             return;
         }
-        party.keyOf(item).ifPresent(key -> {
-            int steps = budgetSteps.computeIfAbsent(owner, project -> new java.util.HashMap<>())
-                    .merge(key, 1, (was, one) -> Math.min(WorkToleranceCurve.MAX_STEPS, was + one));
-            ctx.journal().record(Category.PROJECT, item.describe(), "priced out — its budget grows to "
-                    + Math.round(WorkToleranceCurve.tolerance(item.priority(), steps)) + " blocks");
-        });
+        party.keyOf(item).ifPresent(key -> budgetGrew(item,
+                budgetSteps.computeIfAbsent(owner, project -> new java.util.HashMap<>())
+                        .merge(key, 1, (was, one) -> Math.min(WorkToleranceCurve.MAX_STEPS, was + one)),
+                ctx));
+    }
+
+    private static void budgetGrew(WorkItem item, int steps, BrainContext ctx) {
+        ctx.journal().record(Category.PROJECT, item.describe(), "priced out — its budget grows to "
+                + Math.round(WorkToleranceCurve.tolerance(item.priority(), steps)) + " blocks");
     }
 
     public int budgetSteps(WorkItem item) {
         Project owner = ownerOf(item);
+        if (owner instanceof GrowsBudget own) {
+            return own.budgetSteps(item);
+        }
         if (!(owner instanceof PartyProject party)) {
             return 0;
         }

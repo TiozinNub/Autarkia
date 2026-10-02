@@ -233,4 +233,18 @@ class AutarkiaTaskCodecsTest {
         var back = assertInstanceOf(dev.luizloyola.autarkia.core.builder.LayPiece.class, roundTrip(piece));
         assertEquals(piece.steps(), back.steps());
     }
+
+    @Test
+    void aPersonalBoardWritesDownItsBudgetAndBackOff() {
+        var saved = java.util.List.of(new dev.luizloyola.autarkia.core.board.KeepStocked.State(1200, 37, 4, false, false, 2, 3));
+        var json = AutarkiaTasks.PERSONAL_BOARD.encodeStart(JsonOps.INSTANCE, saved).getOrThrow();
+        assertEquals(saved, AutarkiaTasks.PERSONAL_BOARD.parse(JsonOps.INSTANCE, json).getOrThrow());
+
+        var before = json.getAsJsonArray().get(0).getAsJsonObject();
+        before.remove("steps");
+        before.remove("failures");
+        assertEquals(java.util.List.of(new dev.luizloyola.autarkia.core.board.KeepStocked.State(1200, 37, 4, false, false)),
+                AutarkiaTasks.PERSONAL_BOARD.parse(JsonOps.INSTANCE, json).getOrThrow(),
+                "a body saved before either starts from none");
+    }
 }

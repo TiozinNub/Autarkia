@@ -189,7 +189,16 @@ public final class KeepStocked implements StandingProject {
      * description and the project re-mints on restore. A SHARED board will need durable work-item
      * identity.
      */
-    public record State(int cooldown, int clock, int beats, boolean wanting, boolean claimed) {
+    public record State(int cooldown, int clock, int beats, boolean wanting, boolean claimed,
+                        int steps, int failures) {
+
+        /**
+         * No budget earned and no failures in a row — all a want keeps but {@link ToolUp}, whose
+         * {@code steps} are {@link GrowsBudget its budget} and {@code failures} its back-off.
+         */
+        public State(int cooldown, int clock, int beats, boolean wanting, boolean claimed) {
+            this(cooldown, clock, beats, wanting, claimed, 0, 0);
+        }
     }
 
     @Override

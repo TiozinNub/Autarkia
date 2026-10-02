@@ -243,4 +243,113 @@ class ToolUpTest {
         assertTrue(held.isPresent(), "the arbiter is pointed back at the same errand");
         assertEquals(board.snapshot(), reloaded.snapshot());
     }
+
+    // ── a tool priced out ────────────────────────────────────────────────────────────────────
+
+    /** Ticks to the next beat that offers the pickaxe, and claims it. */
+    private WorkItem nextClaimed() {
+        for (int i = 0; i < 10_000; i++) {
+            Optional<WorkItem> offer = work.bestAvailable(ctx);
+            if (offer.isPresent()) {
+                work.claimed(offer.get(), ctx);
+                return offer.get();
+            }
+            ticks(1);
+        }
+        throw new AssertionError("never offered again");
+    }
+
+    /** The arbiter's side of a run whose one way costs {@code price}: made if the budget reaches it. */
+    private double attempt(double price) {
+        WorkItem item = nextClaimed();
+        double budget = dev.luizloyola.anima.core.brain.WorkToleranceCurve.tolerance(item.priority(),
+                work.budgetSteps(item));
+        if (budget < price) {
+            work.pricedOut(item, ctx);
+            work.failed(item, ctx);
+        } else {
+            ctx.inventory().add(tool("minecraft:wooden_pickaxe"));
+            work.completed(item, ctx);
+        }
+        return budget;
+    }
+
+    private boolean journalled(String detail) {
+        return ctx.journal().recent(Integer.MAX_VALUE).stream().anyMatch(e -> e.detail().equals(detail));
+    }
+
+    @Test
+    void aToolPricedOutEarnsBudgetUntilItIsMade() {
+        // Stone 120 walk-blocks off: past a lacking tool's 77, under the curve's cap.
+        List<Double> budgets = new java.util.ArrayList<>();
+        while (ctx.inventory().count("minecraft:wooden_pickaxe") == 0) {
+            budgets.add(attempt(120));
+            assertTrue(budgets.size() < 10, "made before the budget stops growing");
+        }
+        assertEquals(4, budgets.size(), "77, 93, 109, then 125 affords it: " + budgets);
+        for (int i = 1; i < budgets.size(); i++) {
+            assertTrue(budgets.get(i) > budgets.get(i - 1), "the budget grows: " + budgets);
+        }
+        assertTrue(journalled("priced out — its budget grows to 93 blocks"));
+        KeepStocked.State made = pickaxes.snapshot();
+        assertEquals(0, made.steps(), "a tool made ends the steps");
+        assertEquals(0, made.failures(), "and the failures in a row");
+    }
+
+    @Test
+    void theRepostBacksOffAndResetsOnceTooledUp() {
+        List<Integer> waits = new java.util.ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            WorkItem item = nextClaimed();
+            work.failed(item, ctx);
+            waits.add(pickaxes.snapshot().cooldown());
+        }
+        assertEquals(List.of(600, 1200, 2400, 4800, 4800), waits);
+        assertTrue(journalled("unclaimed, retry cooldown (4800t)"));
+
+        ticks(4800);
+        ctx.inventory().add(tool("minecraft:wooden_pickaxe"));
+        ticks(ToolUp.CHECK_INTERVAL);
+        ctx.inventory().clear();
+        work.failed(nextClaimed(), ctx);
+        assertEquals(600, pickaxes.snapshot().cooldown(), "a tool had starts the wait over");
+    }
+
+    @Test
+    void anAgeReachedStartsTheNewToolAfresh() {
+        attempt(120);
+        attempt(120);
+        assertEquals(2, pickaxes.snapshot().steps());
+        stoneReached = true;
+        ticks(ToolUp.CHECK_INTERVAL);
+        KeepStocked.State now = pickaxes.snapshot();
+        assertEquals(List.of(0, 0, 0), List.of(now.steps(), now.failures(), now.cooldown()),
+                "a stone pickaxe's price is not a wooden one's");
+    }
+
+    @Test
+    void aRestartKeepsTheBudgetAndTheBackOff() {
+        attempt(140);
+        attempt(140);
+        List<KeepStocked.State> saved = board.snapshot();
+        assertEquals(2, saved.get(0).steps());
+        assertEquals(2, saved.get(0).failures());
+
+        PersonalBoard reloaded = new PersonalBoard();
+        ToolUp fresh = new ToolUp(Tools.Family.PICKAXE);
+        reloaded.post(fresh);
+        reloaded.restore(saved, me, ctx.now());
+        assertEquals(saved, reloaded.snapshot());
+        WorkSource again = reloaded.viewFor(() -> me);
+        WorkItem item = null;
+        for (int i = 0; i < 10_000 && item == null; i++) {
+            item = again.bestAvailable(ctx).orElse(null);
+            reloaded.tick(ctx);
+            ctx.advance(1);
+        }
+        assertEquals(2, again.budgetSteps(item), "the budget earned before the restart");
+        again.claimed(item, ctx);
+        again.failed(item, ctx);
+        assertEquals(2400, fresh.snapshot().cooldown(), "the third failure in a row");
+    }
 }
