@@ -5,6 +5,7 @@ import dev.luizloyola.anima.core.brain.act.BlockBreaker;
 import dev.luizloyola.anima.core.brain.act.BreakState;
 import dev.luizloyola.anima.core.brain.act.LeanState;
 import dev.luizloyola.anima.core.brain.act.Leaner;
+import dev.luizloyola.anima.core.brain.act.MoveFailure;
 import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.act.Mover;
 import dev.luizloyola.anima.core.brain.act.RiseState;
@@ -15,6 +16,7 @@ import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Drop;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.CompoundTask;
 import dev.luizloyola.anima.core.brain.task.PrimitiveTask;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.inv.Inventory;
@@ -295,6 +297,15 @@ public final class FellTree implements PrimitiveTask {
     /** Why the chop is giving up, set by whichever part found out; read by the stage in hand. */
     private @Nullable String stuck;
     private @Nullable String failure;
+    /** Sides whose walk stranded short of blocks and was handed over for them: each once. */
+    private final Set<Pos> crossed = new LinkedHashSet<>();
+    /** Blocks the last such walk would have crossed with, until {@link BlocksToFell} goes for them. */
+    private int blocksWanted;
+    /** Whether a {@link BlocksToFell} holds this chop, so a hand-over ends a stretch of it. */
+    private boolean wrapped;
+    /** How the chop itself ended, for the wrapper: a hand-over is neither. */
+    private boolean felled;
+    private boolean over;
     private int ticks;
     /** The last summary journalled — a re-read that says the same thing says nothing. */
     private String told = "";
@@ -311,10 +322,18 @@ public final class FellTree implements PrimitiveTask {
      */
     public static FellTree restored(Pos anchor, Stage stage, Optional<Pos> chosen,
                                     Optional<Climb> climb) {
+        return restored(anchor, stage, chosen, climb, List.of(), 0);
+    }
+
+    /** The same, with the sides already handed over for blocks and what the last one wanted. */
+    public static FellTree restored(Pos anchor, Stage stage, Optional<Pos> chosen,
+                                    Optional<Climb> climb, List<Pos> crossed, int blocksWanted) {
         FellTree task = new FellTree(anchor);
         task.chosen = chosen.orElse(null);
         task.climb = climb.orElse(null);
         task.stage = task.climb == null ? Stage.APPROACH : stage;
+        task.crossed.addAll(crossed);
+        task.blocksWanted = blocksWanted;
         return task;
     }
 
@@ -341,6 +360,36 @@ public final class FellTree implements PrimitiveTask {
         return Optional.ofNullable(climb);
     }
 
+    /** The ring cells of the sides handed over for blocks, in the order they were. */
+    public List<Pos> crossed() {
+        return List.copyOf(crossed);
+    }
+
+    /** Blocks to get before this chop walks on; zero when none are wanted. */
+    public int blocksWanted() {
+        return blocksWanted;
+    }
+
+    /** {@link #blocksWanted}, taken: whoever calls this goes for them. */
+    int takeBlocksWanted() {
+        int wanted = blocksWanted;
+        blocksWanted = 0;
+        return wanted;
+    }
+
+    void wrapped() {
+        wrapped = true;
+    }
+
+    boolean felled() {
+        return felled;
+    }
+
+    /** Whether the chop ended on its own account, felled or given up. */
+    boolean over() {
+        return over;
+    }
+
     /** {@code "walking to W (2)"}, {@code "opening the trunk"}, {@code "rising to -57 (-59)"}, … */
     public String phase() {
         return phase;
@@ -348,6 +397,15 @@ public final class FellTree implements PrimitiveTask {
 
     @Override
     public TaskStatus tick(BrainContext ctx) {
+        TaskStatus status = step(ctx);
+        if (status != TaskStatus.RUNNING && blocksWanted == 0) {
+            over = true;
+            felled = status == TaskStatus.SUCCESS;
+        }
+        return status;
+    }
+
+    private TaskStatus step(BrainContext ctx) {
         // The ground around the stump matters until the tree is down; a sweep re-reading it
         // journals a fresh bearing from every cell it walks through. Read before the claim, which
         // is keyed on the base this finds.
@@ -413,6 +471,10 @@ public final class FellTree implements PrimitiveTask {
             plan(ctx, side, rise == 1);
             return stage == Stage.OPEN ? open(ctx) : clear(ctx);
         }
+        int shortBy = shortOfBlocks(ctx, side);
+        if (shortBy > 0) {
+            return handOver(ctx, side, shortBy);
+        }
         boolean cleared = breakNext(ctx, side.leaves(), LEAVES_ONLY);
         boolean there = walk(ctx, side.feet());
         if (stuck != null) {
@@ -430,6 +492,45 @@ public final class FellTree implements PrimitiveTask {
         phase = "at the tree, " + label + " side";
         plan(ctx, side, side.jumpRoom());
         return TaskStatus.RUNNING;
+    }
+
+    /**
+     * How many blocks the walk to this side has just stranded for want of, the first time it does;
+     * else zero. Read before {@link #walk} counts it as one more failed walk.
+     */
+    private int shortOfBlocks(BrainContext ctx, Approach.Side side) {
+        Mover mover = ctx.actuators().mover();
+        if (!side.feet().equals(walkingTo) || ticks == walkOrderedAt || arrived || walkRetryAt != 0
+                || crossed.contains(side.cell()) || mover.state() != MoveState.FAILED
+                || mover.failure() != MoveFailure.STRANDED) {
+            return 0;
+        }
+        return mover.blocksNeeded();
+    }
+
+    /**
+     * The walk to this side stranded where blocks would have crossed: go and get them, as a
+     * {@code GoTo} would ({@link BlocksToFell}), and walk the side again with them. The claim is let
+     * go meanwhile and taken again on the way back.
+     */
+    private TaskStatus handOver(BrainContext ctx, Approach.Side side, int blocks) {
+        crossed.add(side.cell());
+        blocksWanted = blocks;
+        failure = "stranded — needs " + blocks + " blocks to get to the "
+                + approach.bearing(side.cell()) + " side";
+        phase = failure;
+        say(ctx, failure);
+        release(ctx);
+        walkFailures = 0;
+        // Failing is what asks for the stand-in; inside one it would only fail the wrapper's round
+        // and keep the reason, so this stretch ends instead and the next round goes for the blocks.
+        return wrapped ? TaskStatus.SUCCESS : TaskStatus.FAILED;
+    }
+
+    /** {@link #handOver}'s cure, asked of a chop that handed over outside a {@link BlocksToFell}. */
+    @Override
+    public @Nullable CompoundTask standIn(BrainContext ctx) {
+        return blocksWanted > 0 && !wrapped ? new BlocksToFell(this) : null;
     }
 
     /**

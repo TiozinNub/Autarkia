@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.autarkia.core.tree.BlocksToFell;
 import dev.luizloyola.autarkia.core.tree.FellTree;
 
 import com.mojang.serialization.JsonOps;
@@ -197,6 +198,21 @@ class AutarkiaTaskCodecsTest {
         assertEquals(FellTree.Stage.OPEN, back.stage());
         assertEquals(chosen, back.chosen().orElseThrow());
         assertEquals(climb, back.climb().orElseThrow());
+    }
+
+    /** A chop gone for blocks keeps the sides it handed over, and what the last one wanted. */
+    @Test
+    void aChopGoneForBlocksComesBackGoneForThem() {
+        var anchor = new Pos(208, -60, 0);
+        var south = new Pos(208, -60, 1);
+        var fell = FellTree.restored(anchor, FellTree.Stage.APPROACH, java.util.Optional.of(south),
+                java.util.Optional.empty(), java.util.List.of(south), 6);
+
+        var back = assertInstanceOf(BlocksToFell.class, roundTrip(new BlocksToFell(fell)));
+        assertEquals(anchor, back.fell().anchor());
+        assertEquals(java.util.List.of(south), back.fell().crossed());
+        assertEquals(6, back.fell().blocksWanted());
+        assertEquals(south, back.fell().chosen().orElseThrow());
     }
 
     /** A save from before the chop had stages reads as a fresh approach, not a dead server. */

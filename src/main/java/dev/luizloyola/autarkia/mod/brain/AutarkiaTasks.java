@@ -16,6 +16,7 @@ import dev.luizloyola.autarkia.core.board.KeepStocked;
 import dev.luizloyola.autarkia.core.board.KeepTool;
 import dev.luizloyola.autarkia.core.board.Tools;
 import dev.luizloyola.autarkia.core.patch.PickPatch;
+import dev.luizloyola.autarkia.core.tree.BlocksToFell;
 import dev.luizloyola.autarkia.core.tree.Climb;
 import dev.luizloyola.autarkia.core.tree.FellTree;
 import dev.luizloyola.autarkia.mod.board.PartyBoardCodecs;
@@ -84,8 +85,18 @@ public final class AutarkiaTasks {
                         STAGE.optionalFieldOf("stage", FellTree.Stage.APPROACH)
                                 .forGetter(FellTree::stage),
                         POS.optionalFieldOf("chosen").forGetter(FellTree::chosen),
-                        CLIMB.optionalFieldOf("climb").forGetter(FellTree::climb)
+                        CLIMB.optionalFieldOf("climb").forGetter(FellTree::climb),
+                        POS.listOf().optionalFieldOf("crossed", List.of()).forGetter(FellTree::crossed),
+                        Codec.INT.optionalFieldOf("blocks_wanted", 0).forGetter(FellTree::blocksWanted)
                 ).apply(t, FellTree::restored)));
+        TaskCodecs.register("autarkia:blocks_to_fell", BlocksToFell.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        TaskCodecs.codec().comapFlatMap(task -> task instanceof FellTree fell
+                                        ? DataResult.success(fell)
+                                        : DataResult.<FellTree>error(() -> "blocks_to_fell holds a chop"),
+                                fell -> (dev.luizloyola.anima.core.brain.task.Task) fell)
+                                .fieldOf("fell").forGetter(BlocksToFell::fell)
+                ).apply(t, BlocksToFell::new)));
         // A wrapper carries a TASK, so it leans on the dispatch codec the same way anima:try does;
         // the per-key lookup happens at parse time, which is what makes the recursion legal.
         //

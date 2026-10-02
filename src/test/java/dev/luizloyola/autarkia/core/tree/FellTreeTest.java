@@ -16,15 +16,21 @@ import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Drop;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.BlocksToCross;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
+import dev.luizloyola.anima.core.brain.task.TaskExecutor;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.Entry;
+import dev.luizloyola.anima.core.nav.WalkLevel;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -114,10 +120,22 @@ class FellTreeTest {
      * one, and an item within a cell of the body is picked up.
      */
     private TaskStatus drive(FellTree task, int maxTicks) {
+        return drive(() -> task.tick(ctx), maxTicks);
+    }
+
+    /** {@link #drive(FellTree, int)} through an executor, to the end of its plan. */
+    private TaskStatus drive(TaskExecutor executor, int maxTicks) {
+        return drive(() -> {
+            executor.tick(ctx);
+            return executor.isBusy() ? TaskStatus.RUNNING : executor.lastStatus().orElseThrow();
+        }, maxTicks);
+    }
+
+    private TaskStatus drive(Supplier<TaskStatus> step, int maxTicks) {
         TaskStatus status = TaskStatus.RUNNING;
         for (int i = 0; i < maxTicks && status == TaskStatus.RUNNING; i++) {
             int walks = ctx.mover.moveToCalls;
-            status = task.tick(ctx);
+            status = step.get();
             if (ctx.breaker.state == BreakState.BREAKING) {
                 Pos t = ctx.breaker.target;
                 ctx.percepts.blocks.clear(t.x(), t.y(), t.z());
@@ -1850,6 +1868,127 @@ class FellTreeTest {
         assertEquals(BreakState.IDLE, ctx.breaker.state);
         assertEquals(MoveState.IDLE, ctx.mover.state());
         assertTrue(ctx.mover.stopCalls >= 1);
+    }
+
+    // ── a walk short of blocks (Luiz, 2026-10-02) ─────────────────────────────────────────────
+
+    private static final String DIRT = "minecraft:dirt";
+
+    /** The legs give the walk up where {@code blocks} would have crossed. */
+    private void strandShort(int blocks) {
+        ctx.mover.setState(MoveState.FAILED);
+        ctx.mover.setFailure(MoveFailure.STRANDED);
+        ctx.mover.blocksNeeded = blocks;
+    }
+
+    private void calmLegs() {
+        ctx.mover.setState(MoveState.IDLE);
+        ctx.mover.setFailure(MoveFailure.NONE);
+        ctx.mover.blocksNeeded = 0;
+    }
+
+    /** The chop under an executor, its walk to the south stranded six blocks short. */
+    private TaskExecutor handedOverAtTheSouth() {
+        BlocksToCross.layableBy(DIRT::equals);
+        ctx.walksMayBuild = true;
+        trunk();
+        standSouth();
+        TaskExecutor executor = new TaskExecutor();
+        executor.run(task, ctx);
+        executor.tick(ctx);
+        assertEquals(SOUTH, lastOrder());
+        strandShort(6);
+        executor.tick(ctx);
+        return executor;
+    }
+
+    /** Ticks on with every walk stranding {@code blocks} short, until the plan ends. */
+    private void strandEveryWalk(TaskExecutor executor, int blocks) {
+        for (int i = 0; executor.isBusy() && i < 3_000; i++) {
+            strandShort(blocks);
+            executor.tick(ctx);
+            ctx.percepts.time++;
+        }
+    }
+
+    @AfterEach
+    void blocksMatchNothing() {
+        BlocksToCross.layableBy(id -> false);
+    }
+
+    @Test
+    void aSideStrandedShortOfBlocksGetsThemAndIsWalkedAgainBuilding() {
+        TaskExecutor executor = handedOverAtTheSouth();
+        assertTrue(executor.isBusy(), "the chop stood down for the blocks, it did not fail");
+        assertEquals(List.of("stranded — needs 6 blocks to get to the S side"), said("stranded"));
+        assertTrue(executor.describe().contains("get blocks to cross to the tree at " + at(ANCHOR)),
+                executor.describe());
+        assertEquals(List.of(SOUTH), task.crossed());
+
+        calmLegs();
+        int walks = ctx.mover.moveToCalls;
+        ctx.percepts.inventory.add(ItemStack.of(DIRT, 6, 64));
+        executor.tick(ctx);
+        assertEquals(walks + 1, ctx.mover.moveToCalls, "with six in hand it walks the side again");
+        assertEquals(SOUTH, lastOrder());
+        assertEquals(WalkLevel.BUILD, ctx.mover.lastLevel);
+
+        ctx.percepts.position = SOUTH;
+        ctx.mover.setState(MoveState.ARRIVED);
+        pack(4);
+        assertEquals(TaskStatus.SUCCESS, drive(executor, 400));
+        assertColumnGone(7);
+    }
+
+    @Test
+    void aSideHandsOverOnceAndThenTheTreeIsStruckAsBefore() {
+        onlyTheSouth();
+        remember(ANCHOR);
+        ctx.percepts.inventory.add(ItemStack.of(DIRT, 6, 64));
+        TaskExecutor executor = handedOverAtTheSouth();
+        strandEveryWalk(executor, 6);
+
+        assertEquals(Optional.of(TaskStatus.FAILED), executor.lastStatus());
+        assertEquals(1, said("stranded — needs").size(), "once for the side");
+        assertEquals(1, said("the S side is no good").size());
+        assertFalse(new ChopForLogs(Stock.LOGS).applicable(ctx), "struck: nothing else to offer");
+    }
+
+    @Test
+    void eachSideHandsOverItsOwnTime() {
+        ctx.percepts.inventory.add(ItemStack.of(DIRT, 6, 64));
+        TaskExecutor executor = handedOverAtTheSouth();
+        strandEveryWalk(executor, 6);
+
+        assertEquals(Optional.of(TaskStatus.FAILED), executor.lastStatus());
+        assertEquals(List.of("stranded — needs 6 blocks to get to the S side",
+                "stranded — needs 6 blocks to get to the E side",
+                "stranded — needs 6 blocks to get to the W side",
+                "stranded — needs 6 blocks to get to the N side"), said("stranded — needs"));
+        assertTrue(executor.failureReason().orElse("").contains("4 side(s) given up on"),
+                executor.failureReason().orElse(""));
+    }
+
+    @Test
+    void blocksThatCannotBeHadLeaveTheChopToGoOnWithout() {
+        TaskExecutor executor = handedOverAtTheSouth();
+        calmLegs();
+        int walks = ctx.mover.moveToCalls;
+        executor.tick(ctx);
+        executor.tick(ctx);
+        assertTrue(executor.isBusy());
+        assertEquals(walks + 1, ctx.mover.moveToCalls, "the side walked again, empty-handed");
+        assertEquals(SOUTH, lastOrder());
+    }
+
+    @Test
+    void theWrappersChopIsTheOneThatRuns() {
+        BlocksToFell wrapper = new BlocksToFell(task);
+        List<dev.luizloyola.anima.core.brain.task.Task> restored = new ArrayList<>(List.of(
+                new dev.luizloyola.anima.core.brain.task.ObtainItem(BlocksToCross.SPEC, 6),
+                new FellTree(ANCHOR)));
+        wrapper.rejoin(restored);
+        assertTrue(restored.get(1) == task);
     }
 
     private static String at(Pos cell) {
