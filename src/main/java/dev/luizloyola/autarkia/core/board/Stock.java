@@ -101,9 +101,11 @@ public final class Stock {
     /**
      * Vanilla's {@code #minecraft:dirt} as items — what tops a filled column so it reads as natural
      * ground again. Only the mod layer can read the tag, so it installs the rule ({@link #dirtBy}).
+     * Not named {@code dirt}: that is the name {@code ItemSpec.anyOf} gives the dirt item alone, and
+     * whichever registered first took the other's place.
      */
     public static final ItemSpec DIRT =
-            ItemSpec.register(new ItemSpec("dirt", id -> Stock.dirt.test(id)));
+            ItemSpec.register(new ItemSpec("any_dirt", id -> Stock.dirt.test(id)));
 
     private static volatile java.util.function.Predicate<String> dirt = id -> false;
 
