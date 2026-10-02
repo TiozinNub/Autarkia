@@ -629,6 +629,27 @@ class GatherTest {
     }
 
     @Test
+    void theFirstTripHomeReportsWhatItLeftThere() {
+        Gather project = posted(32);
+        WorkItem trip = claims(project, KYLE, new BoardBrainContext());
+        BoardBrainContext ctx = depositor(CHEST, 32);
+
+        // The arbiter reads this for its "completed" line before the board hears of the trip.
+        assertEquals("32/32 at home", trip.progress(ctx));
+        assertEquals(0, project.stored(), "and reading it wrote nothing");
+    }
+
+    @Test
+    void aWorkerWhoForgotAChestDoesNotEmptyItInTheReadout() {
+        Gather project = posted(64);
+        WorkItem first = claims(project, KYLE, new BoardBrainContext());
+        project.completed(first, depositor(CHEST, 32));
+        WorkItem second = claims(project, SAM, new BoardBrainContext());
+
+        assertEquals("32/64 at home", second.progress(member()));
+    }
+
+    @Test
     void aWorkerStillCarryingWhenItClosesIsNotTheProjectsProblem() {
         Gather project = posted(64);
         WorkItem hers = claims(project, KYLE, packWithRoomFor(32));

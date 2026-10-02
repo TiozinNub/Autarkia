@@ -450,13 +450,19 @@ public final class Gather implements PartyProject {
      * itself never reads a mind.
      */
     private void learnChests(BrainContext ctx) {
+        chests.addAll(chestsKnownTo(ctx));
+    }
+
+    private Set<Pos> chestsKnownTo(BrainContext ctx) {
+        Set<Pos> known = new LinkedHashSet<>();
         ctx.depot().ifPresent(site -> {
             for (PoiMemory memory : Store.ours(ctx)) {
                 if (site.holds(memory.anchor())) {
-                    chests.add(memory.anchor());
+                    known.add(memory.anchor());
                 }
             }
         });
+        return known;
     }
 
     /**
@@ -494,6 +500,26 @@ public final class Gather implements PartyProject {
                 }
             });
         }
+    }
+
+    /**
+     * {@link #stored()} with this worker's newer looks laid over it, written nowhere. The arbiter
+     * writes a trip's "completed" line before {@link #completed} reads the chests, so the first trip
+     * home read 0 (2026-10-01). A chest the worker forgot keeps the ledger's count here, not
+     * {@link #readChests}'s zero: a readout mid-trip should not drop.
+     */
+    private int storedAsSeenBy(BrainContext ctx) {
+        Set<Pos> all = new LinkedHashSet<>(chests);
+        all.addAll(chestsKnownTo(ctx));
+        int total = 0;
+        for (Pos chest : all) {
+            Reading held = readings.get(chest);
+            total += ctx.knowledge().insideOf(chest)
+                    .filter(seen -> held == null || seen.seenTick() >= held.at())
+                    .map(seen -> seen.count(spec))
+                    .orElse(held == null ? 0 : held.count());
+        }
+        return total;
     }
 
     // ── what a member must keep hold of ──────────────────────────────────────────────────────
@@ -704,7 +730,7 @@ public final class Gather implements PartyProject {
 
         @Override
         public String progress(BrainContext ctx) {
-            return stored() + "/" + target + " at home";
+            return storedAsSeenBy(ctx) + "/" + target + " at home";
         }
     }
 
