@@ -63,6 +63,14 @@ class FoodLineTest {
             return OptionalInt.of(spec == RawFood.SPEC ? raw : spec == CharcoalLine.CHARCOAL ? charcoal : items);
         }
 
+        /** Of {@link #raw}, how much is in a store with no side to stand at. */
+        int walledIn = 0;
+
+        @Override
+        public OptionalInt takeableAtHome(ItemSpec spec) {
+            return spec == RawFood.SPEC ? OptionalInt.of(raw - walledIn) : storedAtHome(spec);
+        }
+
         @Override
         public Optional<Pos> placeAtHome(PoiKind kind) {
             return kind == Campfire.POI ? campfire : Optional.empty();
@@ -189,6 +197,23 @@ class FoodLineTest {
         assertTrue(FoodLine.INSTANCE.givesWay(gather, FOOD, party),
                 "a gather kept the hunters out after meat cooking at HOME could make good (2026-10-01)");
         assertFalse(FoodLine.INSTANCE.givesWay(new Cook(FIRE, 12, 0.4), FOOD, party), "a cook never does");
+    }
+
+    @Test
+    void rawFoodNoWalkCanTakeIsNotCooked() {
+        // Forest, 2026-10-02: Hannah's one mutton, in the base's first chest once a second was set
+        // down on its one open side. The cook was claimed and failed on it 336 times.
+        party.raw = 1;
+        party.walledIn = 1;
+        party.campfire = Optional.of(FIRE);
+
+        Gather gather = assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4),
+                "a cook for it could only fail; the line sends for food it can use");
+        assertFalse(FoodLine.INSTANCE.givesWay(gather, FOOD, party), "nor does that gather give way to it");
+
+        party.raw = 3;
+        assertEquals(2, assertInstanceOf(Cook.class, FoodLine.INSTANCE.post(FOOD, party, 0.4)).count(),
+                "what can be taken is cooked, and only that much");
     }
 
     @Test

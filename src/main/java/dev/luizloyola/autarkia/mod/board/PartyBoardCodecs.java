@@ -302,7 +302,9 @@ public final class PartyBoardCodecs {
                     Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.Cook.State::done),
                     GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(dev.luizloyola.autarkia.core.board.Cook.State::cooldowns),
-                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Cook.State::lastTick)
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(dev.luizloyola.autarkia.core.board.Cook.State::lastTick),
+                    SET_UP_FAILURES.listOf().optionalFieldOf("failures", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.Cook.State::failures)
             ).apply(project, dev.luizloyola.autarkia.core.board.Cook.State::new));
 
     /**

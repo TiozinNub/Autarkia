@@ -2,6 +2,8 @@ package dev.luizloyola.autarkia.mod.direction;
 
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.compat.sense.LevelProbe;
+import dev.luizloyola.anima.core.brain.task.EnsureTable;
 import dev.luizloyola.anima.core.brain.task.Food;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
@@ -150,17 +152,22 @@ final class HomeView implements PartyView {
 
     @Override
     public OptionalInt storedAtHome(ItemSpec spec) {
-        return readHome(spec::matches, StoreContents.Reading::matching);
+        return readHome(spec::matches, StoreContents.Reading::matching, false);
+    }
+
+    @Override
+    public OptionalInt takeableAtHome(ItemSpec spec) {
+        return readHome(spec::matches, StoreContents.Reading::matching, true);
     }
 
     @Override
     public OptionalInt foodAtHome() {
-        return readHome(Food.SPEC::matches, StoreContents.Reading::nutrition);
+        return readHome(Food.SPEC::matches, StoreContents.Reading::nutrition, false);
     }
 
     @Override
     public OptionalInt freeSlotsAtHome() {
-        return readHome(id -> false, StoreContents.Reading::free);
+        return readHome(id -> false, StoreContents.Reading::free, false);
     }
 
     @Override
@@ -189,17 +196,25 @@ final class HomeView implements PartyView {
                 .anyMatch(row -> row.kind().equals(kind) && row.at().equals(at))).orElse(false);
     }
 
-    /** One number summed over HOME's stores, or empty when any of them could not be read. */
-    private OptionalInt readHome(Predicate<String> ids, ToIntFunction<StoreContents.Reading> part) {
+    /**
+     * One number summed over HOME's stores, or empty when any of them could not be read; with
+     * {@code reachable}, only those with a side a body could stand at, by the take's own test.
+     */
+    private OptionalInt readHome(Predicate<String> ids, ToIntFunction<StoreContents.Reading> part,
+                                 boolean reachable) {
         Home home = progress.home();
         if (home == null) {
             return OptionalInt.empty();
         }
         SortedSet<ChunkKey> area = area();
         Set<BlockPos> counted = new HashSet<>();
+        LevelProbe probe = reachable ? new LevelProbe(server.overworld()) : null;
         int total = 0;
         for (PlaceRow row : PlacesData.get(server).places().rows()) {
             if (!row.kind().equals(Store.POI) || !party.equals(row.party()) || !atHome(area, row.at())) {
+                continue;
+            }
+            if (probe != null && !EnsureTable.WalkToKnown.hasOpenSide(row.at(), probe)) {
                 continue;
             }
             Optional<StoreContents.Reading> read = StoreContents.read(server.overworld(), row.at(), ids,

@@ -37,6 +37,8 @@ public final class Cook implements PartyProject {
 
     private boolean done;
     private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
+    /** Each member's failures in a row, which double its wait as {@link SetUp}'s do. */
+    private final Map<AgentId, Integer> failures = new LinkedHashMap<>();
     private long lastTick;
     private final CookItem item = new CookItem();
 
@@ -93,15 +95,17 @@ public final class Cook implements PartyProject {
             ctx.journal().record(Category.PROJECT, describe(), "withdrawn — no campfire there");
             return;
         }
-        // Eaten, or carried off by another member: the line judges HOME again rather than this
-        // being offered for ever.
+        // Eaten, carried off by another member, or in a store no walk reaches: the line judges
+        // HOME again, by the same reach, rather than this being offered for ever.
         if (ctx.percepts().inventory().count(RawFood.SPEC.matcher()) == 0
                 && !TakeFromStore.seenHolding(ctx, RawFood.SPEC)) {
             done = true;
             ctx.journal().record(Category.PROJECT, describe(), "withdrawn — nothing raw left to cook");
             return;
         }
-        cooldownUntil.put(who, ctx.percepts().time() + SetUp.FAIL_COOLDOWN);
+        long wait = SetUp.cooldownAfter(failures.merge(who, 1, Integer::sum));
+        cooldownUntil.put(who, ctx.percepts().time() + wait);
+        ctx.journal().record(Category.PROJECT, describe(), "tries again in " + wait + "t");
     }
 
     /** Whether the party no longer has a campfire at {@code at}, as {@link Fire#furnaceGone}. */
@@ -117,7 +121,9 @@ public final class Cook implements PartyProject {
     public ProjectState snapshot() {
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
-        return new State(at, count, priority, done, List.copyOf(cooldowns), lastTick);
+        List<SetUp.Failures> failed = new ArrayList<>();
+        failures.forEach((who, n) -> failed.add(new SetUp.Failures(who, n)));
+        return new State(at, count, priority, done, List.copyOf(cooldowns), lastTick, List.copyOf(failed));
     }
 
     @Override
@@ -166,7 +172,14 @@ public final class Cook implements PartyProject {
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
     public record State(Pos at, int count, double priority, boolean done, List<Gather.Cooldown> cooldowns,
-                        long lastTick) implements ProjectState {
+                        long lastTick, List<SetUp.Failures> failures) implements ProjectState {
+
+        /** A state saved before failures were counted: each member starts from one wait. */
+        public State(Pos at, int count, double priority, boolean done, List<Gather.Cooldown> cooldowns,
+                     long lastTick) {
+            this(at, count, priority, done, cooldowns, lastTick, List.of());
+        }
+
         @Override
         public String type() {
             return "cook";
@@ -178,6 +191,9 @@ public final class Cook implements PartyProject {
         project.done = state.done();
         for (Gather.Cooldown cooldown : state.cooldowns()) {
             project.cooldownUntil.put(cooldown.who(), cooldown.retryAfter());
+        }
+        for (SetUp.Failures failed : state.failures()) {
+            project.failures.put(failed.who(), failed.count());
         }
         project.lastTick = state.lastTick() >= 0 ? state.lastTick() : now;
         return Optional.of(project);

@@ -60,6 +60,16 @@ public interface PartyView {
     OptionalInt storedAtHome(ItemSpec spec);
 
     /**
+     * {@link #storedAtHome}, counting only the stores a body could take it out of — those with a
+     * side to stand at, by the take's own test. What work that fetches from HOME is posted on: a
+     * cook was posted for a mutton in a walled-in chest and failed on it 336 times (forest,
+     * 2026-10-02). All of it for a test view that never walls a store in.
+     */
+    default OptionalInt takeableAtHome(ItemSpec spec) {
+        return storedAtHome(spec);
+    }
+
+    /**
      * How many hunger points of food, raw or ready, HOME's stores hold between them — what the food is
      * worth eaten, not how many items. Empty when one of them could not be read this beat, or there
      * is no HOME.

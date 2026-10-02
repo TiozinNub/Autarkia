@@ -90,7 +90,7 @@ public final class FoodLine implements DirectionLine {
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
         if (canCook(party)) {
-            int raw = party.storedAtHome(RawFood.SPEC).orElse(0);
+            int raw = party.takeableAtHome(RawFood.SPEC).orElse(0);
             Optional<Pos> fire = party.placeAtHome(Campfire.POI);
             if (fire.isPresent()) {
                 return new Cook(fire.get(), raw, priority);
@@ -103,9 +103,13 @@ public final class FoodLine implements DirectionLine {
         return new Gather(Food.SPEC, Math.max(1, target), priority, party.party(), CarrySplit.INSTANCE);
     }
 
-    /** HOME holds raw food, and a campfire to cook it on or the charcoal to make one. */
+    /**
+     * HOME holds raw food a cook could take out, and a campfire to cook it on or the charcoal to
+     * make one. {@link Cook} withdraws itself by the same reach, so neither posts what the other
+     * gives up on.
+     */
     private static boolean canCook(PartyView party) {
-        return party.storedAtHome(RawFood.SPEC).orElse(0) > 0
+        return party.takeableAtHome(RawFood.SPEC).orElse(0) > 0
                 && (party.placeAtHome(Campfire.POI).isPresent()
                         || party.storedAtHome(CharcoalLine.CHARCOAL).orElse(0) > 0 && party.spot().isPresent());
     }

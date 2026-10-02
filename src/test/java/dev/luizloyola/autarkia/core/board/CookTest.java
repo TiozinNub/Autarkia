@@ -108,6 +108,60 @@ class CookTest {
         assertTrue(cook.finished(), "a job for twelve was offered for ever once the beef had gone (2026-10-01)");
     }
 
+    /** Forest, 2026-10-02: a chest boxed in by the base's workbench, furnace, a second chest and the hill. */
+    private void walledInStoreHolding(Pos at, String id, int count) {
+        ctx.claim(dev.luizloyola.anima.core.store.Store.POI, at);
+        ctx.knowledge.sawInside(at, List.of(dev.luizloyola.anima.core.inv.ItemStack.of(id, count, 64)), 0L,
+                dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge.maxPerKind(ctx.profile()));
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                ctx.percepts.blocks.set(at.x() + dx, at.y(), at.z() + dz,
+                        dev.luizloyola.anima.core.brain.knowledge.BlockKind.OTHER);
+            }
+        }
+        ctx.percepts.blocks.set(at.x(), at.y(), at.z(), dev.luizloyola.anima.core.store.Store.BLOCK);
+    }
+
+    @Test
+    void rawFoodOnlyInAStoreNoWalkReachesEndsIt() {
+        ctx.claim(Campfire.POI, fire);
+        walledInStoreHolding(new Pos(-8, 64, 0), "minecraft:beef", 1);
+        Cook cook = new Cook(fire, 1, 0.4);
+
+        cook.failed(cook.open().get(0), ctx.self, ctx);
+
+        assertTrue(cook.finished(), "Hannah's cook was claimed and failed on a walled-in mutton 336 times");
+    }
+
+    @Test
+    void failuresInARowDoubleTheWait() {
+        ctx.claim(Campfire.POI, fire);
+        ctx.percepts.inventory.set(0, dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:beef", 4, 64));
+        Cook cook = new Cook(fire, 4, 0.4);
+        WorkItem item = cook.open().get(0);
+
+        cook.failed(item, ctx.self, ctx);
+        ctx.percepts.time = SetUp.FAIL_COOLDOWN;
+        cook.tick(ctx.percepts.time);
+        assertTrue(cook.offerableTo(item, ctx.self, ctx), "one wait after one failure");
+
+        cook.failed(item, ctx.self, ctx);
+        ctx.percepts.time += SetUp.FAIL_COOLDOWN;
+        cook.tick(ctx.percepts.time);
+        assertFalse(cook.offerableTo(item, ctx.self, ctx), "twice that after a second, not every beat");
+
+        Cook restored = Cook.restore((Cook.State) cook.snapshot(), ctx.percepts.time).orElseThrow();
+        restored.failed(restored.open().get(0), ctx.self, ctx);
+        long third = ctx.percepts.time;
+        ctx.percepts.time += 3 * SetUp.FAIL_COOLDOWN;
+        restored.tick(ctx.percepts.time);
+        assertFalse(restored.offerableTo(restored.open().get(0), ctx.self, ctx),
+                "a restart keeps the count: the third waits four, from " + third);
+        ctx.percepts.time = third + 4 * SetUp.FAIL_COOLDOWN;
+        restored.tick(ctx.percepts.time);
+        assertTrue(restored.offerableTo(restored.open().get(0), ctx.self, ctx));
+    }
+
     @Test
     void aFailureWhileTheCampfireStandsRestsOnlyThatMember() {
         ctx.claim(Campfire.POI, fire);

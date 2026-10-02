@@ -366,10 +366,11 @@ class PartyBoardCodecsTest {
     }
 
     @Test
-    void aCookComesBackWithItsCampfireCountAndCooldowns() {
+    void aCookComesBackWithItsCampfireCountCooldownsAndFailures() {
         AgentId alice = AgentId.random();
         dev.luizloyola.autarkia.core.board.Cook.State before = new dev.luizloyola.autarkia.core.board.Cook.State(
-                new Pos(3, 64, 2), 12, 0.4, false, List.of(new Gather.Cooldown(alice, 900L)), 450L);
+                new Pos(3, 64, 2), 12, 0.4, false, List.of(new Gather.Cooldown(alice, 900L)), 450L,
+                List.of(new SetUp.Failures(alice, 3)));
 
         assertEquals(before, roundTrip(new PartyBoard.Row(before, List.of())).project());
     }
