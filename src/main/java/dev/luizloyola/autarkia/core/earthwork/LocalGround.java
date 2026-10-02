@@ -36,7 +36,7 @@ public final class LocalGround {
      * The mean ground over the square round the column, the column itself left out so a bump does not
      * raise its own bar; NaN when any of it is out of reach.
      */
-    double around(int x, int z) {
+    public double around(int x, int z) {
         long sum = 0;
         int count = 0;
         for (int dx = -radius; dx <= radius; dx++) {

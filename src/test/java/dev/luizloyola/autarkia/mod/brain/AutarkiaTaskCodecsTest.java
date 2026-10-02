@@ -122,6 +122,19 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void aLastResortMiningTripSurvivesTheFile() {
+        var before = new dev.luizloyola.autarkia.core.patch.MinePatch(new Pos(4, 63, 4),
+                new dev.luizloyola.anima.core.brain.knowledge.Region(new Pos(2, 63, 2), new Pos(6, 64, 6)),
+                Stock.FURNACE_STONE, true);
+
+        var after = assertInstanceOf(dev.luizloyola.autarkia.core.patch.MinePatch.class, roundTrip(before));
+
+        assertEquals(before.anchor(), after.anchor());
+        assertEquals(before.bounds(), after.bounds());
+        assertTrue(after.lastResort(), "a restart must not turn the layer back into nothing to mine");
+    }
+
+    @Test
     void aGatheringErrandSurvivesTheFile() {
         // A declared spec travels as its registry NAME: its matcher is a lambda, and a trip
         // reloaded against the wrong one would fetch nothing and never satisfy.

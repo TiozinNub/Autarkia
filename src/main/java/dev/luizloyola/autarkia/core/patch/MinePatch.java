@@ -26,7 +26,8 @@ import java.util.Optional;
 /**
  * Mine one patch of exposed stone from the top, looked at on arrival: the stone showing at the top
  * of its column within the patch and standing above the ground round it, nearest first, at most
- * {@link #MOST}. After the first block it
+ * {@link #MOST}. With {@link #lastResort} and nothing standing, the patch's top layer instead
+ * ({@link #layer}). After the first block it
  * checks that something a furnace takes came of it ({@link Yield}): a patch of granite or tuff is
  * rested for {@link #BARREN_TICKS} at the cost of one block, since the sense sees all overworld
  * stone as one kind.
@@ -39,12 +40,19 @@ public final class MinePatch implements CompoundTask {
     private final Pos anchor;
     private final Region bounds;
     private final ItemSpec wanted;
+    private final boolean lastResort;
     private final List<Method> methods = List.of(new Mine());
 
     public MinePatch(Pos anchor, Region bounds, ItemSpec wanted) {
+        this(anchor, bounds, wanted, false);
+    }
+
+    /** @param lastResort no known patch in sight had stone standing, so the top layer may be taken */
+    public MinePatch(Pos anchor, Region bounds, ItemSpec wanted, boolean lastResort) {
         this.anchor = anchor;
         this.bounds = bounds;
         this.wanted = wanted;
+        this.lastResort = lastResort;
     }
 
     public Pos anchor() {
@@ -59,6 +67,10 @@ public final class MinePatch implements CompoundTask {
         return wanted;
     }
 
+    public boolean lastResort() {
+        return lastResort;
+    }
+
     @Override
     public List<Method> methods() {
         return methods;
@@ -71,7 +83,10 @@ public final class MinePatch implements CompoundTask {
 
     /** The exposed stone in the patch, in the order a body standing here would walk it. */
     List<Pos> exposed(BrainContext ctx) {
-        return exposed(ctx.percepts().blocks(), bounds, ctx.percepts().position());
+        List<Pos> standing = exposed(ctx.percepts().blocks(), bounds, ctx.percepts().position());
+        return standing.isEmpty() && lastResort
+                ? layer(ctx.percepts().blocks(), bounds, ctx.percepts().position())
+                : standing;
     }
 
     /**
@@ -81,15 +96,55 @@ public final class MinePatch implements CompoundTask {
     static List<Pos> exposed(BlockProbe probe, Region bounds, Pos from) {
         LocalGround local = new LocalGround(probe);
         List<Pos> found = new ArrayList<>();
+        for (Pos top : tops(probe, bounds)) {
+            if (local.standsAbove(top.x(), top.z(), top.y())) {
+                found.add(top);
+            }
+        }
+        return walk(found, from);
+    }
+
+    /**
+     * The last resort when no patch has stone standing (Luiz, 2026-10-02): the top stone of the
+     * patch's highest layer, one block a column, so a pass never leaves the patch more than one
+     * below its surface. The cells left least sunk under the ground round them go first, at most
+     * {@link #MOST}.
+     */
+    static List<Pos> layer(BlockProbe probe, Region bounds, Pos from) {
+        List<Pos> tops = tops(probe, bounds);
+        int surface = Integer.MIN_VALUE;
+        for (Pos top : tops) {
+            surface = Math.max(surface, top.y());
+        }
+        LocalGround local = new LocalGround(probe);
+        List<Pos> layer = new ArrayList<>();
+        for (Pos top : tops) {
+            if (top.y() == surface && !Double.isNaN(local.around(top.x(), top.z()))) {
+                layer.add(top);
+            }
+        }
+        // One height throughout, so the lowest ground round a cell is the least sunk once it is cut.
+        layer.sort(java.util.Comparator.comparingDouble(top -> local.around(top.x(), top.z())));
+        return walk(new ArrayList<>(layer.subList(0, Math.min(MOST, layer.size()))), from);
+    }
+
+    /** The stone showing at the top of each column in and just round the patch. */
+    private static List<Pos> tops(BlockProbe probe, Region bounds) {
+        List<Pos> found = new ArrayList<>();
         for (int x = bounds.min().x() - 1; x <= bounds.max().x() + 1; x++) {
             for (int z = bounds.min().z() - 1; z <= bounds.max().z() + 1; z++) {
                 int top = probe.topY(x, z);
                 if (top >= bounds.min().y() - 2 && top <= bounds.max().y() + 2
-                        && probe.at(x, top, z) == Landmarks.STONE && local.standsAbove(x, z, top)) {
+                        && probe.at(x, top, z) == Landmarks.STONE) {
                     found.add(new Pos(x, top, z));
                 }
             }
         }
+        return found;
+    }
+
+    /** Nearest first from {@code from}, then from each cell taken, at most {@link #MOST}. */
+    private static List<Pos> walk(List<Pos> found, Pos from) {
         List<Pos> walk = new ArrayList<>();
         while (!found.isEmpty() && walk.size() < MOST) {
             Pos next = found.get(0);

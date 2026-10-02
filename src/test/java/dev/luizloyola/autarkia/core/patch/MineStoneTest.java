@@ -13,11 +13,13 @@ import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.BreakBlock;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
+import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.List;
@@ -26,7 +28,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Stone from where it shows: a remembered patch, a pickaxe first, and a barren patch rested. */
+/**
+ * Stone from where it shows: a remembered patch, a pickaxe first, a barren patch rested, and a flat
+ * patch's top layer when nothing stands.
+ */
 class MineStoneTest {
 
     private final FakeContext ctx = new FakeContext();
@@ -148,17 +153,102 @@ class MineStoneTest {
     }
 
     @Test
-    void flatStoneIsNeverQuarried() {
+    void flatStoneHasNothingStanding() {
         for (int x = 6; x <= 18; x++) {
             for (int z = -6; z <= 6; z++) {
                 stone(x, z, G);
             }
         }
-        ctx.knowledge.note(new PoiMemory(Landmarks.STONE_POI, patch,
-                new Region(new Pos(10, G, -2), new Pos(14, G + 1, 2)), 25, false, 0L),
-                AgentKnowledge.maxPerKind(ctx.profile()));
         assertEquals(List.of(), exposed());
-        assertFalse(forStone().applicable(ctx), "a stone field in sight with nothing standing is passed by");
+    }
+
+    /** A stone field one above the flat, wide enough that the patch's own edges are not bumps. */
+    private void flatField(int midX) {
+        for (int x = midX - 9; x <= midX + 9; x++) {
+            for (int z = -9; z <= 9; z++) {
+                stone(x, z, G + 1);
+            }
+        }
+    }
+
+    private void rememberAt(Pos anchor) {
+        ctx.knowledge.note(new PoiMemory(Landmarks.STONE_POI, anchor,
+                new Region(new Pos(anchor.x() - 2, G + 1, -2), new Pos(anchor.x() + 2, G + 1, 2)), 25, false, 0L),
+                AgentKnowledge.maxPerKind(ctx.profile()));
+    }
+
+    private MinePatch tripOf(List<Task> plan) {
+        return assertInstanceOf(MinePatch.class, plan.get(plan.size() - 1));
+    }
+
+    private static List<Pos> broken(List<Task> steps) {
+        return steps.stream().filter(Try.class::isInstance).map(t -> ((Try) t).attempt())
+                .filter(BreakBlock.class::isInstance).map(t -> ((BreakBlock) t).target()).toList();
+    }
+
+    @Test
+    void withOnlyFlatPatchesTheLastResortMinesTheirTopLayer() {
+        flatField(12);
+        rememberAt(patch);
+        ctx.percepts.inventory.set(0, ItemStack.of("minecraft:wooden_pickaxe", 1, 1));
+
+        assertTrue(forStone().applicable(ctx), "the furnace's stone is not left for want of a bump");
+        MinePatch trip = tripOf(forStone().decompose(ctx));
+        assertTrue(trip.lastResort());
+        List<Task> steps = trip.methods().get(0).decompose(ctx);
+        List<Pos> cells = broken(steps);
+
+        assertEquals(MinePatch.MOST, cells.size(), "eight stone: a furnace's worth");
+        assertTrue(steps.stream().anyMatch(MinePatch.Yield.class::isInstance));
+        ctx.percepts.inventory.set(1, ItemStack.of("minecraft:cobblestone", 1, 8));
+        assertEquals(TaskStatus.SUCCESS, new MinePatch.Yield(patch, Stock.FURNACE_STONE, 0).tick(ctx));
+    }
+
+    @Test
+    void aLastResortPassNeverDigsBelowOneLayer() {
+        flatField(12);
+        // Three of the nine columns round a one-column patch were cut by an earlier pass.
+        ctx.percepts.blocks.clear(11, G + 1, 0);
+        ctx.percepts.blocks.clear(12, G + 1, 1);
+        ctx.percepts.blocks.clear(13, G + 1, -1);
+        MinePatch trip = new MinePatch(patch, new Region(new Pos(12, G + 1, 0), new Pos(12, G + 1, 0)),
+                Stock.FURNACE_STONE, true);
+
+        List<Pos> cells = trip.exposed(ctx);
+
+        assertEquals(6, cells.size());
+        assertTrue(cells.stream().allMatch(c -> c.y() == G + 1), "the surface only: " + cells);
+        assertEquals(cells.size(), cells.stream().map(c -> c.x() * 1000 + c.z()).distinct().count(),
+                "one block a column");
+    }
+
+    @Test
+    void theLastResortCutsWhatIsLeftLeastSunkFirst() {
+        flatField(12);
+        // A dip beside the patch: the cells on its rim stand nearest to proud of the ground round them.
+        for (int z = -9; z <= 9; z++) {
+            ctx.percepts.blocks.clear(8, G + 1, z);
+            ctx.percepts.blocks.clear(7, G + 1, z);
+        }
+        List<Pos> cells = MinePatch.layer(ctx.percepts.blocks, new Region(new Pos(10, G + 1, -3),
+                new Pos(14, G + 1, 3)), new Pos(20, 64, 0));
+        assertTrue(cells.stream().allMatch(c -> c.x() <= 10), "the rim first: " + cells);
+    }
+
+    @Test
+    void aPatchWithStoneStandingWinsOverTheLastResort() {
+        flatField(12);
+        rememberAt(patch);
+        Pos bump = new Pos(-40, G + 2, 0);
+        stone(-40, 0, G + 2);
+        ctx.knowledge.note(new PoiMemory(Landmarks.STONE_POI, bump,
+                new Region(new Pos(-42, G, -2), new Pos(-38, G + 2, 2)), 3, false, 0L),
+                AgentKnowledge.maxPerKind(ctx.profile()));
+
+        MinePatch trip = tripOf(forStone().decompose(ctx));
+
+        assertEquals(bump, trip.anchor(), "the bump, though the flat field is nearer");
+        assertFalse(trip.lastResort());
     }
 
     @Test

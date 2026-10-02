@@ -22,6 +22,8 @@ import java.util.Optional;
 /**
  * Stone from where it shows at the surface (directions spec, decision 19): the nearest remembered
  * patch of exposed stone standing above the ground round it, mined from the top with a pickaxe.
+ * With none standing, the most worthwhile flat patch gives its top layer instead ({@link
+ * MinePatch#layer}): a furnace waits on eight stone, and a forest may show no other.
  * Registered under {@link Stock#FURNACE_STONE}; in the Wood Age the gate lets it be reached only
  * inside the furnace's craft chain. A pickaxe comes first when none is carried, since stone mined bare-handed
  * drops nothing. Every trip rests the patch, as foraging does; one that gave nothing a furnace takes
@@ -43,7 +45,11 @@ public final class MineStone implements Method {
     @Ephemeral("goes with the memo")
     private Pos chosenFrom;
     @Ephemeral("goes with the memo")
-    private Optional<PoiMemory> chosen = Optional.empty();
+    private Optional<Choice> chosen = Optional.empty();
+
+    /** A patch to go to, and whether its top layer may be taken when nothing there stands. */
+    private record Choice(PoiMemory patch, boolean lastResort) {
+    }
 
     public MineStone(ItemSpec wanted) {
         this.wanted = wanted;
@@ -57,13 +63,15 @@ public final class MineStone implements Method {
     @Override
     public double estimateCost(BrainContext ctx) {
         return nearestPatch(ctx)
-                .map(patch -> Math.sqrt(TreeShape.horizontalDistSq(patch.anchor(), ctx.percepts().position())) + WORK)
+                .map(choice -> Math.sqrt(TreeShape.horizontalDistSq(choice.patch().anchor(),
+                        ctx.percepts().position())) + WORK)
                 .orElse(Double.POSITIVE_INFINITY);
     }
 
     @Override
     public List<Task> decompose(BrainContext ctx) {
-        PoiMemory patch = nearestPatch(ctx).orElseThrow();
+        Choice choice = nearestPatch(ctx).orElseThrow();
+        PoiMemory patch = choice.patch();
         ctx.knowledge().avoid(Landmarks.STONE_POI, patch.anchor(), ctx.percepts().time() + REST_TICKS);
         chosenAt = Long.MIN_VALUE;
         List<Task> steps = new ArrayList<>();
@@ -72,7 +80,7 @@ public final class MineStone implements Method {
         }
         Pos beside = EnsureTable.WalkToKnown.standableBeside(patch.anchor(), ctx);
         steps.add(new GoTo(beside.x(), beside.y(), beside.z()));
-        steps.add(new MinePatch(patch.anchor(), patch.bounds(), wanted));
+        steps.add(new MinePatch(patch.anchor(), patch.bounds(), wanted, choice.lastResort()));
         return steps;
     }
 
@@ -81,8 +89,11 @@ public final class MineStone implements Method {
         return "mine stone for " + wanted.name();
     }
 
-    /** The nearest unrested patch worth the walk; asked three times a choice, so read once a tick. */
-    private Optional<PoiMemory> nearestPatch(BrainContext ctx) {
+    /**
+     * The nearest unrested patch worth the walk, else the last resort; asked three times a choice,
+     * so read once a tick.
+     */
+    private Optional<Choice> nearestPatch(BrainContext ctx) {
         Pos here = ctx.percepts().position();
         long now = ctx.percepts().time();
         if (now == chosenAt && here.equals(chosenFrom)) {
@@ -96,19 +107,43 @@ public final class MineStone implements Method {
         }
         open.sort(java.util.Comparator.comparingLong(patch -> TreeShape.horizontalDistSq(patch.anchor(), here)));
         BlockProbe probe = ctx.percepts().blocks();
-        chosen = open.stream().filter(patch -> worthMining(probe, patch, here)).findFirst();
+        PoiMemory worth = null;
+        boolean standing = false;
+        for (PoiMemory patch : open) {
+            boolean inSight = probe.groundY(patch.anchor().x(), patch.anchor().z()) != Integer.MIN_VALUE;
+            boolean stands = inSight && !MinePatch.exposed(probe, patch.bounds(), here).isEmpty();
+            standing |= stands;
+            if (worth == null && (!inSight || stands)) {
+                worth = patch;
+            }
+            if (worth != null && standing) {
+                break;
+            }
+        }
+        // A patch out of sight cannot be judged from here and is judged on arrival, its layer taken
+        // if it is flat and no patch in sight has stone standing.
+        chosen = worth != null ? Optional.of(new Choice(worth, !standing))
+                : lastResort(probe, open, here).map(patch -> new Choice(patch, true));
         chosenAt = now;
         chosenFrom = here;
         return chosen;
     }
 
     /**
-     * Whether some of the patch stands above the ground round it. One out of sight cannot be judged
-     * from here and is judged on arrival; one in sight with nothing standing is passed by, so flat
-     * stone is never quarried.
+     * With no patch standing above the ground round it, the one whose top layer costs the least walk
+     * a block: near, and with stone to spare.
      */
-    static boolean worthMining(BlockProbe probe, PoiMemory patch, Pos here) {
-        return probe.groundY(patch.anchor().x(), patch.anchor().z()) == Integer.MIN_VALUE
-                || !MinePatch.exposed(probe, patch.bounds(), here).isEmpty();
+    private static Optional<PoiMemory> lastResort(BlockProbe probe, List<PoiMemory> open, Pos here) {
+        PoiMemory best = null;
+        double bestWalk = Double.POSITIVE_INFINITY;
+        for (PoiMemory patch : open) {
+            int cells = MinePatch.layer(probe, patch.bounds(), here).size();
+            double walk = Math.sqrt(TreeShape.horizontalDistSq(patch.anchor(), here)) / Math.max(cells, 1);
+            if (cells > 0 && walk < bestWalk) {
+                best = patch;
+                bestWalk = walk;
+            }
+        }
+        return Optional.ofNullable(best);
     }
 }

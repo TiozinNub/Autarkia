@@ -110,9 +110,11 @@ public final class AutarkiaTasks {
                         POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::anchor),
                         POS.fieldOf("min").forGetter(m -> m.bounds().min()),
                         POS.fieldOf("max").forGetter(m -> m.bounds().max()),
-                        ITEM_SPEC.fieldOf("wanted").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::wanted)
-                ).apply(t, (anchor, min, max, wanted) -> new dev.luizloyola.autarkia.core.patch.MinePatch(
-                        anchor, new dev.luizloyola.anima.core.brain.knowledge.Region(min, max), wanted))));
+                        ITEM_SPEC.fieldOf("wanted").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::wanted),
+                        Codec.BOOL.optionalFieldOf("last_resort", false)
+                                .forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::lastResort)
+                ).apply(t, (anchor, min, max, wanted, lastResort) -> new dev.luizloyola.autarkia.core.patch.MinePatch(
+                        anchor, new dev.luizloyola.anima.core.brain.knowledge.Region(min, max), wanted, lastResort))));
         TaskCodecs.register("autarkia:cut_cells", dev.luizloyola.autarkia.core.earthwork.CutCells.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.listOf().fieldOf("cells").forGetter(dev.luizloyola.autarkia.core.earthwork.CutCells::cells)
