@@ -32,7 +32,8 @@ public final class PersonSpecies {
             .set(ProfileAspect.FIGHT_START_RATIO, 1.5)
             .set(ProfileAspect.FIGHT_QUIT_RATIO, 1.0)
             .set(ProfileAspect.FIGHT_CORNERED_RATIO, 0.5)
-            .set(ProfileAspect.FIGHT_BLAST_LINE, 0.3)
+            // At 0.3 the blast still caught a body running from it, for 8.34 (2026-10-01).
+            .set(ProfileAspect.FIGHT_BLAST_LINE, 0.2)
             // A blow lands 5 ticks after a target comes into reach, counted while the weapon
             // charges, with the last 2 always after it has: a player's timing, not a machine's.
             // A skill will set these (Luiz, 2026-09-28).
