@@ -4,12 +4,14 @@ import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.history.Deed;
+import dev.luizloyola.anima.core.brain.task.AtOneBench;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.Category;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,6 +29,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Shaped after {@link KeepStocked}: a beat every {@link #CHECK_INTERVAL} ticks after a warm-up,
  * withdrawn only while unclaimed, and a failure sits out {@link #FAIL_COOLDOWN}.
+ *
+ * <p>One item per family, so a tool that cannot be made does not hold up the others; but the one
+ * claimed makes every family posted beside it too, {@link AtOneBench at one bench}, so the table
+ * goes down once for them all (in-world, 2026-10-01: three put-downs in 3 s).
  */
 public final class ToolUp implements StandingProject {
 
@@ -46,6 +52,8 @@ public final class ToolUp implements StandingProject {
     static final int OLD_KEPT = 9;
 
     private final Tools.Family family;
+    /** The families posted together, this one among them — whose open items a run takes along. */
+    private List<ToolUp> bench = List.of(this);
 
     private @Nullable WorkItem open;
     private boolean claimed;
@@ -64,7 +72,9 @@ public final class ToolUp implements StandingProject {
 
     /** All four, in the hotbar's order. */
     public static List<ToolUp> settlerDefaults() {
-        return java.util.Arrays.stream(Tools.Family.values()).map(ToolUp::new).toList();
+        List<ToolUp> all = java.util.Arrays.stream(Tools.Family.values()).map(ToolUp::new).toList();
+        all.forEach(one -> one.bench = all);
+        return all;
     }
 
     @Override
@@ -102,8 +112,7 @@ public final class ToolUp implements StandingProject {
             open = new ToolItem();
             ctx.journal().record(Category.PROJECT, open.describe(), "posted");
         } else if (open != null && !claimed && covered) {
-            ctx.journal().record(Category.PROJECT, open.describe(), "withdrawn (tooled up)");
-            open = null;
+            withdraw(ctx);
         }
         if (open != null && !claimed) {
             priority = hasTier(pack) ? SPARE : LACKING;
@@ -121,6 +130,17 @@ public final class ToolUp implements StandingProject {
                 worn++;
             }
         }
+    }
+
+    private void withdraw(BrainContext ctx) {
+        ctx.journal().record(Category.PROJECT, open.describe(), "withdrawn (tooled up)");
+        open = null;
+    }
+
+    /** Covered at the tier the age names now, not the one the last beat read. */
+    private boolean coveredNow(BrainContext ctx) {
+        return Tools.covered(family, Tools.currentTier(family, ctx.gate()), ctx.percepts().inventory(),
+                ctx.profile().d(ProfileAspect.HANDLING_SPARE_BELOW));
     }
 
     /** A tool at the tier or better, worn or not. */
@@ -154,9 +174,24 @@ public final class ToolUp implements StandingProject {
         claimed = true;
     }
 
+    /**
+     * A run at one bench lets a tool it could not make go, so success is judged here: this family
+     * still short sits out the cooldown as a failure would, and a family the run made is withdrawn
+     * rather than claimed for nothing.
+     */
     @Override
     public void completed(WorkItem item, BrainContext ctx) {
         clear();
+        if (!coveredNow(ctx)) {
+            ctx.journal().record(Category.PROJECT, item.describe(),
+                    "not made, retry cooldown (" + FAIL_COOLDOWN + "t)");
+            cooldown = FAIL_COOLDOWN;
+        }
+        for (ToolUp other : bench) {
+            if (other != this && other.open != null && !other.claimed && other.coveredNow(ctx)) {
+                other.withdraw(ctx);
+            }
+        }
     }
 
     @Override
@@ -193,9 +228,17 @@ public final class ToolUp implements StandingProject {
             return priority;
         }
 
+        /** This family first, then every other one posted. */
         @Override
         public Task root() {
-            return new KeepTool(family);
+            List<Task> run = new ArrayList<>();
+            run.add(new KeepTool(family));
+            for (ToolUp other : bench) {
+                if (other != ToolUp.this && other.open != null) {
+                    run.add(new KeepTool(other.family));
+                }
+            }
+            return run.size() == 1 ? run.get(0) : new AtOneBench(run);
         }
 
         @Override

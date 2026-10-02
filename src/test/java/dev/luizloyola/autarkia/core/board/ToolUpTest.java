@@ -8,7 +8,13 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
 import dev.luizloyola.anima.core.brain.gate.Act;
 import dev.luizloyola.anima.core.brain.gate.Gate;
+import dev.luizloyola.anima.core.brain.task.AtOneBench;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
+import dev.luizloyola.anima.core.brain.task.Task;
+import dev.luizloyola.anima.core.brain.task.TaskExecutor;
+import dev.luizloyola.anima.core.brain.task.TaskStatus;
+import dev.luizloyola.anima.core.craft.CraftRecipe;
+import dev.luizloyola.anima.core.craft.Recipes;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.inv.Surplus;
@@ -62,6 +68,7 @@ class ToolUpTest {
         Tools.install(null);
         Gate.install(Gate.OPEN);
         Wear.install(null);
+        Recipes.reset();
     }
 
     private void ticks(int n) {
@@ -155,6 +162,71 @@ class ToolUpTest {
         assertEquals(1, cargo.size(), "one sound tool and the worn one at the tier, every old one");
         String spare = pack.get(cargo.get(0)).id();
         assertTrue(Set.of("minecraft:stone_pickaxe", "minecraft:iron_pickaxe").contains(spare));
+    }
+
+    /** A settler's four, on a board of their own, ticked to the first beat that posts. */
+    private PersonalBoard allFourPosted() {
+        PersonalBoard four = new PersonalBoard();
+        ToolUp.settlerDefaults().forEach(four::post);
+        for (int i = 0; i < ToolUp.CHECK_INTERVAL * 2; i++) {
+            four.tick(ctx);
+            ctx.advance(1);
+        }
+        return four;
+    }
+
+    private static List<Tools.Family> families(Task run) {
+        return ((AtOneBench) run).work().stream().map(task -> ((KeepTool) task).family()).toList();
+    }
+
+    @Test
+    void everyFamilyLackingIsMadeInTheOneRun() {
+        WorkSource four = allFourPosted().viewFor(() -> me);
+        WorkItem item = four.bestAvailable(ctx).orElseThrow();
+        four.claimed(item, ctx);
+
+        List<Tools.Family> run = families(item.root());
+        assertEquals(Set.of(Tools.Family.values()), Set.copyOf(run));
+        assertEquals(4, run.size());
+        assertTrue(item.describe().endsWith(run.get(0).tool()), "the claimed family leads");
+    }
+
+    @Test
+    void aToolThatCannotBeMadeDoesNotHoldUpTheOthers() {
+        // In-hand, so the run needs no world: what is under test is who gets made.
+        List<CraftRecipe> book = java.util.stream.Stream.of("pickaxe", "axe", "shovel")
+                .map(tool -> new CraftRecipe("minecraft:wooden_" + tool,
+                        ItemStack.of("minecraft:wooden_" + tool, 1, 1),
+                        List.of(new CraftRecipe.Ingredient(Set.of("minecraft:oak_planks"), 3),
+                                new CraftRecipe.Ingredient(Set.of("minecraft:stick"), 2)), false))
+                .toList();
+        Recipes.provide(spec -> book.stream().filter(r -> spec.matches(r.outputId())).toList());
+        ctx.inventory().add(ItemStack.of("minecraft:oak_planks", 9, 64));
+        ctx.inventory().add(ItemStack.of("minecraft:stick", 6, 64));
+        PersonalBoard own = allFourPosted();
+        WorkSource four = own.viewFor(() -> me);
+        WorkItem item = four.bestAvailable(ctx).orElseThrow();
+        four.claimed(item, ctx);
+        assertTrue(item.describe().endsWith("sword"), "the one with no recipe is claimed first");
+
+        TaskExecutor executor = new TaskExecutor();
+        executor.run(item.root(), ctx);
+        for (int tick = 0; tick < 200 && executor.isBusy(); tick++) {
+            ctx.advance(1);
+            executor.tick(ctx);
+        }
+        assertEquals(Optional.of(TaskStatus.SUCCESS), executor.lastStatus());
+        for (String tool : List.of("pickaxe", "axe", "shovel")) {
+            assertEquals(1, ctx.inventory().count("minecraft:wooden_" + tool), tool);
+        }
+
+        four.completed(item, ctx);
+        assertTrue(four.bestAvailable(ctx).isEmpty(), "the three made are not offered again");
+        for (int i = 0; i < ToolUp.CHECK_INTERVAL; i++) {
+            own.tick(ctx);
+            ctx.advance(1);
+        }
+        assertTrue(four.bestAvailable(ctx).isEmpty(), "the sword sits out its cooldown");
     }
 
     @Test
