@@ -10,6 +10,7 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.mod.brain.TaskCodecs;
 import dev.luizloyola.autarkia.core.board.BringBack;
 import dev.luizloyola.autarkia.core.board.ClearStrip;
+import dev.luizloyola.autarkia.core.board.FetchSome;
 import dev.luizloyola.autarkia.core.board.GatheringErrand;
 import dev.luizloyola.autarkia.core.board.HaulingErrand;
 import dev.luizloyola.autarkia.core.board.KeepStocked;
@@ -178,6 +179,11 @@ public final class AutarkiaTasks {
                         ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),
                         Codec.INT.fieldOf("count").forGetter(BringBack::count)
                 ).apply(t, BringBack::new)));
+        TaskCodecs.register("autarkia:fetch_some", FetchSome.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        ITEM_SPEC.fieldOf("spec").forGetter(FetchSome::spec),
+                        Codec.INT.fieldOf("count").forGetter(FetchSome::count)
+                ).apply(t, FetchSome::new)));
         // A forage trip's work at the patch. Registered the day it was written, like the rest.
         TaskCodecs.register("autarkia:pick_patch", PickPatch.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(

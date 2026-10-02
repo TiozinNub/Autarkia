@@ -7,7 +7,6 @@ import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.PutItems;
 import dev.luizloyola.anima.core.brain.task.Task;
-import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.store.Store;
 import java.util.List;
@@ -77,9 +76,7 @@ public final class GatheringErrand implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
-            return List.of(new Try(new ObtainItem(spec, count, java.util.Set.of(),
-                            ObtainItem.Sources.NOT_STORES)),
-                    new BringBack(spec, count));
+            return List.of(new FetchSome(spec, count), new BringBack(spec, count));
         }
 
         @Override

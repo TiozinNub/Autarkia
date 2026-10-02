@@ -18,7 +18,6 @@ import dev.luizloyola.anima.core.brain.task.EnsureStore;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.PutItems;
 import dev.luizloyola.anima.core.brain.task.Task;
-import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemStack;
@@ -675,8 +674,8 @@ class GatherTest {
         List<Task> steps = errand.methods().get(0).decompose(new BoardBrainContext());
 
         assertEquals(2, steps.size(), "fetch it, then bring back what was got");
-        ObtainItem fetch = assertInstanceOf(ObtainItem.class,
-                assertInstanceOf(Try.class, steps.get(0)).attempt());
+        ObtainItem fetch = assertInstanceOf(ObtainItem.class, assertInstanceOf(FetchSome.class,
+                steps.get(0)).methods().get(0).decompose(new BoardBrainContext()).get(0));
         assertEquals(ObtainItem.Sources.NOT_STORES, fetch.sources(),
                 "the remainder is measured against what HOME already holds, so an errand "
                         + "allowed to take from storage would be sent to fetch the very goods it "
