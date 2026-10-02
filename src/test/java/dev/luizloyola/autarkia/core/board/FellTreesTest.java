@@ -598,6 +598,8 @@ class FellTreesTest {
 
         assertTrue(project.finished(), "nothing found and nothing left unswept is done");
         assertTrue(project.open().isEmpty());
+        assertTrue(project.describe().endsWith("done — nothing standing"),
+                "not '0 cleared', which reads as trees missed: " + project.describe());
     }
 
     @Test

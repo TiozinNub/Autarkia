@@ -482,8 +482,18 @@ public final class FellTrees implements PartyProject {
 
     private String closingLine() {
         int refused = count(TargetState.REFUSED);
-        return "done — " + count(TargetState.CLEARED) + " cleared"
-                + (refused == 0 ? "" : ", " + refused + " refused: " + refusedAnchors());
+        return done() + (refused == 0 ? "" : ", " + refused + " refused: " + refusedAnchors());
+    }
+
+    /**
+     * A box whose trees were felled for logs before its sweep came had nothing to fell, and "0
+     * cleared" read as the clearing having missed them (2026-10-01).
+     */
+    private String done() {
+        int cleared = count(TargetState.CLEARED);
+        return cleared == 0 && ledger.isEmpty()
+                ? "done — nothing standing"
+                : "done — " + cleared + " cleared";
     }
 
     // ── outcomes ─────────────────────────────────────────────────────────────────────────────
@@ -761,7 +771,7 @@ public final class FellTrees implements PartyProject {
         int refused = count(TargetState.REFUSED);
         String tail = refused == 0 ? "" : " (" + refused + " refused)";
         if (phase == Phase.DONE) {
-            return "done — " + count(TargetState.CLEARED) + " cleared" + tail;
+            return done() + tail;
         }
         if (!clearing.surveys()) {
             return "nobody can survey " + clearing.label() + " yet";
