@@ -36,6 +36,7 @@ import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.autarkia.core.person.PersonDanger;
 import dev.luizloyola.autarkia.core.person.PersonIdentity;
 import dev.luizloyola.autarkia.core.person.PersonSpecies;
+import dev.luizloyola.autarkia.core.person.PickupTally;
 import dev.luizloyola.autarkia.mod.AutarkiaMod;
 import dev.luizloyola.anima.mod.brain.BrainDriver;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
@@ -66,6 +67,7 @@ import dev.luizloyola.anima.mod.nav.Swimmer;
 import dev.luizloyola.autarkia.mod.brain.AutarkiaTasks;
 import dev.luizloyola.autarkia.mod.person.PersonAppearance;
 import dev.luizloyola.autarkia.mod.person.PersonDirectory;
+import dev.luizloyola.autarkia.mod.person.PickupCodecs;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -191,6 +193,8 @@ public class Person extends Avatar implements AgentBody {
     /** The fighting arm's charge: a reload must not cost a fighter its warmup, nor grant one. */
     private static final String TAG_STRIKE_CHARGE = "StrikeCharge";
     private static final String TAG_SETBACKS = "Setbacks";
+    /** Walk-over pickups not yet journaled — see {@link PickupTally}. */
+    private static final String TAG_PICKUPS = "Pickups";
     /** Ground this body has already surveyed, so it does not walk it all again. */
     private static final String TAG_SURVEY = "Survey";
     /** The anchor hunger is measured against, so a reload is not one free step. */
@@ -397,6 +401,7 @@ public class Person extends Avatar implements AgentBody {
      * them: a settler re-walking the doorway it was wedged in could tell a reboot had happened.
      */
     private final Setbacks setbacks = new Setbacks();
+    private final PickupTally pickups = new PickupTally();
 
     /**
      * This person's food physiology ({@link Metabolism}) — body state beside the
@@ -1302,6 +1307,10 @@ public class Person extends Avatar implements AgentBody {
     @Override
     public void die(DamageSource cause) {
         super.die(cause);
+        @Nullable String caught = this.pickups.drain();
+        if (caught != null) {
+            journal().record(Category.BODY, "pickup", caught);
+        }
         Burial.record(this, cause);
     }
 
@@ -1476,6 +1485,9 @@ public class Person extends Avatar implements AgentBody {
         if (!this.setbacks.isEmpty()) {
             output.store(TAG_SETBACKS, BrainState.SETBACKS, this.setbacks.snapshot());
         }
+        if (!this.pickups.isEmpty()) {
+            output.store(TAG_PICKUPS, PickupCodecs.TALLY, this.pickups.snapshot());
+        }
         this.poiSensor.snapshot().ifPresent(survey ->
                 output.store(TAG_SURVEY, BrainState.SURVEY, survey));
         if (!Double.isNaN(this.lastX)) {
@@ -1532,6 +1544,7 @@ public class Person extends Avatar implements AgentBody {
         input.read(TAG_STEP, BrainState.STEP).ifPresent(this.riser::restore);
         this.striker.restore(input.getIntOr(TAG_STRIKE_CHARGE, 0));
         input.read(TAG_SETBACKS, BrainState.SETBACKS).ifPresent(this.setbacks::restore);
+        input.read(TAG_PICKUPS, PickupCodecs.TALLY).ifPresent(this.pickups::restore);
         input.read(TAG_SURVEY, BrainState.SURVEY).ifPresent(this.poiSensor::restore);
         // NaN is the "never moved yet" marker the field initializer uses, and the right default:
         // the next tick anchors it wherever the body actually stands.
@@ -1581,8 +1594,8 @@ public class Person extends Avatar implements AgentBody {
      * lying there. Items {@code target}ed at a player are not special-cased — {@code ItemEntity}
      * exposes no accessor, and vanilla's own mob looting ignores it too.
      *
-     * <p>A tick's catch is journaled as one line, so a pack never fills with no trace of where it
-     * came from; nothing is held past the tick, so there is nothing to save.
+     * <p>The catch is journaled through {@link PickupTally}, one line per window, so a pack never
+     * fills with no trace of where it came from.
      */
     // The pickup sound's pitch is vanilla's own idiom, `(nextFloat() - nextFloat()) * 0.7 + 1`,
     // which spreads the pitch symmetrically around 1. Error Prone reads the two identical calls as
@@ -1593,7 +1606,7 @@ public class Person extends Avatar implements AgentBody {
         if (!isAlive()) {
             return;
         }
-        @Nullable Map<String, Integer> caught = null; // the scan runs every tick and mostly finds nothing
+        long now = level.getGameTime();
         for (ItemEntity itemEntity :
                 level.getEntitiesOfClass(ItemEntity.class, getBoundingBox().inflate(1.0, 0.5, 1.0))) {
             if (itemEntity.isRemoved() || itemEntity.hasPickUpDelay()) {
@@ -1610,10 +1623,7 @@ public class Person extends Avatar implements AgentBody {
             if (taken <= 0) {
                 continue; // inventory full — leave it on the ground
             }
-            if (caught == null) {
-                caught = new java.util.LinkedHashMap<>();
-            }
-            caught.merge(offered.id(), taken, Integer::sum);
+            this.pickups.add(offered.id(), taken, now);
             take(itemEntity, taken);   // the caught portion flies to this Person on every client
             onItemPickup(itemEntity);  // advancement hook, if a player had thrown it
             playSound(SoundEvents.ITEM_PICKUP, 0.2F,
@@ -1626,10 +1636,9 @@ public class Person extends Avatar implements AgentBody {
                 itemEntity.setItem(ground.copyWithCount(leftover.count()));
             }
         }
+        @Nullable String caught = this.pickups.due(now);
         if (caught != null) {
-            java.util.StringJoiner line = new java.util.StringJoiner(", ", "picked up ", "");
-            caught.forEach((id, count) -> line.add(count + "×" + id));
-            journal().record(Category.BODY, "pickup", line.toString());
+            journal().record(Category.BODY, "pickup", caught);
         }
     }
 
