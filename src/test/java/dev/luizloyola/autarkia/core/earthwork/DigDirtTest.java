@@ -43,6 +43,7 @@ class DigDirtTest {
     void tearDown() {
         Gate.install(Gate.OPEN);
         DigDirt.fenceBy((near, reach) -> HandsOff.NONE);
+        DigDirt.groundBy(id -> Stock.DIRT.matches(id));
         Stock.dirtBy(id -> false);
     }
 
@@ -68,6 +69,16 @@ class DigDirtTest {
         probe.set(6, G + 1, 0, BlockKind.OTHER);
         probe.set(6, G + 2, 0, BlockKind.OTHER);
         assertFalse(new DigDirt(Stock.DIRT).applicable(ctx));
+    }
+
+    /** 26.1's {@code #minecraft:dirt} holds no grass block: the mod says what ground is. */
+    @Test
+    void grassIsGroundThoughItsItemIsNoDirt() {
+        Stock.dirtBy(id -> id.equals("minecraft:dirt"));
+        mound(6, 0);
+        assertEquals(List.of(), scrape(probe, HandsOff.NONE, here), "read as an item, grass is not dirt");
+        DigDirt.groundBy(id -> id.equals("minecraft:dirt") || id.equals("minecraft:grass_block"));
+        assertEquals(List.of(new Pos(6, G + 2, 0)), scrape(probe, HandsOff.NONE, here));
     }
 
     @Test

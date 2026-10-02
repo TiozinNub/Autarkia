@@ -283,6 +283,7 @@ public class AutarkiaMod implements ModInitializer {
         Landmarks.init();
         LandmarkBlocks.register();
         dev.luizloyola.autarkia.compat.sense.PlantBlocks.register();
+        dev.luizloyola.autarkia.compat.sense.DirtGround.register();
         GrowthRules.register(Landmarks.STONE, StoneRule.INSTANCE);
         GrowthRules.register(Landmarks.BEE_NEST, NestRule.INSTANCE);
         KnowledgeViewer.particle(Landmarks.STONE_POI, ParticleTypes.CRIT);

@@ -67,6 +67,8 @@ public final class DigDirt implements Method {
     }
 
     private static volatile Fence fence = (near, reach) -> HandsOff.NONE;
+    /** Which blocks dig out as dirt; by default, whatever is dirt as an item. */
+    private static volatile java.util.function.Predicate<String> ground = id -> Stock.DIRT.matches(id);
     private static boolean registered;
 
     private static final Kit TOOLS = Kit.of(ItemCall.want(Stock.SHOVELS, 1));
@@ -92,6 +94,11 @@ public final class DigDirt implements Method {
     /** Installed once by the mod layer. */
     public static void fenceBy(Fence rule) {
         fence = rule;
+    }
+
+    /** Installed once by the mod layer: grass is ground to dig, though its item is no dirt. */
+    public static void groundBy(java.util.function.Predicate<String> rule) {
+        ground = rule;
     }
 
     /** Puts the dig on every obtain of dirt or fill; once a JVM, as the mod and the tests both call it. */
@@ -199,7 +206,7 @@ public final class DigDirt implements Method {
         }
         int g = local.ground(x, z);
         if (g == Integer.MIN_VALUE || Math.abs(g - here.y()) > RISE
-                || !Stock.DIRT.matches(probe.idAt(x, g, z)) || probe.at(x, g + 1, z) == BlockKind.WATER) {
+                || !ground.test(probe.idAt(x, g, z)) || probe.at(x, g + 1, z) == BlockKind.WATER) {
             return null;
         }
         for (int[] side : SIDES) {
