@@ -76,6 +76,11 @@ public interface PartyView {
      */
     OptionalInt foodAtHome();
 
+    /** Whether this Direction's work has got nowhere for a while — {@link PartyProgress.Stall#stuck}. */
+    default boolean stuck(DirectionId direction) {
+        return false;
+    }
+
     /** Whether the party claims a place of this kind at HOME — in its area. */
     boolean hasAtHome(PoiKind kind);
 

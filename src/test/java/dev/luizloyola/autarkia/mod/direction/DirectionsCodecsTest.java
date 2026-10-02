@@ -56,6 +56,15 @@ class DirectionsCodecsTest {
     }
 
     @Test
+    void aPartyRowKeepsItsStalls() {
+        PartyRow row = new PartyRow(new UUID(1, 2), List.of("autarkia:wood"), List.of(), Optional.empty(),
+                List.of(new DirectionsCodecs.SavedStall(new DirectionId("autarkia:wood", "food"),
+                        new dev.luizloyola.autarkia.core.direction.PartyProgress.Stall(5, 15))));
+        assertEquals(row, roundTrip(DirectionsCodecs.PARTY_ROW, row),
+                "a restart neither forgives a stuck food line nor starts its wait again");
+    }
+
+    @Test
     void aPartyWithNoHomeStaysWithout() {
         PartyRow row = new PartyRow(new UUID(3, 4), List.of("autarkia:stone"), List.of(), Optional.empty());
         assertEquals(row, roundTrip(DirectionsCodecs.PARTY_ROW, row));

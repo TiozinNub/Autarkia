@@ -146,6 +146,11 @@ final class HomeView implements PartyView {
     }
 
     @Override
+    public boolean stuck(dev.luizloyola.autarkia.core.direction.DirectionId direction) {
+        return progress.stall(direction).map(PartyProgress.Stall::stuck).orElse(false);
+    }
+
+    @Override
     public int members() {
         return members;
     }

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.Predicate;
 
 /**
  * One party's beat of layer 4: judge every Direction in force, post or withdraw its work, record
@@ -23,10 +24,10 @@ public final class Evolution {
 
     /** What one beat changed — what the host writes to its members' journals. */
     public record Outcome(List<Posted> posted, List<Withdrawn> withdrawn, List<DirectionId> completed,
-                          List<String> reached) {
+                          List<String> reached, boolean stalls) {
 
         public boolean changedProgress() {
-            return !completed.isEmpty() || !reached.isEmpty();
+            return !completed.isEmpty() || !reached.isEmpty() || stalls;
         }
     }
 
@@ -37,6 +38,13 @@ public final class Evolution {
     }
 
     public static Outcome beat(Tree tree, PartyProgress progress, PartyView view, PartyBoard board) {
+        return beat(tree, progress, view, board, project -> false);
+    }
+
+    /** @param worked whether somebody is working a project's errand right now, for {@link #watch} */
+    public static Outcome beat(Tree tree, PartyProgress progress, PartyView view, PartyBoard board,
+                               Predicate<Project> worked) {
+        boolean stalls = false;
         List<Posted> posted = new ArrayList<>();
         List<Withdrawn> withdrawn = new ArrayList<>();
         List<DirectionId> completed = new ArrayList<>();
@@ -51,6 +59,7 @@ public final class Evolution {
                     .findFirst();
             switch (status.reading()) {
                 case MET -> {
+                    stalls |= progress.stall(direction.id(), null);
                     if (progress.complete(direction.id())) {
                         completed.add(direction.id());
                     }
@@ -65,6 +74,7 @@ public final class Evolution {
                     }
                 }
                 case UNMET -> {
+                    stalls |= watch(line.get(), direction, view, progress, work.filter(worked.negate()).isPresent());
                     if (work.isPresent() && !work.get().finished()
                             && line.get().givesWay(work.get(), direction, view)) {
                         OptionalInt handle = board.handleOf(work.get());
@@ -92,7 +102,24 @@ public final class Evolution {
         }
         List<String> reached = tree.unlocked(progress.reached(), progress.checkpoints());
         reached.forEach(progress::reach);
-        return new Outcome(posted, withdrawn, completed, reached);
+        return new Outcome(posted, withdrawn, completed, reached, stalls);
+    }
+
+    /**
+     * One more beat of an unmet line's {@link PartyProgress.Stall}: any rise in its measure starts
+     * it again, and only a beat with its work posted and nobody on it counts — a cook at the fire
+     * is getting somewhere though HOME's food has gone down. Whether that changed what is kept.
+     */
+    private static boolean watch(DirectionLine line, Direction direction, PartyView view,
+                                 PartyProgress progress, boolean idleWork) {
+        OptionalInt measure = line.measure(direction, view);
+        if (measure.isEmpty()) {
+            return false;
+        }
+        int now = measure.getAsInt();
+        PartyProgress.Stall was = progress.stall(direction.id()).orElse(null);
+        int beats = was == null || now > was.last() ? 0 : was.beats() + (idleWork ? 1 : 0);
+        return progress.stall(direction.id(), new PartyProgress.Stall(now, beats));
     }
 
     /**

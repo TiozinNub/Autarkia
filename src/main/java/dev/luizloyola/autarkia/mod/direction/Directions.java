@@ -161,7 +161,10 @@ public final class Directions {
         }
         Home before = progress.home();
         PartyBoard board = PartyBoards.of(server, party);
-        Evolution.Outcome outcome = Evolution.beat(tree, progress, view(server, party, progress), board);
+        long now = server.overworld().getGameTime();
+        Evolution.Outcome outcome = Evolution.beat(tree, progress, view(server, party, progress), board,
+                project -> project instanceof dev.luizloyola.autarkia.core.board.PartyProject posted
+                        && !board.holdsOn(posted, now).isEmpty());
         JournalService journal = Journals.of(server);
         for (Evolution.Posted posted : outcome.posted()) {
             tell(journal, members, "posted #" + posted.handle() + " " + posted.project().describe()

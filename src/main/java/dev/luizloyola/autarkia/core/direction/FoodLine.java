@@ -81,15 +81,27 @@ public final class FoodLine implements DirectionLine {
                 || project instanceof Cook cook && party.placeAtHome(Campfire.POI).filter(cook.at()::equals).isPresent();
     }
 
-    /** A gather out for food while what HOME holds raw could be cooked there instead. */
+    /**
+     * A gather out for food while what HOME holds raw could be cooked there instead; and, the line
+     * stuck, a cook or a campfire for one, so the gather goes after food that is not at HOME.
+     */
     @Override
     public boolean givesWay(Project work, Direction direction, PartyView party) {
-        return work instanceof Gather && canCook(party);
+        if (work instanceof Gather) {
+            return cooking(direction, party);
+        }
+        return party.stuck(direction.id());
+    }
+
+    /** HOME's food in points: what the line's work, any of it, raises. */
+    @Override
+    public OptionalInt measure(Direction direction, PartyView party) {
+        return party.foodAtHome();
     }
 
     @Override
     public PartyProject post(Direction direction, PartyView party, double priority) {
-        if (canCook(party)) {
+        if (cooking(direction, party)) {
             int raw = party.takeableAtHome(RawFood.SPEC).orElse(0);
             Optional<Pos> fire = party.placeAtHome(Campfire.POI);
             if (fire.isPresent()) {
@@ -112,6 +124,16 @@ public final class FoodLine implements DirectionLine {
         return party.takeableAtHome(RawFood.SPEC).orElse(0) > 0
                 && (party.placeAtHome(Campfire.POI).isPresent()
                         || party.storedAtHome(CharcoalLine.CHARCOAL).orElse(0) > 0 && party.spot().isPresent());
+    }
+
+    /**
+     * Cooking is the line's way while it can cook and is not stuck: a cook that could never take
+     * the food it was posted for had the line post nothing else for hours (forest, 2026-10-02).
+     * Stuck, the line gathers — forage, else a hunt, the line's work and not a hungry body's meal
+     * (decision 17) — until food reaches HOME again.
+     */
+    private static boolean cooking(Direction direction, PartyView party) {
+        return canCook(party) && !party.stuck(direction.id());
     }
 
     private static int wanted(Direction direction, PartyView party) {

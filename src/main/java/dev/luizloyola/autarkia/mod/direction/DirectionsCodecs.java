@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.mod.territory.TerritoryData;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
 import dev.luizloyola.autarkia.core.direction.Home;
+import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.mod.board.PartyBoardCodecs;
 import java.util.List;
 import java.util.Optional;
@@ -48,8 +49,23 @@ public final class DirectionsCodecs {
 
     /** One party's climb. Node ids travel as strings: a node the table no longer names stays reached. */
     public record PartyRow(UUID party, List<String> reached, List<DirectionId> checkpoints,
-                           Optional<SavedHome> home) {
+                           Optional<SavedHome> home, List<SavedStall> stalls) {
+
+        public PartyRow(UUID party, List<String> reached, List<DirectionId> checkpoints,
+                        Optional<SavedHome> home) {
+            this(party, reached, checkpoints, home, List.of());
+        }
     }
+
+    /** One line's stall: a restart neither forgives a stuck line nor makes it wait again from nothing. */
+    public record SavedStall(DirectionId direction, PartyProgress.Stall stall) {
+    }
+
+    public static final Codec<SavedStall> STALL = RecordCodecBuilder.create(row -> row.group(
+            DIRECTION_ID.fieldOf("direction").forGetter(SavedStall::direction),
+            Codec.INT.fieldOf("last").forGetter(saved -> saved.stall().last()),
+            Codec.INT.fieldOf("beats").forGetter(saved -> saved.stall().beats())
+    ).apply(row, (direction, last, beats) -> new SavedStall(direction, new PartyProgress.Stall(last, beats))));
 
     /** What one person has reached, wherever they have been. */
     public record PersonRow(UUID agent, List<String> reached) {
@@ -60,7 +76,8 @@ public final class DirectionsCodecs {
             Codec.STRING.listOf().optionalFieldOf("reached", List.of()).forGetter(PartyRow::reached),
             DIRECTION_ID.listOf().optionalFieldOf("checkpoints", List.of())
                     .forGetter(PartyRow::checkpoints),
-            HOME.optionalFieldOf("home").forGetter(PartyRow::home)
+            HOME.optionalFieldOf("home").forGetter(PartyRow::home),
+            STALL.listOf().optionalFieldOf("stalls", List.of()).forGetter(PartyRow::stalls)
     ).apply(row, PartyRow::new));
 
     public static final Codec<PersonRow> PERSON_ROW = RecordCodecBuilder.create(row -> row.group(

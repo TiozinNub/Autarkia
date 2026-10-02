@@ -49,6 +49,14 @@ public interface DirectionLine {
     }
 
     /**
+     * A number this line's work raises as it gets somewhere — HOME's food points — for judging it
+     * stuck ({@link PartyProgress.Stall}); empty for a line that is never judged so.
+     */
+    default java.util.OptionalInt measure(Direction direction, PartyView party) {
+        return java.util.OptionalInt.empty();
+    }
+
+    /**
      * A project of this line's work closed having finished. Its ledger is gone with it, so this is
      * the line's one chance to keep what it learned. Nothing by default.
      */

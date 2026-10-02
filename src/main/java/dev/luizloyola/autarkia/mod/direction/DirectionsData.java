@@ -73,6 +73,7 @@ public final class DirectionsData extends SavedData implements StoreGuard.Checke
             row.reached().forEach(progress::reach);
             row.checkpoints().forEach(progress::complete);
             progress.home(row.home().map(DirectionsCodecs.SavedHome::home).orElse(null));
+            row.stalls().forEach(saved -> progress.stall(saved.direction(), saved.stall()));
             parties.put(PartyId.of(row.party()), progress);
             row.home().flatMap(DirectionsCodecs.SavedHome::plot)
                     .ifPresent(plot -> oldPlots.put(PartyId.of(row.party()), plot));
@@ -163,7 +164,10 @@ public final class DirectionsData extends SavedData implements StoreGuard.Checke
                 rows.add(new PartyRow(party.value(), List.copyOf(progress.reached()),
                         List.<DirectionId>copyOf(progress.checkpoints()),
                         Optional.ofNullable(progress.home())
-                                .map(home -> new DirectionsCodecs.SavedHome(home, Optional.empty()))));
+                                .map(home -> new DirectionsCodecs.SavedHome(home, Optional.empty())),
+                        progress.stalls().entrySet().stream()
+                                .map(stall -> new DirectionsCodecs.SavedStall(stall.getKey(), stall.getValue()))
+                                .toList()));
             }
         });
         return rows;
