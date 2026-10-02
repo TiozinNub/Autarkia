@@ -233,6 +233,7 @@ public final class Structures {
                     tell(server, party, next);
                     if (next.phase() == Phase.BUILT) {
                         MovingIn.moveIn(server, party, next).forEach(line -> journal(server, party, line));
+                        Scaffolds.takeDown(server, party, next).forEach(line -> journal(server, party, line));
                     }
                 }
             }

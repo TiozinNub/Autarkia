@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.PlaceFrom;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.brain.task.Try;
+import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,7 +63,7 @@ public final class LayPiece implements CompoundTask {
             List<Task> tasks = new ArrayList<>();
             for (Laying step : steps) {
                 if (!standing(probe, step)) {
-                    tasks.add(new Try(new PlaceFrom(step.placing(), step.also(), step.stand(), true)));
+                    tasks.add(new Try(new PlaceFrom(step.placing(), step.also(), step.stand(), true, Stock.BRIDGING)));
                 }
             }
             return tasks;

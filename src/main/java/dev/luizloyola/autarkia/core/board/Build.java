@@ -7,6 +7,7 @@ import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.PlaceBlock;
+import dev.luizloyola.anima.core.brain.task.PlaceFrom;
 import dev.luizloyola.anima.core.brain.task.TakeFromStore;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.Inventory;
@@ -16,6 +17,7 @@ import dev.luizloyola.anima.core.inv.Kit;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.autarkia.core.builder.LayPiece;
 import dev.luizloyola.autarkia.core.builder.Laying;
+import dev.luizloyola.autarkia.core.builder.Section;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -406,6 +408,10 @@ public final class Build implements PartyProject {
             List<ItemCall> calls = new ArrayList<>();
             bill().forEach((id, count) -> calls.add(ItemCall.need(ItemSpec.anyOf(Set.of(id)), count)));
             uses().forEach((items, count) -> calls.add(ItemCall.need(ItemSpec.anyOf(items), count)));
+            if (order.get(steps.get(0)).section() != Section.FLOOR) {
+                // A pillar's worth, for a block no stand on the ground reaches; taken back down after.
+                calls.add(ItemCall.want(Stock.BRIDGING, PlaceFrom.MAX_PILLAR));
+            }
             return Kit.of(calls.toArray(ItemCall[]::new));
         }
 
