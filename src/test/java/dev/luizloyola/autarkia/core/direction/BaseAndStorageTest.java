@@ -224,4 +224,60 @@ class BaseAndStorageTest {
                 new Direction(new DirectionId(WOOD, "storage"), 9, null), view);
         assertEquals(Status.NO_BASE, storage);
     }
+
+    @Test
+    void roomForEveryMembersTripIsMet() {
+        view.stations.add(SetUp.WORKBENCH.kind());
+        view.stations.add(SetUp.STORE.kind());
+        view.free = OptionalInt.of(27); // 9 a member, three members
+
+        Evolution.Outcome outcome = beat();
+
+        assertTrue(outcome.completed().contains(new DirectionId(WOOD, "storage")));
+        assertTrue(board.projects().stream().noneMatch(p -> p instanceof SetUp));
+    }
+
+    @Test
+    void theCountIsPerMemberNotForTheParty() {
+        view.stations.add(SetUp.WORKBENCH.kind());
+        view.stations.add(SetUp.STORE.kind());
+        view.free = OptionalInt.of(9);
+
+        Evolution.Outcome outcome = beat();
+
+        assertTrue(lines(outcome).contains("storage"),
+                "one member's room is less than three members' loads: another chest goes up");
+    }
+
+    @Test
+    void fullStoresPostAnotherChestAtTheBase() {
+        view.stations.add(SetUp.WORKBENCH.kind());
+        view.stations.add(SetUp.STORE.kind());
+        view.free = OptionalInt.of(0);
+
+        beat();
+
+        SetUp more = board.projects().stream().filter(p -> p instanceof SetUp).map(p -> (SetUp) p)
+                .findFirst().orElseThrow();
+        assertEquals(List.of(SetUp.STORE), more.stations());
+        assertEquals(SPOT, more.near(), "beside HOME's stores, as the first went down");
+    }
+
+    /** The chest out is the board's project, saved with the board: a restart posts no second one. */
+    @Test
+    void aRestartKeepsTheChestOutAndPostsNoOther() {
+        view.stations.add(SetUp.WORKBENCH.kind());
+        view.stations.add(SetUp.STORE.kind());
+        view.free = OptionalInt.of(0);
+        beat();
+        SetUp out = board.projects().stream().filter(p -> p instanceof SetUp).map(p -> (SetUp) p)
+                .findFirst().orElseThrow();
+
+        PartyBoard restored = new PartyBoard(partyId);
+        restored.post(SetUp.restore((SetUp.State) out.snapshot(), 0L).orElseThrow());
+        Evolution.Outcome after = Evolution.beat(tree, progress, view, restored);
+
+        assertTrue(!lines(after).contains("storage"), "the restored chest is still storage's work");
+        assertEquals(1, restored.projects().stream().filter(p -> p instanceof SetUp).count());
+    }
 }

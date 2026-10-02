@@ -1,5 +1,5 @@
 {
-  "note": "PLACEHOLDER (2026-09-24): the node table is Luiz's to write. Wood is the root, always reached; the base comes first, and the counts are stand-ins except food's 32 hunger points a member (Luiz, 2026-09-27); charcoal's 16 a member is a kit's 64 torches.",
+  "note": "PLACEHOLDER (2026-09-24): the node table is Luiz's to write. Wood is the root, always reached; the base comes first, and the counts are stand-ins except food's 32 hunger points a member (Luiz, 2026-09-27); charcoal's 16 a member is a kit's 64 torches; storage's 12 free slots a member is one stow trip each (StowSurplus.SURPLUS_SLOTS).",
   "kind": "core",
   "parents": [],
   "directions": [
@@ -8,7 +8,7 @@
     {"line": "area"},
     {"line": "house"},
     {"line": "wood", "count": 64},
-    {"line": "storage", "count": 9},
+    {"line": "storage", "count": 12},
     {"line": "food", "count": 32},
     {"line": "charcoal", "count": 16}
   ],

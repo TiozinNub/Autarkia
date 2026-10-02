@@ -9,8 +9,13 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * {@code storage}: HOME's stores have at least {@code count} empty slots between them — "I need
- * more room at my base", asked of the base rather than of whatever happens to be hauling to it.
+ * {@code storage}: HOME's stores have at least {@code count} empty slots per member between them —
+ * "I need more room at my base", asked of the base rather than of whatever happens to be hauling to
+ * it.
+ *
+ * <p><b>Per member</b> (2026-10-02): every member hauls home on their own, so a party-wide number
+ * that was a trip's room for three was less than one member's load for sixteen, and the house's
+ * one chest filled under a forest's leaf litter with every hauler finding it full.
  *
  * <p>Posts one more chest at a time. A Direction never posts the same work twice, so a party short
  * of room gets one chest, not one per member who noticed.
@@ -49,8 +54,9 @@ public final class StorageLine implements DirectionLine {
         if (free.isEmpty()) {
             return Status.UNREAD;
         }
-        return Status.of(free.getAsInt() >= direction.count() ? Status.Reading.MET : Status.Reading.UNMET,
-                "autarkia.direction.storage.free", free.getAsInt(), direction.count());
+        int wanted = direction.count() * party.members();
+        return Status.of(free.getAsInt() >= wanted ? Status.Reading.MET : Status.Reading.UNMET,
+                "autarkia.direction.storage.free", free.getAsInt(), wanted);
     }
 
     @Override
