@@ -118,15 +118,19 @@ public final class HouseSite {
 
         /** Every allowed placement of a plan with a door; a plan with none has no shape. */
         public static List<Shape> of(BuildPlan plan, Dictionary dict, List<Placement> placements) {
-            BuildOrder.Result proved = BuildOrder.prove(plan, dict);
+            return of(plan, dict, placements, OutsideStands.SHARED.of(plan, dict));
+        }
+
+        static List<Shape> of(BuildPlan plan, Dictionary dict, List<Placement> placements, List<Cell> outside) {
             List<Shape> shapes = new ArrayList<>();
             for (Placement placement : placements) {
-                of(plan, dict, placement, proved).ifPresent(shapes::add);
+                of(plan, dict, placement, outside).ifPresent(shapes::add);
             }
             return shapes;
         }
 
-        static Optional<Shape> of(BuildPlan plan, Dictionary dict, Placement placement, BuildOrder.Result proved) {
+        /** {@code outside}: the stands of the plan's proved order outside its drawing. */
+        static Optional<Shape> of(BuildPlan plan, Dictionary dict, Placement placement, List<Cell> outside) {
             Optional<int[]> step = Footprint.doorstep(plan, placement, dict);
             if (step.isEmpty()) {
                 return Optional.empty();
@@ -140,13 +144,7 @@ public final class HouseSite {
             int minZ = Math.min(footprint.minZ(), door[2] + out[1] * (APRON - 1));
             int maxX = Math.max(footprint.maxX(), door[0] + out[0] * (APRON - 1));
             int maxZ = Math.max(footprint.maxZ(), door[2] + out[1] * (APRON - 1));
-            for (BuildOrder.Placed placed : proved.order()) {
-                Cell stand = placed.stand();
-                boolean outside = stand.x() < 0 || stand.z() < 0 || stand.x() >= plan.width()
-                        || stand.z() >= plan.depth();
-                if (!outside) {
-                    continue;
-                }
+            for (Cell stand : outside) {
                 int[] cell = placement.cell(stand.x(), stand.z(), plan.width(), plan.depth());
                 int x = Placement.offset(cell[0], width);
                 int z = Placement.offset(cell[1], depth);

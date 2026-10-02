@@ -9,18 +9,22 @@ import dev.luizloyola.anima.core.config.Config;
 import dev.luizloyola.anima.core.terrain.GroundSample;
 import dev.luizloyola.anima.core.terrain.Terrain;
 import dev.luizloyola.anima.core.territory.ChunkKey;
+import dev.luizloyola.autarkia.core.bp.Blueprint;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Facing;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
+import dev.luizloyola.autarkia.core.bp.TestBlocks;
 import dev.luizloyola.autarkia.core.builder.HouseSite.Choice;
 import dev.luizloyola.autarkia.core.builder.HouseSite.Refusal;
 import dev.luizloyola.autarkia.core.builder.HouseSite.Shape;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Consumer;
@@ -45,19 +49,40 @@ class HouseSiteTest {
     private static final SortedSet<ChunkKey> AREA = new TreeSet<>(List.of(chunk(0, 0), chunk(1, 0), chunk(0, 1),
             chunk(1, 1)));
 
+    private static final Map<String, String> PLAIN = Map.of("beds", "none", "base", "lv1", "attic", "none");
+
+    private static Blueprint house;
+    /** Drawn tight to its west wall, so its builders stand outside the drawing and widen the pad. */
+    private static Blueprint cottage;
+    private static final List<Placement> ALL = new ArrayList<>();
     private static List<Shape> shapes;
 
     @BeforeAll
     static void house() throws IOException {
-        BuildPlan plan = BuildOrderTest.plan(BuildOrderTest.bind(BuildOrderTest.read(
-                "/data/autarkia/autarkia/blueprint/basic_wooden_house.bp")),
-                Map.of("beds", "none", "base", "lv1", "attic", "none"));
-        List<Placement> all = new ArrayList<>();
+        house = BuildOrderTest.bind(BuildOrderTest.read("/data/autarkia/autarkia/blueprint/basic_wooden_house.bp"));
+        cottage = BuildOrderTest.bind(BuildOrderTest.read("/data/autarkia/autarkia/blueprint/growing_cottage.bp"));
+        BuildPlan plan = BuildOrderTest.plan(house, PLAIN);
         for (Facing facing : Facing.values()) {
-            all.add(new Placement(facing, false));
-            all.add(new Placement(facing, true));
+            ALL.add(new Placement(facing, false));
+            ALL.add(new Placement(facing, true));
         }
-        shapes = Shape.of(plan, BuildOrderTest.DICT, all);
+        shapes = Shape.of(plan, BuildOrderTest.DICT, ALL);
+    }
+
+    /** A plan with every slot bound by {@code k}: its woods, and its beds' colour. */
+    private static BuildPlan bound(Blueprint bp, Map<String, String> variants, int k) {
+        return BuildOrderTest.plan(bp, variants, (what, choices) -> Math.floorMod(what.hashCode() * 31 + k,
+                choices.size()));
+    }
+
+    /** The house in the first wood with its beds in colour {@code k}. */
+    private static BuildPlan coloured(Map<String, String> variants, int k) {
+        return BuildOrderTest.plan(house, variants, (what, choices) -> choices.size() >= 16 ? k % choices.size() : 0);
+    }
+
+    private static List<Shape> unkept(BuildPlan plan) {
+        return Shape.of(plan, BuildOrderTest.DICT, ALL,
+                OutsideStands.of(BuildOrder.prove(plan, BuildOrderTest.DICT), plan));
     }
 
     @BeforeEach
@@ -134,6 +159,10 @@ class HouseSiteTest {
     }
 
     private static HouseSite.Result choose(Terrain ground, Fake party) {
+        return choose(ground, shapes, party);
+    }
+
+    private static HouseSite.Result choose(Terrain ground, List<Shape> shapes, Fake party) {
         return HouseSite.choose(ground, shapes, party, HouseSite.Weights.DEFAULTS, 16);
     }
 
@@ -351,5 +380,83 @@ class HouseSiteTest {
         assertFalse(HouseSite.crosses(f, new Pos(0, 0, 0), new Pos(20, 0, 0)));
         assertFalse(HouseSite.crosses(f, new Pos(0, 0, 12), new Pos(5, 0, 12)), "it stops short");
         assertTrue(HouseSite.crosses(f, new Pos(12, 0, 0), new Pos(12, 0, 20)));
+    }
+
+    /**
+     * A kept proof is another plan's — the same building in another wood or colour — so each site it
+     * gives must be the one that plan's own proof gives, over every variant and placement.
+     */
+    @Test
+    void aKeptProofSitesAPlanAsItsOwnProofDoes() {
+        OutsideStands kept = new OutsideStands(OutsideStands.CAPACITY);
+        Terrain meadow = meadow(sample -> { });
+        Map<Blueprint, List<Map<String, String>>> cases = Map.of(
+                house, List.of(PLAIN, Map.of("beds", "2", "base", "lv2", "attic", "none"),
+                        Map.of("beds", "6", "base", "lv3", "attic", "has")),
+                cottage, List.of(Map.of("wing", "none", "beds", "one", "workshop", "none", "cellar", "none"),
+                        Map.of("wing", "east", "beds", "three", "workshop", "table", "cellar", "storage"),
+                        Map.of("wing", "east", "beds", "four", "workshop", "none", "cellar", "none")));
+        int plans = 0;
+        for (Map.Entry<Blueprint, List<Map<String, String>>> entry : cases.entrySet()) {
+            for (Map<String, String> variants : entry.getValue()) {
+                for (int k = 0; k < 4; k++) {
+                    BuildPlan plan = bound(entry.getKey(), variants, k);
+                    plans++;
+                    List<Shape> own = unkept(plan);
+                    List<Shape> reused = Shape.of(plan, BuildOrderTest.DICT, ALL, kept.of(plan, BuildOrderTest.DICT));
+                    String what = plan.id() + " " + variants + ", binding " + plan.bindings();
+                    assertEquals(own, reused, what);
+                    assertEquals(choose(meadow, own, new Fake()), choose(meadow, reused, new Fake()), what);
+                }
+            }
+        }
+        assertTrue(kept.proofs() < plans, kept.proofs() + " proofs for " + plans + " plans: nothing was kept");
+    }
+
+    @Test
+    void aPlanIsProvedOnceHoweverItsBedsAreColoured() {
+        Map<String, String> beds = Map.of("beds", "2", "base", "lv1", "attic", "none");
+        OutsideStands kept = new OutsideStands(OutsideStands.CAPACITY);
+        Set<String> colours = new HashSet<>();
+        for (int k = 0; k < 6; k++) {
+            BuildPlan plan = coloured(beds, k);
+            colours.add(plan.bindings().toString());
+            kept.of(plan, BuildOrderTest.DICT);
+        }
+        assertEquals(6, colours.size(), "six bindings: " + colours);
+        assertEquals(1, kept.proofs(), "six colours of one house");
+
+        kept.of(coloured(PLAIN, 0), BuildOrderTest.DICT);
+        assertEquals(2, kept.proofs(), "another variant is another plan");
+        kept.of(coloured(beds, 7), BuildOrderTest.DICT);
+        assertEquals(2, kept.proofs(), "and the first is still kept");
+
+        kept.of(coloured(beds, 7), TestBlocks.dictionary());
+        assertEquals(3, kept.proofs(), "a rebuilt dictionary proves again");
+    }
+
+    /** Report only: fifty parties siting the house, each with its own binding, proved each time or kept. */
+    @Test
+    void timeFiftySitings() {
+        Terrain meadow = meadow(sample -> { });
+        List<BuildPlan> plans = new ArrayList<>();
+        for (int k = 0; k < 50; k++) {
+            plans.add(bound(house, PLAIN, k));
+        }
+        for (BuildPlan plan : plans.subList(0, 3)) {
+            choose(meadow, unkept(plan), new Fake());
+        }
+        long t0 = System.nanoTime();
+        for (BuildPlan plan : plans) {
+            choose(meadow, unkept(plan), new Fake());
+        }
+        long t1 = System.nanoTime();
+        OutsideStands kept = new OutsideStands(OutsideStands.CAPACITY);
+        for (BuildPlan plan : plans) {
+            choose(meadow, Shape.of(plan, BuildOrderTest.DICT, ALL, kept.of(plan, BuildOrderTest.DICT)), new Fake());
+        }
+        long t2 = System.nanoTime();
+        System.out.printf("[timing] 50 sitings: proved each time %d ms, kept %d ms (%d proofs)%n",
+                (t1 - t0) / 1_000_000, (t2 - t1) / 1_000_000, kept.proofs());
     }
 }

@@ -27,6 +27,9 @@ import org.jspecify.annotations.Nullable;
  * <b>walls</b>. Everything else is
  * decor, <b>interior</b> when roofed. <i>Roofed</i> is open with collision somewhere above — the
  * spec's reading, which an open window does not fool.
+ *
+ * <p>A block's name is read only to tell it from another, and its item never: {@link OutsideStands}
+ * keys a proof on everything else.
  */
 public final class Sections {
 

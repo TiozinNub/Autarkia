@@ -25,6 +25,7 @@ import java.util.Map;
  * of what it places. It walks up a block, drops three, climbs ladders and opens doors. Outside the
  * plan the ground is flat at layer 0, and a builder arrives on it. The world's own blocks — trees,
  * slopes — are the site's business, read when a build starts; this is the plan against itself.
+ * Never a block's name or item either: {@link OutsideStands} keys a proof on everything else.
  */
 public final class BuildOrder {
 

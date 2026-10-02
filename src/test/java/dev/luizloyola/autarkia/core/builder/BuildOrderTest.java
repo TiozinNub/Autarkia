@@ -9,6 +9,7 @@ import dev.luizloyola.autarkia.core.bp.BpCompiler;
 import dev.luizloyola.autarkia.core.bp.BpCompiler.Compiled;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.BuildPlan.CellKind;
+import dev.luizloyola.autarkia.core.bp.Chooser;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Dictionary;
 import dev.luizloyola.autarkia.core.bp.Planner;
@@ -49,8 +50,12 @@ class BuildOrderTest {
     }
 
     static BuildPlan plan(Blueprint bp, Map<String, String> variants) {
+        return plan(bp, variants, (what, choices) -> 0);
+    }
+
+    static BuildPlan plan(Blueprint bp, Map<String, String> variants, Chooser chooser) {
         Diagnostics out = new Diagnostics();
-        BuildPlan plan = Planner.plan(bp, DICT, CUBES, Map.of(), variants, (what, choices) -> 0, new Random(3), out);
+        BuildPlan plan = Planner.plan(bp, DICT, CUBES, Map.of(), variants, chooser, new Random(3), out);
         assertNotNull(plan, out.list()::toString);
         return plan;
     }
