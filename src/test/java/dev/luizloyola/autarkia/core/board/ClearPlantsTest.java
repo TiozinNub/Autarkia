@@ -53,6 +53,11 @@ class ClearPlantsTest {
     }
 
     @Test
+    void aStripsWalksMayBuild() {
+        assertTrue(new ClearPlants(CHUNK, 0.5).open().get(0).buildsOnTheWay());
+    }
+
+    @Test
     void aMemberWhoFailedAStripThreeTimesIsNeverOfferedItAgain() {
         ClearPlants project = new ClearPlants(CHUNK, 0.5);
         WorkItem strip = project.open().get(0);

@@ -192,6 +192,12 @@ public final class ClearPlants implements PartyProject {
             return new ClearStrip(strips.get(index));
         }
 
+        /** As every other errand's: a strip across a ravine is reached by a deck (forest, 2026-10-02). */
+        @Override
+        public boolean buildsOnTheWay() {
+            return true;
+        }
+
         @Override
         public Deed doing() {
             return Deed.of(WorkDoings.CLEARING_PLANTS);
