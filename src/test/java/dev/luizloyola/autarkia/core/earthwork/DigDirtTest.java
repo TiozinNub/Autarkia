@@ -18,6 +18,7 @@ import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.nav.HandsOff;
 import dev.luizloyola.autarkia.core.board.Stock;
+import dev.luizloyola.autarkia.core.direction.SettledFence;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
@@ -62,6 +63,13 @@ class DigDirtTest {
 
     private static List<Pos> scrape(FakeProbe probe, HandsOff fence, Pos here) {
         return DigDirt.scrape(probe, fence, here);
+    }
+
+    @Test
+    void nothingIsDugInsideHome() {
+        mound(6, 0);
+        HandsOff home = SettledFence.of(List.of(new int[] {-20, -20, 20, 20}), List.of());
+        assertEquals(List.of(), scrape(probe, home, here), "HOME takes a deck, never a scrape");
     }
 
     @Test

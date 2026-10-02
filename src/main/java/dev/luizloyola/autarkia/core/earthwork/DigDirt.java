@@ -201,7 +201,7 @@ public final class DigDirt implements Method {
 
     /** The ground cell of this column when it may be dug for dirt, else null. */
     private static Pos diggable(BlockProbe probe, LocalGround local, HandsOff fenced, Pos here, int x, int z) {
-        if (x == here.x() && z == here.z() || fenced.contains(x, z)) {
+        if (x == here.x() && z == here.z() || fenced.barsCut(x, z)) {
             return null;
         }
         int g = local.ground(x, z);
@@ -224,7 +224,7 @@ public final class DigDirt implements Method {
         }
         for (int dx = -MARGIN; dx <= MARGIN; dx++) {
             for (int dz = -MARGIN; dz <= MARGIN; dz++) {
-                if (fenced.contains(x + dx, z + dz)) {
+                if (fenced.barsCut(x + dx, z + dz)) {
                     return null;
                 }
             }
