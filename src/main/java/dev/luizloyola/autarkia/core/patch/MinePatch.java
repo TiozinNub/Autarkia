@@ -17,6 +17,7 @@ import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.MoveCapabilities;
+import dev.luizloyola.autarkia.core.earthwork.LocalGround;
 import dev.luizloyola.autarkia.core.tree.TreeShape;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +25,8 @@ import java.util.Optional;
 
 /**
  * Mine one patch of exposed stone from the top, looked at on arrival: the stone showing at the top
- * of its column within the patch, nearest first, at most {@link #MOST}. After the first block it
+ * of its column within the patch and standing above the ground round it, nearest first, at most
+ * {@link #MOST}. After the first block it
  * checks that something a furnace takes came of it ({@link Yield}): a patch of granite or tuff is
  * rested for {@link #BARREN_TICKS} at the cost of one block, since the sense sees all overworld
  * stone as one kind.
@@ -69,19 +71,26 @@ public final class MinePatch implements CompoundTask {
 
     /** The exposed stone in the patch, in the order a body standing here would walk it. */
     List<Pos> exposed(BrainContext ctx) {
-        BlockProbe probe = ctx.percepts().blocks();
+        return exposed(ctx.percepts().blocks(), bounds, ctx.percepts().position());
+    }
+
+    /**
+     * The same for any patch: only stone standing above the ground round it ({@link LocalGround}),
+     * so an outcrop is cut back toward the land and flat stone never becomes a quarry pit.
+     */
+    static List<Pos> exposed(BlockProbe probe, Region bounds, Pos from) {
+        LocalGround local = new LocalGround(probe);
         List<Pos> found = new ArrayList<>();
         for (int x = bounds.min().x() - 1; x <= bounds.max().x() + 1; x++) {
             for (int z = bounds.min().z() - 1; z <= bounds.max().z() + 1; z++) {
                 int top = probe.topY(x, z);
                 if (top >= bounds.min().y() - 2 && top <= bounds.max().y() + 2
-                        && probe.at(x, top, z) == Landmarks.STONE) {
+                        && probe.at(x, top, z) == Landmarks.STONE && local.standsAbove(x, z, top)) {
                     found.add(new Pos(x, top, z));
                 }
             }
         }
         List<Pos> walk = new ArrayList<>();
-        Pos from = ctx.percepts().position();
         while (!found.isEmpty() && walk.size() < MOST) {
             Pos next = found.get(0);
             for (Pos cell : found) {

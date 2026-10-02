@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.gate.Act;
 import dev.luizloyola.anima.core.brain.gate.Gate;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
+import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -43,7 +44,18 @@ class MineStoneTest {
         Stock.furnaceStoneBy(id -> false);
     }
 
+    private static final int G = FakeProbe.GROUND_Y;
+
+    /** Stone from the ground up to {@code top} at the column. */
+    private void stone(int x, int z, int top) {
+        for (int y = G; y <= top; y++) {
+            ctx.percepts.blocks.set(x, y, z, Landmarks.STONE);
+        }
+    }
+
+    /** The patch remembered, with an outcrop two above the flat ground at its anchor. */
     private void remember() {
+        stone(12, 0, G + 2);
         ctx.knowledge.note(new PoiMemory(Landmarks.STONE_POI, patch,
                 new Region(new Pos(10, 64, -2), new Pos(14, 64, 2)), 12, false, 0L),
                 AgentKnowledge.maxPerKind(ctx.profile()));
@@ -107,20 +119,66 @@ class MineStoneTest {
         assertFalse(forStone().applicable(ctx));
     }
 
+    private List<Pos> exposed() {
+        return new MinePatch(patch, new Region(new Pos(8, G, -4), new Pos(16, G + 3, 4)),
+                Stock.FURNACE_STONE).exposed(ctx);
+    }
+
     @Test
-    void onlyTheStoneShowingIsMinedNearestFirst() {
-        ctx.percepts.blocks.set(13, 64, 0, Landmarks.STONE);
-        ctx.percepts.blocks.set(11, 64, 1, Landmarks.STONE);
-        ctx.percepts.blocks.set(12, 64, 0, Landmarks.STONE);
-        ctx.percepts.blocks.set(12, 65, 0, Landmarks.STONE);
+    void onlyTheTopOfAnOutcropIsMinedNearestFirst() {
+        stone(12, 0, G + 2);
+        stone(11, 1, G + 2);
         ctx.percepts.position = new Pos(10, 64, 0);
 
-        List<Pos> cells = new MinePatch(patch, new Region(new Pos(10, 64, -2), new Pos(14, 65, 2)),
-                Stock.FURNACE_STONE).exposed(ctx);
+        List<Pos> cells = exposed();
 
-        assertEquals(new Pos(11, 64, 1), cells.get(0));
-        assertTrue(cells.contains(new Pos(12, 65, 0)), "the top of the column");
-        assertFalse(cells.contains(new Pos(12, 64, 0)), "under another stone: not showing");
+        assertEquals(new Pos(11, G + 2, 1), cells.get(0));
+        assertTrue(cells.contains(new Pos(12, G + 2, 0)), "the top of the column");
+        assertFalse(cells.contains(new Pos(12, G + 1, 0)), "under another stone: not showing");
+    }
+
+    @Test
+    void anOutcropIsMinedDownToTheGroundRoundItAndNoFurther() {
+        stone(12, 0, G + 2);
+        assertEquals(List.of(new Pos(12, G + 2, 0)), exposed());
+        ctx.percepts.blocks.clear(12, G + 2, 0);
+        assertEquals(List.of(), exposed(), "one above the flat is within the flatten's deadband");
+    }
+
+    @Test
+    void flatStoneIsNeverQuarried() {
+        for (int x = 6; x <= 18; x++) {
+            for (int z = -6; z <= 6; z++) {
+                stone(x, z, G);
+            }
+        }
+        ctx.knowledge.note(new PoiMemory(Landmarks.STONE_POI, patch,
+                new Region(new Pos(10, G, -2), new Pos(14, G + 1, 2)), 25, false, 0L),
+                AgentKnowledge.maxPerKind(ctx.profile()));
+        assertEquals(List.of(), exposed());
+        assertFalse(forStone().applicable(ctx), "a stone field in sight with nothing standing is passed by");
+    }
+
+    @Test
+    void aHolesRimIsMinedAndItsFloorIsNot() {
+        for (int x = 7; x <= 17; x++) {
+            for (int z = -5; z <= 5; z++) {
+                int ring = Math.max(Math.abs(x - 12), Math.abs(z));
+                stone(x, z, ring == 0 ? G : ring == 1 ? G + 3 : G + 1);
+            }
+        }
+        List<Pos> cells = exposed();
+        assertFalse(cells.isEmpty());
+        assertTrue(cells.stream().allMatch(c -> c.y() == G + 3), "only the rim: " + cells);
+    }
+
+    @Test
+    void aPatchOutOfSightIsJudgedOnArrival() {
+        ctx.knowledge.note(new PoiMemory(Landmarks.STONE_POI, patch,
+                new Region(new Pos(10, G, -2), new Pos(14, G + 1, 2)), 12, false, 0L),
+                AgentKnowledge.maxPerKind(ctx.profile()));
+        ctx.percepts.blocks.markUnloaded(patch.x(), patch.z());
+        assertTrue(forStone().applicable(ctx));
     }
 
     @Test
