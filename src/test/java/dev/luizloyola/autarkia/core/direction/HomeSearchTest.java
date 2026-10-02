@@ -23,8 +23,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The search as a player makes it: settle when a place clears the bar, walk the most promising way
- * when none does, ask less with every leg, go back to the best when patience runs out, and never
- * walk back the way it came.
+ * when none does, ask less with every leg, go back to the best when patience runs out, and walk
+ * back the way it came only when every way on is out.
  */
 class HomeSearchTest {
 
@@ -186,6 +186,61 @@ class HomeSearchTest {
 
         Pos next = search.legEnd();
         assertTrue(next.z() >= at.z(), "it did not turn back: " + next);
+    }
+
+    /** {@link #ways}, with no leg at all (water to the horizon) on the given headings. */
+    private static List<Way> coast(Pos at, int... wet) {
+        List<Way> ways = new ArrayList<>(ways(at, EVEN));
+        for (int k : wet) {
+            ways.set(k, new Way(0, null, Set.of()));
+        }
+        return ways;
+    }
+
+    @Test
+    void againstACoastTheScoutWalksBackRatherThanStrand() {
+        HomeSearch search = new HomeSearch();
+        search.looked(HERE, look(List.of(), ways(HERE, 0.9, 0, 0, 0, 0, 0, 0, 0)), TABLE, WALK, NO_NOISE);
+        Pos at = search.legEnd();
+        search.arrived();
+        // Heading south: S, SW, W, E and SE are water; NW, N and NE are the way it came.
+        String line = search.looked(at, look(List.of(), coast(at, 0, 1, 2, 6, 7)), TABLE, WALK, NO_NOISE);
+
+        assertEquals(Phase.WALK, search.phase(), line);
+        Pos next = search.legEnd();
+        assertTrue(next.z() < at.z(), "back north: " + next);
+        assertTrue(Math.hypot(next.x() - HERE.x(), next.z() - HERE.z()) >= HomeSearch.REVISIT,
+                "but not onto the first stop: " + next);
+    }
+
+    @Test
+    void aWayOnStillBeatsTheWayBack() {
+        HomeSearch search = new HomeSearch();
+        search.looked(HERE, look(List.of(), ways(HERE, 0.9, 0, 0, 0, 0, 0, 0, 0)), TABLE, WALK, NO_NOISE);
+        Pos at = search.legEnd();
+        search.arrived();
+        // The poorest way on, east and bare, against the open land and stone behind.
+        List<Way> ways = new ArrayList<>(coast(at, 0, 1, 2, 7));
+        ways.set(6, new Way(0, ways(at, EVEN).get(6).legEnd(), Set.of()));
+        for (int k = 3; k <= 5; k++) {
+            ways.set(k, new Way(1, ways.get(k).legEnd(), Set.of(Want.STONE)));
+        }
+        search.looked(at, look(List.of(), ways), TABLE, WALK, NO_NOISE);
+
+        assertEquals(ways.get(6).legEnd(), search.legEnd(), "east");
+    }
+
+    @Test
+    void againstACoastWithAPlotFoundTheScoutGoesBackToIt() {
+        HomeSearch search = new HomeSearch();
+        search.looked(HERE, look(List.of(plot(10, 0, 50, 30)), ways(HERE, 0.9, 0, 0, 0, 0, 0, 0, 0)),
+                TABLE, WALK, NO_NOISE);
+        Pos at = search.legEnd();
+        search.arrived();
+        search.looked(at, look(List.of(), coast(at, 0, 1, 2, 6, 7)), TABLE, WALK, NO_NOISE);
+
+        assertEquals(Phase.SETTLE, search.phase());
+        assertEquals(new Pos(10, 64, 0), search.settleAt());
     }
 
     @Test

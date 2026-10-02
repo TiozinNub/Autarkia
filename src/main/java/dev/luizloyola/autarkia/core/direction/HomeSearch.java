@@ -41,6 +41,13 @@ public final class HomeSearch {
      */
     static final double NOISE = 15;
 
+    /**
+     * Taken off a heading within 45° of the way it came: more than any forward heading can score,
+     * so the way back is walked only when every way on is out (Luiz, 2026-10-01; a scout pinned
+     * against a coast stranded at its third stop).
+     */
+    static final double BACK = 1_000_000;
+
     private static final String[] COMPASS = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
 
     public enum Phase {
@@ -258,12 +265,15 @@ public final class HomeSearch {
         heading = chosen.heading();
         legEnd = chosen.legEnd();
         phase = Phase.WALK;
-        return "heading " + compass(heading) + " to " + at(legEnd);
+        // Only BACK takes a score below zero.
+        return (chosen.score() < 0 ? "every way on ruled out; heading back " : "heading ")
+                + compass(heading) + " to " + at(legEnd);
     }
 
     /**
      * A heading's worth: open land ahead, the wants the best plot lacks that lie that way, and
-     * momentum — or ruled out, as the way back, a leg ending by an earlier stop, or no leg at all.
+     * momentum, less {@link #BACK} for the way it came — or ruled out, as a leg ending by an earlier
+     * stop, no leg at all, or the way back once a plot has been found.
      */
     private double score(int k, Pos at, Way way, Table table, Terms terms, RandomGenerator random) {
         if (way.legEnd() == null) {
@@ -271,8 +281,9 @@ public final class HomeSearch {
         }
         int off = heading < 0 ? -1 : Math.min(Math.floorMod(k - heading, HEADINGS),
                 Math.floorMod(heading - k, HEADINGS));
-        if (off >= 3) {
-            return Double.NEGATIVE_INFINITY; // within 45° of the way it came
+        boolean back = off >= 3;
+        if (back && best != null) {
+            return Double.NEGATIVE_INFINITY; // with a plot found, going back to it beats walking back
         }
         for (int i = 0; i < stops.size() - 1; i++) {
             if (distance(way.legEnd(), stops.get(i)) < REVISIT) {
@@ -291,7 +302,7 @@ public final class HomeSearch {
         } else if (off == 1) {
             score += terms.keep() / 2;
         }
-        return score + random.nextDouble() * NOISE;
+        return score + random.nextDouble() * NOISE - (back ? BACK : 0);
     }
 
     /** Whether the best plot so far scores under half a want's worth on it. */
