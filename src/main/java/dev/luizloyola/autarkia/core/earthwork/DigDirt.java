@@ -209,6 +209,11 @@ public final class DigDirt implements Method {
                 || !ground.test(probe.idAt(x, g, z)) || probe.at(x, g + 1, z) == BlockKind.WATER) {
             return null;
         }
+        // Ground under the cut, or the scrape is a hole through a ledge: two of the flight's
+        // runners cut the rim of a floor one block thick and fell through it (2026-10-02).
+        if (!probe.at(x, g - 1, z).ground()) {
+            return null;
+        }
         for (int[] side : SIDES) {
             if (probe.at(x + side[0], g, z + side[1]) == BlockKind.WATER) {
                 return null;

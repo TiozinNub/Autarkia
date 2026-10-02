@@ -150,6 +150,18 @@ class DigDirtTest {
                 "not inside, and not within the margin of it");
     }
 
+    /** A rim one block thick over a drop: cut, it is a hole a body falls through. */
+    @Test
+    void aLedgeIsNeverDugThrough() {
+        mound(6, 0);
+        probe.set(6, G, 0, BlockKind.AIR);
+        assertEquals(List.of(new Pos(6, G + 2, 0)), scrape(probe, HandsOff.NONE, here),
+                "the top of a mound has its own block under it");
+        probe.clear(6, G + 2, 0);
+        probe.setId(6, G + 1, 0, "minecraft:grass_block");
+        assertEquals(List.of(), scrape(probe, HandsOff.NONE, here), "nothing under the last block");
+    }
+
     @Test
     void dirtBesideWaterIsLeft() {
         mound(5, 0);
