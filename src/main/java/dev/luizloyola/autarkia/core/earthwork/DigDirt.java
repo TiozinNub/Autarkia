@@ -6,6 +6,7 @@ import dev.luizloyola.anima.core.brain.gate.Acts;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.BlocksToCross;
 import dev.luizloyola.anima.core.brain.task.BreakBlock;
 import dev.luizloyola.anima.core.brain.task.GatherNearbyDrops;
 import dev.luizloyola.anima.core.brain.task.GoTo;
@@ -31,7 +32,9 @@ import java.util.Optional;
  * Dirt from the ground, for when the cuts and the stores have none: the top of the nearest dirt
  * columns outside every fenced area, dug as a shallow scrape. Without it a pad with more fill than
  * cut never levelled (forest, 2026-10-02). Registered under {@link Stock#DIRT} and
- * {@link Stock#FILL}.
+ * {@link Stock#FILL}, and, nearer and bare-handed, under {@link BlocksToCross#SPEC}: a walk stranded
+ * short of blocks digs them out of the ground round it (Luiz, 2026-10-02). Never under
+ * {@link Stock#BRIDGING}, or a settler's standing stack would send it digging.
  *
  * <p>Only ground standing above the mean round it is dug ({@link LocalGround}), one layer a trip,
  * so a scrape cuts bumps and rims back toward the mean and never digs flat ground or deepens a
@@ -44,6 +47,8 @@ public final class DigDirt implements Method {
 
     /** How far from the body a scrape is looked for. */
     static final int REACH = 48;
+    /** How far a body stranded short of blocks looks: the ground round where it stands. */
+    static final int NEAR = 16;
     /** Columns kept whole between a scrape and fenced ground. */
     public static final int MARGIN = 2;
     /** How far round the nearest column the rest of a trip's scrape may lie. */
@@ -67,6 +72,7 @@ public final class DigDirt implements Method {
     private static final Kit TOOLS = Kit.of(ItemCall.want(Stock.SHOVELS, 1));
 
     private final ItemSpec wanted;
+    private final int reach;
     @Ephemeral("a memo of this tick's look round, asked again when a way is next chosen")
     private long foundAt = Long.MIN_VALUE;
     @Ephemeral("goes with the memo")
@@ -75,7 +81,12 @@ public final class DigDirt implements Method {
     private List<Pos> found = List.of();
 
     public DigDirt(ItemSpec wanted) {
+        this(wanted, REACH);
+    }
+
+    DigDirt(ItemSpec wanted, int reach) {
         this.wanted = wanted;
+        this.reach = reach;
     }
 
     /** Installed once by the mod layer. */
@@ -91,6 +102,8 @@ public final class DigDirt implements Method {
         registered = true;
         Producers.register(Stock.DIRT, Stock.DIRT::matches, TOOLS, DigDirt::new);
         Producers.register(Stock.FILL, Stock.DIRT::matches, TOOLS, DigDirt::new);
+        // No shovel: one would be fetched from across whatever cut the body off.
+        Producers.register(BlocksToCross.SPEC, Stock.DIRT::matches, Kit.NONE, w -> new DigDirt(w, NEAR));
     }
 
     @Override
@@ -129,18 +142,29 @@ public final class DigDirt implements Method {
         Pos here = ctx.percepts().position();
         long now = ctx.percepts().time();
         if (now != foundAt || !here.equals(foundFrom)) {
-            found = scrape(ctx.percepts().blocks(), fence.around(here, REACH + MARGIN), here);
+            found = new ArrayList<>();
+            for (Pos cell : scrape(ctx.percepts().blocks(), fence.around(here, reach + MARGIN), here, reach)) {
+                // A stand a walk lately failed to reach: across a ravine, say, from a stranded body.
+                if (!ctx.unreached().struck(standFor(ctx, cell), now)) {
+                    found.add(cell);
+                }
+            }
             foundAt = now;
             foundFrom = here;
         }
         return found;
     }
 
-    /** The cells one trip digs, nearest first: round the nearest diggable column, at most {@link #MOST}. */
+    /** {@link #scrape(BlockProbe, HandsOff, Pos, int)} as far as {@link #REACH}. */
     static List<Pos> scrape(BlockProbe probe, HandsOff fenced, Pos here) {
+        return scrape(probe, fenced, here, REACH);
+    }
+
+    /** The cells one trip digs, nearest first: round the nearest diggable column, at most {@link #MOST}. */
+    static List<Pos> scrape(BlockProbe probe, HandsOff fenced, Pos here, int reach) {
         LocalGround local = new LocalGround(probe);
         Pos seed = null;
-        for (int r = 0; r <= REACH && seed == null; r++) {
+        for (int r = 0; r <= reach && seed == null; r++) {
             for (int dx = -r; dx <= r; dx++) {
                 // The ring's edge only: every cell on its two x sides, the two ends between them.
                 int step = dx == -r || dx == r || r == 0 ? 1 : 2 * r;
