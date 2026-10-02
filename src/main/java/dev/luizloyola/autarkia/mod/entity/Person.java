@@ -1580,6 +1580,9 @@ public class Person extends Avatar implements AgentBody {
      * stack and flies in on every client ({@link #take}), and a full inventory leaves the item
      * lying there. Items {@code target}ed at a player are not special-cased — {@code ItemEntity}
      * exposes no accessor, and vanilla's own mob looting ignores it too.
+     *
+     * <p>A tick's catch is journaled as one line, so a pack never fills with no trace of where it
+     * came from; nothing is held past the tick, so there is nothing to save.
      */
     // The pickup sound's pitch is vanilla's own idiom, `(nextFloat() - nextFloat()) * 0.7 + 1`,
     // which spreads the pitch symmetrically around 1. Error Prone reads the two identical calls as
@@ -1590,6 +1593,7 @@ public class Person extends Avatar implements AgentBody {
         if (!isAlive()) {
             return;
         }
+        @Nullable Map<String, Integer> caught = null; // the scan runs every tick and mostly finds nothing
         for (ItemEntity itemEntity :
                 level.getEntitiesOfClass(ItemEntity.class, getBoundingBox().inflate(1.0, 0.5, 1.0))) {
             if (itemEntity.isRemoved() || itemEntity.hasPickUpDelay()) {
@@ -1600,12 +1604,16 @@ public class Person extends Avatar implements AgentBody {
                 continue;
             }
             int before = ground.getCount();
-            dev.luizloyola.anima.core.inv.ItemStack leftover =
-                    this.inventory.add(ItemStacks.toCore(ground, registryAccess()));
+            dev.luizloyola.anima.core.inv.ItemStack offered = ItemStacks.toCore(ground, registryAccess());
+            dev.luizloyola.anima.core.inv.ItemStack leftover = this.inventory.add(offered);
             int taken = before - leftover.count();
             if (taken <= 0) {
                 continue; // inventory full — leave it on the ground
             }
+            if (caught == null) {
+                caught = new java.util.LinkedHashMap<>();
+            }
+            caught.merge(offered.id(), taken, Integer::sum);
             take(itemEntity, taken);   // the caught portion flies to this Person on every client
             onItemPickup(itemEntity);  // advancement hook, if a player had thrown it
             playSound(SoundEvents.ITEM_PICKUP, 0.2F,
@@ -1617,6 +1625,11 @@ public class Person extends Avatar implements AgentBody {
                 // count — shrinking the existing stack in place would not mark the data watcher dirty.
                 itemEntity.setItem(ground.copyWithCount(leftover.count()));
             }
+        }
+        if (caught != null) {
+            java.util.StringJoiner line = new java.util.StringJoiner(", ", "picked up ", "");
+            caught.forEach((id, count) -> line.add(count + "×" + id));
+            journal().record(Category.BODY, "pickup", line.toString());
         }
     }
 
