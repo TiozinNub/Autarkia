@@ -4,10 +4,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.act.BreakState;
+import dev.luizloyola.anima.core.brain.act.MoveState;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.BlockKind;
 import dev.luizloyola.anima.core.brain.knowledge.FakeProbe;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
+import dev.luizloyola.anima.core.brain.task.FakePlacer;
+import dev.luizloyola.anima.core.brain.task.KittedErrand;
+import dev.luizloyola.anima.core.brain.task.TaskExecutor;
+import dev.luizloyola.anima.core.brain.task.TaskStatus;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.terrain.NaturalGround;
 import dev.luizloyola.autarkia.core.earthwork.FlattenPlan;
@@ -178,6 +185,72 @@ class FlattenTest {
         assertEquals(offers(project), offers(back));
         WorkKey key = project.keyOf(project.open().get(0)).orElseThrow();
         assertTrue(back.itemFor(key).isPresent());
+    }
+
+    // ── a fill errand played out ─────────────────────────────────────────────────────────────
+
+    /** A hole one deep at (5, 5) and its fill errand. */
+    private record Fill(Flatten project, WorkItem item, FakeContext ctx) {
+    }
+
+    private static Fill aHole() {
+        IntBinaryOperator hole = (x, z) -> x == 5 && z == 5 ? G - 1 : G;
+        Flatten project = flatten(hole);
+        FakeContext ctx = world(hole);
+        ctx.percepts.position = new Pos(5, G + 1, 3);
+        ctx.mover.setState(MoveState.ARRIVED);
+        return new Fill(project, offer(project, "fill 1 at (4, 4) y 63"), ctx);
+    }
+
+    /**
+     * Plays the world's part until the errand ends or {@code untilDigging} sees a dig begin: legs that
+     * arrive, an arm whose block drops straight into the pack, hands that place.
+     */
+    private static void play(TaskExecutor executor, FakeContext ctx, boolean untilDigging) {
+        int moves = ctx.mover.moveToCalls;
+        int placed = ctx.placer.placed.size();
+        for (int tick = 0; tick < 2000 && executor.isBusy(); tick++) {
+            executor.tick(ctx);
+            if (ctx.mover.moveToCalls != moves) {
+                moves = ctx.mover.moveToCalls;
+                ctx.percepts.position = new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
+            }
+            if (ctx.breaker.state == BreakState.BREAKING) {
+                if (untilDigging) {
+                    return;
+                }
+                Pos dug = ctx.breaker.target;
+                ctx.percepts.blocks.set(dug.x(), dug.y(), dug.z(), BlockKind.AIR);
+                ctx.percepts.blocks.setId(dug.x(), dug.y(), dug.z(), "");
+                ctx.percepts.inventory.add(ItemStack.of("minecraft:dirt", 1, 64));
+                ctx.breaker.state = BreakState.FINISHED;
+            }
+            if (ctx.placer.placed.size() != placed) {
+                FakePlacer.Placement placement = ctx.placer.placed.get(placed++);
+                Pos cell = placement.cell();
+                ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.OTHER);
+                ctx.percepts.inventory.remove(placement.itemId(), 1);
+            }
+        }
+    }
+
+    private static TaskExecutor started(Fill fill) {
+        TaskExecutor executor = new TaskExecutor();
+        executor.run(KittedErrand.around(fill.item()), fill.ctx());
+        return executor;
+    }
+
+    @Test
+    void aFillWithNoDirtAnywhereFailsRatherThanCompletes() {
+        Fill fill = aHole();
+        TaskExecutor executor = started(fill);
+        play(executor, fill.ctx(), false);
+
+        assertEquals(TaskStatus.FAILED, executor.lastStatus().orElseThrow(),
+                "nothing placed is not a fill done: " + executor.failureReason().orElse(""));
+        assertTrue(fill.ctx().placer.placed.isEmpty());
+        fill.project().failed(fill.item(), fill.ctx());
+        assertTrue(fill.project().describe().contains("waiting on dirt"));
     }
 
     @Test

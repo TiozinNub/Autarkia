@@ -25,7 +25,7 @@ import java.util.Set;
 /**
  * Fill one layer of a flatten's cells with what the body carries: dirt where the cell is the top of
  * its column, so the ground reads as natural again and grass comes back, and any other spoil
- * below. A top cell with no dirt to hand is left for a later trip.
+ * below. A top cell with no dirt to hand is left for a later trip; nothing for any cell fails it.
  */
 public final class FillCells implements CompoundTask {
 
@@ -112,6 +112,35 @@ public final class FillCells implements CompoundTask {
         return Optional.ofNullable(chosen);
     }
 
+    /** What each open cell gets from the pack, nearest first; a cell with nothing to take is left out. */
+    private Map<Pos, String> placings(BrainContext ctx) {
+        BlockProbe probe = ctx.percepts().blocks();
+        Map<String, Integer> held = carried(ctx.percepts().inventory());
+        Set<Pos> topSet = Set.copyOf(tops);
+        List<Pos> open = new ArrayList<>();
+        for (Pos cell : cells) {
+            if (open(probe, cell)) {
+                open.add(cell);
+            }
+        }
+        Map<Pos, String> placings = new LinkedHashMap<>();
+        for (Pos cell : CutCells.walk(open, ctx.percepts().position())) {
+            take(held, topSet.contains(cell)).ifPresent(item -> placings.put(cell, item));
+        }
+        return placings;
+    }
+
+    /**
+     * Open cells and nothing to put in them fails the trip. Placing nothing once read as done, and a
+     * pad with no dirt to be had was "filled" forty times without levelling (forest, 2026-10-02).
+     */
+    @Override
+    public Optional<String> refusal(BrainContext ctx) {
+        BlockProbe probe = ctx.percepts().blocks();
+        boolean anyOpen = cells.stream().anyMatch(cell -> open(probe, cell));
+        return anyOpen && placings(ctx).isEmpty() ? Optional.of("nothing to fill with") : Optional.empty();
+    }
+
     private final class Fill implements Method {
         @Override
         public boolean applicable(BrainContext ctx) {
@@ -126,27 +155,16 @@ public final class FillCells implements CompoundTask {
         @Override
         public List<Task> decompose(BrainContext ctx) {
             BlockProbe probe = ctx.percepts().blocks();
-            Map<String, Integer> held = carried(ctx.percepts().inventory());
-            Set<Pos> topSet = Set.copyOf(tops);
-            List<Pos> open = new ArrayList<>();
-            for (Pos cell : cells) {
-                if (open(probe, cell)) {
-                    open.add(cell);
-                }
-            }
             List<Task> steps = new ArrayList<>();
-            for (Pos cell : CutCells.walk(open, ctx.percepts().position())) {
-                Optional<String> item = take(held, topSet.contains(cell));
-                if (item.isEmpty()) {
-                    continue;
-                }
+            for (Map.Entry<Pos, String> placing : placings(ctx).entrySet()) {
+                Pos cell = placing.getKey();
                 Pos stand = standFor(ctx, cell);
                 steps.add(new Try(new GoTo(stand.x(), stand.y(), stand.z())));
                 if (!probe.empty(cell.x(), cell.y(), cell.z())) {
                     // A flower or a fern: the game will not place into it.
                     steps.add(new Try(new BreakBlock(cell.x(), cell.y(), cell.z())));
                 }
-                steps.add(new Try(new PlaceBlock(item.get(), cell.x(), cell.y(), cell.z())));
+                steps.add(new Try(new PlaceBlock(placing.getValue(), cell.x(), cell.y(), cell.z())));
             }
             return steps;
         }
