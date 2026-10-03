@@ -23,6 +23,11 @@ on:
   schedule:
     - cron: '27 4 * * *'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Minecraft version for the snapshot job; empty is what snapshot.version names'
+        required: false
+        default: ''
 
 # Step names carry no `${{ matrix.version }}`: Gitea's runner does not evaluate expressions in a
 # step's `name:` (GitHub does), so it renders the template at the reader. The matrix job header
@@ -97,80 +102,16 @@ jobs:
             echo "label=build.$(git log -1 --format=%cd --date=format:%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
           fi
 
-      # A change spanning both mods is two pushes seconds apart — Anima first, then the bump
-      # here — so both CIs start together and this one can reach dependency resolution while
-      # Anima is still building. What it resolves then is the PREVIOUS library: usually a
-      # confusing compile error, and occasionally something worse, a green build against a pair
-      # that was never tried.
-      #
-      # Last of the setup steps on purpose: checkout, the JDKs and the cache restore all run
-      # while Anima builds, so the only thing waited for is the part that cannot overlap.
-      #
-      # SNAPSHOTS ONLY. A release pin is immutable and its order is decided by hand — Anima
-      # tagged first, then this — so there is nothing to wait for.
+      # A change spanning both mods is two pushes seconds apart, so this can reach dependency
+      # resolution while Anima is still building and resolve the PREVIOUS library; the script
+      # says why at length. Last of the setup steps on purpose: checkout, the JDKs and the cache
+      # restore all run while Anima builds, so only the part that cannot overlap is waited for.
       - name: Wait out a running Anima build
+        run: scripts/wait-for-anima.sh "build (${{ matrix.version }})"
         env:
           CI_TOKEN: ${{ secrets.CI_TOKEN }}
-          NODE: ${{ matrix.version }}
-        run: |
-          set -euo pipefail
-          pin=$(awk '/^\[/{exit} /^deps\.anima/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)
-          case "$pin" in
-            *-SNAPSHOT) ;;
-            *) echo "deps.anima=$pin is a release — immutable, and ordered by hand. Nothing to wait for."; exit 0 ;;
-          esac
-
-          # A push is the only event that publishes, so a nightly or a dispatch over there is
-          # none of this build's business. Only Anima's job for THIS node counts: each node
-          # publishes its own coordinate and this job resolves only that one. Reading the newest
-          # row of any node failed every node here when a lagging 26.3.x went red (2026-09-27).
-          state() {
-            curl -fsS -H "Authorization: token $CI_TOKEN" \
-              "${{ github.server_url }}/api/v1/repos/${{ github.repository_owner }}/Anima/actions/tasks?limit=20" \
-            | python3 -c 'import os,sys,json; job="build (%s)" % os.environ["NODE"]; rows=[r for r in json.load(sys.stdin).get("workflow_runs",[]) if r["head_branch"]=="main" and r["event"]=="push" and r["name"]==job]; live=[r for r in rows if r["status"] in ("waiting","running","in_progress")]; print("live "+live[0]["head_sha"][:8] if live else (rows[0]["status"]+" "+rows[0]["head_sha"][:8] if rows else "idle -"))'
-          }
-
-          waited=0
-          deadline=$(( SECONDS + 1200 ))
-          while :; do
-            read -r st sha <<< "$(state)"
-            case "$st" in
-              live)
-                if (( SECONDS >= deadline )); then
-                  echo "::error::Anima ($sha) has been building for 20 minutes; this build would resolve a stale $pin"
-                  exit 1
-                fi
-                waited=1
-                echo "Anima $sha is still building — waiting for it to publish…"
-                sleep 20
-                ;;
-              # An unanswered API call is not a conclusion. Reading it as one would fail this
-              # build with a quoted empty status, which says nothing about what went wrong.
-              "")
-                if (( SECONDS >= deadline )); then
-                  echo "::error::no answer from the Anima API for 20 minutes; refusing to guess whether $pin is current"
-                  exit 1
-                fi
-                echo "no answer from the Anima API — retrying"
-                sleep 20
-                ;;
-              # Only fatal if we actually waited for THAT run. A build that went red an hour ago
-              # is a pre-existing condition and none of this build's business — the pin resolves
-              # whatever was last published successfully, exactly as it did before this step.
-              success|idle)
-                echo "Anima is idle (last push: $st $sha) — resolving $pin now"
-                break
-                ;;
-              *)
-                if (( waited )); then
-                  echo "::error::the Anima build this one waited for ($sha) ended '$st', so $pin was never published from it"
-                  exit 1
-                fi
-                echo "Anima's last push build ($sha) ended '$st' before this one started — resolving whatever it published last"
-                break
-                ;;
-            esac
-          done
+          GITEA_SERVER: ${{ github.server_url }}
+          GITEA_OWNER: ${{ github.repository_owner }}
 
       # `build` depends on `check`, so these already run — but Gradle does not ORDER test before
       # assemble, so a unit-test failure can arrive after remapJar has run. Asking for it first
@@ -256,3 +197,136 @@ jobs:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           GITEA_USER: ${{ github.repository_owner }}
           GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+  # The snapshot node: this mod, beside the Anima built for the same Minecraft version, against a
+  # version that is not a target yet. It runs when this commit carries `snapshot.version`, which
+  # the workspace's hourly watch commits to main once Anima's snapshot job has published
+  # `anima-<mc>`, and removes once that line is a target; without the file it does nothing.
+  #
+  # Lagging is allowed as for any non-primary node, strict on the nightly. Never on a tag: nothing
+  # here reaches Modrinth, and a release must not wait on Mojang's week.
+  snapshot:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: ${{ github.event_name != 'schedule' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 25 alone: every 26.x runs on it, and scripts/snapshot.sh refuses a build that does not,
+      # naming the places to teach when Mojang moves.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Point Gradle at the installed JDK
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.java.installations.fromEnv=JAVA_HOME_25_X64' > ~/.gradle/gradle.properties
+
+      # A dispatch's `version` wins over the file, which is how a version is tried by hand. The
+      # verdict is snapshot.sh's exit code: 0 a node to try, 3 nothing newer than the targets, 4 a
+      # build the ecosystem has not caught up with. Only another code is this step failing.
+      - name: Resolve the build to try
+        id: pick
+        run: |
+          want="${{ github.event.inputs.version }}"
+          if [[ -z "$want" && -f snapshot.version ]]; then want=$(tr -d '[:space:]' < snapshot.version); fi
+          if [[ -z "$want" ]]; then
+            echo "no snapshot.version on this commit: nothing to try"
+            echo "state=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          set +e
+          scripts/snapshot.sh "$want"
+          rc=$?
+          set -e
+          case $rc in
+            0) echo "state=ready" >> "$GITHUB_OUTPUT" ;;
+            3) echo "state=nothing" >> "$GITHUB_OUTPUT" ;;
+            4) echo "state=waiting" >> "$GITHUB_OUTPUT" ;;
+            *) exit $rc ;;
+          esac
+
+      - name: Cache the Gradle and Loom caches
+        if: steps.pick.outputs.state == 'ready'
+        uses: actions/cache@v3
+        continue-on-error: true
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/fabric-loom
+            ~/.gradle/wrapper
+            ~/.gradle/jdks
+          key: gradle-snapshot-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties', 'versions/snapshot/stonecutter.properties.toml') }}
+          restore-keys: gradle-snapshot-
+
+      # As in the build job: a changing module is held for 24 hours, and a restored cache would
+      # build against an older Anima and call the pair tried.
+      - name: Forget any cached Anima
+        if: steps.pick.outputs.state == 'ready'
+        run: |
+          rm -rf ~/.gradle/caches/modules-2/files-2.1/dev.luizloyola \
+                 ~/.gradle/caches/modules-2/metadata-*/descriptors/dev.luizloyola
+
+      - name: Wait out a running Anima build
+        if: steps.pick.outputs.state == 'ready'
+        run: scripts/wait-for-anima.sh snapshot
+        env:
+          CI_TOKEN: ${{ secrets.CI_TOKEN }}
+          GITEA_SERVER: ${{ github.server_url }}
+          GITEA_OWNER: ${{ github.repository_owner }}
+
+      # The watch commits the file here only after Anima has published `anima-<mc>`, so a miss is
+      # Anima's snapshot job red since, or a hand dispatch that came too early.
+      - name: Is Anima published for it?
+        if: steps.pick.outputs.state == 'ready'
+        env:
+          CI_TOKEN: ${{ secrets.CI_TOKEN }}
+        run: |
+          pin=$(awk '/^\[/{exit} /^deps\.anima/{sub(/.*= *"/,"");sub(/".*/,"");print;exit}' stonecutter.properties.toml)
+          url="${{ github.server_url }}/api/packages/${{ github.repository_owner }}/maven/dev/luizloyola/anima-${{ steps.pick.outputs.minecraft }}/$pin/maven-metadata.xml"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: token $CI_TOKEN" "$url")
+          if [[ "$code" != 200 ]]; then
+            echo "::error::Anima has not published anima-${{ steps.pick.outputs.minecraft }} $pin (http $code) — Anima's snapshot job has to go green for it first"
+            exit 1
+          fi
+
+      - name: Unit-test
+        if: steps.pick.outputs.state == 'ready'
+        run: ./gradlew :snapshot:test --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      - name: Build
+        if: steps.pick.outputs.state == 'ready'
+        run: ./gradlew :snapshot:build --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      - name: Stage this mod and the Anima it was built against
+        if: steps.pick.outputs.state == 'ready'
+        run: ./gradlew :snapshot:smokeMods --no-daemon
+        env:
+          GITEA_USER: ${{ github.repository_owner }}
+          GITEA_TOKEN: ${{ secrets.CI_TOKEN }}
+
+      - name: Boot the pair, spawn a Person, read it back
+        if: steps.pick.outputs.state == 'ready'
+        run: scripts/smoke.sh snapshot
+        env:
+          SMOKE_EULA: 'true'
+          READY_TIMEOUT: '900'
+
+      - name: Upload the test reports
+        if: failure() && steps.pick.outputs.state == 'ready'
+        uses: actions/upload-artifact@v3
+        with:
+          name: autarkia-test-reports-snapshot-${{ steps.pick.outputs.minecraft }}
+          path: versions/snapshot/build/reports/tests/
+          retention-days: 14
