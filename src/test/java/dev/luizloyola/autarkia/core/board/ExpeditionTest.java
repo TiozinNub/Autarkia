@@ -33,6 +33,10 @@ class ExpeditionTest {
     private static final ItemSpec STONE = ItemSpec.register(
             new ItemSpec("expedition-test-stone", id -> id.startsWith("test:stone")));
 
+    /** Stone only a body standing east of x = 100 knows of. */
+    private static final ItemSpec EAST_STONE = ItemSpec.register(
+            new ItemSpec("expedition-test-east-stone", id -> id.startsWith("test:east_stone")));
+
     // Registered once and never reset: Producers.reset() also drops what other classes register
     // when they load, and StrandedDigTest failed for it.
     static {
@@ -59,9 +63,54 @@ class ExpeditionTest {
         });
     }
 
+    static {
+        Producers.register(EAST_STONE, id -> true, wanted -> new Method() {
+            @Override
+            public boolean applicable(BrainContext ctx) {
+                return ctx.percepts().position().x() > 100;
+            }
+
+            @Override
+            public double estimateCost(BrainContext ctx) {
+                return 220;
+            }
+
+            @Override
+            public List<Task> decompose(BrainContext ctx) {
+                return List.of();
+            }
+
+            @Override
+            public String describe() {
+                return "mine the east stone";
+            }
+        });
+    }
+
     @BeforeEach
     void setUp() {
         Splits.register(CarrySplit.INSTANCE);
+    }
+
+    @Test
+    void onlyOneWhoKnowsTheWayIsOfferedTheLead() {
+        Expedition far = new Expedition(EAST_STONE, PARTY);
+        far.need(DORIS, "put minecraft:furnace down", 8, 0.52, Set.of("minecraft:furnace"), 0);
+        far.tick(0);
+        BoardBrainContext bia = atHome();
+        BoardBrainContext ana = atHome();
+        ana.standAt(new Pos(150, 64, 0));
+
+        assertFalse(far.offerableTo(far.open().get(0), EMILY, bia), "she knows no such stone; she can go along");
+        assertTrue(far.offerableTo(far.open().get(0), DORIS, ana));
+    }
+
+    @Test
+    void anOperatorsOrderDoesNotLapse() {
+        Expedition far = new Expedition(STONE, PARTY);
+        far.need(new Expedition.Need(DORIS, "asked by Server", 40, 0.4, Set.of(), 0, true), 0);
+        far.tick(10 * Expedition.NEED_LAPSE);
+        assertEquals(80, far.haul(), "nothing will fail again to say it is still wanted");
     }
 
     private static BoardBrainContext atHome() {

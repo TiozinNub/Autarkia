@@ -93,7 +93,9 @@ class PartyBoardCodecsTest {
         var state = new dev.luizloyola.autarkia.core.board.Expedition.State(
                 dev.luizloyola.autarkia.core.board.Stock.FURNACE_STONE.name(), PartyId.random(), "carry",
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Need(CREW, "make a stone axe", 3, 0.46,
-                        java.util.Set.of("minecraft:stone_axe"), 1200)),
+                        java.util.Set.of("minecraft:stone_axe"), 1200),
+                        new dev.luizloyola.autarkia.core.board.Expedition.Need(CREW, "asked by Server", 40, 0.4,
+                                java.util.Set.of(), 900, true)),
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Trip(CREW, 34)), 2, 2400, 1300,
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Trip(AgentId.random(), 14)), 1900,
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Cooldown(AgentId.random(), 2500)));

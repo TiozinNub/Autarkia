@@ -240,9 +240,10 @@ public final class PartyBoardCodecs {
             Codec.DOUBLE.fieldOf("priority").forGetter(Expedition.Need::priority),
             Codec.STRING.listOf().optionalFieldOf("for", List.of())
                     .forGetter(out -> List.copyOf(new TreeSet<>(out.pursued()))),
-            Codec.LONG.fieldOf("seen").forGetter(Expedition.Need::seen)
-    ).apply(need, (who, what, count, priority, pursued, seen) -> new Expedition.Need(
-            AgentId.of(who), what, count, priority, Set.copyOf(pursued), seen)));
+            Codec.LONG.fieldOf("seen").forGetter(Expedition.Need::seen),
+            Codec.BOOL.optionalFieldOf("standing", false).forGetter(Expedition.Need::standing)
+    ).apply(need, (who, what, count, priority, pursued, seen, standing) -> new Expedition.Need(
+            AgentId.of(who), what, count, priority, Set.copyOf(pursued), seen, standing)));
 
     public static final Codec<Expedition.Trip> EXPEDITION_TRIP = RecordCodecBuilder.create(trip -> trip.group(
             UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),

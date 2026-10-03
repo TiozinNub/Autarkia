@@ -5,6 +5,8 @@ import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
+import dev.luizloyola.anima.core.brain.task.Method;
+import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemSpec;
@@ -72,7 +74,11 @@ public final class Expedition implements PartyProject {
      * @param pursued what it was crafting, which is what lets the trip seek the resource at all
      * @param seen    the last time it failed priced out
      */
-    public record Need(AgentId who, String what, int count, double priority, Set<String> pursued, long seen) {
+    public record Need(AgentId who, String what, int count, double priority, Set<String> pursued, long seen,
+                       boolean standing) {
+        public Need(AgentId who, String what, int count, double priority, Set<String> pursued, long seen) {
+            this(who, what, count, priority, pursued, seen, false);
+        }
     }
 
     /** A trip out, with who took it — written down because nothing re-derives its size. */
@@ -96,6 +102,9 @@ public final class Expedition implements PartyProject {
     /** Until when the company offer stands: the leader's muster. Zero before anybody leads. */
     private long companyUntil;
     private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
+    /** Whether each member knew a way, as of the beat it was asked — a memo, never saved. */
+    private final Map<AgentId, Long> wayCheckedAt = new java.util.HashMap<>();
+    private final Map<AgentId, Boolean> knowsWay = new java.util.HashMap<>();
     private int failures;
     private long retryAfter;
     private boolean done;
@@ -123,7 +132,15 @@ public final class Expedition implements PartyProject {
 
     /** One of the party's items failed priced out of this resource with its budget at the cap. */
     public void need(AgentId who, String what, int count, double priority, Set<String> pursued, long now) {
-        needs.put(who + "|" + what, new Need(who, what, count, priority, Set.copyOf(pursued), now));
+        need(new Need(who, what, count, priority, Set.copyOf(pursued), now, false), now);
+    }
+
+    /**
+     * A need as given: a {@code standing} one — an operator's order, which never fails again to
+     * say it is still wanted — does not lapse.
+     */
+    public void need(Need need, long now) {
+        needs.put(need.who() + "|" + need.what(), need);
         lastTick = Math.max(lastTick, now);
         rebuildOffer();
     }
@@ -172,7 +189,7 @@ public final class Expedition implements PartyProject {
     @Override
     public void tick(long now) {
         lastTick = now;
-        needs.values().removeIf(need -> need.seen() + NEED_LAPSE < now);
+        needs.values().removeIf(need -> !need.standing() && need.seen() + NEED_LAPSE < now);
         rebuildOffer();
     }
 
@@ -215,7 +232,8 @@ public final class Expedition implements PartyProject {
             return false;
         }
         if (item == offer) {
-            return trip == null && lastTick >= retryAfter && split.tripFor(haul(), resource, ctx) > 0;
+            return trip == null && lastTick >= retryAfter && split.tripFor(haul(), resource, ctx) > 0
+                    && knowsTheWay(asker, ctx);
         }
         if (item == companyOffer) {
             return trip != null && !trip.who().equals(asker) && !company.containsKey(asker)
@@ -288,6 +306,27 @@ public final class Expedition implements PartyProject {
         failures++;
         retryAfter = ctx.percepts().time() + cooldownAfter(failures);
         rebuildOffer();
+    }
+
+    /**
+     * Whether {@code asker} knows a source within {@link #REACH} — only one who does can lead; the
+     * rest learn the way by going along. Once a beat per member: the board asks on every tick.
+     */
+    private boolean knowsTheWay(AgentId asker, BrainContext ctx) {
+        Long at = wayCheckedAt.get(asker);
+        if (at == null || at != lastTick) {
+            wayCheckedAt.put(asker, lastTick);
+            ObtainItem obtain = new ObtainItem(resource, 1, pursued(), ObtainItem.Sources.NOT_STORES);
+            boolean knows = false;
+            for (Method way : obtain.methods()) {
+                if (way.applicable(ctx) && way.estimateCost(ctx) <= REACH) {
+                    knows = true;
+                    break;
+                }
+            }
+            knowsWay.put(asker, knows);
+        }
+        return knowsWay.getOrDefault(asker, false);
     }
 
     static long cooldownAfter(int failures) {

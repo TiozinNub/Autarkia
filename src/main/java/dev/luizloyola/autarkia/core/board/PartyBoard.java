@@ -107,9 +107,15 @@ public final class PartyBoard extends Board {
     /** Adds a need to the expedition for {@code source}, posting one if none is going. */
     public Expedition sendFor(ItemSpec source, AgentId who, String what, int count, double priority,
                               java.util.Set<String> pursued, long now) {
+        return sendFor(source, new Expedition.Need(who, what, count, priority, java.util.Set.copyOf(pursued), now),
+                now);
+    }
+
+    /** The same with the need as given — an operator's is {@linkplain Expedition.Need#standing standing}. */
+    public Expedition sendFor(ItemSpec source, Expedition.Need need, long now) {
         Optional<Expedition> going = expeditionFor(source);
         Expedition expedition = going.orElseGet(() -> new Expedition(source, party));
-        expedition.need(who, what, count, priority, pursued, now);
+        expedition.need(need, now);
         if (going.isEmpty()) {
             post(expedition);
         }

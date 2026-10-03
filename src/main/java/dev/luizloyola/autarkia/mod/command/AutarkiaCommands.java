@@ -703,8 +703,10 @@ public final class AutarkiaCommands {
         }
         PartyBoard board = PartyBoards.of(server, party);
         boolean fresh = board.expeditionFor(resource.get()).isEmpty();
-        dev.luizloyola.autarkia.core.board.Expedition expedition = board.sendFor(resource.get(), who,
-                "asked by " + source.getTextName(), count, GATHER_PRIORITY, pursued, level.getGameTime());
+        // Standing: an order never fails again to say it is still wanted, so it must not lapse.
+        dev.luizloyola.autarkia.core.board.Expedition expedition = board.sendFor(resource.get(),
+                new dev.luizloyola.autarkia.core.board.Expedition.Need(who, "asked by " + source.getTextName(),
+                        count, GATHER_PRIORITY, pursued, level.getGameTime(), true), level.getGameTime());
         int handle = board.handleOf(expedition).orElse(0);
         PartyBoards.touch(server);
         OpJournal.record(source, PartyData.get(server).members(party),
