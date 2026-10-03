@@ -81,7 +81,9 @@ public final class FellTrees implements PartyProject {
     /**
      * Failures before a target is given up on. Nothing else in the board machinery ever gives up —
      * {@link #failed} paces a retry and re-offers — so without it one unreachable remnant would hold
-     * the project open forever.
+     * the project open forever. Counted in different workers, or in failures once every member of a
+     * smaller party has failed: alone, Clara went back to a tree ringed by water every half minute
+     * with HOME's area and the house waiting behind it (forest, 2026-10-03).
      */
     public static final int REFUSE_AFTER = 3;
 
@@ -90,8 +92,8 @@ public final class FellTrees implements PartyProject {
 
     /**
      * How long a target sits out after its {@code failures}th failure: {@link #FAIL_COOLDOWN}
-     * doubled each time, up to sixty-four times it. Giving up takes several different people
-     * ({@link #REFUSE_AFTER}), and a lone worker never gives up — so with a flat cooldown one
+     * doubled each time, up to sixty-four times it. A lone worker gives up only after
+     * {@link #REFUSE_AFTER} failures of its own — so with a flat cooldown, before it gave up at all, one
      * body alone went back to the same two trees under a cave every 600 ticks for as long as it
      * lived, the rest of the box untouched (2026-09-10). Waiting longer each time is what gets
      * the rest of the box offered in between.
@@ -159,6 +161,25 @@ public final class FellTrees implements PartyProject {
             }
             return new Target(anchor, state, failures + 1, retryAfter, List.copyOf(tried));
         }
+
+        Target refused() {
+            return new Target(anchor, TargetState.REFUSED, failures, 0L, failedBy);
+        }
+    }
+
+    /**
+     * Whether a target is given up on. Distinct WORKERS, not attempts — see Target.andFailedBy for
+     * what counting attempts cost — unless the party has fewer than {@link #REFUSE_AFTER}, when every
+     * member having failed and {@link #REFUSE_AFTER} failures in all will do. Falling back to
+     * attempts when nobody is named keeps termination: corroboration needs identities, and
+     * production always names the worker, so this is the seam's default rather than a path a
+     * settlement takes.
+     */
+    static boolean givesUp(Target tried, int members) {
+        return tried.failedBy().isEmpty()
+                ? tried.failures() >= REFUSE_AFTER
+                : tried.failedBy().size() >= Math.min(REFUSE_AFTER, members)
+                        && tried.failures() >= REFUSE_AFTER;
     }
 
     /** A slice waiting out a failure — same pacing a target gets, for the same reason. */
@@ -168,6 +189,8 @@ public final class FellTrees implements PartyProject {
     private final Felling clearing;
     private final Region bounds;
     private final double priority;
+    /** The party's size when this was posted: how many different workers giving up takes. */
+    private final int members;
 
     /** The grid the box divides into, in a fixed order — index is the durable slice name. */
     private final List<Region> slices;
@@ -248,9 +271,15 @@ public final class FellTrees implements PartyProject {
      * box is clear when it is clear, whether or not a single log reached a home chest.
      */
     public FellTrees(Felling clearing, Region bounds, double priority, boolean home) {
+        this(clearing, bounds, priority, home, REFUSE_AFTER);
+    }
+
+    /** As above, for a party of {@code members}: fewer than {@link #REFUSE_AFTER} give up sooner. */
+    public FellTrees(Felling clearing, Region bounds, double priority, boolean home, int members) {
         this.clearing = clearing;
         this.bounds = bounds;
         this.priority = priority;
+        this.members = Math.max(1, members);
         this.slices = sliceUp(bounds);
         this.covered = new CoverageGrid(bounds);
         this.home = home;
@@ -637,22 +666,15 @@ public final class FellTrees implements PartyProject {
             } else {
                 Target was = ledger.getOrDefault(place.at(), Target.fresh(place.at()));
                 Target tried = was.andFailedBy(who, now + cooldownAfter(was.failures() + 1));
-                // Distinct WORKERS, not attempts — see Target.andFailedBy for what counting attempts
-                // cost. Falling back to attempts when nobody is named keeps termination: corroboration
-                // needs identities, and production always names the worker, so this is the seam's
-                // default rather than a path a settlement takes.
-                boolean giveUp = tried.failedBy().isEmpty()
-                        ? tried.failures() >= REFUSE_AFTER
-                        : tried.failedBy().size() >= REFUSE_AFTER;
-                ledger.put(place.at(), giveUp
-                        ? new Target(place.at(), TargetState.REFUSED, tried.failures(), 0L,
-                                tried.failedBy())
-                        : tried);
-                ctx.journal().record(Category.PROJECT, name(), giveUp
+                boolean giveUp = givesUp(tried, members);
+                ledger.put(place.at(), giveUp ? tried.refused() : tried);
+                ctx.journal().record(Category.PROJECT, name(), !giveUp
+                        ? "failed at " + at(place.at()) + ", retry in " + cooldownAfter(tried.failures()) + "t"
+                        : tried.failedBy().size() >= REFUSE_AFTER
                         ? "gave up on " + at(place.at()) + " — " + tried.failedBy().size()
                                 + " different people could not"
-                        : "failed at " + at(place.at()) + ", retry in "
-                                + cooldownAfter(tried.failures()) + "t");
+                        : "gave up on " + at(place.at()) + " — every one of us failed at it, "
+                                + tried.failures() + " tries");
             }
         }
         withdraw(key);
@@ -1147,7 +1169,7 @@ public final class FellTrees implements PartyProject {
     public record State(String clearing, Region bounds, double priority, Phase phase,
                         List<SliceCooldown> sliceCooldowns, List<Target> targets,
                         int felledSinceReopen, List<CellMask> covered,
-                        boolean home, List<AgentId> crew)
+                        boolean home, List<AgentId> crew, int members)
             implements ProjectState {
 
         @Override
@@ -1174,7 +1196,7 @@ public final class FellTrees implements PartyProject {
         covered.masks().forEach((corner, mask) -> cells.add(new CellMask(corner, mask)));
         return new State(clearing.id(), bounds, priority, phase, List.copyOf(cooldowns),
                 List.copyOf(ledger.values()), felledSinceReopen, List.copyOf(cells), home,
-                List.copyOf(crew));
+                List.copyOf(crew), members);
     }
 
     /**
@@ -1185,13 +1207,15 @@ public final class FellTrees implements PartyProject {
     public static Optional<FellTrees> restore(State state, long now) {
         return Fellings.byId(state.clearing()).map(clearing -> {
             FellTrees project =
-                    new FellTrees(clearing, state.bounds(), state.priority(), state.home());
+                    new FellTrees(clearing, state.bounds(), state.priority(), state.home(), state.members());
             project.phase = state.phase();
             for (SliceCooldown cooldown : state.sliceCooldowns()) {
                 project.sliceRetryAfter.put(cooldown.slice(), cooldown.retryAfter());
             }
             for (Target target : state.targets()) {
-                project.ledger.put(target.anchor(), target);
+                // A box saved stuck, before a small party could give a target up, comes back moving.
+                project.ledger.put(target.anchor(), target.state() == TargetState.OPEN
+                        && givesUp(target, project.members) ? target.refused() : target);
             }
             project.felledSinceReopen = state.felledSinceReopen();
             for (CellMask cell : state.covered()) {

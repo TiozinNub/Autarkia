@@ -52,7 +52,7 @@ class PartyBoardCodecsTest {
                 targets, 7,
                 List.of(new FellTrees.CellMask(new Pos(0, 60, 0), CoverageGrid.FULL),
                         new FellTrees.CellMask(new Pos(8, 60, 0), 0x00FF)),
-                true, List.of(CREW));
+                true, List.of(CREW), 2);
     }
 
     @Test
@@ -147,7 +147,7 @@ class PartyBoardCodecsTest {
     void aBoxWithNoHaulRoundTripsWithoutOne() {
         FellTrees.State plain = new FellTrees.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), false, List.of());
+                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), false, List.of(), 1);
 
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(plain, List.of()));
 
@@ -160,7 +160,7 @@ class PartyBoardCodecsTest {
     void aBoxSavedWithAYardStillTakesItsWoodHome() {
         FellTrees.State plain = new FellTrees.State("trees",
                 new Region(new Pos(-10, 60, -20), new Pos(70, 90, 40)),
-                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), false, List.of());
+                0.5, FellTrees.Phase.WORKING, List.of(), List.of(), 0, List.of(), false, List.of(), 1);
         JsonObject row = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, new PartyBoard.Row(plain, List.of()))
                 .getOrThrow().getAsJsonObject();
         JsonObject project = row.getAsJsonObject("project");
@@ -328,6 +328,15 @@ class PartyBoardCodecsTest {
         encoded.getAsJsonObject().remove("members");
         assertEquals(1, ((ClearPlants.State) PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, encoded)
                 .getOrThrow()).members(), "a box saved before the party was counted writes off at one strike-out");
+    }
+
+    @Test
+    void aFellingSavedBeforeThePartyWasCountedReadsAsOne() {
+        PartyBoard.Row row = new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of());
+        var encoded = PartyBoardCodecs.ROW.encodeStart(JsonOps.INSTANCE, row).getOrThrow();
+        encoded.getAsJsonObject().getAsJsonObject("project").remove("members");
+        assertEquals(1, ((FellTrees.State) PartyBoardCodecs.ROW.parse(JsonOps.INSTANCE, encoded).getOrThrow()
+                .project()).members(), "so a lone settler's stuck box gives its tree up");
     }
 
     @Test

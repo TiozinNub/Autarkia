@@ -245,7 +245,7 @@ class EvolutionTest {
         FellTrees posted = clearingOnTheBoard();
         board.cancel(board.handleOf(posted).orElseThrow());
         FellTrees done = FellTrees.restore(new FellTrees.State("trees", PLOT, 0.5, FellTrees.Phase.DONE,
-                List.of(), List.of(), 0, List.of(), true, List.of()), 0L).orElseThrow();
+                List.of(), List.of(), 0, List.of(), true, List.of(), 1), 0L).orElseThrow();
         board.post(done);
         assertEquals(List.of(new DirectionId(WOOD, "area")),
                 Evolution.collect(tree, progress, view, board.closeFinished()));
@@ -331,7 +331,7 @@ class EvolutionTest {
     private void finish(FellTrees posted) {
         board.cancel(board.handleOf(posted).orElseThrow());
         FellTrees done = FellTrees.restore(new FellTrees.State("trees", posted.bounds(), 0.5,
-                FellTrees.Phase.DONE, List.of(), List.of(), 0, List.of(), true, List.of()), 0L)
+                FellTrees.Phase.DONE, List.of(), List.of(), 0, List.of(), true, List.of(), 1), 0L)
                 .orElseThrow();
         board.post(done);
         Evolution.collect(tree, progress, view, board.closeFinished());

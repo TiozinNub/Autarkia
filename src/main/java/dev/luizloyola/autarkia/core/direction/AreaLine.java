@@ -69,7 +69,7 @@ public final class AreaLine implements DirectionLine {
         Region bounds = Home.region(next, spot.y());
         return home.felled().contains(next)
                 ? new ClearPlants(bounds, priority, party.members())
-                : new FellTrees(TreeFelling.INSTANCE, bounds, priority, true);
+                : new FellTrees(TreeFelling.INSTANCE, bounds, priority, true, party.members());
     }
 
     @Override

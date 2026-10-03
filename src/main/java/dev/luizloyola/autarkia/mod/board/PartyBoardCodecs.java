@@ -127,16 +127,20 @@ public final class PartyBoardCodecs {
                     // Who has worked the box, so the end of the job still knows whose loads to
                     // bring in after a restart. A save from before 2026-09-27 has no crew yet.
                     UUIDUtil.CODEC.listOf().optionalFieldOf("crew", List.of())
-                            .forGetter(state -> state.crew().stream().map(AgentId::value).toList())
+                            .forGetter(state -> state.crew().stream().map(AgentId::value).toList()),
+                    // A box saved before the party was counted gives a target up once its one
+                    // worker has failed it three times.
+                    Codec.INT.optionalFieldOf("members", 1).forGetter(FellTrees.State::members)
             ).apply(project, (clearing, bounds, priority, phase, cooldowns, targets, felled,
-                    covered, legacySwept, home, legacyYard, crew) -> new FellTrees.State(
+                    covered, legacySwept, home, legacyYard, crew, members) -> new FellTrees.State(
                             clearing, bounds, priority, phase, cooldowns, targets, felled,
                             covered.isEmpty()
                                     ? legacySwept.stream()
                                             .map(at -> new FellTrees.CellMask(at, CoverageGrid.FULL))
                                             .toList()
                                     : covered,
-                            home.orElse(legacyYard.isPresent()), crew.stream().map(AgentId::of).toList())));
+                            home.orElse(legacyYard.isPresent()), crew.stream().map(AgentId::of).toList(),
+                            members)));
 
     /** What one home chest held when somebody last looked, and when they looked. */
     public static final Codec<Gather.Reading> READING =

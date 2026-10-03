@@ -949,6 +949,54 @@ class FellTreesTest {
         assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(tree).state());
     }
 
+    /**
+     * Clara, alone: a tree ringed by water was retried every half minute for good, and HOME's area
+     * and the house waited behind it. Alone, the one body failing is the only evidence there is.
+     */
+    @Test
+    void aLoneWorkerGivesATreeUpAfterFailingItEnoughTimes() {
+        FellTrees project = new FellTrees(ABLE, oneSlice(), 0.5, true, 1);
+        project.tick(0L);
+        BoardBrainContext ctx = new BoardBrainContext();
+        Pos tree = new Pos(3, 60, 3);
+        ctx.remember(THING, tree);
+        project.completed(project.open().get(0), ctx);
+
+        AgentId clara = AgentId.random();
+        for (int attempt = 1; attempt <= FellTrees.REFUSE_AFTER; attempt++) {
+            assertEquals(FellTrees.TargetState.OPEN, project.ledger().get(tree).state());
+            project.failed(itemAt(project, tree), clara, ctx);
+            ctx.advance(FellTrees.cooldownAfter(attempt));
+            project.tick(ctx.now());
+        }
+        assertEquals(FellTrees.TargetState.REFUSED, project.ledger().get(tree).state());
+    }
+
+    @Test
+    void aPairGivesATreeUpOnlyOnceBothFailedIt() {
+        FellTrees.Target tree = FellTrees.Target.fresh(new Pos(3, 60, 3));
+        AgentId ari = AgentId.random();
+        for (int attempt = 0; attempt < FellTrees.REFUSE_AFTER * 3; attempt++) {
+            tree = tree.andFailedBy(ari, 0L);
+        }
+        assertFalse(FellTrees.givesUp(tree, 2), "the other may still reach it");
+        assertTrue(FellTrees.givesUp(tree.andFailedBy(AgentId.random(), 0L), 2));
+        assertFalse(FellTrees.givesUp(tree.andFailedBy(AgentId.random(), 0L), 3),
+                "a crew of three still takes three different people");
+    }
+
+    @Test
+    void aLoneWorkersBoxSavedStuckComesBackMoving() {
+        Fellings.register(ABLE);
+        Pos tree = new Pos(3, 60, 3);
+        FellTrees.Target stuck = new FellTrees.Target(tree, FellTrees.TargetState.OPEN, 11, 0L,
+                List.of(AgentId.random()));
+        FellTrees back = FellTrees.restore(new FellTrees.State(ABLE.id(), oneSlice(), 0.5,
+                FellTrees.Phase.WORKING, List.of(), List.of(stuck), 0, List.of(), true, List.of(), 1), 0L)
+                .orElseThrow();
+        assertEquals(FellTrees.TargetState.REFUSED, back.ledger().get(tree).state());
+    }
+
     @Test
     void aFailedSliceIsOfferedAgainAfterItsCooldown() {
         FellTrees project = posted(ABLE, oneSlice());

@@ -607,7 +607,8 @@ public final class AutarkiaCommands {
         PartyBoard board = PartyBoards.of(server, party);
         // Trees, because they are the only thing anything knows how to clear. The kind becomes an
         // argument the day a second Felling is registered; until then a choice of one is noise.
-        FellTrees project = new FellTrees(TreeFelling.INSTANCE, bounds, priority, home);
+        FellTrees project = new FellTrees(TreeFelling.INSTANCE, bounds, priority, home,
+                PartyData.get(server).members(party).size());
         int handle = board.post(project);
         PartyBoards.touch(server);
         OpJournal.record(source, PartyData.get(server).members(party),
