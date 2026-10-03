@@ -84,26 +84,36 @@ public final class PartyBoard extends Board {
         if (source.isEmpty()) {
             return;
         }
-        Expedition expedition = null;
-        for (Project project : projects()) {
-            if (project instanceof Expedition far && far.resource() == source.get() && !far.finished()) {
-                expedition = far;
-            }
-        }
-        boolean fresh = expedition == null;
-        if (fresh && tolerance < WorkToleranceCurve.CAP) {
+        Optional<Expedition> going = expeditionFor(source.get());
+        if (going.isEmpty() && tolerance < WorkToleranceCurve.CAP) {
             return;
         }
-        if (fresh) {
-            expedition = new Expedition(source.get(), party);
+        Expedition expedition = sendFor(source.get(), who, item.describe(), wanted.count(), item.priority(),
+                wanted.pursued(), ctx.percepts().time());
+        ctx.journal().record(Category.PROJECT, item.describe(),
+                (going.isEmpty() ? "out of reach — " : "joins the ") + expedition.describe());
+    }
+
+    /** The open expedition for {@code source}, if one is going. */
+    public Optional<Expedition> expeditionFor(ItemSpec source) {
+        for (Project project : projects()) {
+            if (project instanceof Expedition far && far.resource() == source && !far.finished()) {
+                return Optional.of(far);
+            }
         }
-        expedition.need(who, item.describe(), wanted.count(), item.priority(), wanted.pursued(),
-                ctx.percepts().time());
-        if (fresh) {
+        return Optional.empty();
+    }
+
+    /** Adds a need to the expedition for {@code source}, posting one if none is going. */
+    public Expedition sendFor(ItemSpec source, AgentId who, String what, int count, double priority,
+                              java.util.Set<String> pursued, long now) {
+        Optional<Expedition> going = expeditionFor(source);
+        Expedition expedition = going.orElseGet(() -> new Expedition(source, party));
+        expedition.need(who, what, count, priority, pursued, now);
+        if (going.isEmpty()) {
             post(expedition);
         }
-        ctx.journal().record(Category.PROJECT, item.describe(),
-                (fresh ? "out of reach — " : "joins the ") + expedition.describe());
+        return expedition;
     }
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────

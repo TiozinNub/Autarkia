@@ -316,6 +316,21 @@ public final class AutarkiaCommands {
                         // Level a cleared area: the plan `flatten plan` paints, posted.
                         .then(Commands.literal("flatten").then(FlattenCommands.area(
                                 AutarkiaCommands::boardPostFlatten)))
+                        // Send somebody far for this many, as a need priced out at the cap does;
+                        // `for` names what it is wanted for, which lets the Wood Age seek stone.
+                        .then(Commands.literal("expedition")
+                                .then(Commands.argument("item", ItemArgument.item(registryAccess))
+                                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> boardPostExpedition(ctx,
+                                                        ItemArgument.getItem(ctx, "item"),
+                                                        IntegerArgumentType.getInteger(ctx, "count"), null))
+                                                .then(Commands.literal("for")
+                                                        .then(Commands.argument("craft",
+                                                                        ItemArgument.item(registryAccess))
+                                                                .executes(ctx -> boardPostExpedition(ctx,
+                                                                        ItemArgument.getItem(ctx, "item"),
+                                                                        IntegerArgumentType.getInteger(ctx, "count"),
+                                                                        ItemArgument.getItem(ctx, "craft"))))))))
                         // Get this many of this item into HOME's stores. A party with no HOME is
                         // refused: a gather with nowhere to put the goods has no completion rule.
                         .then(Commands.literal("gather")
@@ -654,6 +669,52 @@ public final class AutarkiaCommands {
      * <p>Refused before anything is posted when nothing registered here can ever make the item —
      * otherwise the settlement looks busy on a job that can never complete.
      */
+    private static int boardPostExpedition(CommandContext<CommandSourceStack> ctx, ItemInput item, int count,
+                                           @org.jspecify.annotations.Nullable ItemInput craft) {
+        CommandSourceStack source = ctx.getSource();
+        Person person = resolve(ctx);
+        if (person == null) return 0;
+        AgentId who = person.getAgentId();
+        if (who == null || !(person.level() instanceof ServerLevel level)) {
+            Replies.fail(source, Component.translatable(
+                    "autarkia.command.no_identity", person.getName()));
+            return 0;
+        }
+        String id;
+        Set<String> pursued;
+        try {
+            id = ItemStacks.templateOf(item, source.registryAccess()).id();
+            pursued = craft == null ? Set.of() : Set.of(ItemStacks.templateOf(craft, source.registryAccess()).id());
+        } catch (CommandSyntaxException invalid) {
+            Replies.fail(source, Component.translatable("autarkia.command.obtain.not_an_item"));
+            return 0;
+        }
+        Optional<ItemSpec> resource = Producers.sourceOf(ItemSpec.anyOf(Set.of(id)));
+        if (resource.isEmpty()) {
+            Replies.fail(source, Component.translatable("autarkia.command.gather.cannot_make", id));
+            return 0;
+        }
+        MinecraftServer server = level.getServer();
+        PartyId party = PartyData.get(server).partyOf(who);
+        if (dev.luizloyola.autarkia.mod.direction.DirectionsData.get(server).find(party)
+                .map(dev.luizloyola.autarkia.core.direction.PartyProgress::home).isEmpty()) {
+            Replies.fail(source, Component.translatable("autarkia.command.gather.no_home", person.getName()));
+            return 0;
+        }
+        PartyBoard board = PartyBoards.of(server, party);
+        boolean fresh = board.expeditionFor(resource.get()).isEmpty();
+        dev.luizloyola.autarkia.core.board.Expedition expedition = board.sendFor(resource.get(), who,
+                "asked by " + source.getTextName(), count, GATHER_PRIORITY, pursued, level.getGameTime());
+        int handle = board.handleOf(expedition).orElse(0);
+        PartyBoards.touch(server);
+        OpJournal.record(source, PartyData.get(server).members(party),
+                (fresh ? "posted #" : "added to #") + handle + " " + expedition.describe());
+        Replies.send(source, () -> Component.translatable("autarkia.command.gather.posted",
+                        handle, person.getName(), expedition.describe())
+                .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        return 1;
+    }
+
     private static int boardPostGather(CommandContext<CommandSourceStack> ctx, ItemInput item, int count,
                                        double priority) {
         CommandSourceStack source = ctx.getSource();
