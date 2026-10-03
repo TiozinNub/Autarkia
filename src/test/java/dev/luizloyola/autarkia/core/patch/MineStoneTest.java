@@ -155,6 +155,31 @@ class MineStoneTest {
                 Stock.FURNACE_STONE).exposed(ctx);
     }
 
+    /** Mined first, the anchor took the whole patch out of mind: 8 home from 49 (2026-10-02). */
+    @Test
+    void theAnchorIsMinedLastSoThePatchIsRememberedUntilItIsGone() {
+        Pos anchor = new Pos(10, G + 1, 0);
+        for (int x = 10; x <= 13; x++) {
+            for (int z = -1; z <= 1; z++) {
+                stone(x, z, G + 1);
+            }
+        }
+        ctx.percepts.position = new Pos(9, 64, 0);
+        MinePatch mine = new MinePatch(anchor, new Region(new Pos(8, G, -4), new Pos(16, G + 3, 4)),
+                Stock.FURNACE_STONE);
+
+        assertFalse(mine.exposed(ctx).contains(anchor), "twelve showing: the nearest is left for last");
+
+        for (int x = 10; x <= 13; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x != 10 || z != 0) {
+                    ctx.percepts.blocks.clear(x, G + 1, z);
+                }
+            }
+        }
+        assertEquals(List.of(anchor), mine.exposed(ctx), "and taken once nothing else is left");
+    }
+
     @Test
     void onlyTheTopOfAnOutcropIsMinedNearestFirst() {
         stone(12, 0, G + 2);

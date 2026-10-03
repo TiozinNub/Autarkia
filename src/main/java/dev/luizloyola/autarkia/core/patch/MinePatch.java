@@ -81,11 +81,15 @@ public final class MinePatch implements CompoundTask {
         return "mine the stone at (" + anchor.x() + ", " + anchor.y() + ", " + anchor.z() + ")";
     }
 
-    /** The exposed stone in the patch, in the order a body standing here would walk it. */
+    /**
+     * The exposed stone in the patch, in the order a body standing here would walk it — the anchor
+     * last. A belief is forgotten when its anchor goes, so mined first it took the rest of the patch
+     * out of mind: a far trip came home with 8 from an outcrop of 49 (2026-10-02).
+     */
     List<Pos> exposed(BrainContext ctx) {
-        List<Pos> standing = exposed(ctx.percepts().blocks(), bounds, ctx.percepts().position());
+        List<Pos> standing = exposed(ctx.percepts().blocks(), bounds, ctx.percepts().position(), anchor);
         return standing.isEmpty() && lastResort
-                ? layer(ctx.percepts().blocks(), bounds, ctx.percepts().position())
+                ? layer(ctx.percepts().blocks(), bounds, ctx.percepts().position(), anchor)
                 : standing;
     }
 
@@ -94,6 +98,10 @@ public final class MinePatch implements CompoundTask {
      * so an outcrop is cut back toward the land and flat stone never becomes a quarry pit.
      */
     static List<Pos> exposed(BlockProbe probe, Region bounds, Pos from) {
+        return exposed(probe, bounds, from, null);
+    }
+
+    private static List<Pos> exposed(BlockProbe probe, Region bounds, Pos from, Pos last) {
         LocalGround local = new LocalGround(probe);
         List<Pos> found = new ArrayList<>();
         for (Pos top : tops(probe, bounds)) {
@@ -101,7 +109,7 @@ public final class MinePatch implements CompoundTask {
                 found.add(top);
             }
         }
-        return walk(found, from);
+        return walk(found, from, last);
     }
 
     /**
@@ -111,6 +119,10 @@ public final class MinePatch implements CompoundTask {
      * {@link #MOST}.
      */
     static List<Pos> layer(BlockProbe probe, Region bounds, Pos from) {
+        return layer(probe, bounds, from, null);
+    }
+
+    private static List<Pos> layer(BlockProbe probe, Region bounds, Pos from, Pos last) {
         List<Pos> tops = tops(probe, bounds);
         int surface = Integer.MIN_VALUE;
         for (Pos top : tops) {
@@ -125,7 +137,11 @@ public final class MinePatch implements CompoundTask {
         }
         // One height throughout, so the lowest ground round a cell is the least sunk once it is cut.
         layer.sort(java.util.Comparator.comparingDouble(top -> local.around(top.x(), top.z())));
-        return walk(new ArrayList<>(layer.subList(0, Math.min(MOST, layer.size()))), from);
+        if (layer.size() > MOST && layer.indexOf(last) >= 0 && layer.indexOf(last) < MOST) {
+            layer.remove(last);
+            layer.add(last);
+        }
+        return walk(new ArrayList<>(layer.subList(0, Math.min(MOST, layer.size()))), from, last);
     }
 
     /** The stone showing at the top of each column in and just round the patch. */
@@ -143,13 +159,19 @@ public final class MinePatch implements CompoundTask {
         return found;
     }
 
-    /** Nearest first from {@code from}, then from each cell taken, at most {@link #MOST}. */
-    private static List<Pos> walk(List<Pos> found, Pos from) {
+    /**
+     * Nearest first from {@code from}, then from each cell taken, at most {@link #MOST}; {@code last}
+     * only once nothing else is left.
+     */
+    private static List<Pos> walk(List<Pos> found, Pos from, Pos last) {
         List<Pos> walk = new ArrayList<>();
         while (!found.isEmpty() && walk.size() < MOST) {
-            Pos next = found.get(0);
+            Pos next = null;
             for (Pos cell : found) {
-                if (TreeShape.horizontalDistSq(cell, from) < TreeShape.horizontalDistSq(next, from)) {
+                if (cell.equals(last) && found.size() > 1) {
+                    continue;
+                }
+                if (next == null || TreeShape.horizontalDistSq(cell, from) < TreeShape.horizontalDistSq(next, from)) {
                     next = cell;
                 }
             }
