@@ -503,8 +503,17 @@ public final class Expedition implements PartyProject {
         }
     }
 
-    /** Going along: whoever takes it gets a {@link CompanyItem} of their own. */
+    /**
+     * Going along: whoever takes it gets a {@link CompanyItem} of their own. Free to bid: it stands
+     * only through a muster, when the haul needs more than one pack, and at the trip's price a
+     * companion lost to every errand at HOME and the leader waited for nobody (2026-10-03) *(call)*.
+     */
     private final class CompanyOffer extends Item {
+        @Override
+        public double estimatedCost(BrainContext ctx) {
+            return 0.0;
+        }
+
         @Override
         public Task root() {
             throw new IllegalStateException("an expedition's company offer is replaced by a share before it is run");
@@ -519,6 +528,11 @@ public final class Expedition implements PartyProject {
     private final class CompanyItem extends Item {
         private final AgentId who;
         private final int size;
+
+        @Override
+        public double estimatedCost(BrainContext ctx) {
+            return 0.0;
+        }
 
         private CompanyItem(AgentId who, int size) {
             this.who = who;
