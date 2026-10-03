@@ -786,6 +786,35 @@ class PersonChooserTest {
         assertEquals(Chooser.Line.of(SpeechActs.ACCEPT_OFFER), chooser.choose(ctx, turn));
     }
 
+    @Test
+    @DisplayName("asked for food before any greeting: the request is answered, and no hello follows it")
+    void aRequestBeforeTheGreetingIsAnsweredWithNoHelloAfter() {
+        carries("minecraft:cooked_beef", 6, 8);
+        FakeSpeech theirs = new FakeSpeech(otherId.asPerson(), () -> ctx.percepts.time, ctx.speech.roster);
+        Encounter e = theirs.join(BeingId.of(ctx.self), Speech.Opening.I_HAILED).orElseThrow();
+        theirs.say(e, Chooser.Line.of(SpeechActs.ASK_FOOD));
+
+        Chooser.Line answer = chooser.choose(ctx, ctx.speech.turn(e));
+        assertEquals(SpeechActs.OFFER, answer.act(), "the request is answered first");
+        ctx.speech.say(e, answer);
+        theirs.say(e, Chooser.Line.of(SpeechActs.ACCEPT_OFFER));
+
+        Chooser.Line next = chooser.choose(ctx, ctx.speech.turn(e));
+        assertNotEquals(SpeechActs.GREETING, actOf(next), "no \"Hello\" after the first message");
+        assertEquals(List.of(SpeechActs.HAIL.key(), SpeechActs.ASK_FOOD.key(), SpeechActs.OFFER.key(),
+                SpeechActs.ACCEPT_OFFER.key()), e.transcript().stream().map(Utterance::act).toList());
+    }
+
+    @Test
+    @DisplayName("a hail and a greeting with nothing between are still greeted back")
+    void aPlainGreetingIsStillGreetedBack() {
+        FakeSpeech theirs = new FakeSpeech(otherId.asPerson(), () -> ctx.percepts.time, ctx.speech.roster);
+        Encounter e = theirs.join(BeingId.of(ctx.self), Speech.Opening.I_HAILED).orElseThrow();
+        theirs.say(e, Chooser.Line.of(SpeechActs.GREETING));
+
+        assertEquals(Chooser.Line.of(SpeechActs.GREETING), chooser.choose(ctx, ctx.speech.turn(e)));
+    }
+
     private Chooser.Turn greetedChat(Encounter e) {
         return new Chooser.Turn(e,
                 List.of(SpeechActs.ASK_FOOD, PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK, SpeechActs.END_CHAT),

@@ -49,7 +49,9 @@ import org.jspecify.annotations.Nullable;
  *       ({@link Turn#awaiting()}): hold — silence, not a second ask. Patience and the IGNORED
  *       snub already cover a counterpart who never replies; any discharging reply restores
  *       initiative on the very next turn.</li>
- *   <li>Say hello before anything else.</li>
+ *   <li>Say hello before anything else — unless something past the greetings has already been
+ *       said, by either side: a hello after a request reads backwards (decision: Luiz, 2026-10-03).
+ *       The engine folds that into {@link Turn#greeted()}.</li>
  *   <li>Peckish or worse, with no ready food on it: ask for some, once a record. Right after the
  *       greeting, whatever opened the chat — the hail is the same hail, and the first line after it
  *       is what says what the caller wanted (decision: Luiz, 2026-10-02).</li>
@@ -173,7 +175,7 @@ public final class PersonChooser implements Chooser {
                                 + offer(turn, PersonActs.SMALL_TALK_REPLY)),
                 new Rung(isWaiting(turn), "7 hold while awaiting an answer", waitingFacts(turn)),
                 new Rung(greets(turn), "8 greet",
-                        (turn.greeted() ? "already greeted here" : "not greeted yet")
+                        (turn.greeted() ? "greeted, or past the greetings" : "not greeted yet")
                                 + ", greeting " + offer(turn, SpeechActs.GREETING)),
                 new Rung(asksForFood(ctx, turn), "9 ask for food", foodFacts(ctx, turn)),
                 new Rung(asksTheirName(ctx, turn), "10 ask their name", nameFacts(ctx, turn)
