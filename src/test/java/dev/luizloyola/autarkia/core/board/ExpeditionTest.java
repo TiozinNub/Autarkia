@@ -192,6 +192,19 @@ class ExpeditionTest {
     }
 
     @Test
+    void aSearchCutShortLeavesItsWayUntried() {
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        WorkItem look = far.realise(far.open().get(1), EMILY, atHome());
+        far.claimed(look, EMILY);
+        int heading = assertInstanceOf(SearchErrand.class, look.root()).seek().heading();
+        far.lapsed(look);
+
+        WorkItem again = far.realise(far.open().get(1), EMILY, atHome());
+        assertEquals(heading, assertInstanceOf(SearchErrand.class, again.root()).seek().heading(),
+                "a fight drove her home; that way was never looked down");
+    }
+
+    @Test
     void aRestartKeepsTheSearch() {
         Expedition far = lost(Expedition.SEARCH_PATIENCE);
         WorkItem look = far.realise(far.open().get(1), EMILY, atHome());

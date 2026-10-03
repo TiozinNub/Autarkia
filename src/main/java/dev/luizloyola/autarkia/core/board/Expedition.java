@@ -488,6 +488,8 @@ public final class Expedition implements PartyProject {
         if (item == trip) {
             trip = null;
         } else if (item == search) {
+            // Cut short — a fight, a night — so that way was never looked down: it is tried again.
+            tried.remove(Integer.valueOf(search.heading()));
             search = null;
         } else if (item instanceof CompanyItem along && company.get(along.who()) == along) {
             company.remove(along.who());
