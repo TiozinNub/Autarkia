@@ -49,6 +49,12 @@ public final class WoodLine implements DirectionLine {
     }
 
     @Override
+    public OptionalInt shortOf(Direction direction, PartyView party) {
+        OptionalInt stored = party.storedAtHome(Stock.LOGS);
+        return stored.isEmpty() ? stored : OptionalInt.of(Math.max(0, direction.count() - stored.getAsInt()));
+    }
+
+    @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
         return project instanceof Gather gather && gather.spec() == Stock.LOGS && party.home().isPresent();
     }

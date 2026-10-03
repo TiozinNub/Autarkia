@@ -24,6 +24,12 @@ import java.util.Optional;
 public final class PartyBoard extends Board {
 
     private final PartyId party;
+    /**
+     * What the next tech node wants of each resource, as the Directions beat last read it: re-read
+     * every beat, and each expedition saves its own copy.
+     */
+    private Map<ItemSpec, Integer> ahead = Map.of();
+    private int members;
 
     public PartyBoard(PartyId party) {
         this.party = party;
@@ -124,6 +130,25 @@ public final class PartyBoard extends Board {
         return Optional.empty();
     }
 
+    /**
+     * What the party's next tech node will want, beyond what HOME holds and the Directions in force
+     * ask, of each resource — and how many members could carry it. Every expedition's haul counts
+     * it (Luiz, 2026-10-03).
+     */
+    public void foresee(Map<ItemSpec, Integer> more, int members) {
+        this.ahead = Map.copyOf(more);
+        this.members = members;
+        for (Project project : projects()) {
+            if (project instanceof Expedition far) {
+                far.foresee(aheadOf(far.resource()));
+            }
+        }
+    }
+
+    private Expedition.Ahead aheadOf(ItemSpec resource) {
+        return new Expedition.Ahead(ahead.getOrDefault(resource, 0), members);
+    }
+
     /** Adds a need to the expedition for {@code source}, posting one if none is going. */
     public Expedition sendFor(ItemSpec source, AgentId who, String what, int count, double priority,
                               java.util.Set<String> pursued, long now) {
@@ -137,6 +162,7 @@ public final class PartyBoard extends Board {
         Expedition expedition = going.orElseGet(() -> new Expedition(source, party));
         expedition.need(need, now);
         if (going.isEmpty()) {
+            expedition.foresee(aheadOf(source));
             post(expedition);
         }
         return expedition;

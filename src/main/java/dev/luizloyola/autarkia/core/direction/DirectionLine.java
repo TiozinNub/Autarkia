@@ -57,6 +57,15 @@ public interface DirectionLine {
     }
 
     /**
+     * How many more of what it {@linkplain #seeks seeks} HOME's stores must hold for this version to
+     * be met — what an expedition can bring ahead of the node (Luiz, 2026-10-03). Zero for a line
+     * whose condition is no stock of it; empty when the stores could not be read.
+     */
+    default java.util.OptionalInt shortOf(Direction direction, PartyView party) {
+        return java.util.OptionalInt.of(0);
+    }
+
+    /**
      * A project of this line's work closed having finished. Its ledger is gone with it, so this is
      * the line's one chance to keep what it learned. Nothing by default.
      */

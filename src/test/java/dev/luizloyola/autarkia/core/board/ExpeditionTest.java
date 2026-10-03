@@ -235,6 +235,58 @@ class ExpeditionTest {
         assertEquals(34, dorisNeeds().haul(), "stone, unlisted: twice the needs");
     }
 
+    // ── the next node ────────────────────────────────────────────────────────────────────────
+
+    private static final ItemSpec LOGS = ItemSpec.register(
+            new ItemSpec("expedition-test-logs", id -> id.equals("test:log")));
+
+    private static Expedition forATable() {
+        SourceKinds.register(LOGS, dev.luizloyola.autarkia.core.tree.Pois.TREE, SourceKinds.Haul.RENEWABLE);
+        Expedition far = new Expedition(LOGS, PARTY);
+        far.need(DORIS, "put minecraft:crafting_table down", 1, 0.52, Set.of(), 0);
+        return far;
+    }
+
+    @Test
+    void theNextNodesNeedsComeHomeToo() {
+        Expedition far = forATable();
+        assertEquals(2, far.haul(), "nothing ahead: today's number");
+
+        far.foresee(new Expedition.Ahead(192, 4));
+        assertEquals(193, far.haul(), "the table's log and the Stone Age's 192 beyond (Luiz, 2026-10-03)");
+
+        Expedition back = Expedition.restore(far.snapshot(), 0).orElseThrow();
+        assertEquals(far.snapshot(), back.snapshot());
+        assertEquals(193, back.haul(), "a restart sizes the trip the same");
+    }
+
+    @Test
+    void theNextNodeCountsOnlyUpToWhatThePartyCarries() {
+        Expedition far = forATable();
+        far.foresee(new Expedition.Ahead(192, 1));
+        assertEquals(CarrySplit.MAX_TRIP, far.haul(), "one member, one pack");
+    }
+
+    @Test
+    void theNextNodeNeverShrinksAHaul() {
+        Expedition far = dorisNeeds();
+        far.foresee(new Expedition.Ahead(5, 1));
+        assertEquals(34, far.haul(), "17 + 5 is less than twice the 17");
+        far.foresee(new Expedition.Ahead(0, 3));
+        assertEquals(34, far.haul(), "no next node: today's number");
+    }
+
+    @Test
+    void anExpeditionPostedBetweenBeatsTakesTheBoardsForesight() {
+        PartyBoard board = new PartyBoard(PARTY);
+        board.foresee(java.util.Map.of(STONE, 50), 2);
+        Expedition far = board.sendFor(STONE, DORIS, "put minecraft:furnace down", 8, 0.52, Set.of(), 0);
+        assertEquals(58, far.haul(), "the furnace's 8 and the 50 ahead, though no beat has run since");
+
+        board.foresee(java.util.Map.of(), 2);
+        assertEquals(16, far.haul(), "a beat that reads nothing ahead takes it away again");
+    }
+
     @Test
     void anOperatorsOrderDoesNotLapse() {
         Expedition far = new Expedition(STONE, PARTY);

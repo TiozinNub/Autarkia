@@ -103,7 +103,8 @@ class PartyBoardCodecsTest {
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Cooldown(AgentId.random(), 2500)),
                 new dev.luizloyola.autarkia.core.board.Expedition.Searching(
                         List.of(new dev.luizloyola.autarkia.core.board.Expedition.Search(CREW, 3, 5)), 6, 2, 3100,
-                        List.of(1, 3)));
+                        List.of(1, 3)),
+                new dev.luizloyola.autarkia.core.board.Expedition.Ahead(192, 2));
 
         assertEquals(state, roundTrip(new PartyBoard.Row(state, List.of())).project());
     }

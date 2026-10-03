@@ -267,6 +267,12 @@ public final class PartyBoardCodecs {
             Codec.INT.listOf().optionalFieldOf("tried", List.of()).forGetter(Expedition.Searching::tried)
     ).apply(s, Expedition.Searching::new));
 
+    /** What the next node wants of an expedition's resource, and the members who could carry it. */
+    public static final Codec<Expedition.Ahead> EXPEDITION_AHEAD = RecordCodecBuilder.create(a -> a.group(
+            Codec.INT.optionalFieldOf("more", 0).forGetter(Expedition.Ahead::more),
+            Codec.INT.optionalFieldOf("members", 0).forGetter(Expedition.Ahead::members)
+    ).apply(a, Expedition.Ahead::new));
+
     public static final Codec<Expedition.Trip> EXPEDITION_TRIP = RecordCodecBuilder.create(trip -> trip.group(
             UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
             Codec.INT.fieldOf("size").forGetter(Expedition.Trip::size)
@@ -296,10 +302,13 @@ public final class PartyBoardCodecs {
                     EXPEDITION_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(Expedition.State::cooldowns),
                     EXPEDITION_SEARCHING.optionalFieldOf("searching", Expedition.Searching.NONE)
-                            .forGetter(Expedition.State::searching)
+                            .forGetter(Expedition.State::searching),
+                    EXPEDITION_AHEAD.optionalFieldOf("ahead", Expedition.Ahead.NONE)
+                            .forGetter(Expedition.State::ahead)
             ).apply(project, (resource, party, split, needs, trip, failures, retry, lastTick, company,
-                    companyUntil, cooldowns, searching) -> new Expedition.State(resource, PartyId.of(party), split,
-                    needs, trip, failures, retry, lastTick, company, companyUntil, cooldowns, searching)));
+                    companyUntil, cooldowns, searching, ahead) -> new Expedition.State(resource, PartyId.of(party),
+                    split, needs, trip, failures, retry, lastTick, company, companyUntil, cooldowns, searching,
+                    ahead)));
 
     /** A station by the place kind it is remembered as and the block that places it. */
     public static final Codec<SetUp.Station> STATION = RecordCodecBuilder.create(station -> station.group(

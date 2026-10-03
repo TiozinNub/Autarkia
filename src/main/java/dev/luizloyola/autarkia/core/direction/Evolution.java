@@ -4,10 +4,14 @@ import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SetUp;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -102,7 +106,45 @@ public final class Evolution {
         }
         List<String> reached = tree.unlocked(progress.reached(), progress.checkpoints());
         reached.forEach(progress::reach);
+        ahead(tree, progress.reached(), view).ifPresent(more -> board.foresee(more, view.members()));
         return new Outcome(posted, withdrawn, completed, reached, stalls);
+    }
+
+    /**
+     * What the nodes the party could reach next will want in HOME's stores, by resource, beyond
+     * what they hold and what the same line in force already asks — an expedition's haul brings it
+     * too (Luiz, 2026-10-03). Every next node counts, as the board pursues every Direction at
+     * once; a stock line asks "at least", so the largest of them is the one that matters. Empty
+     * when the stores could not be read.
+     */
+    public static Optional<Map<ItemSpec, Integer>> ahead(Tree tree, Set<String> reached, PartyView view) {
+        Map<String, Direction> inForce = new HashMap<>();
+        tree.inForce(reached).forEach(direction -> inForce.put(direction.line(), direction));
+        Set<String> all = tree.withRoots(reached);
+        Map<ItemSpec, Integer> more = new HashMap<>();
+        for (Node node : tree.nodes()) {
+            if (all.contains(node.id()) || !tree.parentsMet(node, all)) {
+                continue;
+            }
+            for (Direction direction : node.directions()) {
+                Optional<DirectionLine> line = Lines.byId(direction.line());
+                Optional<ItemSpec> seeks = line.flatMap(DirectionLine::seeks);
+                if (seeks.isEmpty()) {
+                    continue;
+                }
+                OptionalInt later = line.get().shortOf(direction, view);
+                Direction now = inForce.get(direction.line());
+                OptionalInt asked = now == null ? OptionalInt.of(0) : line.get().shortOf(now, view);
+                if (later.isEmpty() || asked.isEmpty()) {
+                    return Optional.empty();
+                }
+                int beyond = later.getAsInt() - asked.getAsInt();
+                if (beyond > 0) {
+                    more.merge(seeks.get(), beyond, Math::max);
+                }
+            }
+        }
+        return Optional.of(more);
     }
 
     /**

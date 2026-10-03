@@ -12,13 +12,16 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.board.ClearPlants;
+import dev.luizloyola.autarkia.core.board.Expedition;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Fellings;
 import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
+import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -225,6 +228,32 @@ class EvolutionTest {
         assertEquals(1, outcome.posted().size());
         assertEquals(List.of(2), board.projects().stream().filter(p -> !p.finished())
                 .map(p -> ((Gather) p).target()).toList());
+    }
+
+    @Test
+    void theStoneAgesLogsBeyondWhatWoodAsksAreForeseen() {
+        view.logs = OptionalInt.of(10);
+        assertEquals(Optional.of(Map.of(Stock.LOGS, 192)), Evolution.ahead(tree, progress.reached(), view),
+                "256 at Stone, less the 10 held and the 54 Wood still asks");
+        view.logs = OptionalInt.of(100);
+        assertEquals(Optional.of(Map.of(Stock.LOGS, 156)), Evolution.ahead(tree, progress.reached(), view));
+        view.logs = OptionalInt.empty();
+        assertEquals(Optional.empty(), Evolution.ahead(tree, progress.reached(), view), "nothing to go on");
+
+        progress.reach(STONE);
+        view.logs = OptionalInt.of(10);
+        assertEquals(Optional.of(Map.of()), Evolution.ahead(tree, progress.reached(), view), "no next node");
+    }
+
+    @Test
+    void aBeatTellsTheExpeditionWhatTheNextNodeWants() {
+        view.logs = OptionalInt.of(10);
+        Expedition far = board.sendFor(Stock.LOGS, dev.luizloyola.anima.core.agent.AgentId.random(),
+                "put minecraft:crafting_table down", 1, 0.52, Set.of(), 0);
+        assertEquals(2, far.haul());
+        beat();
+        assertEquals(2 * dev.luizloyola.autarkia.core.board.CarrySplit.MAX_TRIP, far.haul(),
+                "1 and the 192 ahead, as much as two members carry");
     }
 
     @Test

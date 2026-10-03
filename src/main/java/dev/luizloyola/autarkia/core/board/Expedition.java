@@ -118,6 +118,15 @@ public final class Expedition implements PartyProject {
         public static final Searching NONE = new Searching(List.of(), SEARCH_LEGS, 0, 0L, List.of());
     }
 
+    /**
+     * What the party's next tech node will want of the resource beyond what HOME holds and the
+     * Directions in force already ask, and how many members could carry it — set each Directions
+     * beat, saved so a trip claimed after a restart is sized the same.
+     */
+    public record Ahead(int more, int members) {
+        public static final Ahead NONE = new Ahead(0, 0);
+    }
+
     /** A trip out, with who took it — written down because nothing re-derives its size. */
     public record Trip(AgentId who, int size) {
     }
@@ -153,6 +162,7 @@ public final class Expedition implements PartyProject {
     private int searchFailures;
     private long searchRetryAfter;
     private final List<Integer> tried = new ArrayList<>();
+    private Ahead ahead = Ahead.NONE;
 
     private final OfferItem offer = new OfferItem();
     private final CompanyOffer companyOffer = new CompanyOffer();
@@ -200,10 +210,19 @@ public final class Expedition implements PartyProject {
         return List.copyOf(needs.values());
     }
 
+    /** What the next node wants of this resource, as the Directions beat last read it. */
+    public void foresee(Ahead now) {
+        ahead = now;
+    }
+
     /**
      * How much to bring home, by the resource's {@link SourceKinds.Haul}: {@link #HAUL_PER_NEED}
      * times the open needs — stone (Luiz) and wood *(call)* alike — or, for a scarce one, all that
      * is found up to a stack, never less than the needs.
+     *
+     * <p>Raised to the open needs plus what the next node will want ({@link Ahead}), up to a pack
+     * a member (Luiz, 2026-10-03): the Stone Age's 256 logs are a second trip of up to 512 blocks
+     * otherwise. Never below the class's own number.
      */
     public int haul() {
         int total = 0;
@@ -215,8 +234,10 @@ public final class Expedition implements PartyProject {
         if (total == 0) {
             return 0;
         }
-        return SourceKinds.haulOf(resource) == SourceKinds.Haul.SCARCE
+        int byClass = SourceKinds.haulOf(resource) == SourceKinds.Haul.SCARCE
                 ? Math.max(total, ALL_FOUND) : HAUL_PER_NEED * total;
+        int carried = ahead.members() * CarrySplit.MAX_TRIP;
+        return Math.max(byClass, Math.min(total + ahead.more(), carried));
     }
 
     /** What is left of the haul once the trip and every companion's share are counted. */
@@ -571,7 +592,7 @@ public final class Expedition implements PartyProject {
 
     public record State(String resource, PartyId party, String split, List<Need> needs, List<Trip> trip,
                         int failures, long retryAfter, long lastTick, List<Trip> company, long companyUntil,
-                        List<Cooldown> cooldowns, Searching searching) implements ProjectState {
+                        List<Cooldown> cooldowns, Searching searching, Ahead ahead) implements ProjectState {
         /** A state saved before company was. */
         public State(String resource, PartyId party, String split, List<Need> needs, List<Trip> trip,
                      int failures, long retryAfter, long lastTick) {
@@ -584,6 +605,14 @@ public final class Expedition implements PartyProject {
                      List<Cooldown> cooldowns) {
             this(resource, party, split, needs, trip, failures, retryAfter, lastTick, company, companyUntil,
                     cooldowns, Searching.NONE);
+        }
+
+        /** A state saved before the next node counted. */
+        public State(String resource, PartyId party, String split, List<Need> needs, List<Trip> trip,
+                     int failures, long retryAfter, long lastTick, List<Trip> company, long companyUntil,
+                     List<Cooldown> cooldowns, Searching searching) {
+            this(resource, party, split, needs, trip, failures, retryAfter, lastTick, company, companyUntil,
+                    cooldowns, searching, Ahead.NONE);
         }
 
         @Override
@@ -603,7 +632,7 @@ public final class Expedition implements PartyProject {
                 : List.of(new Search(search.who(), search.heading(), search.legs()));
         return new State(resource.name(), party, split.id(), List.copyOf(needs.values()), out,
                 failures, retryAfter, lastTick, List.copyOf(along), companyUntil, List.copyOf(cooling),
-                new Searching(looking, searchLegs, searchFailures, searchRetryAfter, List.copyOf(tried)));
+                new Searching(looking, searchLegs, searchFailures, searchRetryAfter, List.copyOf(tried)), ahead);
     }
 
     public static Optional<Expedition> restore(State state, long now) {
@@ -628,6 +657,7 @@ public final class Expedition implements PartyProject {
             project.searchFailures = searching.failures();
             project.searchRetryAfter = searching.retryAfter();
             project.tried.addAll(searching.tried());
+            project.ahead = state.ahead();
             for (Cooldown cooling : state.cooldowns()) {
                 project.cooldownUntil.put(cooling.who(), cooling.retryAfter());
             }
