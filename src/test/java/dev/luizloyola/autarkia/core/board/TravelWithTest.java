@@ -15,7 +15,6 @@ import dev.luizloyola.anima.core.inv.ItemSpec;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -27,10 +26,11 @@ class TravelWithTest {
 
     private final FakeContext ctx = new FakeContext();
     /** How far off the one source this body knows is, in walk-blocks. */
-    private double sourceAt = Double.POSITIVE_INFINITY;
+    private static double sourceAt = Double.POSITIVE_INFINITY;
 
-    @BeforeEach
-    void setUp() {
+    // Registered once and never reset: Producers.reset() also drops what other classes register
+    // when they load, and StrandedDigTest failed for it.
+    static {
         Producers.register(STONE, id -> true, wanted -> new Method() {
             @Override
             public boolean applicable(BrainContext c) {
@@ -52,15 +52,15 @@ class TravelWithTest {
                 return "mine the stone";
             }
         });
+    }
+
+    @BeforeEach
+    void setUp() {
+        sourceAt = Double.POSITIVE_INFINITY;
         ctx.percepts.position = new Pos(0, 64, 0);
         ctx.depot = java.util.Optional.of(new dev.luizloyola.anima.core.store.Depot.Site(new Pos(0, 64, 0),
                 Set.of(new dev.luizloyola.anima.core.territory.ChunkKey(
                         dev.luizloyola.anima.core.territory.ChunkKey.OVERWORLD, 0, 0))));
-    }
-
-    @AfterEach
-    void tearDown() {
-        Producers.reset();
     }
 
     private void leaderAt(Pos where) {

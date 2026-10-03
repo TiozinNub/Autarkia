@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -34,9 +33,9 @@ class ExpeditionTest {
     private static final ItemSpec STONE = ItemSpec.register(
             new ItemSpec("expedition-test-stone", id -> id.startsWith("test:stone")));
 
-    @BeforeEach
-    void setUp() {
-        Splits.register(CarrySplit.INSTANCE);
+    // Registered once and never reset: Producers.reset() also drops what other classes register
+    // when they load, and StrandedDigTest failed for it.
+    static {
         Producers.register(STONE, id -> true, wanted -> new Method() {
             @Override
             public boolean applicable(BrainContext ctx) {
@@ -60,9 +59,9 @@ class ExpeditionTest {
         });
     }
 
-    @AfterEach
-    void tearDown() {
-        Producers.reset();
+    @BeforeEach
+    void setUp() {
+        Splits.register(CarrySplit.INSTANCE);
     }
 
     private static BoardBrainContext atHome() {
