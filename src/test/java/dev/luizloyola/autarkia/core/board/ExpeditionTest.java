@@ -180,6 +180,17 @@ class ExpeditionTest {
                 "away from HOME nobody could come along");
     }
 
+    /** Emily, a lone settler, 2026-10-03: her search outlived its needs and began again from four legs. */
+    @Test
+    void needsDoNotAgeWhileSomebodyIsOut() {
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        BoardBrainContext home = atHome();
+        far.claimed(far.realise(far.open().get(1), EMILY, home), EMILY);
+
+        far.tick(Expedition.SEARCH_PATIENCE + 3 * Expedition.NEED_LAPSE);
+        assertEquals(16, far.haul(), "nothing at HOME could fail to say they are still wanted");
+    }
+
     @Test
     void aRestartKeepsTheSearch() {
         Expedition far = lost(Expedition.SEARCH_PATIENCE);

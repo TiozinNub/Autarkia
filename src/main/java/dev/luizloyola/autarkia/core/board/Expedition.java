@@ -251,6 +251,12 @@ public final class Expedition implements PartyProject {
     @Override
     public void tick(long now) {
         lastTick = now;
+        if (trip != null || search != null || !company.isEmpty()) {
+            // Nothing fails at HOME while its only member is out looking or fetching, so a need
+            // does not age then: a lone settler's search outlived its needs and started over.
+            needs.replaceAll((key, need) -> new Need(need.who(), need.what(), need.count(), need.priority(),
+                    need.pursued(), Math.max(need.seen(), now), need.standing(), need.since(), need.lost()));
+        }
         needs.values().removeIf(need -> !need.standing() && need.seen() + NEED_LAPSE < now);
         rebuildOffer();
     }
@@ -541,10 +547,11 @@ public final class Expedition implements PartyProject {
     @Override
     public String describe() {
         int count = needs.size();
-        return "expedition for " + haul() + " " + resource.name() + " — " + count
+        return "expedition for " + (haul() == 0 ? "" : haul() + " ") + resource.name() + " — " + count
                 + (count == 1 ? " need" : " needs") + (trip == null ? "" : ", a trip out")
                 + (company.isEmpty() ? "" : ", " + company.size() + " along")
-                + (search == null ? "" : ", searching");
+                + (search == null ? "" : ", searching")
+                + (haul() == 0 && count > 0 ? ", not yet" : "");
     }
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────
