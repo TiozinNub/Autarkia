@@ -9,6 +9,7 @@ import dev.luizloyola.anima.core.brain.task.CompoundTask;
 import dev.luizloyola.anima.core.brain.task.EnsureTable;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.Method;
+import dev.luizloyola.anima.core.brain.task.Standing;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.brain.task.Try;
 import java.util.ArrayList;
@@ -121,12 +122,13 @@ public final class ClearStrip implements CompoundTask {
             Pos here = ctx.percepts().position();
             Pos middle = middle();
             if (!there && flat(here, middle) > (long) NEAR * NEAR) {
-                // Too far to see the strip: go and stand on it first, then look.
+                // Too far to see the strip: go and stand on it first, then look. The legs take the
+                // cell asked for, give or take one, so ask for the floor: unread, the strip is aimed
+                // at this body's own height, which down a hill is in the air.
                 int y = ctx.percepts().blocks().groundY(middle.x(), middle.z());
-                if (y == Integer.MIN_VALUE) {
-                    return List.of(new GoTo(middle.x(), here.y(), middle.z()), new ClearStrip(strip, true));
-                }
-                return List.of(new GoTo(middle.x(), y + 1, middle.z()), new ClearStrip(strip, true));
+                Pos on = Standing.floorUnder(ctx, new Pos(middle.x(),
+                        y == Integer.MIN_VALUE ? here.y() : y + 1, middle.z()));
+                return List.of(new GoTo(on.x(), on.y(), on.z()), new ClearStrip(strip, true));
             }
             List<Task> steps = new ArrayList<>();
             for (Pos plant : plants(strip, ctx.percepts().blocks(), here)) {

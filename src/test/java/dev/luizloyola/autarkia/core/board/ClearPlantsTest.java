@@ -173,4 +173,28 @@ class ClearPlantsTest {
             }
         };
     }
+
+    /**
+     * A strip down a hill is walked onto at its floor: the legs lower a goal one cell at most (Luiz,
+     * 2026-10-02), and the probe's ground there is the top of a tree, not where a body stands.
+     */
+    @Test
+    void aFarStripIsWalkedOntoAtTheFloorTheLegsCanStandOn() {
+        ctx.standAt(new Pos(40, 64, 0));
+        ctx.terrain = new dev.luizloyola.anima.core.nav.NavGrid() {
+            @Override
+            public dev.luizloyola.anima.core.nav.CellType cell(int x, int y, int z) {
+                return y < 60 ? dev.luizloyola.anima.core.nav.CellType.GROUND
+                        : dev.luizloyola.anima.core.nav.CellType.PASSABLE;
+            }
+        };
+        ClearStrip strip = new ClearStrip(new Region(new Pos(0, 48, 0), new Pos(15, 112, 3)));
+
+        List<dev.luizloyola.anima.core.brain.task.Task> steps =
+                strip.methods().get(0).decompose(ctx);
+
+        dev.luizloyola.anima.core.brain.task.GoTo walk =
+                (dev.luizloyola.anima.core.brain.task.GoTo) steps.get(0);
+        assertEquals(60, walk.y(), "named at the probe's ground, 64; the floor is 60");
+    }
 }

@@ -127,6 +127,8 @@ final class BoardBrainContext implements BrainContext {
     /** The world these percepts read. Tests place logs and leaves in it directly. */
     public final dev.luizloyola.anima.core.brain.knowledge.FakeProbe blocks =
             new dev.luizloyola.anima.core.brain.knowledge.FakeProbe();
+    /** The same world as the legs read it; nothing known unless a test draws it. */
+    dev.luizloyola.anima.core.nav.NavGrid terrain = dev.luizloyola.anima.core.nav.NavGrid.UNKNOWN;
 
     @Override
     public Percepts percepts() {
@@ -179,6 +181,11 @@ final class BoardBrainContext implements BrainContext {
             @Override
             public BlockProbe blocks() {
                 return blocks;
+            }
+
+            @Override
+            public dev.luizloyola.anima.core.nav.NavGrid terrain() {
+                return terrain;
             }
 
             @Override
