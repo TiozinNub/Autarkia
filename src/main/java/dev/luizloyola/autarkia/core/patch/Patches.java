@@ -38,6 +38,9 @@ public final class Patches {
      */
     public static final BlockKind SUGAR_CANE = BlockKind.register("sugar_cane");
 
+    /** A bamboo stalk — not the shoot, which has nothing to cut yet. */
+    public static final BlockKind BAMBOO_STALK = BlockKind.register("bamboo");
+
     /** A sweet berry bush, collision-free for the same reason and found the same way. */
     public static final BlockKind SWEET_BERRIES = BlockKind.register("sweet_berries");
 
@@ -76,6 +79,9 @@ public final class Patches {
 
     /** A stand of berry bushes. Same clumping, same reach. */
     public static final PoiKind BERRIES = PoiKind.register("berries", 8, "");
+
+    /** A bamboo grove. A jungle's groves run together, so the cactus radius rather than cane's. */
+    public static final PoiKind BAMBOO = PoiKind.register("bamboo", 12, "");
 
     private Patches() {
     }

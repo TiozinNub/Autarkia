@@ -219,6 +219,23 @@ class ExpeditionTest {
     }
 
     @Test
+    void howMuchComesHomeDependsOnHowTheResourceIsFound() {
+        ItemSpec cane = ItemSpec.register(new ItemSpec("expedition-test-cane", id -> id.equals("test:cane")));
+        ItemSpec wood = ItemSpec.register(new ItemSpec("expedition-test-wood", id -> id.equals("test:wood")));
+        SourceKinds.register(cane, dev.luizloyola.autarkia.core.patch.Patches.CANE, SourceKinds.Haul.SCARCE);
+        SourceKinds.register(wood, dev.luizloyola.autarkia.core.tree.Pois.TREE, SourceKinds.Haul.RENEWABLE);
+
+        Expedition forCane = new Expedition(cane, PARTY);
+        forCane.need(DORIS, "start a plantation", 3, 0.4, Set.of(), 0);
+        assertEquals(Expedition.ALL_FOUND, forCane.haul(), "the need is 3; finding 10, take all 10");
+
+        Expedition forWood = new Expedition(wood, PARTY);
+        forWood.need(DORIS, "put minecraft:crafting_table down", 1, 0.52, Set.of(), 0);
+        assertEquals(2, forWood.haul(), "the open needs and a margin");
+        assertEquals(34, dorisNeeds().haul(), "stone, unlisted: twice the needs");
+    }
+
+    @Test
     void anOperatorsOrderDoesNotLapse() {
         Expedition far = new Expedition(STONE, PARTY);
         far.need(new Expedition.Need(DORIS, "asked by Server", 40, 0.4, Set.of(), 0, true), 0);

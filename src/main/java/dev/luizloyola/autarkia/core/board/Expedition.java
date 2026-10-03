@@ -47,6 +47,9 @@ public final class Expedition implements PartyProject {
     /** The haul is this many times the open needs (Luiz, 2026-10-02: stone, open needs × 2). */
     public static final int HAUL_PER_NEED = 2;
 
+    /** "All that is found" of a scarce resource, as a count: what one trip can carry. */
+    public static final int ALL_FOUND = CarrySplit.MAX_TRIP;
+
     /**
      * Ticks a need stays without failing again before it leaves: past the longest back-off a
      * priced-out item waits (4,800), so only a need met another way, or withdrawn, ever lapses.
@@ -197,7 +200,11 @@ public final class Expedition implements PartyProject {
         return List.copyOf(needs.values());
     }
 
-    /** {@link #HAUL_PER_NEED} times the open needs. */
+    /**
+     * How much to bring home, by the resource's {@link SourceKinds.Haul}: {@link #HAUL_PER_NEED}
+     * times the open needs — stone (Luiz) and wood *(call)* alike — or, for a scarce one, all that
+     * is found up to a stack, never less than the needs.
+     */
     public int haul() {
         int total = 0;
         for (Need need : needs.values()) {
@@ -205,7 +212,11 @@ public final class Expedition implements PartyProject {
                 total += need.count();
             }
         }
-        return HAUL_PER_NEED * total;
+        if (total == 0) {
+            return 0;
+        }
+        return SourceKinds.haulOf(resource) == SourceKinds.Haul.SCARCE
+                ? Math.max(total, ALL_FOUND) : HAUL_PER_NEED * total;
     }
 
     /** What is left of the haul once the trip and every companion's share are counted. */

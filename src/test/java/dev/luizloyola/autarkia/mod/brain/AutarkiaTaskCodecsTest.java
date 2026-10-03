@@ -198,6 +198,18 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void aStalkCuttingSurvivesTheFile() {
+        var anchor = new dev.luizloyola.anima.core.brain.sense.Pos(3, 64, -2);
+        var cut = assertInstanceOf(dev.luizloyola.autarkia.core.patch.CutStalks.class,
+                roundTrip(new dev.luizloyola.autarkia.core.patch.CutStalks(dev.luizloyola.autarkia.core.patch.Stalks.CACTUS, anchor)));
+        assertEquals(dev.luizloyola.autarkia.core.patch.Patches.CACTI, cut.kind());
+        assertEquals(anchor, cut.anchor());
+        var grab = assertInstanceOf(dev.luizloyola.autarkia.core.patch.CutStalks.GrabClear.class,
+                roundTrip(new dev.luizloyola.autarkia.core.patch.CutStalks.GrabClear(dev.luizloyola.autarkia.core.patch.Stalks.BAMBOO, anchor)));
+        assertEquals(dev.luizloyola.autarkia.core.patch.Patches.BAMBOO, grab.kind());
+    }
+
+    @Test
     void aFetchOnItsWaySurvivesTheFile() {
         dev.luizloyola.autarkia.core.board.FetchSome after = assertInstanceOf(
                 dev.luizloyola.autarkia.core.board.FetchSome.class,

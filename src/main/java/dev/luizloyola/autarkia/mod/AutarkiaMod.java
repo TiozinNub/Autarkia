@@ -169,7 +169,16 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.core.board.SourceKinds.register(Stock.FURNACE_STONE,
                 dev.luizloyola.autarkia.core.patch.Landmarks.STONE_POI);
         dev.luizloyola.autarkia.core.board.SourceKinds.register(Stock.LOGS,
-                dev.luizloyola.autarkia.core.tree.Pois.TREE);
+                dev.luizloyola.autarkia.core.tree.Pois.TREE, dev.luizloyola.autarkia.core.board.SourceKinds.Haul.RENEWABLE);
+        // What grows up in a column, cut by forage (CutStalks). Cane and cactus are scarce, so an
+        // expedition takes all it finds; a bamboo grove is wood's kind of plenty *(call)*.
+        for (dev.luizloyola.autarkia.core.patch.Stalk stalk : dev.luizloyola.autarkia.core.patch.Stalks.ALL) {
+            Producers.register(stalk.item(), stalk.item()::matches, dev.luizloyola.autarkia.core.patch.Forage::new);
+            dev.luizloyola.autarkia.core.board.SourceKinds.register(stalk.item(), stalk.patch(),
+                    stalk == dev.luizloyola.autarkia.core.patch.Stalks.BAMBOO
+                            ? dev.luizloyola.autarkia.core.board.SourceKinds.Haul.RENEWABLE
+                            : dev.luizloyola.autarkia.core.board.SourceKinds.Haul.SCARCE);
+        }
         // And by hunting, under food alone: raw meat is not a meal, so the party's need for food is
         // what sends a Person hunting — or starving (directions spec, decisions 16 and 17).
         dev.luizloyola.autarkia.core.person.Hunting.ACT.key();

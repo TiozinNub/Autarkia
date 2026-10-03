@@ -231,6 +231,17 @@ public final class AutarkiaTasks {
                                 .forGetter(f -> java.util.List.copyOf(new java.util.TreeSet<>(f.pursued())))
                 ).apply(t, (spec, count, pursued) -> new FetchSome(spec, count, java.util.Set.copyOf(pursued)))));
         // A forage trip's work at the patch. Registered the day it was written, like the rest.
+        // A stalk patch's cutting, by the patch kind that names its stalk, and its clear-standing pickup.
+        TaskCodecs.register("autarkia:cut_stalks", dev.luizloyola.autarkia.core.patch.CutStalks.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        STALK.fieldOf("kind").forGetter(c -> dev.luizloyola.autarkia.core.patch.Stalks.of(c.kind()).orElseThrow()),
+                        POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.CutStalks::anchor)
+                ).apply(t, dev.luizloyola.autarkia.core.patch.CutStalks::new)));
+        TaskCodecs.register("autarkia:grab_clear", dev.luizloyola.autarkia.core.patch.CutStalks.GrabClear.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        STALK.fieldOf("kind").forGetter(g -> dev.luizloyola.autarkia.core.patch.Stalks.of(g.kind()).orElseThrow()),
+                        POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.CutStalks.GrabClear::anchor)
+                ).apply(t, dev.luizloyola.autarkia.core.patch.CutStalks.GrabClear::new)));
         TaskCodecs.register("autarkia:pick_patch", PickPatch.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POI_KIND.fieldOf("kind").forGetter(PickPatch::kind),
@@ -260,6 +271,12 @@ public final class AutarkiaTasks {
             key -> PoiKind.byKey(key).map(DataResult::success)
                     .orElseGet(() -> DataResult.error(() -> "no place kind is keyed \"" + key + "\"")),
             PoiKind::key);
+
+    /** A stalk, by its patch kind's key — the one thing that names it. */
+    private static final Codec<dev.luizloyola.autarkia.core.patch.Stalk> STALK = POI_KIND.comapFlatMap(
+            kind -> dev.luizloyola.autarkia.core.patch.Stalks.of(kind).map(DataResult::success)
+                    .orElseGet(() -> DataResult.error(() -> "no stalk grows in a \"" + kind.key() + "\" patch")),
+            dev.luizloyola.autarkia.core.patch.Stalk::patch);
 
 
     /**

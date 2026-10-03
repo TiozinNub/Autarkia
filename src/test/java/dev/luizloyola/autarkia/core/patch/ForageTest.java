@@ -71,6 +71,13 @@ class ForageTest {
     }
 
     @Test
+    void aCanePatchIsAWayToCaneAndNotToFood() {
+        remember(Patches.CANE, new Pos(20, 64, 0));
+        assertTrue(new Forage(Stalks.CANE_ITEM).applicable(ctx));
+        assertFalse(forFood().applicable(ctx), "nobody eats cane");
+    }
+
+    @Test
     void withNoPatchKnownThereIsNoWay() {
         assertFalse(forFood().applicable(ctx));
     }

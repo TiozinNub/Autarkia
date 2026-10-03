@@ -19,7 +19,8 @@ import java.util.Optional;
 /**
  * Where ready food comes from before anybody farms: a remembered patch of berries or melons.
  * Registered under {@code ReadyFood.SPEC} and {@code Food.SPEC}, so a meal and a gather for HOME's
- * stores both reach it through {@code ObtainItem}.
+ * stores both reach it through {@code ObtainItem} — and under each {@link Stalk}'s item, a plant
+ * that grows up being cut rather than picked ({@link CutStalks}).
  *
  * <p>A trip goes to the nearest patch that yields what is wanted, that nobody else is working and
  * this body has not been to lately, and picks what is ripe there — {@link PickPatch} looks on
@@ -44,7 +45,10 @@ public final class Forage implements Method {
 
     private static final List<Yield> YIELDS = List.of(
             new Yield(Patches.BERRIES, "minecraft:sweet_berries"),
-            new Yield(Patches.MELONS, "minecraft:melon_slice"));
+            new Yield(Patches.MELONS, "minecraft:melon_slice"),
+            new Yield(Patches.CANE, "minecraft:sugar_cane"),
+            new Yield(Patches.CACTI, "minecraft:cactus"),
+            new Yield(Patches.BAMBOO, "minecraft:bamboo"));
 
     /** Whether some patch yields {@code itemId} — what forage can ever make. */
     public static boolean yields(String itemId) {
@@ -76,6 +80,10 @@ public final class Forage implements Method {
         long now = ctx.percepts().time();
         ctx.knowledge().avoid(patch.kind(), patch.anchor(), now + REST_TICKS);
         ctx.claims().claim(patch.kind(), patch.anchor(), Region.of(patch.anchor()), now);
+        Optional<Stalk> stalk = Stalks.of(patch.kind());
+        if (stalk.isPresent()) {
+            return List.of(new CutStalks(stalk.get(), patch.anchor())); // walks to each cut itself: a cactus stand is never beside it
+        }
         Pos beside = EnsureTable.WalkToKnown.standableBeside(patch.anchor(), ctx);
         return List.of(new GoTo(beside.x(), beside.y(), beside.z()),
                 new PickPatch(patch.kind(), patch.anchor()));
