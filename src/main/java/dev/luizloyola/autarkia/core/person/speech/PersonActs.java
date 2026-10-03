@@ -27,6 +27,21 @@ public final class PersonActs {
     public static final SpeechAct SMALL_TALK = SpeechActs.register(new SpeechAct(
             "small_talk", "autarkia.speech.small_talk", 2, true, false, false, false, List.of(),
             Topics.FLAVOURS));
+    /**
+     * Small talk said as a question — it obliges, so it is answered on its topic, and left unanswered
+     * past patience it is a snub as an unanswered name is (decision: Luiz, 2026-10-02). Which topics
+     * may be asked is {@link Topics#QUESTIONS}; the flavours all may.
+     */
+    public static final SpeechAct SMALL_TALK_QUESTION = SpeechActs.register(new SpeechAct(
+            "small_talk_question", "autarkia.speech.small_talk_question", 2, true, true, false,
+            false, List.of("small_talk_reply", "deflect"), Topics.FLAVOURS));
+    /**
+     * The answer to a line of small talk, on its topic ({@link Topics#reply}). Never itself
+     * answered: a reply owed a reply is how two content settlers talked out the turn cap.
+     */
+    public static final SpeechAct SMALL_TALK_REPLY = SpeechActs.register(new SpeechAct(
+            "small_talk_reply", "autarkia.speech.small_talk_reply", 2, true, false, false, false,
+            List.of(), Topics.FLAVOURS));
 
     private PersonActs() {
     }

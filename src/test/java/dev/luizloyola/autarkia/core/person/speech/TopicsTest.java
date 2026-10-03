@@ -14,6 +14,7 @@ import dev.luizloyola.anima.core.brain.sense.Surroundings;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.brain.sense.Being;
+import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.Utterance;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.social.speech.Recounting;
@@ -153,21 +154,26 @@ class TopicsTest {
     }
 
     @Test
-    @DisplayName("Said reads the speaker's own small talk: topics by key, deeds by deed")
-    void saidReadsOwnSmallTalk() {
+    @DisplayName("Said reads topics by either side, and the speaker's own deeds")
+    void saidReadsBothSides() {
         AgentId me = AgentId.random();
         AgentId them = AgentId.random();
         String smallTalk = PersonActs.SMALL_TALK.key();
         List<Utterance> lines = List.of(
                 new Utterance(me, smallTalk, Map.of("topic", "weather"), 1),
-                new Utterance(them, smallTalk, Map.of("topic", "work"), 2),
-                new Utterance(me, smallTalk, Recounting.payload(fled("zombie", 0), 0), 3),
-                new Utterance(me, "greeting", Map.of(), 4));
+                new Utterance(them, PersonActs.SMALL_TALK_QUESTION.key(), Map.of("topic", "work"), 2),
+                new Utterance(me, PersonActs.SMALL_TALK_REPLY.key(),
+                        Map.of("topic", "need.hunger.same", Topics.ABOUT, "need.hunger"), 3),
+                new Utterance(me, smallTalk, Recounting.payload(fled("zombie", 0), 0), 4),
+                new Utterance(them, smallTalk, Recounting.payload(fled("spider", 0), 0), 5),
+                new Utterance(me, "greeting", Map.of(), 6));
 
         Topics.Said said = Topics.Said.in(lines, line -> me.equals(line.author()));
 
-        assertEquals(Set.of("weather"), said.topics(), "theirs are theirs to repeat");
-        assertEquals(Set.of(Deed.of(Doings.FLEEING, Slot.entity("zombie"))), said.deeds());
+        assertEquals(Set.of("weather", "work", "need.hunger"), said.topics(),
+                "a topic they raised is answered, not raised again; a reply counts as what it was about");
+        assertEquals(Set.of(Deed.of(Doings.FLEEING, Slot.entity("zombie"))), said.deeds(),
+                "their day stays theirs — ours can still answer it");
     }
 
     // ── the sources ──────────────────────────────────────────────────────────────────────────
@@ -277,24 +283,100 @@ class TopicsTest {
         }
         List<String> problems = new ArrayList<>();
         for (Map.Entry<String, Integer> topic : topics.entrySet()) {
-            for (int variant = 1; variant <= PersonActs.SMALL_TALK.variants(); variant++) {
-                String key = "autarkia.speech.small_talk." + topic.getKey() + "." + variant;
-                String line = en.get(key);
-                if (line == null) {
-                    problems.add(key + " is missing");
-                    continue;
-                }
-                Matcher m = ARG.matcher(line);
-                while (m.find()) {
-                    int position = m.group(1) == null ? -1 : Integer.parseInt(m.group(1));
-                    if (!m.group().equals("%%") && (position < 1 || position > topic.getValue())) {
-                        problems.add(key + " uses " + m.group() + " but carries "
-                                + topic.getValue() + " slot(s)");
-                    }
+            check(en, PersonActs.SMALL_TALK, topic.getKey(), topic.getValue(), problems);
+            if (Topics.QUESTIONS.contains(topic.getKey())) {
+                check(en, PersonActs.SMALL_TALK_QUESTION, topic.getKey(), topic.getValue(), problems);
+            }
+            // A reply carries the slots of the line it answers.
+            check(en, PersonActs.SMALL_TALK_REPLY, topic.getKey(), topic.getValue(), problems);
+            for (String set : Topics.REPLY_SETS.getOrDefault(topic.getKey(), List.of())) {
+                check(en, PersonActs.SMALL_TALK_REPLY, topic.getKey() + "." + set, topic.getValue(),
+                        problems);
+            }
+        }
+        check(en, PersonActs.SMALL_TALK_REPLY, Topics.DEED, 0, problems);
+        assertTrue(topics.keySet().containsAll(Topics.QUESTIONS), "a question about nothing we say");
+        assertTrue(topics.keySet().containsAll(Topics.REPLY_SETS.keySet()), "replies to nothing we say");
+        assertEquals(List.of(), problems);
+    }
+
+    /** Every line of {@code act} about {@code topic}, its arguments within {@code slots}. */
+    private static void check(Map<String, String> en, SpeechAct act, String topic, int slots,
+            List<String> problems) {
+        for (int variant = 1; variant <= act.variants(); variant++) {
+            String key = act.langKey() + "." + topic + "." + variant;
+            String line = en.get(key);
+            if (line == null) {
+                problems.add(key + " is missing");
+                continue;
+            }
+            Matcher m = ARG.matcher(line);
+            while (m.find()) {
+                int position = m.group(1) == null ? -1 : Integer.parseInt(m.group(1));
+                if (!m.group().equals("%%") && (position < 1 || position > slots)) {
+                    problems.add(key + " uses " + m.group() + " but carries " + slots + " slot(s)");
                 }
             }
         }
-        assertEquals(List.of(), problems);
+    }
+
+    // ── replies and questions ────────────────────────────────────────────────────────────────
+
+    private static Utterance line(SpeechAct act, String topic) {
+        return new Utterance(AgentId.random(), act.key(), Map.of("topic", topic), 0);
+    }
+
+    private static Topics.Speaker hungry(boolean hungry) {
+        return new Topics.Speaker(Optional.empty(), Optional.empty(), Topics.Pack.of(new Inventory()),
+                hungry ? List.of("hunger") : List.of(), List.of(), 0);
+    }
+
+    @Test
+    @DisplayName("a reply takes the best set its topic declares: asked and shared, asked, shared, plain")
+    void aReplyTakesTheBestSet() {
+        Utterance remark = line(PersonActs.SMALL_TALK, "need.hunger");
+        Utterance question = line(PersonActs.SMALL_TALK_QUESTION, "need.hunger");
+
+        assertEquals("need.hunger", Topics.reply(hungry(false), Topics.Said.NOTHING, remark).get("topic"));
+        assertEquals("need.hunger.same", Topics.reply(hungry(true), Topics.Said.NOTHING, remark).get("topic"));
+        assertEquals("need.hunger.asked",
+                Topics.reply(hungry(false), Topics.Said.NOTHING, question).get("topic"));
+        assertEquals("need.hunger.asked.same",
+                Topics.reply(hungry(true), Topics.Said.NOTHING, question).get("topic"));
+        assertEquals("need.breath.same", Topics.reply(new Topics.Speaker(Optional.empty(),
+                Optional.empty(), Topics.Pack.of(new Inventory()), List.of("breath"), List.of(), 0),
+                Topics.Said.NOTHING, line(PersonActs.SMALL_TALK, "need.breath")).get("topic"),
+                "breath declares no asked set, and shared is the next best");
+        assertEquals("need.hunger",
+                Topics.reply(hungry(true), Topics.Said.NOTHING, remark).get(Topics.ABOUT),
+                "whatever set it renders through, it is about what it answers");
+    }
+
+    @Test
+    @DisplayName("a reply carries what the line it answers named")
+    void aReplyCarriesTheSlots() {
+        Map<String, String> asked = LineSlots.with(Map.of("topic", Topics.HOLDING),
+                List.of(Slot.item("minecraft:bread")));
+        Map<String, String> reply = Topics.reply(hungry(false), Topics.Said.NOTHING,
+                new Utterance(AgentId.random(), PersonActs.SMALL_TALK_QUESTION.key(), asked, 0));
+
+        assertEquals("them.holding.asked", reply.get("topic"));
+        assertEquals(LineSlots.of(asked), LineSlots.of(reply));
+    }
+
+    @Test
+    @DisplayName("a question is drawn only from topics that can be asked, and never twice")
+    void questionsDrawFromTheAskable() {
+        Topics.Speaker player = playerAtDusk(); // dusk, an axe in their hand, logs, hungry
+        for (int i = 0; i < 50; i++) {
+            String topic = Topics.question(player, Topics.Said.NOTHING, RandomGenerator.getDefault())
+                    .orElseThrow().get("topic");
+            assertTrue(Topics.QUESTIONS.contains(topic), topic);
+        }
+        Set<String> all = new HashSet<>(Topics.options(player).stream().map(Topics.Topic::key).toList());
+        assertFalse(Topics.anythingToAsk(player, new Topics.Said(all, Set.of())));
+        assertTrue(Topics.question(player, new Topics.Said(all, Set.of()), RandomGenerator.getDefault())
+                .isEmpty());
     }
 
     // ── a player, or anybody with no brain ───────────────────────────────────────────────────

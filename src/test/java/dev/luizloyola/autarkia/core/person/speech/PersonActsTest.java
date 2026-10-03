@@ -6,8 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.social.speech.Encounter;
+import dev.luizloyola.anima.core.social.speech.Picker;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
+import dev.luizloyola.anima.core.social.speech.Utterance;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +54,32 @@ class PersonActsTest {
         assertFalse(PersonActs.SMALL_TALK.ends());
     }
 
+    @Test
+    @DisplayName("a question in small talk obliges, and a reply or a deflection discharges it")
+    void smallTalkQuestionFlags() {
+        assertTrue(PersonActs.SMALL_TALK_QUESTION.obliges());
+        assertEquals(List.of("small_talk_reply", "deflect"), PersonActs.SMALL_TALK_QUESTION.responses());
+        assertFalse(PersonActs.SMALL_TALK_REPLY.obliges(), "a reply owed a reply never ends");
+        assertFalse(PersonActs.SMALL_TALK_QUESTION.ends());
+        assertFalse(PersonActs.SMALL_TALK_REPLY.ends());
+    }
+
+    @Test
+    @DisplayName("a question left unanswered past patience names the snubber")
+    void anUnansweredQuestionIsASnub() {
+        AgentId asker = AgentId.random();
+        AgentId asked = AgentId.random();
+        Encounter e = new Encounter(java.util.UUID.randomUUID(), List.of(asker, asked), 0);
+        e.append(new Utterance(asker, PersonActs.SMALL_TALK_QUESTION.key(), Map.of("topic", "work"), 0));
+
+        assertTrue(Picker.expiredObligation(e, asker, 300, 300).isEmpty(), "patience is inclusive");
+        assertEquals(Optional.of(asked), Picker.expiredObligation(e, asker, 301, 300));
+
+        e.append(new Utterance(asked, PersonActs.SMALL_TALK_REPLY.key(),
+                Map.of("topic", "work.asked", Topics.ABOUT, "work"), 200));
+        assertTrue(Picker.expiredObligation(e, asker, 1000, 300).isEmpty(), "answered");
+    }
+
     /**
      * The only act of ours with a topic, and it declares the FLAVOUR half alone — what a body
      * feels is read off its own gauges at the moment of speaking, and a speaker choosing from a
@@ -71,7 +103,7 @@ class PersonActsTest {
     void buttonLabels() {
         String lang = langSource();
         for (var act : List.of(PersonActs.ASK_IDENTITY, PersonActs.INFORM_NAME,
-                PersonActs.SMALL_TALK)) {
+                PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_QUESTION, PersonActs.SMALL_TALK_REPLY)) {
             assertTrue(lang.contains("\"" + act.langKey() + ".button\""),
                     act.key() + " has no " + act.langKey() + ".button label");
         }
@@ -93,5 +125,7 @@ class PersonActsTest {
         assertEquals("autarkia.speech.ask_identity", PersonActs.ASK_IDENTITY.langKey());
         assertEquals("autarkia.speech.inform_name", PersonActs.INFORM_NAME.langKey());
         assertEquals("autarkia.speech.small_talk", PersonActs.SMALL_TALK.langKey());
+        assertEquals("autarkia.speech.small_talk_question", PersonActs.SMALL_TALK_QUESTION.langKey());
+        assertEquals("autarkia.speech.small_talk_reply", PersonActs.SMALL_TALK_REPLY.langKey());
     }
 }

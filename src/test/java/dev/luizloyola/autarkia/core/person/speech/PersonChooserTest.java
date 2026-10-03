@@ -33,9 +33,11 @@ import dev.luizloyola.anima.core.social.speech.Speech;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.random.RandomGenerator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -214,8 +216,50 @@ class PersonChooserTest {
 
         Chooser.Line line = chooser.choose(ctx, turn);
 
-        assertEquals(PersonActs.SMALL_TALK, line.act());
+        assertEquals(PersonActs.SMALL_TALK, line.act(), "a question is said only where one is on offer");
         assertTrue(Topics.keys(ctx, Optional.empty()).contains(line.payload().get("topic")));
+    }
+
+    @Test
+    @DisplayName("priority 8 asks as well as remarks, when a question is on offer")
+    void priority8SometimesAsks() {
+        ctx.percepts.company.setValue(0.5);
+        Chooser.Turn turn = new Chooser.Turn(freshEncounter(),
+                List.of(PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_QUESTION),
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
+
+        Set<SpeechAct> said = new HashSet<>();
+        for (int i = 0; i < 60; i++) {
+            Chooser.Line line = chooser.choose(ctx, turn);
+            said.add(line.act());
+            if (line.act() == PersonActs.SMALL_TALK_QUESTION) {
+                assertTrue(Topics.QUESTIONS.contains(line.payload().get("topic")),
+                        line.payload() + " is not a topic that can be asked");
+            }
+        }
+        assertEquals(Set.of(PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_QUESTION), said);
+    }
+
+    // ── priority 3: a question in small talk ─────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("priority 3 answers a question on its topic, from the asked set — whatever the gauge says")
+    void priority3AnswersAQuestionOnItsTopic() {
+        ctx.percepts.company.setValue(1.0);
+        Encounter e = freshEncounter();
+        Utterance asked = new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK_QUESTION.key(),
+                Map.of("topic", "work"), 0);
+        e.append(asked);
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(PersonActs.SMALL_TALK_REPLY, SpeechActs.DEFLECT, SpeechActs.END_CHAT),
+                Optional.of(asked), Optional.empty(), true, Optional.of(otherId.asPerson()));
+
+        Chooser.Line line = chooser.choose(ctx, turn);
+
+        assertEquals(PersonActs.SMALL_TALK_REPLY, line.act());
+        assertEquals("work.asked", line.payload().get("topic"));
+        assertEquals("work", line.payload().get(Topics.ABOUT));
+        assertTrue(chooser.explain(ctx, turn).get(2).startsWith("fired:   3 answer a question"));
     }
 
     @Test
@@ -250,56 +294,61 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 6 answers their small talk even when company wants no more")
-    void priority6AnswersTheirSmallTalkWhenContent() {
+    @DisplayName("priority 7 replies to their small talk on its topic, even when company wants no more")
+    void priority7RepliesToTheirSmallTalkWhenContent() {
         ctx.percepts.company.setValue(1.0); // crowded — no reason of its own to chat
         Encounter e = freshEncounter();
         e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
                 Map.of("topic", "weather"), 0));
         Chooser.Turn turn = new Chooser.Turn(e,
-                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
-                Optional.of(otherId.asPerson()));
+                List.of(PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_REPLY, SpeechActs.END_CHAT),
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
         Chooser.Line line = chooser.choose(ctx, turn);
 
-        assertEquals(PersonActs.SMALL_TALK, line.act(), "a line of theirs is answered, whatever the gauge says");
-        assertTrue(Topics.keys(ctx, Optional.empty()).contains(line.payload().get("topic")));
-        assertTrue(line.payload().containsKey(PersonChooser.ANSWER),
-                "and says it is a courtesy, or it would be answered back");
+        assertEquals(PersonActs.SMALL_TALK_REPLY, line.act(), "a line of theirs is answered, whatever the gauge says");
+        assertEquals("weather", line.payload().get("topic"), "on its own topic, not a fresh one");
     }
 
     @Test
-    @DisplayName("priority 6 does not answer a courtesy of theirs — an answer is owed to what was volunteered")
-    void priority6DoesNotAnswerTheirCourtesy() {
+    @DisplayName("a reply of theirs is never replied to")
+    void aReplyIsNotRepliedTo() {
         ctx.percepts.company.setValue(1.0);
         Encounter e = freshEncounter();
         e.append(new Utterance(ctx.self, PersonActs.SMALL_TALK.key(), Map.of("topic", "work"), 0));
-        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
-                Map.of("topic", "weather", PersonChooser.ANSWER, "1"), 20));
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK_REPLY.key(),
+                Map.of("topic", "work", Topics.ABOUT, "work"), 20));
         Chooser.Turn turn = new Chooser.Turn(e,
-                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
-                Optional.of(otherId.asPerson()));
+                List.of(PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_REPLY, SpeechActs.END_CHAT),
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
         ctx.percepts.time = 40;
 
         assertNull(chooser.choose(ctx, turn),
-                "two content bodies trading courtesies talked out the turn cap — the silence clock runs instead");
+                "two content bodies trading answers talked out the turn cap — the silence clock runs instead");
     }
 
     @Test
-    @DisplayName("a body that wants company volunteers small talk, never marks it a courtesy")
+    @DisplayName("a body that wants company volunteers after their reply — on something new to both")
     void wantedSmallTalkIsVolunteered() {
         ctx.percepts.company.setValue(0.0);
         Encounter e = freshEncounter();
+        e.append(new Utterance(ctx.self, PersonActs.SMALL_TALK.key(), Map.of("topic", "work"), 0));
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK_REPLY.key(),
+                Map.of("topic", "work", Topics.ABOUT, "work"), 20));
         e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
-                Map.of("topic", "weather", PersonChooser.ANSWER, "1"), 0));
+                Map.of("topic", "weather"), 40));
+        e.append(new Utterance(ctx.self, PersonActs.SMALL_TALK_REPLY.key(),
+                Map.of("topic", "weather", Topics.ABOUT, "weather"), 60));
         Chooser.Turn turn = new Chooser.Turn(e,
-                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
-                Optional.of(otherId.asPerson()));
+                List.of(PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_REPLY, SpeechActs.END_CHAT),
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
 
-        Chooser.Line line = chooser.choose(ctx, turn);
-
-        assertEquals(PersonActs.SMALL_TALK, line.act(), "lonely: keeps talking whatever their last line was");
-        assertFalse(line.payload().containsKey(PersonChooser.ANSWER), "wanted, so the counterpart owes it an answer");
+        for (int i = 0; i < 20; i++) {
+            Chooser.Line line = chooser.choose(ctx, turn);
+            assertEquals(PersonActs.SMALL_TALK, line.act(), "lonely: keeps talking");
+            assertFalse(Set.of("work", "weather").contains(line.payload().get("topic")),
+                    "work was ours and the weather theirs — neither is raised again");
+        }
     }
 
     @Test
@@ -384,23 +433,24 @@ class PersonChooserTest {
 
         List<String> lines = chooser.explain(ctx, turn);
 
-        assertEquals(8, lines.size(), "one line per rung, whatever happens");
+        assertEquals(10, lines.size(), "one line per rung, whatever happens");
         List<String> fired = lines.stream().filter(line -> line.startsWith("fired")).toList();
         assertEquals(1, fired.size(), "first match wins — exactly one rung takes the turn");
-        assertTrue(fired.get(0).contains("5 ask their name"), fired.get(0));
+        assertTrue(fired.get(0).contains("6 ask their name"), fired.get(0));
         assertEquals(PersonActs.ASK_IDENTITY, chooser.choose(ctx, turn).act(),
                 "the rung explain() marks fired is the one choose() actually took");
 
-        // Live facts, not canned text: the pending act, rung 5's percept, rung 6's two numbers.
+        // Live facts, not canned text: the pending act, rung 6's percept, rung 8's two numbers.
         assertTrue(lines.get(1).contains("pending none"), lines.get(1));
-        assertTrue(lines.get(4).contains("seen at INDIVIDUAL"), lines.get(4));
-        assertTrue(lines.get(5).contains("company 0.50 < content 0.85"), lines.get(5));
-        // Rung 7 reads skipped: nothing has been said here yet, so plenty is left to say.
-        assertTrue(lines.get(6).startsWith("skipped"), lines.get(6));
-        assertTrue(lines.get(6).contains("something new left"), lines.get(6));
-        // Rung 8 reads skipped: rung 5 spoke, and the silence it waits for has not run either.
-        assertTrue(lines.get(7).startsWith("skipped"), lines.get(7));
-        assertTrue(lines.get(7).contains("silent 0 of 300 ticks"), lines.get(7));
+        assertTrue(lines.get(5).contains("seen at INDIVIDUAL"), lines.get(5));
+        assertTrue(lines.get(6).contains("last said nothing"), lines.get(6));
+        assertTrue(lines.get(7).contains("company 0.50 < content 0.85"), lines.get(7));
+        // Rung 9 reads skipped: nothing has been said here yet, so plenty is left to say.
+        assertTrue(lines.get(8).startsWith("skipped"), lines.get(8));
+        assertTrue(lines.get(8).contains("something new left"), lines.get(8));
+        // Rung 10 reads skipped: rung 6 spoke, and the silence it waits for has not run either.
+        assertTrue(lines.get(9).startsWith("skipped"), lines.get(9));
+        assertTrue(lines.get(9).contains("silent 0 of 300 ticks"), lines.get(9));
     }
 
     // ── the full two-party conversation ──────────────────────────────────────────────────────
@@ -578,8 +628,8 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 6 answers a deed of theirs with the latest of its own")
-    void priority6AnswersADeedWithADeed() {
+    @DisplayName("priority 7 answers a deed of theirs with the latest of its own")
+    void priority7AnswersADeedWithADeed() {
         ctx.percepts.company.setValue(1.0);
         History.Entry mine = new History.Entry(Deed.of(Doings.EATING), 0, 1);
         ctx.history.add(mine);
@@ -587,16 +637,25 @@ class PersonChooserTest {
         e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
                 Recounting.payload(new History.Entry(
                         Deed.of(Doings.FLEEING, Slot.entity("zombie")), 0, 1), 0), 0));
-        Chooser.Turn turn = new Chooser.Turn(e,
-                List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT), Optional.empty(),
-                Optional.empty(), true, Optional.of(otherId.asPerson()));
+        Chooser.Line line = chooser.choose(ctx, chatting(e));
 
-        Chooser.Line line = chooser.choose(ctx, turn);
-
-        assertEquals(PersonActs.SMALL_TALK, line.act());
+        assertEquals(PersonActs.SMALL_TALK_REPLY, line.act());
         assertEquals(Deed.of(Doings.EATING), Recounting.read(line.payload()).orElseThrow().deed(),
                 "their day, answered with ours — not a fresh random topic");
-        assertTrue(line.payload().containsKey(PersonChooser.ANSWER), "and still a courtesy");
+    }
+
+    @Test
+    @DisplayName("priority 7 answers a deed of theirs with a line about it, when it has none of its own")
+    void priority7AnswersADeedWithoutOneOfItsOwn() {
+        ctx.percepts.company.setValue(1.0);
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
+                Recounting.payload(new History.Entry(Deed.of(Doings.EATING), 0, 1), 0), 0));
+
+        Chooser.Line line = chooser.choose(ctx, chatting(e));
+
+        assertEquals(PersonActs.SMALL_TALK_REPLY, line.act());
+        assertEquals(Topics.DEED, line.payload().get("topic"));
     }
 
     // ── nothing said twice ───────────────────────────────────────────────────────────────────
@@ -606,27 +665,21 @@ class PersonChooserTest {
         return new Utterance(ctx.self, PersonActs.SMALL_TALK.key(), Map.of("topic", topic), 0);
     }
 
-    /** Their small talk about the weather — a line of theirs to answer, not a monologue of ours. */
-    private Utterance theirs() {
-        return new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK.key(),
-                Map.of("topic", "weather"), 0);
-    }
-
     private Chooser.Turn chatting(Encounter e) {
-        return new Chooser.Turn(e, List.of(PersonActs.SMALL_TALK, SpeechActs.END_CHAT),
+        return new Chooser.Turn(e,
+                List.of(PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_REPLY, SpeechActs.END_CHAT),
                 Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
     }
 
     @Test
-    @DisplayName("priority 6 never brings up a topic it already brought up here")
-    void priority6NeverRepeatsATopic() {
+    @DisplayName("priority 8 never brings up a topic already brought up here")
+    void priority8NeverRepeatsATopic() {
         ctx.percepts.company.setValue(0.5);
         Encounter e = freshEncounter();
         List<String> topics = Topics.keys(ctx, Optional.empty());
         for (String topic : topics.subList(1, topics.size())) {
             e.append(mine(topic));
         }
-        e.append(theirs());
 
         for (int i = 0; i < 20; i++) {
             assertEquals(topics.get(0), chooser.choose(ctx, chatting(e)).payload().get("topic"),
@@ -635,19 +688,21 @@ class PersonChooserTest {
     }
 
     @Test
-    @DisplayName("priority 7: everything said, it says goodbye at once rather than again")
-    void priority7SaysGoodbyeWhenOutOfThingsToSay() {
+    @DisplayName("priority 9: everything said, by either side, it says goodbye at once rather than again")
+    void priority9SaysGoodbyeWhenOutOfThingsToSay() {
         ctx.percepts.company.setValue(0.5); // still wants company — and has nothing left to say
         Encounter e = freshEncounter();
-        for (String topic : Topics.keys(ctx, Optional.empty())) {
+        List<String> topics = Topics.keys(ctx, Optional.empty());
+        for (String topic : topics.subList(1, topics.size())) {
             e.append(mine(topic));
         }
-        e.append(theirs());
+        e.append(new Utterance(otherId.asPerson(), PersonActs.SMALL_TALK_REPLY.key(),
+                Map.of("topic", topics.get(0), Topics.ABOUT, topics.get(0)), 0));
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, chatting(e)),
                 "running out of things to say is how a chat ends");
-        String rung7 = chooser.explain(ctx, chatting(e)).get(6);
-        assertTrue(rung7.startsWith("fired:   7 out of things to say"), rung7);
+        String rung9 = chooser.explain(ctx, chatting(e)).get(8);
+        assertTrue(rung9.startsWith("fired:   9 out of things to say"), rung9);
     }
 
     @Test

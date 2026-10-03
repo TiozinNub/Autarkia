@@ -8,21 +8,18 @@ import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.Picker;
-import dev.luizloyola.anima.core.social.speech.Recounting;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The part with the personality — an eight-rung ladder, first match wins, every rung gated on
- * the act being in {@link Turn#applicable()}: the picker filters, this only wants.
+ * The part with the personality — a ten-rung ladder, first match wins, every rung gated on the
+ * act being in {@link Turn#applicable()}: the picker filters, this only wants.
  *
  * <ol>
  *   <li>Asked its identity — v1 never deflects, it always shares its name. Gated on the pending
@@ -32,6 +29,8 @@ import org.jspecify.annotations.Nullable;
  *       goodbye is not a proposal anybody gets to refuse (decision: Luiz, 2026-09-13) — the
  *       negotiated ending it replaced let two bodies decline each other's proposals one line
  *       per beat.</li>
+ *   <li>Asked a question in small talk: answer it, on its topic ({@link Topics#reply}). A question
+ *       obliges (decision: Luiz, 2026-10-02).</li>
  *   <li>Already asked something of the counterpart that nothing of theirs has answered yet
  *       ({@link Turn#awaiting()}): hold — silence, not a second ask. Patience and the IGNORED
  *       snub already cover a counterpart who never replies; any discharging reply restores
@@ -40,16 +39,14 @@ import org.jspecify.annotations.Nullable;
  *   <li>A counterpart seen but never introduced, who has not already given a name in this
  *       record, and whom this body has not already asked here: ask. Once per record — a
  *       deflection is an answer, and asking again after one is badgering.</li>
- *   <li>Still wanting company, or answering small talk of theirs: small talk — the topic varies
- *       (see {@link Topics}), the act never does; see {@link #choose}'s own rung 6 for why. The
- *       answer is a courtesy owed whatever the gauge says: a content settler that stood mute while
- *       the player chatted at it was the first client run's second finding (2026-09-13). A
- *       courtesy is marked as one ({@link #ANSWER}) and earns no courtesy back: owed to what was
- *       volunteered, never to an answer — two content settlers trading answers talked out the
- *       whole turn cap (2026-09-14). A deed of theirs is answered with the latest of this body's
- *       own, when it has one — the first reply that follows from what it answers (2026-09-23).
- *       Only ever something this body has not already brought up here ({@link Topics.Said}).</li>
- *   <li>Rung 6 would speak but has nothing new left to say: say goodbye. Running out of things to
+ *   <li>Their small talk was the last thing said: reply on its topic, whatever the gauge says — a
+ *       content settler that stood mute while the player chatted at it was the first client run's
+ *       second finding (2026-09-13). A told day of theirs is answered with this body's own. A
+ *       reply is never itself replied to: two content settlers trading answers talked out the
+ *       whole turn cap (2026-09-14).</li>
+ *   <li>Still wanting company: small talk, a remark or a question ({@link Topics#volunteer}) —
+ *       only ever something not already brought up here, by either side ({@link Topics.Said}).</li>
+ *   <li>Rung 8 would speak but has nothing new left to say: say goodbye. Running out of things to
  *       say is how a chat ends, not a reason to say them again (decision: Luiz, 2026-09-23).</li>
  *   <li>Nothing pressing, and nobody has spoken for this body's patience: say goodbye. Leaving
  *       the moment nothing is pressing reads as bolting — two seconds after learning a name, on
@@ -57,12 +54,6 @@ import org.jspecify.annotations.Nullable;
  * </ol>
  */
 public final class PersonChooser implements Chooser {
-
-    /**
-     * Payload key on a small-talk line said as a courtesy rather than wanted — so the counterpart
-     * does not answer it in turn. A player's line never carries it: a click is always volunteered.
-     */
-    public static final String ANSWER = "answer";
 
     @Override
     public @Nullable Line choose(BrainContext ctx, Turn turn) {
@@ -72,6 +63,11 @@ public final class PersonChooser implements Chooser {
 
         if (acknowledgesGoodbye(turn)) {
             return Line.of(SpeechActs.END_CHAT);
+        }
+
+        if (answersQuestion(turn)) {
+            return new Line(PersonActs.SMALL_TALK_REPLY, Topics.reply(ctx,
+                    counterpartSeen(ctx, turn), saidHere(turn), turn.pending().orElseThrow()));
         }
 
         if (isWaiting(turn)) {
@@ -86,22 +82,17 @@ public final class PersonChooser implements Chooser {
             return Line.of(PersonActs.ASK_IDENTITY);
         }
 
+        if (repliesToSmallTalk(turn)) {
+            return new Line(PersonActs.SMALL_TALK_REPLY, Topics.reply(ctx,
+                    counterpartSeen(ctx, turn), saidHere(turn),
+                    Picker.lastSpoken(turn.encounter()).orElseThrow()));
+        }
+
         if (makesSmallTalk(ctx, turn)) {
-            // No act-level variety roll here: rungs 4 and 5 already claim any card such a roll
-            // could legally deal, so act variety is structurally impossible at this rung —
-            // conversational variety comes from the topic draw below and the reply beat's jitter.
             // orElseThrow is safe: the rung's own predicate checked something new is left.
-            Topics.Said said = saidHere(turn);
-            Optional<Being> them = counterpartSeen(ctx, turn);
-            Map<String, String> payload = (answersADeed(turn)
-                    ? Topics.latestDeed(ctx, said).or(() -> Topics.pick(ctx, them, said))
-                    : Topics.pick(ctx, them, said)).orElseThrow();
-            if (!wantsCompany(ctx)) {
-                Map<String, String> courtesy = new HashMap<>(payload);
-                courtesy.put(ANSWER, "1");
-                payload = courtesy;
-            }
-            return new Line(PersonActs.SMALL_TALK, payload);
+            Line line = Topics.volunteer(ctx, counterpartSeen(ctx, turn), saidHere(turn)).orElseThrow();
+            return turn.applicable().contains(line.act()) ? line
+                    : new Line(PersonActs.SMALL_TALK, line.payload());
         }
 
         if (runsOutOfThingsToSay(ctx, turn)) {
@@ -134,21 +125,27 @@ public final class PersonChooser implements Chooser {
                 new Rung(acknowledgesGoodbye(turn), "2 acknowledge a goodbye",
                         "pending " + pendingKey(turn) + ", end_chat "
                                 + offer(turn, SpeechActs.END_CHAT)),
-                new Rung(isWaiting(turn), "3 hold while awaiting an answer", waitingFacts(turn)),
-                new Rung(greets(turn), "4 greet",
+                new Rung(answersQuestion(turn), "3 answer a question",
+                        "pending " + pendingKey(turn) + ", small_talk_reply "
+                                + offer(turn, PersonActs.SMALL_TALK_REPLY)),
+                new Rung(isWaiting(turn), "4 hold while awaiting an answer", waitingFacts(turn)),
+                new Rung(greets(turn), "5 greet",
                         (turn.greeted() ? "already greeted here" : "not greeted yet")
                                 + ", greeting " + offer(turn, SpeechActs.GREETING)),
-                new Rung(asksTheirName(ctx, turn), "5 ask their name", nameFacts(ctx, turn)
+                new Rung(asksTheirName(ctx, turn), "6 ask their name", nameFacts(ctx, turn)
                         + (alreadyAsked(turn) ? ", already asked here" : ", not asked here yet")
                         + ", ask_identity " + offer(turn, PersonActs.ASK_IDENTITY)),
-                new Rung(makesSmallTalk(ctx, turn), "6 small talk", "company " + number(company)
+                new Rung(repliesToSmallTalk(turn), "7 reply to their small talk",
+                        "last said " + Picker.lastSpoken(turn.encounter())
+                                .map(line -> (theirs(turn, line) ? "theirs " : "ours ") + line.act())
+                                .orElse("nothing")
+                                + ", small_talk_reply " + offer(turn, PersonActs.SMALL_TALK_REPLY)),
+                new Rung(makesSmallTalk(ctx, turn), "8 small talk", "company " + number(company)
                         + (company < boundary ? " < " : " ≥ ") + "content " + number(boundary)
-                        + (answersSmallTalk(turn) ? ", theirs to answer" : "")
-                        + (answersADeed(turn) ? ", a deed of theirs" : "")
                         + ", small_talk " + offer(turn, PersonActs.SMALL_TALK)),
-                new Rung(runsOutOfThingsToSay(ctx, turn), "7 out of things to say",
+                new Rung(runsOutOfThingsToSay(ctx, turn), "9 out of things to say",
                         saidFacts(ctx, turn) + ", end_chat " + offer(turn, SpeechActs.END_CHAT)),
-                new Rung(saysGoodbye(ctx, turn), "8 say goodbye",
+                new Rung(saysGoodbye(ctx, turn), "10 say goodbye",
                         "silent " + silence(ctx, turn) + " of " + patience(ctx) + " ticks, end_chat "
                                 + offer(turn, SpeechActs.END_CHAT)));
 
@@ -177,6 +174,28 @@ public final class PersonChooser implements Chooser {
         return pendingIs(turn, SpeechActs.END_CHAT) && turn.applicable().contains(SpeechActs.END_CHAT);
     }
 
+    /** Rung 3: a question of theirs is pending, and a reply is on offer. */
+    private static boolean answersQuestion(Turn turn) {
+        return pendingIs(turn, PersonActs.SMALL_TALK_QUESTION)
+                && turn.applicable().contains(PersonActs.SMALL_TALK_REPLY);
+    }
+
+    /**
+     * Rung 7: the last thing said was a remark of theirs — a question is rung 3's, and a reply is
+     * never replied to.
+     */
+    private static boolean repliesToSmallTalk(Turn turn) {
+        return turn.applicable().contains(PersonActs.SMALL_TALK_REPLY)
+                && Picker.lastSpoken(turn.encounter())
+                        .filter(line -> theirs(turn, line)
+                                && line.act().equals(PersonActs.SMALL_TALK.key()))
+                        .isPresent();
+    }
+
+    private static boolean theirs(Turn turn, Utterance line) {
+        return turn.counterpart().map(them -> them.equals(line.author())).orElse(false);
+    }
+
     /** Whether SELF has already asked the counterpart something nothing of theirs has answered. */
     private static boolean isWaiting(Turn turn) {
         return turn.awaiting().isPresent();
@@ -198,22 +217,22 @@ public final class PersonChooser implements Chooser {
                 && Topics.anythingLeft(ctx, counterpartSeen(ctx, turn), saidHere(turn));
     }
 
-    /** Rung 7: rung 6's reasons to speak hold, and everything this body could say, it has said. */
+    /** Rung 9: rung 8's reason to speak holds, and everything this body could say has been said. */
     private static boolean runsOutOfThingsToSay(BrainContext ctx, Turn turn) {
         return wouldChat(ctx, turn)
                 && !Topics.anythingLeft(ctx, counterpartSeen(ctx, turn), saidHere(turn))
                 && turn.applicable().contains(SpeechActs.END_CHAT);
     }
 
-    /** Rung 6's reasons to speak, before asking whether there is anything new to say. */
+    /** Rung 8's reason to speak, before asking whether there is anything new to say. */
     private static boolean wouldChat(BrainContext ctx, Turn turn) {
-        return turn.applicable().contains(PersonActs.SMALL_TALK)
-                && (wantsCompany(ctx) || answersSmallTalk(turn));
+        return turn.applicable().contains(PersonActs.SMALL_TALK) && wantsCompany(ctx);
     }
 
     /**
-     * What this body has already brought up in THIS record — read the way {@link #alreadyAsked}
-     * reads it: in a two-party record a line the counterpart did not say is this body's own.
+     * What has already been brought up in THIS record — topics by either side, deeds by this body,
+     * read the way {@link #alreadyAsked} reads it: in a two-party record a line the counterpart did
+     * not say is this body's own.
      */
     private static Topics.Said saidHere(Turn turn) {
         AgentId counterpart = turn.counterpart().orElse(null);
@@ -223,26 +242,6 @@ public final class PersonChooser implements Chooser {
 
     private static boolean wantsCompany(BrainContext ctx) {
         return ctx.percepts().needs().value(NeedKind.COMPANY) < contentBoundary(ctx);
-    }
-
-    /**
-     * Whether the last thing said was small talk of THEIRS that they volunteered — a line this
-     * body owes an answer to. Their own courtesy answer ({@link #ANSWER}) is owed nothing.
-     */
-    private static boolean answersSmallTalk(Turn turn) {
-        AgentId counterpart = turn.counterpart().orElse(null);
-        return Picker.lastSpoken(turn.encounter())
-                .filter(line -> line.author().equals(counterpart)
-                        && line.act().equals(PersonActs.SMALL_TALK.key())
-                        && !line.payload().containsKey(ANSWER))
-                .isPresent();
-    }
-
-    /** Whether the small talk owed an answer was the counterpart telling of their own day. */
-    private static boolean answersADeed(Turn turn) {
-        return answersSmallTalk(turn) && Picker.lastSpoken(turn.encounter())
-                .map(line -> line.payload().containsKey(Recounting.DID))
-                .orElse(false);
     }
 
     private static boolean saysGoodbye(BrainContext ctx, Turn turn) {
@@ -260,19 +259,19 @@ public final class PersonChooser implements Chooser {
 
     // ── what the readout says about them ─────────────────────────────────────────────────────
 
-    /** The act owed by this body, or {@code none} — the fact rungs 1 and 2 both turn on. */
+    /** The act owed by this body, or {@code none} — the fact rungs 1 to 3 turn on. */
     private static String pendingKey(Turn turn) {
         return turn.pending().map(Utterance::act).orElse("none");
     }
 
-    /** What rung 3 tells the readout — the act SELF is still owed no answer to, if any. */
+    /** What rung 4 tells the readout — the act SELF is still owed no answer to, if any. */
     private static String waitingFacts(Turn turn) {
         return turn.awaiting()
                 .map(asked -> "waiting: " + asked.act() + ", ball is theirs")
                 .orElse("nothing outstanding");
     }
 
-    /** What rung 7 tells the readout: how much has been said here, and whether anything is left. */
+    /** What rung 9 tells the readout: how much has been said here, and whether anything is left. */
     private static String saidFacts(BrainContext ctx, Turn turn) {
         Topics.Said said = saidHere(turn);
         return "said " + said.topics().size() + " topic(s) and " + said.deeds().size()
@@ -291,7 +290,7 @@ public final class PersonChooser implements Chooser {
 
     /**
      * The three facts {@link #isUnintroducedCounterpart} and {@link #counterpartAlreadySaidItsName}
-     * read, spelled out — which of them refused rung 4 is the whole question when a settler will
+     * read, spelled out — which of them refused rung 6 is the whole question when a settler will
      * not ask a stranger's name.
      */
     private static String nameFacts(BrainContext ctx, Turn turn) {
@@ -308,8 +307,9 @@ public final class PersonChooser implements Chooser {
 
     /**
      * Whether specifically {@code act} is owed — not just any pending obligation. An answer is to
-     * what was asked: rung 1 answers a question about its name, rung 2 a goodbye, and neither may
-     * grab an obligation that happens to leave its line technically applicable.
+     * what was asked: rung 1 answers a question about its name, rung 2 a goodbye, rung 3 a question
+     * in small talk, and none may grab an obligation that happens to leave its line technically
+     * applicable.
      */
     private static boolean pendingIsAskIdentity(Turn turn) {
         return pendingIs(turn, PersonActs.ASK_IDENTITY);

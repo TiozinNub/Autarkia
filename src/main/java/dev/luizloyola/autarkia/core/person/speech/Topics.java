@@ -8,6 +8,7 @@ import dev.luizloyola.anima.core.brain.history.Slot;
 import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.Surroundings;
 import dev.luizloyola.anima.core.inv.Inventory;
+import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.LineSlots;
 import dev.luizloyola.anima.core.social.speech.Recounting;
 import dev.luizloyola.anima.core.social.speech.Utterance;
@@ -44,9 +45,14 @@ import java.util.random.RandomGenerator;
  *
  * <p><b>Nothing is said twice in one conversation</b> (decision: Luiz, 2026-09-23). In the forest a
  * settler told the same meal four times in one chat and said "The work never runs out." three:
- * every draw here leaves out what {@link Said} says this speaker already brought up, and a speaker
- * with nothing new left has nothing to say — the end of the chat for a settler, and no chat button
- * for a player.
+ * every draw here leaves out what {@link Said} says was already brought up, by either side since
+ * 2026-10-02, and a speaker with nothing new left has nothing to say — the end of the chat for a
+ * settler, and no chat button for a player.
+ *
+ * <p><b>Small talk is answered on its own topic</b> (decision: Luiz, 2026-10-02,
+ * 2026-10-02-food-and-replies-design.md). A topic in {@link #QUESTIONS} may be asked as well as
+ * remarked on, and every topic has replies: a reply follows from what it answers, where a fresh
+ * topic drawn at random talked straight past "Where did you get that Bread?".
  */
 public final class Topics {
 
@@ -85,6 +91,36 @@ public final class Topics {
      * take — what the lines test walks, so a topic added here without words fails there.
      */
     static final Map<String, Integer> VOCABULARY = vocabulary();
+
+    /**
+     * The topics that may be asked, not only remarked on — each has question lines under
+     * {@code small_talk_question}. Breath is not: nobody short of it asks about it.
+     */
+    static final Set<String> QUESTIONS = Set.of("weather", "work", "mood", CLEAR_DAY, CLEAR_NIGHT,
+            RAIN, THUNDER, THUNDER_CLOSE, SNOW, DAWN, DUSK, NIGHT, DARK, HOLDING, SNEAKING, EATING,
+            HEAVY_PACK, CARRYING, "need.hunger", "need.company", "need.vigor");
+
+    /** The reply set for a line that was asked rather than remarked on. */
+    static final String ASKED = "asked";
+    /** The reply set for a replier who could have raised the same topic: hungry too, laden too. */
+    static final String SHARED = "same";
+    /** Asked, and shared. */
+    static final String ASKED_SHARED = ASKED + "." + SHARED;
+
+    /**
+     * Every reply set beyond the plain one, by topic, best first — a topic not listed has the plain
+     * set alone. The lines test walks this, so a set declared without words fails there.
+     */
+    static final Map<String, List<String>> REPLY_SETS = replySets();
+
+    /** What a reply to somebody's told day is about, when the replier has no day of its own to tell. */
+    static final String DEED = "deed";
+
+    /**
+     * Payload key of a reply: the topic it answers. {@link Utterance#TOPIC} on a reply is the reply
+     * set to render ({@code need.hunger.same}), so what was talked about rides here.
+     */
+    public static final String ABOUT = "about";
 
     /**
      * At or under this, the light at a speaker's eyes is too little to see by. An open field at
@@ -182,7 +218,11 @@ public final class Topics {
         }
     }
 
-    /** What one speaker has already brought up in one conversation: topics by key, deeds by deed. */
+    /**
+     * What is already brought up in one conversation: topics by key, by EITHER side — a topic the
+     * other raised is answered, not raised again (2026-10-02) — and this speaker's own deeds by deed.
+     * Their deeds stay theirs: "I was eating too" answers "I had a meal earlier".
+     */
     public record Said(Set<String> topics, Set<Deed> deeds) {
 
         public static final Said NOTHING = new Said(Set.of(), Set.of());
@@ -192,19 +232,21 @@ public final class Topics {
             deeds = Set.copyOf(deeds);
         }
 
-        /** What the small talk among {@code lines} that {@code own} accepts brought up. */
+        /** What the small talk among {@code lines} brought up; {@code own} picks this speaker's lines. */
         public static Said in(List<Utterance> lines, Predicate<Utterance> own) {
             Set<String> topics = new HashSet<>();
             Set<Deed> deeds = new HashSet<>();
             for (Utterance line : lines) {
-                if (!own.test(line) || !line.act().equals(PersonActs.SMALL_TALK.key())) {
+                if (line.system() || !isSmallTalk(line)) {
                     continue;
                 }
                 Optional<Recounting.Told> told = Recounting.read(line.payload());
                 if (told.isPresent()) {
-                    deeds.add(told.get().deed());
-                } else if (line.payload().containsKey(Utterance.TOPIC)) {
-                    topics.add(line.payload().get(Utterance.TOPIC));
+                    if (own.test(line)) {
+                        deeds.add(told.get().deed());
+                    }
+                } else {
+                    about(line).ifPresent(topics::add);
                 }
             }
             return new Said(topics, deeds);
@@ -233,6 +275,16 @@ public final class Topics {
 
     public static Optional<Map<String, String>> latestDeed(BrainContext ctx, Said said) {
         return latestDeed(speaker(ctx, Optional.empty()), said);
+    }
+
+    public static Optional<Chooser.Line> volunteer(BrainContext ctx, Optional<Being> them,
+            Said said) {
+        return volunteer(speaker(ctx, them), said, ctx.random());
+    }
+
+    public static Map<String, String> reply(BrainContext ctx, Optional<Being> them, Said said,
+            Utterance answered) {
+        return reply(speaker(ctx, them), said, answered);
     }
 
     public static boolean anythingLeft(BrainContext ctx, Optional<Being> them, Said said) {
@@ -265,16 +317,94 @@ public final class Topics {
         if (topics.isEmpty() && deeds.isEmpty()) {
             return Optional.empty();
         }
-        for (String salient : SALIENT) {
-            for (Topic topic : topics) {
-                if (topic.key().equals(salient)) {
-                    return Optional.of(topic.payload());
-                }
-            }
+        Optional<Topic> salient = salient(topics);
+        if (salient.isPresent()) {
+            return Optional.of(salient.get().payload());
         }
         int draw = random.nextInt(topics.size() + deeds.size());
         return Optional.of(draw < topics.size() ? topics.get(draw).payload()
                 : Recounting.payload(deeds.get(draw - topics.size()), speaker.now()));
+    }
+
+    /**
+     * A question about a topic in {@link #QUESTIONS} not yet {@code said} — a SMALL_TALK_QUESTION
+     * payload, the thunder first while it is fresh. Empty once nothing is left to ask.
+     */
+    public static Optional<Map<String, String>> question(Speaker speaker, Said said,
+            RandomGenerator random) {
+        List<Topic> askable = new ArrayList<>(freshTopics(speaker, said));
+        askable.removeIf(topic -> !QUESTIONS.contains(topic.key()));
+        if (askable.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(salient(askable).orElseGet(() -> askable.get(random.nextInt(askable.size())))
+                .payload());
+    }
+
+    /** Whether anything is left to ask. */
+    public static boolean anythingToAsk(Speaker speaker, Said said) {
+        return freshTopics(speaker, said).stream().anyMatch(topic -> QUESTIONS.contains(topic.key()));
+    }
+
+    /**
+     * What a body says of its own accord: {@link #pick}'s draw, said as a question half the time
+     * when the topic can be asked. Empty once nothing new is left.
+     */
+    public static Optional<Chooser.Line> volunteer(Speaker speaker, Said said,
+            RandomGenerator random) {
+        return pick(speaker, said, random).map(payload -> {
+            // A told deed carries no topic, and Set.of throws on contains(null).
+            boolean askable = payload.containsKey(Utterance.TOPIC)
+                    && QUESTIONS.contains(payload.get(Utterance.TOPIC));
+            return new Chooser.Line(askable && random.nextBoolean()
+                    ? PersonActs.SMALL_TALK_QUESTION : PersonActs.SMALL_TALK, payload);
+        });
+    }
+
+    /**
+     * The reply to {@code answered}, a line of small talk or a question: on its topic, from the
+     * best reply set the topic declares — asked and shared, asked, shared, then plain. Shared is a
+     * replier who could have raised the topic itself ("I could eat too"). A told day is answered
+     * with the replier's own latest untold deed, or a line about theirs when it has none.
+     */
+    public static Map<String, String> reply(Speaker replier, Said said, Utterance answered) {
+        if (Recounting.read(answered.payload()).isPresent()) {
+            return latestDeed(replier, said)
+                    .orElse(Map.of(Utterance.TOPIC, DEED, ABOUT, DEED));
+        }
+        String topic = about(answered).orElse("mood");
+        boolean asked = answered.act().equals(PersonActs.SMALL_TALK_QUESTION.key());
+        boolean shared = options(replier).stream().anyMatch(own -> own.key().equals(topic));
+        List<String> sets = REPLY_SETS.getOrDefault(topic, List.of());
+        List<String> wanted = new ArrayList<>();
+        if (asked && shared) {
+            wanted.add(ASKED_SHARED);
+        }
+        if (asked) {
+            wanted.add(ASKED);
+        }
+        if (shared) {
+            wanted.add(SHARED);
+        }
+        String set = wanted.stream().filter(sets::contains).findFirst().orElse(null);
+        Map<String, String> payload = new LinkedHashMap<>(LineSlots.with(
+                Map.of(Utterance.TOPIC, set == null ? topic : topic + "." + set),
+                LineSlots.of(answered.payload()).orElse(List.of())));
+        payload.put(ABOUT, topic);
+        return Map.copyOf(payload);
+    }
+
+    /** Whether {@code line} is small talk of any kind — a remark, a question or a reply. */
+    public static boolean isSmallTalk(Utterance line) {
+        return line.act().equals(PersonActs.SMALL_TALK.key())
+                || line.act().equals(PersonActs.SMALL_TALK_QUESTION.key())
+                || line.act().equals(PersonActs.SMALL_TALK_REPLY.key());
+    }
+
+    /** The topic a line of small talk is about; a reply's is under {@link #ABOUT}. */
+    static Optional<String> about(Utterance line) {
+        return Optional.ofNullable(line.payload().getOrDefault(ABOUT,
+                line.payload().get(Utterance.TOPIC)));
     }
 
     /**
@@ -388,6 +518,18 @@ public final class Topics {
         }
     }
 
+    /** A fresh thunderclap among {@code topics}, which is said before anything else. */
+    private static Optional<Topic> salient(List<Topic> topics) {
+        for (String salient : SALIENT) {
+            for (Topic topic : topics) {
+                if (topic.key().equals(salient)) {
+                    return Optional.of(topic);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     private static List<Topic> freshTopics(Speaker speaker, Said said) {
         List<Topic> fresh = new ArrayList<>(options(speaker));
         fresh.removeIf(topic -> said.topics().contains(topic.key()));
@@ -399,6 +541,22 @@ public final class Topics {
         List<History.Entry> fresh = new ArrayList<>(recentDeeds(speaker));
         fresh.removeIf(entry -> said.deeds().contains(entry.deed()));
         return fresh;
+    }
+
+    private static Map<String, List<String>> replySets() {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        for (String topic : QUESTIONS) {
+            out.put(topic, List.of(ASKED));
+        }
+        for (String topic : List.of("need.breath", "need.company", HEAVY_PACK, CARRYING)) {
+            List<String> sets = new ArrayList<>(out.getOrDefault(topic, List.of()));
+            sets.add(SHARED);
+            out.put(topic, List.copyOf(sets));
+        }
+        for (String topic : List.of("need.hunger", "need.vigor")) {
+            out.put(topic, List.of(ASKED_SHARED, ASKED, SHARED));
+        }
+        return Map.copyOf(out);
     }
 
     private static Map<String, Integer> vocabulary() {

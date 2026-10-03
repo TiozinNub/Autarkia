@@ -2,11 +2,15 @@ package dev.luizloyola.autarkia.mod.person;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.social.speech.Encounter;
+import dev.luizloyola.anima.core.social.speech.Picker;
+import dev.luizloyola.anima.core.social.speech.SpeechAct;
+import dev.luizloyola.anima.core.social.speech.Utterance;
 import dev.luizloyola.anima.mod.body.AgentBodies;
 import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.brain.SurroundingsReader;
 import dev.luizloyola.anima.mod.net.ContactsSync;
 import dev.luizloyola.anima.mod.social.PlayerTopics;
+import dev.luizloyola.autarkia.core.person.speech.PersonActs;
 import dev.luizloyola.autarkia.core.person.speech.Topics;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +27,8 @@ import net.minecraft.world.item.ItemUseAnimation;
 /**
  * A player's small talk, read off the player the way a settler's is read off its percepts
  * (decision: Luiz, 2026-09-24): the sky over them, their pack, their hunger, health and breath,
- * and the settler in front of them — and never what they already said in this chat.
+ * and the settler in front of them — never what either side already brought up in this chat, and
+ * an answer on the topic of whatever the settler last said (2026-10-02).
  */
 public final class PlayerSmallTalk implements PlayerTopics.Source {
 
@@ -32,14 +37,39 @@ public final class PlayerSmallTalk implements PlayerTopics.Source {
 
     @Override
     public Optional<Map<String, String>> pick(MinecraftServer server, ServerPlayer player,
-            Encounter e) {
+            Encounter e, SpeechAct act) {
+        Topics.Speaker speaker = speaker(server, player, e);
+        Topics.Said said = said(player, e);
+        if (act == PersonActs.SMALL_TALK_REPLY) {
+            return toAnswer(player, e).map(line -> Topics.reply(speaker, said, line));
+        }
         // The JDK's shared generator: a player has no stream of chance of their own.
-        return Topics.pick(speaker(server, player, e), said(player, e), RandomGenerator.getDefault());
+        return act == PersonActs.SMALL_TALK_QUESTION
+                ? Topics.question(speaker, said, RandomGenerator.getDefault())
+                : Topics.pick(speaker, said, RandomGenerator.getDefault());
     }
 
     @Override
-    public boolean anythingLeft(MinecraftServer server, ServerPlayer player, Encounter e) {
-        return Topics.anythingLeft(speaker(server, player, e), said(player, e));
+    public boolean anythingLeft(MinecraftServer server, ServerPlayer player, Encounter e,
+            SpeechAct act) {
+        if (act == PersonActs.SMALL_TALK_REPLY) {
+            return toAnswer(player, e).isPresent();
+        }
+        Topics.Speaker speaker = speaker(server, player, e);
+        return act == PersonActs.SMALL_TALK_QUESTION
+                ? Topics.anythingToAsk(speaker, said(player, e))
+                : Topics.anythingLeft(speaker, said(player, e));
+    }
+
+    /**
+     * The settler's small talk the player has yet to answer — the last line said, when it is a remark
+     * or a question of theirs. A reply is never answered, and neither is the player's own line.
+     */
+    private static Optional<Utterance> toAnswer(ServerPlayer player, Encounter e) {
+        AgentId self = ContactsSync.idOf(player);
+        return Picker.lastSpoken(e).filter(line -> !self.equals(line.author())
+                && (line.act().equals(PersonActs.SMALL_TALK.key())
+                        || line.act().equals(PersonActs.SMALL_TALK_QUESTION.key())));
     }
 
     private static Topics.Said said(ServerPlayer player, Encounter e) {
