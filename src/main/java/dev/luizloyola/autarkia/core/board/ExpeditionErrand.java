@@ -13,11 +13,22 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
- * One member's part in an expedition: a lead-in, then the gather trip. The one leading waits
- * {@code muster} ticks at HOME for others to take a share; a companion keeps with
- * {@code leader} until it knows the source itself ({@link TravelWith}).
+ * One member's part in an expedition: a lead-in, then the fetch, then home. The one leading waits
+ * {@code muster} ticks at HOME for others to take a share; a companion keeps with {@code leader}
+ * until it knows the source itself ({@link TravelWith}).
+ *
+ * <p><b>At the source it fetches {@link #ROUNDS} times, pausing between</b>, because a source is
+ * forgotten and noticed again as it is worked: a flat outcrop shows only its edge, and the sense
+ * drops a patch whose anchor is mined, then finds the rest a few ticks later. A trip that fetched
+ * once came home with 12 of 64 (2026-10-02).
  */
 public final class ExpeditionErrand implements CompoundTask {
+
+    /** Fetches at the source before going home, each counting what is already held *(call)*. */
+    public static final int ROUNDS = 4;
+
+    /** The stand between them, for the near sense to see what is left *(call)*. */
+    public static final int PAUSE_TICKS = 40;
 
     private final ItemSpec spec;
     private final int count;
@@ -84,7 +95,13 @@ public final class ExpeditionErrand implements CompoundTask {
             } else if (muster > 0) {
                 steps.add(new Idle(muster));
             }
-            steps.add(new GatheringErrand(spec, count, pursued));
+            for (int round = 0; round < ROUNDS; round++) {
+                if (round > 0) {
+                    steps.add(new Idle(PAUSE_TICKS));
+                }
+                steps.add(new FetchSome(spec, count, pursued));
+            }
+            steps.add(new BringBack(spec, count));
             return steps;
         }
 
