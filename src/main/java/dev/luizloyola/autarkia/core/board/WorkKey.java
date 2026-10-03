@@ -72,6 +72,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** One far trip for what nothing near can give. */
     String EXPEDITION = "expedition";
 
+    /** Going along on one, for a share of the haul. */
+    String EXPEDITION_COMPANY = "expedition_company";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

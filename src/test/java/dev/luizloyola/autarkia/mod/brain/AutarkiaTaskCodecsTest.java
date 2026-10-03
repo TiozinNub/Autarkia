@@ -159,6 +159,30 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void anExpeditionsPartSurvivesTheFile() {
+        var leader = dev.luizloyola.anima.core.brain.sense.BeingId.of(java.util.UUID.randomUUID());
+        var along = assertInstanceOf(dev.luizloyola.autarkia.core.board.ExpeditionErrand.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.ExpeditionErrand(Stock.LOGS, 14,
+                        java.util.Set.of("minecraft:furnace"), leader, 0)));
+        assertEquals(14, along.count());
+        assertEquals(leader, along.leader());
+        assertEquals(java.util.Set.of("minecraft:furnace"), along.pursued());
+
+        var leading = assertInstanceOf(dev.luizloyola.autarkia.core.board.ExpeditionErrand.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.ExpeditionErrand(Stock.LOGS, 20,
+                        java.util.Set.of(), null, 450)));
+        assertEquals(null, leading.leader());
+        assertEquals(450, leading.muster());
+
+        var travel = assertInstanceOf(dev.luizloyola.autarkia.core.board.TravelWith.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.TravelWith(leader, Stock.LOGS,
+                        java.util.Set.of("minecraft:furnace"), 37, 81.5)));
+        assertEquals(leader, travel.leader());
+        assertEquals(37, travel.stalled(), "a restart does not forgive a leader who went nowhere");
+        assertEquals(81.5, travel.farthest());
+    }
+
+    @Test
     void aFetchOnItsWaySurvivesTheFile() {
         dev.luizloyola.autarkia.core.board.FetchSome after = assertInstanceOf(
                 dev.luizloyola.autarkia.core.board.FetchSome.class,

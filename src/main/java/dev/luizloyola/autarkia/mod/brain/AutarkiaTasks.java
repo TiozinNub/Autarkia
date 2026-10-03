@@ -181,6 +181,39 @@ public final class AutarkiaTasks {
                         ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),
                         Codec.INT.fieldOf("count").forGetter(BringBack::count)
                 ).apply(t, BringBack::new)));
+        // An expedition's part for one member: who it follows, if anyone, and the muster left.
+        TaskCodecs.register("autarkia:expedition_errand",
+                dev.luizloyola.autarkia.core.board.ExpeditionErrand.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        ITEM_SPEC.fieldOf("spec").forGetter(dev.luizloyola.autarkia.core.board.ExpeditionErrand::spec),
+                        Codec.INT.fieldOf("count").forGetter(dev.luizloyola.autarkia.core.board.ExpeditionErrand::count),
+                        Codec.STRING.listOf().optionalFieldOf("for", java.util.List.of())
+                                .forGetter(e -> java.util.List.copyOf(new java.util.TreeSet<>(e.pursued()))),
+                        net.minecraft.core.UUIDUtil.CODEC.optionalFieldOf("leader").forGetter(e ->
+                                java.util.Optional.ofNullable(e.leader()).map(
+                                        dev.luizloyola.anima.core.brain.sense.BeingId::value)),
+                        Codec.INT.optionalFieldOf("muster", 0)
+                                .forGetter(dev.luizloyola.autarkia.core.board.ExpeditionErrand::muster)
+                ).apply(t, (spec, count, pursued, leader, muster) ->
+                        new dev.luizloyola.autarkia.core.board.ExpeditionErrand(spec, count,
+                                java.util.Set.copyOf(pursued),
+                                leader.map(dev.luizloyola.anima.core.brain.sense.BeingId::of).orElse(null),
+                                muster))));
+        // Keeping with the leader: how long it has gone nowhere, and the farthest it got from HOME.
+        TaskCodecs.register("autarkia:travel_with", dev.luizloyola.autarkia.core.board.TravelWith.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        net.minecraft.core.UUIDUtil.CODEC.fieldOf("leader").forGetter(w -> w.leader().value()),
+                        ITEM_SPEC.fieldOf("resource").forGetter(dev.luizloyola.autarkia.core.board.TravelWith::resource),
+                        Codec.STRING.listOf().optionalFieldOf("for", java.util.List.of())
+                                .forGetter(w -> java.util.List.copyOf(new java.util.TreeSet<>(w.pursued()))),
+                        Codec.INT.optionalFieldOf("stalled", 0)
+                                .forGetter(dev.luizloyola.autarkia.core.board.TravelWith::stalled),
+                        Codec.DOUBLE.optionalFieldOf("farthest", 0.0)
+                                .forGetter(dev.luizloyola.autarkia.core.board.TravelWith::farthest)
+                ).apply(t, (leader, resource, pursued, stalled, farthest) ->
+                        new dev.luizloyola.autarkia.core.board.TravelWith(
+                                dev.luizloyola.anima.core.brain.sense.BeingId.of(leader), resource,
+                                java.util.Set.copyOf(pursued), stalled, farthest))));
         TaskCodecs.register("autarkia:fetch_some", FetchSome.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(FetchSome::spec),

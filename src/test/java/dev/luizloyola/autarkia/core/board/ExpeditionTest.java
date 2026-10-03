@@ -107,8 +107,10 @@ class ExpeditionTest {
         WorkItem trip = takes(far, DORIS, atHome());
 
         assertEquals(OptionalDouble.of(Expedition.REACH), trip.tolerance(), "past every budget a need earns");
-        GatheringErrand errand = assertInstanceOf(GatheringErrand.class, trip.root());
+        ExpeditionErrand errand = assertInstanceOf(ExpeditionErrand.class, trip.root());
         assertEquals(34, errand.count());
+        assertEquals(0, errand.muster(), "one pack holds the haul: nobody is waited for");
+        assertEquals(null, errand.leader());
         assertEquals(Set.of("minecraft:furnace", "minecraft:stone_axe", "minecraft:stone_pickaxe",
                         "minecraft:stone_shovel", "minecraft:stone_hoe"), errand.pursued(),
                 "what lets the trip seek stone in an age that makes nothing else of it");
@@ -152,6 +154,88 @@ class ExpeditionTest {
         assertEquals(6, far.haul(), "only the axe failed again");
         far.tick(5000 + Expedition.NEED_LAPSE + 1);
         assertTrue(far.finished(), "met another way, or withdrawn: nothing left to fetch");
+    }
+
+    // ── company ──────────────────────────────────────────────────────────────────────────────
+
+    /** Every storage slot full but one, holding {@code 64 - room} of the stone. */
+    private static BoardBrainContext roomFor(int room) {
+        BoardBrainContext ctx = atHome();
+        for (int slot = 0; slot < dev.luizloyola.anima.core.inv.Inventory.ARMOR_START; slot++) {
+            ctx.inventory().set(slot, dev.luizloyola.anima.core.inv.ItemStack.of("minecraft:dirt", 64, 64));
+        }
+        ctx.inventory().set(0, dev.luizloyola.anima.core.inv.ItemStack.of("test:stone_a", 64 - room, 64));
+        return ctx;
+    }
+
+    @Test
+    void aHaulOnePackCannotHoldIsSharedWithWhoeverGoesAlong() {
+        Expedition far = dorisNeeds();
+        far.tick(100);
+        WorkItem lead = takes(far, DORIS, roomFor(20));
+        ExpeditionErrand leading = assertInstanceOf(ExpeditionErrand.class, lead.root());
+        assertEquals(20, leading.count());
+        assertEquals(Expedition.MUSTER_TICKS, leading.muster(), "it waits for company at HOME first");
+
+        WorkItem offer = far.open().get(1);
+        assertFalse(far.offerableTo(offer, DORIS, atHome()), "the one leading does not go along with itself");
+        assertTrue(far.offerableTo(offer, EMILY, atHome()));
+        WorkItem share = far.realise(offer, EMILY, atHome());
+        far.claimed(share, EMILY);
+        ExpeditionErrand along = assertInstanceOf(ExpeditionErrand.class, share.root());
+        assertEquals(14, along.count(), "what the leader's pack left of the 34");
+        assertEquals(dev.luizloyola.anima.core.brain.sense.BeingId.of(DORIS), along.leader());
+        assertEquals(List.of(lead, share), far.open(), "nothing left to share");
+
+        far.completed(lead, atHome());
+        assertFalse(far.finished(), "Emily is still out with her share");
+        far.completed(share, atHome());
+        assertTrue(far.finished());
+    }
+
+    @Test
+    void theCompanyOfferClosesWithTheMuster() {
+        Expedition far = dorisNeeds();
+        far.tick(100);
+        takes(far, DORIS, roomFor(20));
+        assertEquals(2, far.open().size());
+        far.tick(100 + Expedition.MUSTER_TICKS);
+        assertEquals(1, far.open().size(), "the leader has gone; nobody can catch up");
+    }
+
+    @Test
+    void aCompanionWhoseShareFailedSitsTheOfferOut() {
+        Expedition far = dorisNeeds();
+        far.tick(100);
+        takes(far, DORIS, roomFor(20));
+        BoardBrainContext ctx = atHome();
+        WorkItem share = far.realise(far.open().get(1), EMILY, ctx);
+        far.claimed(share, EMILY);
+        far.failed(share, ctx);
+
+        far.tick(200);
+        assertFalse(far.offerableTo(far.open().get(1), EMILY, ctx), "600 ticks after the failure");
+    }
+
+    @Test
+    void aRestartKeepsWhoWentAlong() {
+        Expedition far = dorisNeeds();
+        far.tick(100);
+        takes(far, DORIS, roomFor(20));
+        WorkItem share = far.realise(far.open().get(1), EMILY, atHome());
+        far.claimed(share, EMILY);
+
+        Expedition back = Expedition.restore(far.snapshot(), 0).orElseThrow();
+        assertEquals(far.snapshot(), back.snapshot());
+        WorkItem again = back.itemFor(new WorkKey.ForMember(WorkKey.EXPEDITION_COMPANY, EMILY)).orElseThrow();
+        back.claimed(again, EMILY);
+        back.holdsRestored();
+        assertTrue(back.open().contains(again));
+
+        Expedition unheld = Expedition.restore(far.snapshot(), 0).orElseThrow();
+        unheld.holdsRestored();
+        assertTrue(unheld.itemFor(new WorkKey.ForMember(WorkKey.EXPEDITION_COMPANY, EMILY)).isEmpty(),
+                "a share nobody came back for is dropped");
     }
 
     // ── a restart ────────────────────────────────────────────────────────────────────────────

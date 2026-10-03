@@ -4,6 +4,7 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.history.Deed;
+import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.inv.ItemSpec;
@@ -27,8 +28,12 @@ import java.util.TreeSet;
  * producers already know of, so a source past every budget is mined like one next door. Searching
  * for an unknown source is a later step.
  *
- * <p>One trip at a time, and the expedition is over when one comes home. A need still short after
+ * <p>One trip at a time, and the expedition is over when it comes home. A need still short after
  * it is priced out again and posts the next.
+ *
+ * <p><b>Others may go along</b> (Luiz, 2026-10-02) when the haul is more than the one leading can
+ * carry: the leader waits {@link #MUSTER_TICKS} at HOME, and each member who takes the company
+ * offer meanwhile follows it out ({@link TravelWith}) and brings home a share of its own.
  */
 public final class Expedition implements PartyProject {
 
@@ -54,6 +59,12 @@ public final class Expedition implements PartyProject {
      */
     public static final double COST = Gather.COST_AT_RANGE;
 
+    /** How long the one leading waits at HOME for company — the HOME search's gathering wait *(call)*. */
+    public static final int MUSTER_TICKS = 600;
+
+    /** Ticks a companion whose share failed sits the company offer out — {@code Gather}'s. */
+    public static final int COMPANY_COOLDOWN = Gather.FAIL_COOLDOWN;
+
     /**
      * One priced-out item the haul is for.
      *
@@ -64,8 +75,12 @@ public final class Expedition implements PartyProject {
     public record Need(AgentId who, String what, int count, double priority, Set<String> pursued, long seen) {
     }
 
-    /** The trip out, with who took it — written down because nothing re-derives its size. */
+    /** A trip out, with who took it — written down because nothing re-derives its size. */
     public record Trip(AgentId who, int size) {
+    }
+
+    /** One member sitting the company offer out after a failed share. */
+    public record Cooldown(AgentId who, long retryAfter) {
     }
 
     private final ItemSpec resource;
@@ -76,12 +91,18 @@ public final class Expedition implements PartyProject {
     private TripItem trip;
     /** Whether a hold came back for the trip after a restart — see {@link #holdsRestored}. */
     private boolean tripHeld;
+    private final Map<AgentId, CompanyItem> company = new LinkedHashMap<>();
+    private final Set<AgentId> companyHeld = new java.util.HashSet<>();
+    /** Until when the company offer stands: the leader's muster. Zero before anybody leads. */
+    private long companyUntil;
+    private final Map<AgentId, Long> cooldownUntil = new LinkedHashMap<>();
     private int failures;
     private long retryAfter;
     private boolean done;
     private long lastTick;
 
     private final OfferItem offer = new OfferItem();
+    private final CompanyOffer companyOffer = new CompanyOffer();
     private List<WorkItem> open = List.of();
 
     public Expedition(ItemSpec resource, PartyId party) {
@@ -120,6 +141,15 @@ public final class Expedition implements PartyProject {
         return HAUL_PER_NEED * total;
     }
 
+    /** What is left of the haul once the trip and every companion's share are counted. */
+    private int unclaimed() {
+        int left = haul() - (trip == null ? 0 : trip.size());
+        for (CompanyItem along : company.values()) {
+            left -= along.size();
+        }
+        return Math.max(0, left);
+    }
+
     private Set<String> pursued() {
         Set<String> all = new TreeSet<>();
         for (Need need : needs.values()) {
@@ -148,7 +178,7 @@ public final class Expedition implements PartyProject {
 
     @Override
     public boolean finished() {
-        return done || (needs.isEmpty() && trip == null);
+        return company.isEmpty() && (done || (needs.isEmpty() && trip == null));
     }
 
     @Override
@@ -157,12 +187,16 @@ public final class Expedition implements PartyProject {
     }
 
     private void rebuildOffer() {
-        List<WorkItem> items = new ArrayList<>(2);
+        List<WorkItem> items = new ArrayList<>();
         if (trip != null) {
             items.add(trip);
+            if (!done && lastTick < companyUntil && unclaimed() > 0) {
+                items.add(companyOffer);
+            }
         } else if (!needs.isEmpty() && !done) {
             items.add(offer);
         }
+        items.addAll(company.values());
         open = List.copyOf(items);
     }
 
@@ -170,7 +204,9 @@ public final class Expedition implements PartyProject {
 
     @Override
     public boolean owns(WorkItem item) {
-        return item == offer || (item instanceof TripItem taken && taken.owner() == this);
+        return item == offer || item == companyOffer
+                || (item instanceof TripItem taken && taken.owner() == this)
+                || (item instanceof CompanyItem along && along.owner() == this);
     }
 
     @Override
@@ -181,29 +217,53 @@ public final class Expedition implements PartyProject {
         if (item == offer) {
             return trip == null && lastTick >= retryAfter && split.tripFor(haul(), resource, ctx) > 0;
         }
+        if (item == companyOffer) {
+            return trip != null && !trip.who().equals(asker) && !company.containsKey(asker)
+                    && cooldownUntil.getOrDefault(asker, 0L) <= lastTick && lastTick < companyUntil
+                    && split.tripFor(unclaimed(), resource, ctx) > 0;
+        }
+        if (item instanceof CompanyItem along) {
+            return along.who().equals(asker);
+        }
         return item == trip && trip.who().equals(asker);
     }
 
     @Override
     public WorkItem realise(WorkItem offered, AgentId asker, BrainContext ctx) {
+        if (offered == companyOffer) {
+            int share = split.tripFor(unclaimed(), resource, ctx);
+            return share <= 0 ? offered : new CompanyItem(asker, share);
+        }
         if (offered != offer) {
             return offered;
         }
         int size = split.tripFor(haul(), resource, ctx);
-        return size <= 0 ? offered : new TripItem(asker, size, pursued());
+        return size <= 0 ? offered : new TripItem(asker, size, pursued(), size < haul() ? MUSTER_TICKS : 0);
     }
 
     @Override
     public void claimed(WorkItem item, AgentId who) {
         if (item instanceof TripItem taken && owns(taken)) {
+            if (trip != taken) {
+                companyUntil = lastTick + taken.muster();
+            }
             trip = taken;
             tripHeld = true;
+            rebuildOffer();
+        } else if (item instanceof CompanyItem along && owns(along)) {
+            company.put(along.who(), along);
+            companyHeld.add(along.who());
             rebuildOffer();
         }
     }
 
     @Override
     public void completed(WorkItem item, BrainContext ctx) {
+        if (item instanceof CompanyItem along && company.get(along.who()) == along) {
+            company.remove(along.who());
+            rebuildOffer();
+            return;
+        }
         if (item != trip) {
             return;
         }
@@ -215,6 +275,12 @@ public final class Expedition implements PartyProject {
 
     @Override
     public void failed(WorkItem item, BrainContext ctx) {
+        if (item instanceof CompanyItem along && company.get(along.who()) == along) {
+            company.remove(along.who());
+            cooldownUntil.put(along.who(), ctx.percepts().time() + COMPANY_COOLDOWN);
+            rebuildOffer();
+            return;
+        }
         if (item != trip) {
             return;
         }
@@ -232,34 +298,47 @@ public final class Expedition implements PartyProject {
     public void lapsed(WorkItem item) {
         if (item == trip) {
             trip = null;
-            rebuildOffer();
+        } else if (item instanceof CompanyItem along && company.get(along.who()) == along) {
+            company.remove(along.who());
         }
+        rebuildOffer();
     }
 
     @Override
     public List<ItemCall> reserved() {
-        return trip == null ? List.of() : List.of(ItemCall.need(resource, trip.size()));
+        int largest = trip == null ? 0 : trip.size();
+        for (CompanyItem along : company.values()) {
+            largest = Math.max(largest, along.size());
+        }
+        return largest == 0 ? List.of() : List.of(ItemCall.need(resource, largest));
     }
 
     // ── durable names ────────────────────────────────────────────────────────────────────────
 
     @Override
     public Optional<WorkKey> keyOf(WorkItem item) {
+        if (item instanceof CompanyItem along && company.get(along.who()) == along) {
+            return Optional.of(new WorkKey.ForMember(WorkKey.EXPEDITION_COMPANY, along.who()));
+        }
         return item == trip && trip != null
                 ? Optional.of(new WorkKey.ForMember(WorkKey.EXPEDITION, trip.who())) : Optional.empty();
     }
 
     @Override
     public Optional<WorkItem> itemFor(WorkKey key) {
+        if (key instanceof WorkKey.ForMember member && WorkKey.EXPEDITION_COMPANY.equals(member.flavour())) {
+            return Optional.ofNullable(company.get(member.who()));
+        }
         return keyOf(trip).filter(key::equals).map(found -> trip);
     }
 
-    /** A trip saved without its hold is nobody's: dropped, so the next one can go. */
+    /** A trip or share saved without its hold is nobody's: dropped, so the work can go again. */
     @Override
     public void holdsRestored() {
         if (trip != null && !tripHeld) {
             trip = null;
         }
+        company.keySet().removeIf(who -> !companyHeld.contains(who));
         rebuildOffer();
     }
 
@@ -269,13 +348,21 @@ public final class Expedition implements PartyProject {
     public String describe() {
         int count = needs.size();
         return "expedition for " + haul() + " " + resource.name() + " — " + count
-                + (count == 1 ? " need" : " needs") + (trip == null ? "" : ", a trip out");
+                + (count == 1 ? " need" : " needs") + (trip == null ? "" : ", a trip out")
+                + (company.isEmpty() ? "" : ", " + company.size() + " along");
     }
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────
 
     public record State(String resource, PartyId party, String split, List<Need> needs, List<Trip> trip,
-                        int failures, long retryAfter, long lastTick) implements ProjectState {
+                        int failures, long retryAfter, long lastTick, List<Trip> company, long companyUntil,
+                        List<Cooldown> cooldowns) implements ProjectState {
+        /** A state saved before company was. */
+        public State(String resource, PartyId party, String split, List<Need> needs, List<Trip> trip,
+                     int failures, long retryAfter, long lastTick) {
+            this(resource, party, split, needs, trip, failures, retryAfter, lastTick, List.of(), 0L, List.of());
+        }
+
         @Override
         public String type() {
             return "expedition";
@@ -285,8 +372,12 @@ public final class Expedition implements PartyProject {
     @Override
     public State snapshot() {
         List<Trip> out = trip == null ? List.of() : List.of(new Trip(trip.who(), trip.size()));
+        List<Trip> along = new ArrayList<>();
+        company.values().forEach(share -> along.add(new Trip(share.who(), share.size())));
+        List<Cooldown> cooling = new ArrayList<>();
+        cooldownUntil.forEach((who, until) -> cooling.add(new Cooldown(who, until)));
         return new State(resource.name(), party, split.id(), List.copyOf(needs.values()), out,
-                failures, retryAfter, lastTick);
+                failures, retryAfter, lastTick, List.copyOf(along), companyUntil, List.copyOf(cooling));
     }
 
     public static Optional<Expedition> restore(State state, long now) {
@@ -297,7 +388,14 @@ public final class Expedition implements PartyProject {
                 project.needs.put(need.who() + "|" + need.what(), need);
             }
             for (Trip saved : state.trip()) {
-                project.trip = project.new TripItem(saved.who(), saved.size(), project.pursued());
+                project.trip = project.new TripItem(saved.who(), saved.size(), project.pursued(), 0);
+            }
+            for (Trip saved : state.company()) {
+                project.company.put(saved.who(), project.new CompanyItem(saved.who(), saved.size()));
+            }
+            project.companyUntil = state.companyUntil();
+            for (Cooldown cooling : state.cooldowns()) {
+                project.cooldownUntil.put(cooling.who(), cooling.retryAfter());
             }
             project.failures = state.failures();
             project.retryAfter = state.retryAfter();
@@ -366,15 +464,26 @@ public final class Expedition implements PartyProject {
         }
     }
 
-    private final class TripItem extends Item {
+    /** Going along: whoever takes it gets a {@link CompanyItem} of their own. */
+    private final class CompanyOffer extends Item {
+        @Override
+        public Task root() {
+            throw new IllegalStateException("an expedition's company offer is replaced by a share before it is run");
+        }
+
+        @Override
+        public String describe() {
+            return "go along for " + unclaimed() + " " + resource.name();
+        }
+    }
+
+    private final class CompanyItem extends Item {
         private final AgentId who;
         private final int size;
-        private final Set<String> pursued;
 
-        private TripItem(AgentId who, int size, Set<String> pursued) {
+        private CompanyItem(AgentId who, int size) {
             this.who = who;
             this.size = size;
-            this.pursued = Set.copyOf(pursued);
         }
 
         AgentId who() {
@@ -391,7 +500,51 @@ public final class Expedition implements PartyProject {
 
         @Override
         public Task root() {
-            return new GatheringErrand(resource, size, pursued);
+            return new ExpeditionErrand(resource, size, pursued(),
+                    trip == null ? null : BeingId.of(trip.who()), 0);
+        }
+
+        @Override
+        public String describe() {
+            return "go along for " + size + " " + resource.name();
+        }
+    }
+
+    private final class TripItem extends Item {
+        private final AgentId who;
+        private final int size;
+        private final Set<String> pursued;
+        /** The wait for company it was taken with — zero when one pack holds the haul. */
+        private final int muster;
+
+        private TripItem(AgentId who, int size, Set<String> pursued, int muster) {
+            this.who = who;
+            this.size = size;
+            this.pursued = Set.copyOf(pursued);
+            this.muster = muster;
+        }
+
+        int muster() {
+            return muster;
+        }
+
+        AgentId who() {
+            return who;
+        }
+
+        int size() {
+            return size;
+        }
+
+        Expedition owner() {
+            return Expedition.this;
+        }
+
+        /** The muster left, so a trip resumed after the wait does not wait again. */
+        @Override
+        public Task root() {
+            int wait = companyUntil == 0 ? muster : (int) Math.max(0, companyUntil - lastTick);
+            return new ExpeditionErrand(resource, size, pursued, null, wait);
         }
 
         @Override

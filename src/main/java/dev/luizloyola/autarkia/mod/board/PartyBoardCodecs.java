@@ -249,7 +249,12 @@ public final class PartyBoardCodecs {
             Codec.INT.fieldOf("size").forGetter(Expedition.Trip::size)
     ).apply(trip, (who, size) -> new Expedition.Trip(AgentId.of(who), size)));
 
-    /** Everything an {@code expedition} row carries: the needs, the trip out and its pacing. */
+    public static final Codec<Expedition.Cooldown> EXPEDITION_COOLDOWN = RecordCodecBuilder.create(c -> c.group(
+            UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
+            Codec.LONG.fieldOf("retry").forGetter(Expedition.Cooldown::retryAfter)
+    ).apply(c, (who, retry) -> new Expedition.Cooldown(AgentId.of(who), retry)));
+
+    /** Everything an {@code expedition} row carries: the needs, the trips out and their pacing. */
     public static final MapCodec<Expedition.State> EXPEDITION =
             RecordCodecBuilder.mapCodec(project -> project.group(
                     SPEC.fieldOf("resource").forGetter(Expedition.State::resource),
@@ -261,10 +266,15 @@ public final class PartyBoardCodecs {
                             .forGetter(Expedition.State::trip),
                     Codec.INT.optionalFieldOf("failures", 0).forGetter(Expedition.State::failures),
                     Codec.LONG.optionalFieldOf("retry", 0L).forGetter(Expedition.State::retryAfter),
-                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(Expedition.State::lastTick)
-            ).apply(project, (resource, party, split, needs, trip, failures, retry, lastTick) ->
-                    new Expedition.State(resource, PartyId.of(party), split, needs, trip, failures, retry,
-                            lastTick)));
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(Expedition.State::lastTick),
+                    EXPEDITION_TRIP.listOf().optionalFieldOf("company", List.of())
+                            .forGetter(Expedition.State::company),
+                    Codec.LONG.optionalFieldOf("company_until", 0L).forGetter(Expedition.State::companyUntil),
+                    EXPEDITION_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
+                            .forGetter(Expedition.State::cooldowns)
+            ).apply(project, (resource, party, split, needs, trip, failures, retry, lastTick, company,
+                    companyUntil, cooldowns) -> new Expedition.State(resource, PartyId.of(party), split, needs,
+                    trip, failures, retry, lastTick, company, companyUntil, cooldowns)));
 
     /** A station by the place kind it is remembered as and the block that places it. */
     public static final Codec<SetUp.Station> STATION = RecordCodecBuilder.create(station -> station.group(
