@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.core.patch;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.gate.Act;
 import dev.luizloyola.anima.core.brain.gate.Acts;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
 import dev.luizloyola.anima.core.brain.sense.Pos;
@@ -26,8 +27,10 @@ import java.util.Optional;
  * MinePatch#layer}): a furnace waits on eight stone, and a forest may show no other.
  * Registered under {@link Stock#FURNACE_STONE}; in the Wood Age the gate lets it be reached only
  * inside the furnace's craft chain. A pickaxe comes first when none is carried, since stone mined bare-handed
- * drops nothing. Every trip rests the patch, as foraging does; one that gave nothing a furnace takes
- * — granite, tuff — is rested for a day ({@link MinePatch}).
+ * drops nothing. Every trip rests the patch, as foraging does, but a rested patch in sight with
+ * stone still standing may be mined again (Luiz, 2026-10-02): otherwise a far trip to a lone patch
+ * comes home with 8. One that gave nothing a furnace takes — granite, tuff — is rested for a day
+ * ({@link MinePatch}).
  */
 public final class MineStone implements Method {
 
@@ -72,7 +75,7 @@ public final class MineStone implements Method {
     public List<Task> decompose(BrainContext ctx) {
         Choice choice = nearestPatch(ctx).orElseThrow();
         PoiMemory patch = choice.patch();
-        ctx.knowledge().avoid(Landmarks.STONE_POI, patch.anchor(), ctx.percepts().time() + REST_TICKS);
+        ctx.knowledge().rest(Landmarks.STONE_POI, patch.anchor(), ctx.percepts().time() + REST_TICKS);
         chosenAt = Long.MIN_VALUE;
         List<Task> steps = new ArrayList<>();
         if (ctx.percepts().inventory().count(Stock.PICKAXES.matcher()) == 0) {
@@ -100,9 +103,15 @@ public final class MineStone implements Method {
             return chosen;
         }
         List<PoiMemory> open = new ArrayList<>();
+        java.util.Set<Pos> resting = new java.util.HashSet<>();
+        java.util.Map<Pos, AgentKnowledge.Avoid> marks = ctx.knowledge().avoids(Landmarks.STONE_POI);
         for (PoiMemory patch : ctx.knowledge().all(Landmarks.STONE_POI)) {
-            if (!ctx.knowledge().isAvoided(Landmarks.STONE_POI, patch.anchor(), now)) {
+            AgentKnowledge.Avoid mark = marks.get(patch.anchor());
+            if (mark == null || mark.until() <= now) {
                 open.add(patch);
+            } else if (mark.strikes() == 0) {
+                open.add(patch);
+                resting.add(patch.anchor());
             }
         }
         open.sort(java.util.Comparator.comparingLong(patch -> TreeShape.horizontalDistSq(patch.anchor(), here)));
@@ -113,7 +122,7 @@ public final class MineStone implements Method {
             boolean inSight = probe.groundY(patch.anchor().x(), patch.anchor().z()) != Integer.MIN_VALUE;
             boolean stands = inSight && !MinePatch.exposed(probe, patch.bounds(), here).isEmpty();
             standing |= stands;
-            if (worth == null && (!inSight || stands)) {
+            if (worth == null && (stands || (!inSight && !resting.contains(patch.anchor())))) {
                 worth = patch;
             }
             if (worth != null && standing) {
@@ -123,7 +132,8 @@ public final class MineStone implements Method {
         // A patch out of sight cannot be judged from here and is judged on arrival, its layer taken
         // if it is flat and no patch in sight has stone standing.
         chosen = worth != null ? Optional.of(new Choice(worth, !standing))
-                : lastResort(probe, open, here).map(patch -> new Choice(patch, true));
+                : lastResort(probe, open.stream().filter(patch -> !resting.contains(patch.anchor())).toList(), here)
+                        .map(patch -> new Choice(patch, true));
         chosenAt = now;
         chosenFrom = here;
         return chosen;

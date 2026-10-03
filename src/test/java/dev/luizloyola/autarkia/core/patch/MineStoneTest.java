@@ -100,10 +100,36 @@ class MineStoneTest {
     }
 
     @Test
-    void aTripRestsThePatch() {
+    void aTripRestsThePatchOnceWhatShowedIsMined() {
         remember();
         forStone().decompose(ctx);
+        for (int y = G + 1; y <= G + 2; y++) {
+            ctx.percepts.blocks.clear(12, y, 0);
+        }
         assertFalse(forStone().applicable(ctx), "what showed has been mined; come back later");
+    }
+
+    /** Luiz, 2026-10-02: a far trip to a lone patch came home with 8, the rest left standing. */
+    @Test
+    void aRestedPatchWithStoneStillStandingIsMinedAgain() {
+        remember();
+        forStone().decompose(ctx);
+        assertTrue(forStone().applicable(ctx), "the stone is in sight and still there");
+    }
+
+    @Test
+    void aRestedPatchOutOfSightWaitsOutItsRest() {
+        remember();
+        forStone().decompose(ctx);
+        ctx.percepts.blocks.markUnloaded(12, 0);
+        assertFalse(forStone().applicable(ctx), "nobody can tell from here whether anything is left");
+    }
+
+    @Test
+    void aBarrenPatchStaysStruckForItsDay() {
+        remember();
+        ctx.knowledge.avoid(Landmarks.STONE_POI, patch, ctx.percepts.time() + MinePatch.BARREN_TICKS);
+        assertFalse(forStone().applicable(ctx), "granite stands there, and gives a furnace nothing");
     }
 
     @Test
