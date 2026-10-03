@@ -241,9 +241,27 @@ public final class PartyBoardCodecs {
             Codec.STRING.listOf().optionalFieldOf("for", List.of())
                     .forGetter(out -> List.copyOf(new TreeSet<>(out.pursued()))),
             Codec.LONG.fieldOf("seen").forGetter(Expedition.Need::seen),
-            Codec.BOOL.optionalFieldOf("standing", false).forGetter(Expedition.Need::standing)
-    ).apply(need, (who, what, count, priority, pursued, seen, standing) -> new Expedition.Need(
-            AgentId.of(who), what, count, priority, Set.copyOf(pursued), seen, standing)));
+            Codec.BOOL.optionalFieldOf("standing", false).forGetter(Expedition.Need::standing),
+            Codec.LONG.optionalFieldOf("since").forGetter(out -> Optional.of(out.since())),
+            Codec.BOOL.optionalFieldOf("lost", false).forGetter(Expedition.Need::lost)
+    ).apply(need, (who, what, count, priority, pursued, seen, standing, since, lost) -> new Expedition.Need(
+            AgentId.of(who), what, count, priority, Set.copyOf(pursued), seen, standing, since.orElse(seen),
+            lost)));
+
+    public static final Codec<Expedition.Search> EXPEDITION_SEARCH = RecordCodecBuilder.create(search -> search.group(
+            UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
+            Codec.INT.fieldOf("heading").forGetter(Expedition.Search::heading),
+            Codec.INT.fieldOf("legs").forGetter(Expedition.Search::legs)
+    ).apply(search, (who, heading, legs) -> new Expedition.Search(AgentId.of(who), heading, legs)));
+
+    /** An expedition's searches: the one out, how far the next goes, its pacing, the headings tried. */
+    public static final Codec<Expedition.Searching> EXPEDITION_SEARCHING = RecordCodecBuilder.create(s -> s.group(
+            EXPEDITION_SEARCH.listOf().optionalFieldOf("out", List.of()).forGetter(Expedition.Searching::out),
+            Codec.INT.optionalFieldOf("legs", Expedition.SEARCH_LEGS).forGetter(Expedition.Searching::legs),
+            Codec.INT.optionalFieldOf("failures", 0).forGetter(Expedition.Searching::failures),
+            Codec.LONG.optionalFieldOf("retry", 0L).forGetter(Expedition.Searching::retryAfter),
+            Codec.INT.listOf().optionalFieldOf("tried", List.of()).forGetter(Expedition.Searching::tried)
+    ).apply(s, Expedition.Searching::new));
 
     public static final Codec<Expedition.Trip> EXPEDITION_TRIP = RecordCodecBuilder.create(trip -> trip.group(
             UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
@@ -272,10 +290,12 @@ public final class PartyBoardCodecs {
                             .forGetter(Expedition.State::company),
                     Codec.LONG.optionalFieldOf("company_until", 0L).forGetter(Expedition.State::companyUntil),
                     EXPEDITION_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
-                            .forGetter(Expedition.State::cooldowns)
+                            .forGetter(Expedition.State::cooldowns),
+                    EXPEDITION_SEARCHING.optionalFieldOf("searching", Expedition.Searching.NONE)
+                            .forGetter(Expedition.State::searching)
             ).apply(project, (resource, party, split, needs, trip, failures, retry, lastTick, company,
-                    companyUntil, cooldowns) -> new Expedition.State(resource, PartyId.of(party), split, needs,
-                    trip, failures, retry, lastTick, company, companyUntil, cooldowns)));
+                    companyUntil, cooldowns, searching) -> new Expedition.State(resource, PartyId.of(party), split,
+                    needs, trip, failures, retry, lastTick, company, companyUntil, cooldowns, searching)));
 
     /** A station by the place kind it is remembered as and the block that places it. */
     public static final Codec<SetUp.Station> STATION = RecordCodecBuilder.create(station -> station.group(

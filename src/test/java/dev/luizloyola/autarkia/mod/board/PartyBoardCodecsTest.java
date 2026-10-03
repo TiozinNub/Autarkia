@@ -95,10 +95,15 @@ class PartyBoardCodecsTest {
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Need(CREW, "make a stone axe", 3, 0.46,
                         java.util.Set.of("minecraft:stone_axe"), 1200),
                         new dev.luizloyola.autarkia.core.board.Expedition.Need(CREW, "asked by Server", 40, 0.4,
-                                java.util.Set.of(), 900, true)),
+                                java.util.Set.of(), 900, true),
+                        new dev.luizloyola.autarkia.core.board.Expedition.Need(CREW, "fetch 32 logs home", 32, 0.4,
+                                java.util.Set.of(), 9000, false, 4000, true)),
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Trip(CREW, 34)), 2, 2400, 1300,
                 List.of(new dev.luizloyola.autarkia.core.board.Expedition.Trip(AgentId.random(), 14)), 1900,
-                List.of(new dev.luizloyola.autarkia.core.board.Expedition.Cooldown(AgentId.random(), 2500)));
+                List.of(new dev.luizloyola.autarkia.core.board.Expedition.Cooldown(AgentId.random(), 2500)),
+                new dev.luizloyola.autarkia.core.board.Expedition.Searching(
+                        List.of(new dev.luizloyola.autarkia.core.board.Expedition.Search(CREW, 3, 5)), 6, 2, 3100,
+                        List.of(1, 3)));
 
         assertEquals(state, roundTrip(new PartyBoard.Row(state, List.of())).project());
     }

@@ -614,6 +614,10 @@ public class Board {
     public void pricedOutOf(AgentId who, WorkItem item, ObtainItem wanted, double tolerance, BrainContext ctx) {
     }
 
+    /** {@code who}'s item had no way at all to {@code wanted}. Nothing here — {@link PartyBoard} answers. */
+    public void noWayTo(AgentId who, WorkItem item, ObtainItem wanted, BrainContext ctx) {
+    }
+
     /** Every priced-out failure of {@code item} earns it a step, journalled with the new budget. */
     public void pricedOut(WorkItem item, BrainContext ctx) {
         Project owner = ownerOf(item);
@@ -712,6 +716,11 @@ public class Board {
         @Override
         public void pricedOutOf(WorkItem item, ObtainItem wanted, double tolerance, BrainContext ctx) {
             Board.this.pricedOutOf(member.get(), item, wanted, tolerance, ctx);
+        }
+
+        @Override
+        public void noWayTo(WorkItem item, ObtainItem wanted, BrainContext ctx) {
+            Board.this.noWayTo(member.get(), item, wanted, ctx);
         }
 
         @Override

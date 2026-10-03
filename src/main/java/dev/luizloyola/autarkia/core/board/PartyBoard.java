@@ -94,6 +94,26 @@ public final class PartyBoard extends Board {
                 (going.isEmpty() ? "out of reach — " : "joins the ") + expedition.describe());
     }
 
+    /**
+     * A member's item had no way at all to {@code wanted}: the need joins its source's expedition,
+     * posted if there is none, and counts once it has gone on failing past
+     * {@link Expedition#SEARCH_PATIENCE} — then somebody who knows a way goes, or somebody looks.
+     */
+    @Override
+    public void noWayTo(AgentId who, WorkItem item, ObtainItem wanted, BrainContext ctx) {
+        Optional<ItemSpec> source = Producers.sourceOf(wanted.spec());
+        if (source.isEmpty()) {
+            return;
+        }
+        boolean fresh = expeditionFor(source.get()).isEmpty();
+        long now = ctx.percepts().time();
+        Expedition expedition = sendFor(source.get(), new Expedition.Need(who, item.describe(), wanted.count(),
+                item.priority(), wanted.pursued(), now, false, now, true), now);
+        if (fresh) {
+            ctx.journal().record(Category.PROJECT, item.describe(), "no way to it — " + expedition.describe());
+        }
+    }
+
     /** The open expedition for {@code source}, if one is going. */
     public Optional<Expedition> expeditionFor(ItemSpec source) {
         for (Project project : projects()) {

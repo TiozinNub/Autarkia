@@ -64,6 +64,7 @@ class ExpeditionTest {
     }
 
     static {
+        SourceKinds.register(EAST_STONE, dev.luizloyola.autarkia.core.patch.Landmarks.STONE_POI);
         Producers.register(EAST_STONE, id -> true, wanted -> new Method() {
             @Override
             public boolean applicable(BrainContext ctx) {
@@ -103,6 +104,94 @@ class ExpeditionTest {
 
         assertFalse(far.offerableTo(far.open().get(0), EMILY, bia), "she knows no such stone; she can go along");
         assertTrue(far.offerableTo(far.open().get(0), DORIS, ana));
+    }
+
+    // ── the search ───────────────────────────────────────────────────────────────────────────
+
+    private static Expedition lost(long seen) {
+        Expedition far = new Expedition(EAST_STONE, PARTY);
+        far.need(new Expedition.Need(DORIS, "put minecraft:furnace down", 8, 0.52, Set.of("minecraft:furnace"),
+                0, false, 0, true), 0);
+        if (seen > 0) {
+            far.need(new Expedition.Need(DORIS, "put minecraft:furnace down", 8, 0.52, Set.of("minecraft:furnace"),
+                    seen, false, seen, true), seen);
+        }
+        far.tick(seen);
+        return far;
+    }
+
+    private static BoardBrainContext east() {
+        BoardBrainContext ctx = atHome();
+        ctx.standAt(new Pos(150, 64, 0));
+        return ctx;
+    }
+
+    @Test
+    void aNeedWithNoWayWaitsOutThePatienceBeforeAnybodyGoes() {
+        assertTrue(lost(0).open().isEmpty(), "a way can be missing a while without being gone");
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        assertEquals(16, far.haul());
+        assertEquals(2, far.open().size(), "the trip for who knows a way, the search for who does not");
+    }
+
+    @Test
+    void onlyOneWhoKnowsNoWayIsSentLooking() {
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        WorkItem lead = far.open().get(0);
+        WorkItem look = far.open().get(1);
+
+        assertTrue(far.offerableTo(look, EMILY, atHome()));
+        assertFalse(far.offerableTo(look, DORIS, east()), "she knows the stone: she leads instead");
+        assertTrue(far.offerableTo(lead, DORIS, east()));
+    }
+
+    @Test
+    void anEmptySearchGoesFurtherNextTimeAnotherWay() {
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        BoardBrainContext home = atHome();
+        home.advance(Expedition.SEARCH_PATIENCE);
+        WorkItem first = far.realise(far.open().get(1), EMILY, home);
+        far.claimed(first, EMILY);
+        SeekSource seek = assertInstanceOf(SearchErrand.class, first.root()).seek();
+        assertEquals(Expedition.SEARCH_LEGS, seek.legsLeft());
+
+        far.completed(first, home);
+        assertFalse(far.open().stream().anyMatch(item -> item.describe().startsWith("look for")),
+                "an empty search waits before the next");
+        far.tick(Expedition.SEARCH_PATIENCE + 600);
+        WorkItem second = far.realise(far.open().get(1), EMILY, home);
+        SeekSource next = assertInstanceOf(SearchErrand.class, second.root()).seek();
+        assertEquals(Expedition.SEARCH_LEGS + 1, next.legsLeft(), "one leg further");
+        assertTrue(next.heading() != seek.heading(), "and a way not yet tried");
+    }
+
+    @Test
+    void aSearchThatFoundItHandsTheTripToTheSearcher() {
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        WorkItem look = far.realise(far.open().get(1), EMILY, atHome());
+        far.claimed(look, EMILY);
+        BoardBrainContext there = east();
+        far.completed(look, there);
+
+        WorkItem lead = far.open().get(0);
+        assertTrue(far.offerableTo(lead, EMILY, there), "she stands by the stone now");
+        WorkItem trip = far.realise(lead, EMILY, there);
+        assertEquals(0, assertInstanceOf(ExpeditionErrand.class, trip.root()).muster(),
+                "away from HOME nobody could come along");
+    }
+
+    @Test
+    void aRestartKeepsTheSearch() {
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        WorkItem look = far.realise(far.open().get(1), EMILY, atHome());
+        far.claimed(look, EMILY);
+
+        Expedition back = Expedition.restore(far.snapshot(), 0).orElseThrow();
+        assertEquals(far.snapshot(), back.snapshot());
+        WorkItem again = back.itemFor(new WorkKey.ForMember(WorkKey.EXPEDITION_SEARCH, EMILY)).orElseThrow();
+        back.claimed(again, EMILY);
+        back.holdsRestored();
+        assertEquals(List.of(again), back.open());
     }
 
     @Test

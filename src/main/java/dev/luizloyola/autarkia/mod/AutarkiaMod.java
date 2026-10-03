@@ -165,6 +165,11 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.core.patch.MineStone.ACT.key();
         Producers.register(Stock.FURNACE_STONE, Stock.FURNACE_STONE::matches,
                 dev.luizloyola.autarkia.core.patch.MineStone::new);
+        // Where each is found, for an expedition that has to look (expedition spec, step 4).
+        dev.luizloyola.autarkia.core.board.SourceKinds.register(Stock.FURNACE_STONE,
+                dev.luizloyola.autarkia.core.patch.Landmarks.STONE_POI);
+        dev.luizloyola.autarkia.core.board.SourceKinds.register(Stock.LOGS,
+                dev.luizloyola.autarkia.core.tree.Pois.TREE);
         // And by hunting, under food alone: raw meat is not a meal, so the party's need for food is
         // what sends a Person hunting — or starving (directions spec, decisions 16 and 17).
         dev.luizloyola.autarkia.core.person.Hunting.ACT.key();

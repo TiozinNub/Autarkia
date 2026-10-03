@@ -201,6 +201,13 @@ public final class AutarkiaTasks {
                                 java.util.Set.copyOf(pursued),
                                 leader.map(dev.luizloyola.anima.core.brain.sense.BeingId::of).orElse(null),
                                 muster))));
+        // A search for a source: which way, how far is left, and the glimpses already walked to.
+        TaskCodecs.register("autarkia:seek_source", dev.luizloyola.autarkia.core.board.SeekSource.class,
+                SEEK_SOURCE);
+        TaskCodecs.register("autarkia:search_errand", dev.luizloyola.autarkia.core.board.SearchErrand.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        SEEK_SOURCE.fieldOf("seek").forGetter(dev.luizloyola.autarkia.core.board.SearchErrand::seek)
+                ).apply(t, dev.luizloyola.autarkia.core.board.SearchErrand::new)));
         // Keeping with the leader: how long it has gone nowhere, and the farthest it got from HOME.
         TaskCodecs.register("autarkia:travel_with", dev.luizloyola.autarkia.core.board.TravelWith.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
@@ -254,6 +261,7 @@ public final class AutarkiaTasks {
                     .orElseGet(() -> DataResult.error(() -> "no place kind is keyed \"" + key + "\"")),
             PoiKind::key);
 
+
     /**
      * A class of items, in the two shapes a spec can have — the same fork {@code AnimaTasks} uses,
      * and no longer narrower than it. A mod-declared spec's matcher is a lambda and cannot be
@@ -267,6 +275,22 @@ public final class AutarkiaTasks {
     private static final Codec<ItemSpec> ITEM_SPEC =
             Codec.either(Codec.STRING, Codec.STRING.listOf())
                     .comapFlatMap(AutarkiaTasks::specFromEither, AutarkiaTasks::specToEither);
+
+    private static final com.mojang.serialization.MapCodec<dev.luizloyola.autarkia.core.board.SeekSource> SEEK_SOURCE =
+            RecordCodecBuilder.mapCodec(t -> t.group(
+                    POI_KIND.fieldOf("kind").forGetter(dev.luizloyola.autarkia.core.board.SeekSource::kind),
+                    ITEM_SPEC.fieldOf("resource").forGetter(dev.luizloyola.autarkia.core.board.SeekSource::resource),
+                    Codec.STRING.listOf().optionalFieldOf("for", java.util.List.of())
+                            .forGetter(k -> java.util.List.copyOf(new java.util.TreeSet<>(k.pursued()))),
+                    Codec.INT.fieldOf("heading").forGetter(dev.luizloyola.autarkia.core.board.SeekSource::heading),
+                    Codec.INT.fieldOf("legs_left").forGetter(dev.luizloyola.autarkia.core.board.SeekSource::legsLeft),
+                    Codec.INT.optionalFieldOf("walked", 0).forGetter(dev.luizloyola.autarkia.core.board.SeekSource::walked),
+                    Codec.BOOL.optionalFieldOf("looked", false).forGetter(dev.luizloyola.autarkia.core.board.SeekSource::looked),
+                    POS.listOf().optionalFieldOf("visited", java.util.List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.SeekSource::visited)
+            ).apply(t, (kind, resource, pursued, heading, legsLeft, walked, looked, visited) ->
+                    new dev.luizloyola.autarkia.core.board.SeekSource(kind, resource, java.util.Set.copyOf(pursued),
+                            heading, legsLeft, walked, looked, java.util.Set.copyOf(visited))));
 
     private static DataResult<ItemSpec> specFromEither(Either<String, List<String>> written) {
         return written.map(

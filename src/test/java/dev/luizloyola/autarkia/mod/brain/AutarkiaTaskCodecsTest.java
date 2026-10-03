@@ -183,6 +183,21 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void aSearchHalfwayOutSurvivesTheFile() {
+        var seek = new dev.luizloyola.autarkia.core.board.SeekSource(dev.luizloyola.autarkia.core.tree.Pois.TREE,
+                Stock.LOGS, java.util.Set.of("minecraft:furnace"), 2, 3, 1, true,
+                java.util.Set.of(new dev.luizloyola.anima.core.brain.sense.Pos(40, 64, 90)));
+        var after = assertInstanceOf(dev.luizloyola.autarkia.core.board.SearchErrand.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.SearchErrand(seek))).seek();
+        assertEquals(2, after.heading());
+        assertEquals(3, after.legsLeft(), "a restart does not hand back the legs already walked");
+        assertEquals(1, after.walked());
+        assertEquals(true, after.looked());
+        assertEquals(seek.visited(), after.visited());
+        assertEquals(dev.luizloyola.autarkia.core.tree.Pois.TREE, after.kind());
+    }
+
+    @Test
     void aFetchOnItsWaySurvivesTheFile() {
         dev.luizloyola.autarkia.core.board.FetchSome after = assertInstanceOf(
                 dev.luizloyola.autarkia.core.board.FetchSome.class,

@@ -138,6 +138,11 @@ public final class ComposedBoards implements WorkSource {
     }
 
     @Override
+    public void noWayTo(WorkItem item, ObtainItem wanted, BrainContext ctx) {
+        party.get().noWayTo(item, wanted, ctx);
+    }
+
+    @Override
     public int budgetSteps(WorkItem item) {
         return sourceOf(item).budgetSteps(item);
     }
