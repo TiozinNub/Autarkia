@@ -292,6 +292,10 @@ mc() {
     fi
 }
 
+# Mobs spawn round a Person as round a player, which `spawn-monsters=false` does not stop: slimes
+# come up out of the superflat's slime chunks in daylight and the pair fight them instead of meeting.
+mc "gamerule spawn_mobs false"
+
 # Forceload FIRST. With no player online nothing holds a chunk, so a Person spawned into one exists
 # in the save and is not even selectable, let alone ticking — the rehearsal for this reported
 # "Spawned CiProbe" and "No Persons are loaded" in the same breath. Stage inside the rectangle.
