@@ -116,6 +116,7 @@ public final class PersonSpecies {
             .set(ProfileAspect.SOCIAL_CHAT_RADIUS, 12)
             // Fifteen seconds on an unanswered question before it reads as a snub.
             .set(ProfileAspect.SOCIAL_PATIENCE_TICKS, 300)
+            .set(ProfileAspect.SOCIAL_SHARE_FRACTION, 0.25)
             // --- body: a 1.8 hitbox, a vanilla jump, and vanilla's sprint-jump limit ----------
             .set(ProfileAspect.BODY_HEIGHT, 1.8)   // the real hitbox, not a cell count
             .set(ProfileAspect.BODY_JUMP_HEIGHT, 1)

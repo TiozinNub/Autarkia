@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.core.person.speech;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +12,7 @@ import dev.luizloyola.anima.core.brain.history.History;
 import dev.luizloyola.anima.core.brain.history.Doings;
 import dev.luizloyola.anima.core.brain.history.Deed;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.agent.FoodValue;
 import dev.luizloyola.anima.core.agent.AgentProfile;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
 import dev.luizloyola.anima.core.agent.Pronouns;
@@ -25,9 +27,11 @@ import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.FakePercepts;
 import dev.luizloyola.anima.core.brain.task.FakeSpeech;
 import dev.luizloyola.anima.core.brain.task.TaskStatus;
+import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.anima.core.log.AgentJournal;
 import dev.luizloyola.anima.core.social.speech.Chooser;
 import dev.luizloyola.anima.core.social.speech.Encounter;
+import dev.luizloyola.anima.core.social.speech.Handover;
 import dev.luizloyola.anima.core.social.speech.Picker;
 import dev.luizloyola.anima.core.social.speech.Speech;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
@@ -259,7 +263,7 @@ class PersonChooserTest {
         assertEquals(PersonActs.SMALL_TALK_REPLY, line.act());
         assertEquals("work.asked", line.payload().get("topic"));
         assertEquals("work", line.payload().get(Topics.ABOUT));
-        assertTrue(chooser.explain(ctx, turn).get(2).startsWith("fired:   3 answer a question"));
+        assertTrue(chooser.explain(ctx, turn).get(5).startsWith("fired:   6 answer a question"));
     }
 
     @Test
@@ -433,24 +437,25 @@ class PersonChooserTest {
 
         List<String> lines = chooser.explain(ctx, turn);
 
-        assertEquals(10, lines.size(), "one line per rung, whatever happens");
+        assertEquals(14, lines.size(), "one line per rung, whatever happens");
         List<String> fired = lines.stream().filter(line -> line.startsWith("fired")).toList();
         assertEquals(1, fired.size(), "first match wins — exactly one rung takes the turn");
-        assertTrue(fired.get(0).contains("6 ask their name"), fired.get(0));
+        assertTrue(fired.get(0).contains("10 ask their name"), fired.get(0));
         assertEquals(PersonActs.ASK_IDENTITY, chooser.choose(ctx, turn).act(),
                 "the rung explain() marks fired is the one choose() actually took");
 
-        // Live facts, not canned text: the pending act, rung 6's percept, rung 8's two numbers.
+        // Live facts, not canned text: the pending act, rung 10's percept, rung 12's two numbers.
         assertTrue(lines.get(1).contains("pending none"), lines.get(1));
-        assertTrue(lines.get(5).contains("seen at INDIVIDUAL"), lines.get(5));
-        assertTrue(lines.get(6).contains("last said nothing"), lines.get(6));
-        assertTrue(lines.get(7).contains("company 0.50 < content 0.85"), lines.get(7));
-        // Rung 9 reads skipped: nothing has been said here yet, so plenty is left to say.
-        assertTrue(lines.get(8).startsWith("skipped"), lines.get(8));
-        assertTrue(lines.get(8).contains("something new left"), lines.get(8));
-        // Rung 10 reads skipped: rung 6 spoke, and the silence it waits for has not run either.
-        assertTrue(lines.get(9).startsWith("skipped"), lines.get(9));
-        assertTrue(lines.get(9).contains("silent 0 of 300 ticks"), lines.get(9));
+        assertTrue(lines.get(8).contains("fed"), lines.get(8));
+        assertTrue(lines.get(9).contains("seen at INDIVIDUAL"), lines.get(9));
+        assertTrue(lines.get(10).contains("last said nothing"), lines.get(10));
+        assertTrue(lines.get(11).contains("company 0.50 < content 0.85"), lines.get(11));
+        // Rung 13 reads skipped: nothing has been said here yet, so plenty is left to say.
+        assertTrue(lines.get(12).startsWith("skipped"), lines.get(12));
+        assertTrue(lines.get(12).contains("something new left"), lines.get(12));
+        // Rung 14 reads skipped: rung 10 spoke, and the silence it waits for has not run either.
+        assertTrue(lines.get(13).startsWith("skipped"), lines.get(13));
+        assertTrue(lines.get(13).contains("silent 0 of 300 ticks"), lines.get(13));
     }
 
     // ── the full two-party conversation ──────────────────────────────────────────────────────
@@ -701,8 +706,8 @@ class PersonChooserTest {
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, chatting(e)),
                 "running out of things to say is how a chat ends");
-        String rung9 = chooser.explain(ctx, chatting(e)).get(8);
-        assertTrue(rung9.startsWith("fired:   9 out of things to say"), rung9);
+        String rung13 = chooser.explain(ctx, chatting(e)).get(12);
+        assertTrue(rung13.startsWith("fired:   13 out of things to say"), rung13);
     }
 
     @Test
@@ -720,5 +725,147 @@ class PersonChooserTest {
 
         assertEquals(fled.deed(),
                 Recounting.read(chooser.choose(ctx, chatting(e)).payload()).orElseThrow().deed());
+    }
+
+    // ── food: asking, sharing, taking (2026-10-02-food-and-replies-design.md) ────────────────
+
+    private Encounter askedForFood() {
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), SpeechActs.ASK_FOOD.key(), Map.of(), 0));
+        return e;
+    }
+
+    private Chooser.Turn owing(Encounter e) {
+        return new Chooser.Turn(e,
+                List.of(SpeechActs.CANNOT_SPARE, SpeechActs.OFFER, SpeechActs.END_CHAT),
+                Picker.pendingOn(e, ctx.self), Optional.empty(), true, Optional.of(otherId.asPerson()));
+    }
+
+    private void carries(String id, int count, int nutrition) {
+        ctx.percepts.food(id, new FoodValue(nutrition, nutrition * 1.2f, false));
+        ctx.percepts.inventory.add(ItemStack.of(id, count, 64));
+    }
+
+    @Test
+    @DisplayName("priority 3: a stranger asks, and is held out what the surplus allows")
+    void priority3OffersAStrangerFromTheSurplus() {
+        carries("minecraft:cooked_beef", 6, 8);
+        Encounter e = askedForFood();
+
+        Chooser.Line line = chooser.choose(ctx, owing(e));
+
+        assertEquals(SpeechActs.OFFER, line.act());
+        assertEquals(List.of(new Handover.Item("minecraft:cooked_beef", 2)), Handover.read(line.payload()));
+    }
+
+    @Test
+    @DisplayName("priority 3: nothing beyond a full bar, nothing to spare for a stranger — but half for a colleague")
+    void priority3ColleagueOrNothing() {
+        carries("minecraft:cooked_beef", 2, 8);
+        Encounter e = askedForFood();
+
+        assertEquals(Chooser.Line.of(SpeechActs.CANNOT_SPARE), chooser.choose(ctx, owing(e)));
+
+        ctx.colleagues.add(otherId.asPerson());
+        Chooser.Line line = chooser.choose(ctx, owing(e));
+        assertEquals(SpeechActs.OFFER, line.act());
+        assertEquals(List.of(new Handover.Item("minecraft:cooked_beef", 1)), Handover.read(line.payload()));
+        assertTrue(chooser.explain(ctx, owing(e)).get(2).contains("a colleague"));
+    }
+
+    @Test
+    @DisplayName("priority 4: something held out is taken")
+    void priority4TakesWhatIsOffered() {
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), SpeechActs.OFFER.key(),
+                Handover.payload(List.of(new Handover.Item("minecraft:bread", 2))), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(SpeechActs.ACCEPT_OFFER, SpeechActs.DECLINE_OFFER, SpeechActs.END_CHAT),
+                Picker.pendingOn(e, ctx.self), Optional.empty(), true, Optional.of(otherId.asPerson()));
+
+        assertEquals(Chooser.Line.of(SpeechActs.ACCEPT_OFFER), chooser.choose(ctx, turn));
+    }
+
+    private Chooser.Turn greetedChat(Encounter e) {
+        return new Chooser.Turn(e,
+                List.of(SpeechActs.ASK_FOOD, PersonActs.ASK_IDENTITY, PersonActs.SMALL_TALK, SpeechActs.END_CHAT),
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()));
+    }
+
+    @Test
+    @DisplayName("priority 8: peckish with nothing ready, it asks for food first thing after the greeting — once")
+    void priority8AsksForFoodOnce() {
+        ctx.percepts.metabolism.setFoodLevel(8);
+        ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(4, 64, 0), 4.0, ""));
+        Encounter e = freshEncounter();
+
+        assertEquals(Chooser.Line.of(SpeechActs.ASK_FOOD), chooser.choose(ctx, greetedChat(e)),
+                "before even asking their name");
+
+        e.append(new Utterance(ctx.self, SpeechActs.ASK_FOOD.key(), Map.of(), 0));
+        e.append(new Utterance(otherId.asPerson(), SpeechActs.CANNOT_SPARE.key(), Map.of(), 20));
+        assertEquals(PersonActs.ASK_IDENTITY, chooser.choose(ctx, greetedChat(e)).act(),
+                "turned down: it does not ask again");
+    }
+
+    @Test
+    @DisplayName("priority 8: not when fed, and not with ready food in the pack")
+    void priority8NotWhenItNeedsNothing() {
+        ctx.percepts.company.setValue(1.0);
+        Encounter e = freshEncounter();
+        assertNotEquals(SpeechActs.ASK_FOOD, actOf(chooser.choose(ctx, greetedChat(e))), "fed");
+
+        ctx.percepts.metabolism.setFoodLevel(8);
+        carries("minecraft:bread", 1, 5);
+        assertNotEquals(SpeechActs.ASK_FOOD, actOf(chooser.choose(ctx, greetedChat(e))), "bread on it");
+    }
+
+    private static SpeechAct actOf(Chooser.Line line) {
+        return line == null ? null : line.act();
+    }
+
+    // ── a gift: thanked for, or named as not wanted ──────────────────────────────────────────
+
+    private Chooser.Line judging(boolean asked, Handover.Item... items) {
+        ctx.percepts.food("minecraft:bread", new FoodValue(5, 6.0f, false));
+        Encounter e = freshEncounter();
+        if (asked) {
+            e.append(new Utterance(ctx.self, SpeechActs.ASK_FOOD.key(), Map.of(), 0));
+        }
+        e.append(new Utterance(otherId.asPerson(), SpeechActs.GIVE.key(), Handover.payload(List.of(items)), 20));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(SpeechActs.ACCEPT_OFFER, SpeechActs.NOT_WANTED, SpeechActs.END_CHAT),
+                Picker.pendingOn(e, ctx.self), Optional.empty(), true, Optional.of(otherId.asPerson()));
+        return chooser.choose(ctx, turn);
+    }
+
+    private static final Handover.Item BREAD = new Handover.Item("minecraft:bread", 3);
+    private static final Handover.Item DIRT = new Handover.Item("minecraft:dirt", 8);
+
+    @Test
+    @DisplayName("priority 5: food it asked for is thanked for")
+    void priority5ThanksForFood() {
+        assertEquals(Chooser.Line.of(SpeechActs.ACCEPT_OFFER), judging(true, BREAD));
+    }
+
+    @Test
+    @DisplayName("priority 5: asked for food and given dirt — not food; given both — the dirt is the rest")
+    void priority5NamesWhatIsNotFood() {
+        Chooser.Line dirt = judging(true, DIRT);
+        assertEquals(SpeechActs.NOT_WANTED, dirt.act());
+        assertEquals("not_food", dirt.payload().get("topic"));
+        assertEquals(List.of(DIRT), Handover.read(dirt.payload()));
+
+        Chooser.Line mixed = judging(true, BREAD, DIRT);
+        assertEquals("mixed", mixed.payload().get("topic"));
+        assertEquals(List.of(DIRT), Handover.read(mixed.payload()), "the bread is kept");
+    }
+
+    @Test
+    @DisplayName("priority 5: nothing asked for — all of it is named, food or not")
+    void priority5UnaskedIsAllNamed() {
+        Chooser.Line line = judging(false, BREAD, DIRT);
+        assertEquals("unasked", line.payload().get("topic"));
+        assertEquals(List.of(BREAD, DIRT), Handover.read(line.payload()));
     }
 }
