@@ -68,7 +68,7 @@ public final class AreaLine implements DirectionLine {
         ChunkKey next = home.uncleared(party.area(), spot).get(0);
         Region bounds = Home.region(next, spot.y());
         return home.felled().contains(next)
-                ? new ClearPlants(bounds, priority)
+                ? new ClearPlants(bounds, priority, party.members())
                 : new FellTrees(TreeFelling.INSTANCE, bounds, priority, true);
     }
 

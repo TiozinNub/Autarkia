@@ -434,7 +434,9 @@ public final class PartyBoardCodecs {
                             .forGetter(ClearPlants.State::failures),
                     GATHER_COOLDOWN.listOf().optionalFieldOf("cooldowns", List.of())
                             .forGetter(ClearPlants.State::cooldowns),
-                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(ClearPlants.State::lastTick)
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(ClearPlants.State::lastTick),
+                    // A row saved before the party was counted writes a strip off at the first strike-out.
+                    Codec.INT.optionalFieldOf("members", 1).forGetter(ClearPlants.State::members)
             ).apply(project, ClearPlants.State::new));
 
     private static final Codec<dev.luizloyola.autarkia.core.board.Deconstruct.Target> DECONSTRUCT_TARGET =

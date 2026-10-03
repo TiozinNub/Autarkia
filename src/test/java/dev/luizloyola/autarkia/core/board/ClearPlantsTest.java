@@ -29,7 +29,7 @@ class ClearPlantsTest {
 
     @Test
     void aChunkIsFourStripsAndDoneWhenEachIs() {
-        ClearPlants project = new ClearPlants(CHUNK, 0.5);
+        ClearPlants project = new ClearPlants(CHUNK, 0.5, 3);
         assertEquals(4, project.open().size());
         for (WorkItem item : project.open()) {
             assertFalse(project.finished());
@@ -41,7 +41,7 @@ class ClearPlantsTest {
 
     @Test
     void aStripThreeMembersFailedAtIsWrittenOffAndOneMemberCountsOnce() {
-        ClearPlants project = new ClearPlants(CHUNK, 0.5);
+        ClearPlants project = new ClearPlants(CHUNK, 0.5, 3);
         WorkItem strip = project.open().get(0);
         AgentId ari = AgentId.random();
         project.failed(strip, ari, ctx);
@@ -52,14 +52,52 @@ class ClearPlantsTest {
         assertEquals(3, project.open().size(), "written off, so a plant nobody reaches never keeps it open");
     }
 
+    /** Stephanie and Rose, alone: the strip was neither offered nor done, and the house waited for good. */
+    @Test
+    void aLoneSettlerWritesOffAStripSheStruckOutOn() {
+        ClearPlants project = new ClearPlants(CHUNK, 0.5, 1);
+        WorkItem strip = project.open().get(0);
+        AgentId rose = AgentId.random();
+        for (int i = 0; i < ClearPlants.STRIKE - 1; i++) {
+            project.failed(strip, rose, ctx);
+        }
+        assertEquals(4, project.open().size(), "two failures are bad luck");
+        project.failed(strip, rose, ctx);
+        assertEquals(3, project.open().size());
+    }
+
+    @Test
+    void aPairWritesOffAStripOnlyOnceBothStruckOut() {
+        ClearPlants project = new ClearPlants(CHUNK, 0.5, 2);
+        WorkItem strip = project.open().get(0);
+        AgentId ari = AgentId.random();
+        AgentId ruth = AgentId.random();
+        for (int i = 0; i < ClearPlants.STRIKE; i++) {
+            project.failed(strip, ari, ctx);
+        }
+        assertEquals(4, project.open().size(), "the other may still reach it");
+        for (int i = 0; i < ClearPlants.STRIKE; i++) {
+            project.failed(strip, ruth, ctx);
+        }
+        assertEquals(3, project.open().size());
+    }
+
+    @Test
+    void aLoneSettlersBoxSavedStuckComesBackMoving() {
+        AgentId rose = AgentId.random();
+        ClearPlants back = ClearPlants.restore(new ClearPlants.State(CHUNK, 0.5, List.of(0, 1, 2),
+                List.of(new ClearPlants.Failure(3, rose, ClearPlants.STRIKE)), List.of(), 0L, 1), 0L).orElseThrow();
+        assertTrue(back.finished());
+    }
+
     @Test
     void aStripsWalksMayBuild() {
-        assertTrue(new ClearPlants(CHUNK, 0.5).open().get(0).buildsOnTheWay());
+        assertTrue(new ClearPlants(CHUNK, 0.5, 3).open().get(0).buildsOnTheWay());
     }
 
     @Test
     void aMemberWhoFailedAStripThreeTimesIsNeverOfferedItAgain() {
-        ClearPlants project = new ClearPlants(CHUNK, 0.5);
+        ClearPlants project = new ClearPlants(CHUNK, 0.5, 3);
         WorkItem strip = project.open().get(0);
         WorkItem other = project.open().get(1);
         AgentId ruth = AgentId.random();
@@ -82,7 +120,7 @@ class ClearPlantsTest {
 
     @Test
     void aRestartChangesNothing() {
-        ClearPlants project = new ClearPlants(CHUNK, 0.5);
+        ClearPlants project = new ClearPlants(CHUNK, 0.5, 3);
         project.completed(project.open().get(1), ctx);
         project.failed(project.open().get(0), AgentId.random(), ctx);
         ClearPlants back = ClearPlants.restore((ClearPlants.State) project.snapshot(), 0L).orElseThrow();
@@ -196,5 +234,27 @@ class ClearPlantsTest {
         dev.luizloyola.anima.core.brain.task.GoTo walk =
                 (dev.luizloyola.anima.core.brain.task.GoTo) steps.get(0);
         assertEquals(60, walk.y(), "named at the probe's ground, 64; the floor is 60");
+    }
+
+    /** Stephanie's lake and Rose's pond: the walk to the middle failed stranded before looking. */
+    @Test
+    void aStripWhoseMiddleIsAPondIsWalkedOntoAtTheNearestDryCell() {
+        ctx.standAt(new Pos(40, 64, 0));
+        ctx.terrain = new dev.luizloyola.anima.core.nav.NavGrid() {
+            @Override
+            public dev.luizloyola.anima.core.nav.CellType cell(int x, int y, int z) {
+                if (x >= 4 && x <= 11 && y >= 57 && y < 60) {
+                    return dev.luizloyola.anima.core.nav.CellType.WATER;
+                }
+                return y < 60 ? dev.luizloyola.anima.core.nav.CellType.GROUND
+                        : dev.luizloyola.anima.core.nav.CellType.PASSABLE;
+            }
+        };
+        ClearStrip strip = new ClearStrip(new Region(new Pos(0, 48, 0), new Pos(15, 112, 3)));
+
+        dev.luizloyola.anima.core.brain.task.GoTo walk = (dev.luizloyola.anima.core.brain.task.GoTo)
+                strip.methods().get(0).decompose(ctx).get(0);
+        assertEquals(new Pos(3, 60, 1), new Pos(walk.x(), walk.y(), walk.z()),
+                "the middle, (7, 1), is water; the shore nearest it is x 3");
     }
 }

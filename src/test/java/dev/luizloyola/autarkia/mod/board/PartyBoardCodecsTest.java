@@ -320,10 +320,14 @@ class PartyBoardCodecsTest {
     void aPlantClearingComesBackWithItsStripsAndWhoFailed() {
         ClearPlants.State before = new ClearPlants.State(new Region(new Pos(0, 48, 0), new Pos(15, 112, 15)),
                 0.5, List.of(0, 2), List.of(new ClearPlants.Failure(1, CREW, 3)),
-                List.of(new Gather.Cooldown(CREW, 900L)), 400L);
+                List.of(new Gather.Cooldown(CREW, 900L)), 400L, 2);
         var encoded = PartyBoardCodecs.PROJECT.encodeStart(JsonOps.INSTANCE, before).getOrThrow();
         assertEquals("clear_plants", encoded.getAsJsonObject().get("type").getAsString());
         assertEquals(before, PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, encoded).getOrThrow());
+
+        encoded.getAsJsonObject().remove("members");
+        assertEquals(1, ((ClearPlants.State) PartyBoardCodecs.PROJECT.parse(JsonOps.INSTANCE, encoded)
+                .getOrThrow()).members(), "a box saved before the party was counted writes off at one strike-out");
     }
 
     @Test

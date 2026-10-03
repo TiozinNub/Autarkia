@@ -12,7 +12,10 @@ import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.Standing;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.brain.task.Try;
+import dev.luizloyola.anima.core.nav.MoveCapabilities;
+import dev.luizloyola.anima.core.nav.NavGrid;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -106,6 +109,42 @@ public final class ClearStrip implements CompoundTask {
         return new Pos((strip.min().x() + strip.max().x()) / 2, 0, (strip.min().z() + strip.max().z()) / 2);
     }
 
+    /**
+     * Where to stand to look at the strip: the dry cell on it nearest its middle. The middle itself
+     * is often a pond, and a walk there failed stranded before looking even with every plant
+     * reachable from the shore (normal and singleplayer, 2026-10-03). With no dry cell on the strip,
+     * the middle, and the walk fails as it always did.
+     */
+    private Pos standOn(BrainContext ctx, Pos middle) {
+        NavGrid grid = ctx.percepts().terrain();
+        MoveCapabilities body = MoveCapabilities.of(ctx.profile());
+        List<Pos> columns = new ArrayList<>();
+        for (int x = strip.min().x(); x <= strip.max().x(); x++) {
+            for (int z = strip.min().z(); z <= strip.max().z(); z++) {
+                columns.add(new Pos(x, 0, z));
+            }
+        }
+        columns.sort(Comparator.comparingLong(column -> flat(column, middle)));
+        for (Pos column : columns) {
+            Pos on = floorOf(ctx, column);
+            if (Standing.standable(grid, body, on.x(), on.y(), on.z())) {
+                return on;
+            }
+        }
+        return floorOf(ctx, middle);
+    }
+
+    /**
+     * The floor of a column of the strip. The legs take the cell asked for, give or take one, so ask
+     * for the floor: unread, the strip is aimed at this body's own height, which down a hill is in
+     * the air.
+     */
+    private static Pos floorOf(BrainContext ctx, Pos column) {
+        int y = ctx.percepts().blocks().groundY(column.x(), column.z());
+        return Standing.floorUnder(ctx, new Pos(column.x(),
+                y == Integer.MIN_VALUE ? ctx.percepts().position().y() : y + 1, column.z()));
+    }
+
     private final class Clear implements Method {
         @Override
         public boolean applicable(BrainContext ctx) {
@@ -122,12 +161,7 @@ public final class ClearStrip implements CompoundTask {
             Pos here = ctx.percepts().position();
             Pos middle = middle();
             if (!there && flat(here, middle) > (long) NEAR * NEAR) {
-                // Too far to see the strip: go and stand on it first, then look. The legs take the
-                // cell asked for, give or take one, so ask for the floor: unread, the strip is aimed
-                // at this body's own height, which down a hill is in the air.
-                int y = ctx.percepts().blocks().groundY(middle.x(), middle.z());
-                Pos on = Standing.floorUnder(ctx, new Pos(middle.x(),
-                        y == Integer.MIN_VALUE ? here.y() : y + 1, middle.z()));
+                Pos on = standOn(ctx, middle);
                 return List.of(new GoTo(on.x(), on.y(), on.z()), new ClearStrip(strip, true));
             }
             List<Task> steps = new ArrayList<>();

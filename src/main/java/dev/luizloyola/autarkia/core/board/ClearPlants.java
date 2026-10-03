@@ -28,7 +28,9 @@ import java.util.TreeSet;
  * {@value #GIVE_UP} members have failed at is written off, so a plant nobody can reach never keeps
  * the box open, and one a member has failed at {@value #STRIKE} times is never offered to them
  * again: a settler cut off from it by a ravine claimed it 268 times in ten minutes (forest,
- * 2026-10-02).
+ * 2026-10-02). A party smaller than {@value #GIVE_UP} writes a strip off once every member has
+ * struck out on it: alone, Stephanie and Rose struck out and the box stayed open for good, with the
+ * house waiting behind it (normal and singleplayer, 2026-10-03).
  */
 public final class ClearPlants implements PartyProject {
 
@@ -38,6 +40,8 @@ public final class ClearPlants implements PartyProject {
 
     private final Region bounds;
     private final double priority;
+    /** The party's size when this was posted. */
+    private final int members;
     private final List<Region> strips;
     private final Set<Integer> done = new TreeSet<>();
     /** Each strip's failures, by member. */
@@ -46,9 +50,10 @@ public final class ClearPlants implements PartyProject {
     private final List<StripItem> items = new ArrayList<>();
     private long lastTick;
 
-    public ClearPlants(Region bounds, double priority) {
+    public ClearPlants(Region bounds, double priority, int members) {
         this.bounds = Objects.requireNonNull(bounds, "bounds");
         this.priority = priority;
+        this.members = Math.max(1, members);
         this.strips = strips(bounds);
         for (int i = 0; i < strips.size(); i++) {
             items.add(new StripItem(i));
@@ -132,7 +137,17 @@ public final class ClearPlants implements PartyProject {
         } else if (times == STRIKE) {
             ctx.journal().record(Category.PROJECT, describe(), "gave up " + item.describe() + " after "
                     + STRIKE + " tries");
+            if (struckOut(item.index) >= members) {
+                done.add(item.index);
+                ctx.journal().record(Category.PROJECT, describe(), "wrote off " + item.describe()
+                        + ", every one of us gave up on it");
+            }
         }
+    }
+
+    private int struckOut(int strip) {
+        return (int) failedBy.getOrDefault(strip, Map.of()).values().stream()
+                .filter(times -> times >= STRIKE).count();
     }
 
     @Override
@@ -214,7 +229,7 @@ public final class ClearPlants implements PartyProject {
 
     /** @param failures each strip with the members who failed at it, so a write-off survives a restart */
     public record State(Region bounds, double priority, List<Integer> done, List<Failure> failures,
-                        List<Gather.Cooldown> cooldowns, long lastTick) implements ProjectState {
+                        List<Gather.Cooldown> cooldowns, long lastTick, int members) implements ProjectState {
         @Override
         public String type() {
             return "clear_plants";
@@ -234,11 +249,11 @@ public final class ClearPlants implements PartyProject {
         failedBy.forEach((strip, by) -> by.forEach((member, times) -> failures.add(new Failure(strip, member, times))));
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
-        return new State(bounds, priority, List.copyOf(done), failures, cooldowns, lastTick);
+        return new State(bounds, priority, List.copyOf(done), failures, cooldowns, lastTick, members);
     }
 
     public static Optional<ClearPlants> restore(State state, long now) {
-        ClearPlants project = new ClearPlants(state.bounds(), state.priority());
+        ClearPlants project = new ClearPlants(state.bounds(), state.priority(), state.members());
         for (int strip : state.done()) {
             if (strip >= 0 && strip < project.strips.size()) {
                 project.done.add(strip);
@@ -248,6 +263,9 @@ public final class ClearPlants implements PartyProject {
             project.failedBy.computeIfAbsent(failure.strip(), key -> new LinkedHashMap<>())
                     .merge(failure.who(), Math.max(1, failure.times()), Integer::sum);
         }
+        // A box saved stuck, before a small party could write a strip off, comes back moving.
+        project.failedBy.keySet().stream().filter(strip -> project.struckOut(strip) >= project.members)
+                .forEach(project.done::add);
         for (Gather.Cooldown cooldown : state.cooldowns()) {
             project.cooldownUntil.put(cooldown.who(), cooldown.retryAfter());
         }

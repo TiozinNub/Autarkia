@@ -340,7 +340,7 @@ class EvolutionTest {
     private void finish(ClearPlants posted) {
         board.cancel(board.handleOf(posted).orElseThrow());
         ClearPlants done = ClearPlants.restore(new ClearPlants.State(posted.bounds(), 0.5,
-                List.of(0, 1, 2, 3), List.of(), List.of(), 0L), 0L).orElseThrow();
+                List.of(0, 1, 2, 3), List.of(), List.of(), 0L, 1), 0L).orElseThrow();
         board.post(done);
         Evolution.collect(tree, progress, view, board.closeFinished());
     }
