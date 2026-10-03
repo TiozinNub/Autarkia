@@ -115,8 +115,10 @@ public final class AutarkiaTasks {
         TaskCodecs.register("autarkia:gather_errand", GatheringErrand.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(GatheringErrand::spec),
-                        Codec.INT.fieldOf("count").forGetter(GatheringErrand::count)
-                ).apply(t, GatheringErrand::new)));
+                        Codec.INT.fieldOf("count").forGetter(GatheringErrand::count),
+                        Codec.STRING.listOf().optionalFieldOf("for", java.util.List.of())
+                                .forGetter(e -> java.util.List.copyOf(new java.util.TreeSet<>(e.pursued())))
+                ).apply(t, (spec, count, pursued) -> new GatheringErrand(spec, count, java.util.Set.copyOf(pursued)))));
         TaskCodecs.register("autarkia:mine_patch", dev.luizloyola.autarkia.core.patch.MinePatch.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch::anchor),
@@ -182,8 +184,10 @@ public final class AutarkiaTasks {
         TaskCodecs.register("autarkia:fetch_some", FetchSome.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(FetchSome::spec),
-                        Codec.INT.fieldOf("count").forGetter(FetchSome::count)
-                ).apply(t, FetchSome::new)));
+                        Codec.INT.fieldOf("count").forGetter(FetchSome::count),
+                        Codec.STRING.listOf().optionalFieldOf("for", java.util.List.of())
+                                .forGetter(f -> java.util.List.copyOf(new java.util.TreeSet<>(f.pursued())))
+                ).apply(t, (spec, count, pursued) -> new FetchSome(spec, count, java.util.Set.copyOf(pursued)))));
         // A forage trip's work at the patch. Registered the day it was written, like the rest.
         TaskCodecs.register("autarkia:pick_patch", PickPatch.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(

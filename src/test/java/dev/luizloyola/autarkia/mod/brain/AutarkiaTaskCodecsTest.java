@@ -139,12 +139,13 @@ class AutarkiaTaskCodecsTest {
     void aGatheringErrandSurvivesTheFile() {
         // A declared spec travels as its registry NAME: its matcher is a lambda, and a trip
         // reloaded against the wrong one would fetch nothing and never satisfy.
-        GatheringErrand before = new GatheringErrand(Stock.LOGS, 16);
+        GatheringErrand before = new GatheringErrand(Stock.LOGS, 16, java.util.Set.of("minecraft:stone_axe"));
 
         GatheringErrand after = assertInstanceOf(GatheringErrand.class, roundTrip(before));
 
         assertEquals(Stock.LOGS, after.spec());
         assertEquals(16, after.count());
+        assertEquals(java.util.Set.of("minecraft:stone_axe"), after.pursued());
     }
 
     @Test
@@ -161,10 +162,13 @@ class AutarkiaTaskCodecsTest {
     void aFetchOnItsWaySurvivesTheFile() {
         dev.luizloyola.autarkia.core.board.FetchSome after = assertInstanceOf(
                 dev.luizloyola.autarkia.core.board.FetchSome.class,
-                roundTrip(new dev.luizloyola.autarkia.core.board.FetchSome(Stock.LOGS, 16)));
+                roundTrip(new dev.luizloyola.autarkia.core.board.FetchSome(Stock.LOGS, 16,
+                        java.util.Set.of("minecraft:furnace"))));
 
         assertEquals(Stock.LOGS, after.spec());
         assertEquals(16, after.count());
+        assertEquals(java.util.Set.of("minecraft:furnace"), after.pursued(),
+                "what it is for is what lets an expedition's fetch past the gate");
     }
 
     @Test

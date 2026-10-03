@@ -1,7 +1,13 @@
 package dev.luizloyola.autarkia.core.board;
 
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.BrainContext;
+import dev.luizloyola.anima.core.brain.WorkToleranceCurve;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
+import dev.luizloyola.anima.core.brain.task.ObtainItem;
+import dev.luizloyola.anima.core.brain.task.Producers;
+import dev.luizloyola.anima.core.inv.ItemSpec;
+import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.social.PartyId;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +70,40 @@ public final class PartyBoard extends Board {
             project.keyOf(hold.getKey()).ifPresent(key -> out.put(key, hold.getValue()));
         }
         return out;
+    }
+
+    /**
+     * A member's item was priced out of {@code wanted}. At the cap no wait will make it
+     * affordable, so the party posts an expedition for its source; below it, the need joins one
+     * already going, so a single haul is for every need of that resource. An item no producer
+     * here can make has nobody to send.
+     */
+    @Override
+    public void pricedOutOf(AgentId who, WorkItem item, ObtainItem wanted, double tolerance, BrainContext ctx) {
+        Optional<ItemSpec> source = Producers.sourceOf(wanted.spec());
+        if (source.isEmpty()) {
+            return;
+        }
+        Expedition expedition = null;
+        for (Project project : projects()) {
+            if (project instanceof Expedition far && far.resource() == source.get() && !far.finished()) {
+                expedition = far;
+            }
+        }
+        boolean fresh = expedition == null;
+        if (fresh && tolerance < WorkToleranceCurve.CAP) {
+            return;
+        }
+        if (fresh) {
+            expedition = new Expedition(source.get(), party);
+        }
+        expedition.need(who, item.describe(), wanted.count(), item.priority(), wanted.pursued(),
+                ctx.percepts().time());
+        if (fresh) {
+            post(expedition);
+        }
+        ctx.journal().record(Category.PROJECT, item.describe(),
+                (fresh ? "out of reach — " : "joins the ") + expedition.describe());
     }
 
     // ── continuity ───────────────────────────────────────────────────────────────────────────

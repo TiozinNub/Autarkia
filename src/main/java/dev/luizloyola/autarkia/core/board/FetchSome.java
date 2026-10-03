@@ -18,11 +18,18 @@ public final class FetchSome implements CompoundTask {
 
     private final ItemSpec spec;
     private final int count;
+    private final Set<String> pursued;
     private final List<Method> methods;
 
     public FetchSome(ItemSpec spec, int count) {
+        this(spec, count, Set.of());
+    }
+
+    /** @param pursued what it is fetched for, as {@link ObtainItem}'s own — an expedition's crafts */
+    public FetchSome(ItemSpec spec, int count, Set<String> pursued) {
         this.spec = spec;
         this.count = count;
+        this.pursued = Set.copyOf(pursued);
         this.methods = List.of(new Fetch(), new Settle());
     }
 
@@ -44,6 +51,10 @@ public final class FetchSome implements CompoundTask {
         return count;
     }
 
+    public Set<String> pursued() {
+        return pursued;
+    }
+
     /** First on the tie, so a body already carrying some still goes for the rest. */
     private final class Fetch implements Method {
         @Override
@@ -58,7 +69,7 @@ public final class FetchSome implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
-            return List.of(new ObtainItem(spec, count, Set.of(), ObtainItem.Sources.NOT_STORES));
+            return List.of(new ObtainItem(spec, count, pursued, ObtainItem.Sources.NOT_STORES));
         }
 
         @Override

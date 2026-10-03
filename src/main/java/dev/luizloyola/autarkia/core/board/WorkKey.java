@@ -69,6 +69,9 @@ public sealed interface WorkKey permits WorkKey.AtPlace, WorkKey.ForMember {
     /** Taking one block down, a container emptied first. */
     String DECONSTRUCT = "deconstruct";
 
+    /** One far trip for what nothing near can give. */
+    String EXPEDITION = "expedition";
+
     /** @param at the place that names it */
     record AtPlace(String flavour, Pos at) implements WorkKey {
     }

@@ -189,6 +189,9 @@ public class AutarkiaMod implements ModInitializer {
         // either the project or the store.
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.Gather.TYPE);
+        // One far trip for what every budget falls short of (expedition spec, 2026-10-02).
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.Expedition.TYPE);
         dev.luizloyola.autarkia.core.board.Splits.register(
                 dev.luizloyola.autarkia.core.board.CarrySplit.INSTANCE);
         // And that a party's work board is checked at boot like every other store: a project

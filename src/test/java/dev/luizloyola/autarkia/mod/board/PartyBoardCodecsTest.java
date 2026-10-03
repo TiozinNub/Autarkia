@@ -89,6 +89,17 @@ class PartyBoardCodecsTest {
     }
 
     @Test
+    void anExpeditionComesBackWithItsNeedsItsTripAndItsPacing() {
+        var state = new dev.luizloyola.autarkia.core.board.Expedition.State(
+                dev.luizloyola.autarkia.core.board.Stock.FURNACE_STONE.name(), PartyId.random(), "carry",
+                List.of(new dev.luizloyola.autarkia.core.board.Expedition.Need(CREW, "make a stone axe", 3, 0.46,
+                        java.util.Set.of("minecraft:stone_axe"), 1200)),
+                List.of(new dev.luizloyola.autarkia.core.board.Expedition.Trip(CREW, 34)), 2, 2400, 1300);
+
+        assertEquals(state, roundTrip(new PartyBoard.Row(state, List.of())).project());
+    }
+
+    @Test
     void aDeconstructionComesBackWithItsTally() {
         var targets = List.of(
                 new dev.luizloyola.autarkia.core.board.Deconstruct.Target(new Pos(4, 64, 4), "minecraft:chest", true),

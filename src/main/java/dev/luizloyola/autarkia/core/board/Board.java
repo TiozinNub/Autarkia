@@ -1,6 +1,5 @@
 package dev.luizloyola.autarkia.core.board;
 
-import dev.luizloyola.anima.core.continuity.Ephemeral;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.WorkToleranceCurve;
@@ -8,7 +7,9 @@ import dev.luizloyola.anima.core.brain.board.SiteClaims;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
+import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Producers;
+import dev.luizloyola.anima.core.continuity.Ephemeral;
 import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
@@ -606,6 +607,13 @@ public class Board {
      */
     private final Map<Project, Map<WorkKey, Integer>> budgetSteps = new IdentityHashMap<>();
 
+    /**
+     * {@code who}'s item failed priced out of {@code wanted} at {@code tolerance}. Nothing on a
+     * board that cannot send anybody further — {@link PartyBoard} can.
+     */
+    public void pricedOutOf(AgentId who, WorkItem item, ObtainItem wanted, double tolerance, BrainContext ctx) {
+    }
+
     /** Every priced-out failure of {@code item} earns it a step, journalled with the new budget. */
     public void pricedOut(WorkItem item, BrainContext ctx) {
         Project owner = ownerOf(item);
@@ -699,6 +707,11 @@ public class Board {
         @Override
         public void pricedOut(WorkItem item, BrainContext ctx) {
             Board.this.pricedOut(item, ctx);
+        }
+
+        @Override
+        public void pricedOutOf(WorkItem item, ObtainItem wanted, double tolerance, BrainContext ctx) {
+            Board.this.pricedOutOf(member.get(), item, wanted, tolerance, ctx);
         }
 
         @Override

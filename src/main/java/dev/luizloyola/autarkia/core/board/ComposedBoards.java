@@ -4,8 +4,9 @@ import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.board.WorkLease;
 import dev.luizloyola.anima.core.brain.board.WorkSource;
-import dev.luizloyola.anima.core.inv.ItemCall;
 import dev.luizloyola.anima.core.brain.instinct.Instinct;
+import dev.luizloyola.anima.core.brain.task.ObtainItem;
+import dev.luizloyola.anima.core.inv.ItemCall;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -128,6 +129,12 @@ public final class ComposedBoards implements WorkSource {
     @Override
     public void pricedOut(WorkItem item, BrainContext ctx) {
         sourceOf(item).pricedOut(item, ctx);
+    }
+
+    /** The party's to answer, whichever board the item came from: a far trip is the party's work. */
+    @Override
+    public void pricedOutOf(WorkItem item, ObtainItem wanted, double tolerance, BrainContext ctx) {
+        party.get().pricedOutOf(item, wanted, tolerance, ctx);
     }
 
     @Override

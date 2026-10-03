@@ -32,11 +32,18 @@ public final class GatheringErrand implements CompoundTask {
 
     private final ItemSpec spec;
     private final int count;
+    private final java.util.Set<String> pursued;
     private final List<Method> methods;
 
     public GatheringErrand(ItemSpec spec, int count) {
+        this(spec, count, java.util.Set.of());
+    }
+
+    /** @param pursued what it is fetched for — see {@link FetchSome} */
+    public GatheringErrand(ItemSpec spec, int count, java.util.Set<String> pursued) {
         this.spec = spec;
         this.count = count;
+        this.pursued = java.util.Set.copyOf(pursued);
         this.methods = List.of(new FetchThenDeposit());
     }
 
@@ -58,6 +65,10 @@ public final class GatheringErrand implements CompoundTask {
         return count;
     }
 
+    public java.util.Set<String> pursued() {
+        return pursued;
+    }
+
     private final class FetchThenDeposit implements Method {
         @Override
         public boolean applicable(BrainContext ctx) {
@@ -76,7 +87,7 @@ public final class GatheringErrand implements CompoundTask {
 
         @Override
         public List<Task> decompose(BrainContext ctx) {
-            return List.of(new FetchSome(spec, count), new BringBack(spec, count));
+            return List.of(new FetchSome(spec, count, pursued), new BringBack(spec, count));
         }
 
         @Override

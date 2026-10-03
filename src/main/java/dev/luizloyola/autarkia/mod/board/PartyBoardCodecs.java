@@ -15,6 +15,7 @@ import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.FellTrees;
+import dev.luizloyola.autarkia.core.board.Expedition;
 import dev.luizloyola.autarkia.core.board.Explore;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.Gather;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -229,6 +231,40 @@ public final class PartyBoardCodecs {
             ).apply(project, (spec, target, priority, party, split, chests, readings, trips,
                     cooldowns, lastTick) -> new Gather.State(spec, target, priority,
                             PartyId.of(party), split, chests, readings, trips, cooldowns, lastTick)));
+
+    /** One priced-out item an expedition's haul is for. */
+    public static final Codec<Expedition.Need> EXPEDITION_NEED = RecordCodecBuilder.create(need -> need.group(
+            UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
+            Codec.STRING.fieldOf("what").forGetter(Expedition.Need::what),
+            Codec.INT.fieldOf("count").forGetter(Expedition.Need::count),
+            Codec.DOUBLE.fieldOf("priority").forGetter(Expedition.Need::priority),
+            Codec.STRING.listOf().optionalFieldOf("for", List.of())
+                    .forGetter(out -> List.copyOf(new TreeSet<>(out.pursued()))),
+            Codec.LONG.fieldOf("seen").forGetter(Expedition.Need::seen)
+    ).apply(need, (who, what, count, priority, pursued, seen) -> new Expedition.Need(
+            AgentId.of(who), what, count, priority, Set.copyOf(pursued), seen)));
+
+    public static final Codec<Expedition.Trip> EXPEDITION_TRIP = RecordCodecBuilder.create(trip -> trip.group(
+            UUIDUtil.CODEC.fieldOf("who").forGetter(out -> out.who().value()),
+            Codec.INT.fieldOf("size").forGetter(Expedition.Trip::size)
+    ).apply(trip, (who, size) -> new Expedition.Trip(AgentId.of(who), size)));
+
+    /** Everything an {@code expedition} row carries: the needs, the trip out and its pacing. */
+    public static final MapCodec<Expedition.State> EXPEDITION =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    SPEC.fieldOf("resource").forGetter(Expedition.State::resource),
+                    UUIDUtil.CODEC.fieldOf("party").forGetter(state -> state.party().value()),
+                    Codec.STRING.fieldOf("split").forGetter(Expedition.State::split),
+                    EXPEDITION_NEED.listOf().optionalFieldOf("needs", List.of())
+                            .forGetter(Expedition.State::needs),
+                    EXPEDITION_TRIP.listOf().optionalFieldOf("trip", List.of())
+                            .forGetter(Expedition.State::trip),
+                    Codec.INT.optionalFieldOf("failures", 0).forGetter(Expedition.State::failures),
+                    Codec.LONG.optionalFieldOf("retry", 0L).forGetter(Expedition.State::retryAfter),
+                    Codec.LONG.optionalFieldOf("last_tick", -1L).forGetter(Expedition.State::lastTick)
+            ).apply(project, (resource, party, split, needs, trip, failures, retry, lastTick) ->
+                    new Expedition.State(resource, PartyId.of(party), split, needs, trip, failures, retry,
+                            lastTick)));
 
     /** A station by the place kind it is remembered as and the block that places it. */
     public static final Codec<SetUp.Station> STATION = RecordCodecBuilder.create(station -> station.group(
@@ -621,6 +657,7 @@ public final class PartyBoardCodecs {
             case "grow_building" -> DataResult.success(GROW_BUILDING);
             case "build" -> DataResult.success(BUILD);
             case "deconstruct" -> DataResult.success(DECONSTRUCT);
+            case "expedition" -> DataResult.success(EXPEDITION);
             default -> DataResult.error(() -> "no project type called \"" + type + "\"");
         };
     }
