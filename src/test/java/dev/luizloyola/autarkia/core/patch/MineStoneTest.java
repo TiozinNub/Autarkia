@@ -180,6 +180,56 @@ class MineStoneTest {
         assertEquals(List.of(anchor), mine.exposed(ctx), "and taken once nothing else is left");
     }
 
+    /**
+     * A one-high outcrop 11×11 at x 20..30, remembered by its corner only — the sense's partial
+     * patch — and HOME's one chunk round it, or far off.
+     */
+    private MinePatch flatOutcrop(boolean homeHere) {
+        for (int x = 20; x <= 30; x++) {
+            for (int z = -5; z <= 5; z++) {
+                stone(x, z, G + 1);
+            }
+        }
+        Pos home = homeHere ? new Pos(20, 64, 0) : new Pos(-500, 64, 0);
+        ctx.depot = java.util.Optional.of(new dev.luizloyola.anima.core.store.Depot.Site(home, java.util.Set.of(
+                new dev.luizloyola.anima.core.territory.ChunkKey(dev.luizloyola.anima.core.territory.ChunkKey.OVERWORLD,
+                        Math.floorDiv(home.x(), 16), Math.floorDiv(home.z(), 16)))));
+        ctx.percepts.position = new Pos(19, G + 1, 0);
+        return new MinePatch(new Pos(22, G + 1, -2), new Region(new Pos(20, G, -5), new Pos(25, G + 1, 0)),
+                Stock.FURNACE_STONE);
+    }
+
+    /** Luiz, 2026-10-03: a far trip to a flat outcrop got its edge only, two or three a visit. */
+    @Test
+    void awayFromHomeAFlatOutcropsWholeTopLayerIsTakenEdgeFirst() {
+        List<Pos> cells = flatOutcrop(false).exposed(ctx);
+
+        assertEquals(8, cells.size(), "a full pass, not the two or three the edge shows");
+        assertFalse(cells.contains(new Pos(22, G + 1, -2)), "the anchor is left for last");
+        assertTrue(cells.stream().allMatch(cell -> cell.y() == G + 1), "never below the land round it");
+    }
+
+    @Test
+    void nearHomeAnOutcropIsStillCutBackFromItsEdgeOnly() {
+        List<Pos> cells = flatOutcrop(true).exposed(ctx);
+        assertTrue(cells.size() < 8, "only what stands above the ground round it: " + cells);
+        assertTrue(cells.stream().noneMatch(cell -> cell.x() > 20 && cell.z() > -5),
+                "no quarry beside the house: " + cells);
+    }
+
+    @Test
+    void aFirstBlockSomebodyElseTookDoesNotJudgeTheStone() {
+        remember();
+        MinePatch.Yield yield = new MinePatch.Yield(patch, Stock.FURNACE_STONE, 0, 0);
+        assertEquals(TaskStatus.FAILED, yield.tick(ctx), "nothing came of it");
+        assertFalse(ctx.knowledge.isAvoided(Landmarks.STONE_POI, patch, ctx.percepts.time() + 1),
+                "a companion took the block; the patch is no less stone");
+
+        ctx.percepts.inventory.set(0, ItemStack.of("minecraft:granite", 1, 64));
+        assertEquals(TaskStatus.FAILED, yield.tick(ctx));
+        assertTrue(ctx.knowledge.isAvoided(Landmarks.STONE_POI, patch, ctx.percepts.time() + 1), "granite came of it");
+    }
+
     @Test
     void onlyTheTopOfAnOutcropIsMinedNearestFirst() {
         stone(12, 0, G + 2);

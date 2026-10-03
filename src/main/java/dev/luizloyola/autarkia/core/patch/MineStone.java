@@ -116,11 +116,13 @@ public final class MineStone implements Method {
         }
         open.sort(java.util.Comparator.comparingLong(patch -> TreeShape.horizontalDistSq(patch.anchor(), here)));
         BlockProbe probe = ctx.percepts().blocks();
+        boolean away = MinePatch.awayFromHome(ctx);
         PoiMemory worth = null;
         boolean standing = false;
         for (PoiMemory patch : open) {
             boolean inSight = probe.groundY(patch.anchor().x(), patch.anchor().z()) != Integer.MIN_VALUE;
-            boolean stands = inSight && !MinePatch.exposed(probe, patch.bounds(), here).isEmpty();
+            boolean stands = inSight && (!MinePatch.exposed(probe, patch.bounds(), here).isEmpty()
+                    || (away && !MinePatch.topLayer(probe, patch.bounds(), here, null).isEmpty()));
             standing |= stands;
             if (worth == null && (stands || (!inSight && !resting.contains(patch.anchor())))) {
                 worth = patch;

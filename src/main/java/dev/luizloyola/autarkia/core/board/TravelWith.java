@@ -65,7 +65,8 @@ public final class TravelWith implements PrimitiveTask {
             return TaskStatus.FAILED;
         }
         if (follow == null) {
-            follow = new Follow(leader, null);
+            // HOME, where the leader musters: a companion out of sight walks there to find them.
+            follow = new Follow(leader, ctx.depot().map(dev.luizloyola.anima.core.store.Depot.Site::hint).orElse(null));
         }
         TaskStatus status = follow.tick(ctx);
         if (status == TaskStatus.SUCCESS) {

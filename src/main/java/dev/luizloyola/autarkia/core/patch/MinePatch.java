@@ -27,10 +27,11 @@ import java.util.Optional;
  * Mine one patch of exposed stone from the top, looked at on arrival: the stone showing at the top
  * of its column within the patch and standing above the ground round it, nearest first, at most
  * {@link #MOST}. With {@link #lastResort} and nothing standing, the patch's top layer instead
- * ({@link #layer}). After the first block it
- * checks that something a furnace takes came of it ({@link Yield}): a patch of granite or tuff is
- * rested for {@link #BARREN_TICKS} at the cost of one block, since the sense sees all overworld
- * stone as one kind.
+ * ({@link #layer}). Away from HOME the whole top layer above the land round the patch may be taken,
+ * edge first ({@link #topLayer}; Luiz, 2026-10-03): a far trip to a flat outcrop otherwise got only
+ * its edge, two or three blocks a visit. After the first block it checks that something a furnace
+ * takes came of it ({@link Yield}): a patch of granite or tuff is rested for {@link #BARREN_TICKS}
+ * at the cost of one block, since the sense sees all overworld stone as one kind.
  */
 public final class MinePatch implements CompoundTask {
 
@@ -87,6 +88,12 @@ public final class MinePatch implements CompoundTask {
      * out of mind: a far trip came home with 8 from an outcrop of 49 (2026-10-02).
      */
     List<Pos> exposed(BrainContext ctx) {
+        if (awayFromHome(ctx)) {
+            List<Pos> top = topLayer(ctx.percepts().blocks(), bounds, ctx.percepts().position(), anchor);
+            if (!top.isEmpty()) {
+                return top;
+            }
+        }
         List<Pos> standing = exposed(ctx.percepts().blocks(), bounds, ctx.percepts().position(), anchor);
         return standing.isEmpty() && lastResort
                 ? layer(ctx.percepts().blocks(), bounds, ctx.percepts().position(), anchor)
@@ -110,6 +117,65 @@ public final class MinePatch implements CompoundTask {
             }
         }
         return walk(found, from, last);
+    }
+
+    /** Outside HOME's area, where a quarry-like cut troubles nobody's ground. No HOME is home. */
+    static boolean awayFromHome(BrainContext ctx) {
+        Pos here = ctx.percepts().position();
+        return ctx.depot().map(site -> !site.holds(here)).orElse(false);
+    }
+
+    /**
+     * Away from HOME: the top stone of each column in the patch that stands above the land round the
+     * patch — the lowest ground on the ring just outside it — edge first, then nearest, at most
+     * {@link #MOST}, {@code last} only once nothing else is left. The patch is cut back to the land
+     * and never below it, so no pit is dug.
+     */
+    static List<Pos> topLayer(BlockProbe probe, Region bounds, Pos from, Pos last) {
+        int land = Integer.MAX_VALUE;
+        for (int x = bounds.min().x() - 1; x <= bounds.max().x() + 1; x++) {
+            for (int z = bounds.min().z() - 1; z <= bounds.max().z() + 1; z++) {
+                boolean ring = x < bounds.min().x() || x > bounds.max().x()
+                        || z < bounds.min().z() || z > bounds.max().z();
+                if (!ring) {
+                    continue;
+                }
+                int top = probe.topY(x, z);
+                if (top != Integer.MIN_VALUE && probe.at(x, top, z) != Landmarks.STONE) {
+                    land = Math.min(land, top);
+                }
+            }
+        }
+        if (land == Integer.MAX_VALUE) {
+            return List.of();
+        }
+        List<Pos> found = new ArrayList<>();
+        for (int x = bounds.min().x(); x <= bounds.max().x(); x++) {
+            for (int z = bounds.min().z(); z <= bounds.max().z(); z++) {
+                int top = probe.topY(x, z);
+                if (top > land && probe.at(x, top, z) == Landmarks.STONE) {
+                    found.add(new Pos(x, top, z));
+                }
+            }
+        }
+        // Edge first: fewest stone neighbours at their own level.
+        found.sort(java.util.Comparator.comparingInt(cell -> stoneBeside(probe, cell)));
+        int keep = Math.min(MOST, found.size());
+        if (found.size() > MOST && found.indexOf(last) >= 0 && found.indexOf(last) < MOST) {
+            found.remove(last);
+            found.add(last);
+        }
+        return walk(new ArrayList<>(found.subList(0, keep)), from, last);
+    }
+
+    private static int stoneBeside(BlockProbe probe, Pos cell) {
+        int n = 0;
+        for (int[] side : new int[][] {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+            if (probe.at(cell.x() + side[0], cell.y(), cell.z() + side[1]) == Landmarks.STONE) {
+                n++;
+            }
+        }
+        return n;
     }
 
     /**
@@ -220,7 +286,8 @@ public final class MinePatch implements CompoundTask {
                 steps.add(new Try(new BreakBlock(cell.x(), cell.y(), cell.z())));
                 if (i == 0) {
                     steps.add(new Try(new GatherNearbyDrops(wanted)));
-                    steps.add(new Yield(anchor, wanted, ctx.percepts().inventory().count(wanted.matcher())));
+                    steps.add(new Yield(anchor, wanted, ctx.percepts().inventory().count(wanted.matcher()),
+                            ctx.percepts().inventory().count(id -> true)));
                 }
             }
             if (cells.size() > 1) {
@@ -244,11 +311,22 @@ public final class MinePatch implements CompoundTask {
         private final Pos anchor;
         private final ItemSpec wanted;
         private final int before;
+        /** Everything held before, or -1 when not known (a plan saved before it was). */
+        private final int beforeAll;
 
         public Yield(Pos anchor, ItemSpec wanted, int before) {
+            this(anchor, wanted, before, -1);
+        }
+
+        public Yield(Pos anchor, ItemSpec wanted, int before, int beforeAll) {
             this.anchor = anchor;
             this.wanted = wanted;
             this.before = before;
+            this.beforeAll = beforeAll;
+        }
+
+        public int beforeAll() {
+            return beforeAll;
         }
 
         public Pos anchor() {
@@ -267,6 +345,11 @@ public final class MinePatch implements CompoundTask {
         public TaskStatus tick(BrainContext ctx) {
             if (ctx.percepts().inventory().count(wanted.matcher()) > before) {
                 return TaskStatus.SUCCESS;
+            }
+            if (beforeAll >= 0 && ctx.percepts().inventory().count(id -> true) <= beforeAll) {
+                // Nothing came at all: somebody else took the block or its drop. The stone is not
+                // judged by it — a companion struck the patch barren for a day this way (2026-10-03).
+                return TaskStatus.FAILED;
             }
             ctx.knowledge().avoid(Landmarks.STONE_POI, anchor, ctx.percepts().time() + BARREN_TICKS);
             ctx.journal().record(Category.BRAIN, "stone", "the stone at " + anchor.x() + ", " + anchor.y()

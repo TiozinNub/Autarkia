@@ -89,6 +89,13 @@ class TravelWithTest {
     }
 
     @Test
+    void outOfSightItLooksForTheLeaderAtHome() {
+        TravelWith travel = new TravelWith(LEADER, STONE, Set.of());
+        ctx.percepts.position = new Pos(30, 64, 0);
+        assertEquals(TaskStatus.RUNNING, travel.tick(ctx), "the leader musters at HOME; it walks there");
+    }
+
+    @Test
     void itFailsWhenTheLeaderGoesNowhere() {
         TravelWith travel = new TravelWith(LEADER, STONE, Set.of());
         leaderAt(new Pos(3, 64, 0));

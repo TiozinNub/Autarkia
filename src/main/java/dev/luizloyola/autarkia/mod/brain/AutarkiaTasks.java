@@ -151,7 +151,9 @@ public final class AutarkiaTasks {
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         POS.fieldOf("anchor").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::anchor),
                         ITEM_SPEC.fieldOf("wanted").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::wanted),
-                        Codec.INT.fieldOf("before").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::before)
+                        Codec.INT.fieldOf("before").forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::before),
+                        Codec.INT.optionalFieldOf("before_all", -1)
+                                .forGetter(dev.luizloyola.autarkia.core.patch.MinePatch.Yield::beforeAll)
                 ).apply(t, dev.luizloyola.autarkia.core.patch.MinePatch.Yield::new)));
         TaskCodecs.register("autarkia:tend_errand", dev.luizloyola.autarkia.core.board.TendErrand.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
