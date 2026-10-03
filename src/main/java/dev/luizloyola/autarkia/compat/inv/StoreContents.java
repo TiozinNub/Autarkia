@@ -28,9 +28,9 @@ public final class StoreContents {
 
     /**
      * What one store held when read: how many items the predicate accepted, the hunger points
-     * those items are worth eaten, and empty slots.
+     * those items are worth eaten, empty slots, and slots holding anything.
      */
-    public record Reading(int matching, int free, int nutrition) {
+    public record Reading(int matching, int free, int nutrition, int used) {
     }
 
     /**
@@ -48,20 +48,24 @@ public final class StoreContents {
             return Optional.empty();
         }
         if (!counted.add(pos)) {
-            return Optional.of(new Reading(0, 0, 0));
+            return Optional.of(new Reading(0, 0, 0, 0));
         }
         Container container = container(level, pos, counted);
         if (container == null) {
-            return Optional.of(new Reading(0, 0, 0));
+            return Optional.of(new Reading(0, 0, 0, 0));
         }
         int matching = 0;
         int free = 0;
         int nutrition = 0;
+        int used = 0;
         for (int slot = 0; slot < container.getContainerSize(); slot++) {
             ItemStack held = container.getItem(slot);
             if (held.isEmpty()) {
                 free++;
-            } else if (ids.test(BuiltInRegistries.ITEM.getKey(held.getItem()).toString())) {
+                continue;
+            }
+            used++;
+            if (ids.test(BuiltInRegistries.ITEM.getKey(held.getItem()).toString())) {
                 matching += held.getCount();
                 FoodProperties food = held.get(DataComponents.FOOD);
                 if (food != null) {
@@ -69,7 +73,7 @@ public final class StoreContents {
                 }
             }
         }
-        return Optional.of(new Reading(matching, free, nutrition));
+        return Optional.of(new Reading(matching, free, nutrition, used));
     }
 
     /**

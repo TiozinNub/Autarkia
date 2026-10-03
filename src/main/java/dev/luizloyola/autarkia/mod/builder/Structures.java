@@ -96,6 +96,7 @@ public final class Structures {
                     tell(server, party, next);
                 }
             }
+            MovingIn.foldStrays(server, party, data.of(party)).forEach(line -> journal(server, party, line));
         }
     }
 
