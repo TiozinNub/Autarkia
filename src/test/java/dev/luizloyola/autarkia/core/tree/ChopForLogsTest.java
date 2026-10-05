@@ -92,6 +92,20 @@ class ChopForLogsTest {
     }
 
     @Test
+    void aStumpOfWoodOrHyphaeIsLogsByTheTag() {
+        Stock.logsBy(Set.of("minecraft:oak_wood", "minecraft:crimson_hyphae")::contains);
+        try {
+            for (String stump : List.of("minecraft:oak_wood", "minecraft:crimson_hyphae")) {
+                FakeContext ctx = new FakeContext();
+                ctx.knowledge().note(tree(4, 64, 0, stump, 0), 64);
+                assertTrue(new ChopForLogs(Stock.LOGS).applicable(ctx), stump);
+            }
+        } finally {
+            Stock.logsBy(id -> id.endsWith("_log") || id.endsWith("_stem"));
+        }
+    }
+
+    @Test
     void aTreeNobodyNamedSatisfiesNothing() {
         FakeContext ctx = new FakeContext();
         ctx.knowledge().note(tree(4, 64, 0, "", 0), 64);

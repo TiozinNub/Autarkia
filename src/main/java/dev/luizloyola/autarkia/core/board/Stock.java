@@ -14,15 +14,24 @@ import dev.luizloyola.anima.core.inv.Kit;
  */
 public final class Stock {
 
-    /** Wood in log form — every overworld {@code *_log} plus the nether {@code *_stem}s.
-     *  String-level vanilla knowledge, the same convention the chop's sapling map uses;
-     *  provisional until a compat tag lens ({@code ItemTags.LOGS}) replaces the predicate. */
+    /**
+     * Wood in log form — vanilla's {@code #minecraft:logs}, woods, hyphae and modded logs with it,
+     * which only the mod layer can read, so it installs the rule ({@link #logsBy}). Until then,
+     * headless, {@code *_log} and {@code *_stem}.
+     */
     public static final ItemSpec LOGS =
-            ItemSpec.register(
-                    new ItemSpec("logs", id -> id.endsWith("_log") || id.endsWith("_stem")));
+            ItemSpec.register(new ItemSpec("logs", id -> Stock.logs.test(id)));
+
+    private static volatile java.util.function.Predicate<String> logs =
+            id -> id.endsWith("_log") || id.endsWith("_stem");
+
+    /** Sets what {@link #LOGS} matches. A tree's species is its stump's block id, matched here too. */
+    public static void logsBy(java.util.function.Predicate<String> rule) {
+        logs = rule;
+    }
 
     /** Planks of any wood — what a furnace burns: a log as four planks smelts six, burnt whole one
-     *  and a half. The string-level convention of {@link #LOGS}. */
+     *  and a half. Matched by name. */
     public static final ItemSpec PLANKS =
             ItemSpec.register(new ItemSpec("planks", id -> id.endsWith("_planks")));
 
@@ -53,8 +62,8 @@ public final class Stock {
     }
 
     /** Any axe, any tier — what chopping WANTS (never needs: a chop works bare-handed, slower).
-     *  Same string-level convention as {@link #LOGS}; the wield step never reads this — it
-     *  measures — so the spec only has to be right where there is no block to measure against. */
+     *  Matched by name; the wield step never reads this — it measures — so the spec only has to
+     *  be right where there is no block to measure against. */
     public static final ItemSpec AXES =
             ItemSpec.register(new ItemSpec("axes", id -> id.endsWith("_axe")));
 
