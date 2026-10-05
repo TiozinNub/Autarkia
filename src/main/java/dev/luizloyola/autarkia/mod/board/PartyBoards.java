@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.mod.board;
 
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import java.util.ArrayList;
@@ -98,6 +99,20 @@ public final class PartyBoards {
             PartyBoardData.refuseUnknown(board.restore(saved.projects(), now), party);
         }
         store.attach(server);
+        // Here, not in init: the roster is one store per server, so each start subscribes once.
+        PartyData.get(server).onDisband(party -> drop(server, party));
+    }
+
+    /**
+     * A party that ceased to exist takes its board with it: no member can reach that work, yet the
+     * tick would go on walking it and every autosave writing it.
+     */
+    private static void drop(MinecraftServer server, PartyId party) {
+        Map<PartyId, PartyBoard> boards = BY_SERVER.get(server);
+        if (boards != null && boards.remove(party) != null) {
+            // Or a world with nothing else posted keeps the ghost in its file.
+            touch(server);
+        }
     }
 
     /**
