@@ -2,11 +2,13 @@ package dev.luizloyola.autarkia.mod.builder;
 
 import dev.luizloyola.anima.compat.terrain.NaturalGroundReader;
 import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.terrain.NaturalGround;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.log.Journals;
+import dev.luizloyola.anima.mod.nav.Doorways;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.core.board.Build;
@@ -37,6 +39,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
@@ -64,6 +67,21 @@ public final class Structures {
             }
         });
         PartyBoards.onClosed(Structures::closed);
+        Doorways.houseDoors(Structures::houseDoor);
+    }
+
+    /** {@link Doorways}' house doors. Buildings are only ever sited in the overworld. */
+    private static boolean houseDoor(ServerLevel level, BlockPos door) {
+        if (level != level.getServer().overworld()) {
+            return false;
+        }
+        Pos at = new Pos(door.getX(), door.getY(), door.getZ());
+        for (List<Structure> party : StructuresData.get(level.getServer()).parties().values()) {
+            if (Structure.houseDoor(party, at)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void beat(MinecraftServer server) {

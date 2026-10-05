@@ -58,6 +58,9 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         REFUSED
     }
 
+    /** How far above layer 0 its walls are taken to reach: the record keeps no height. */
+    public static final int WALLS_HIGH = 16;
+
     /** How far past the pad a flatten eases the ground: its chunks must be cleared too. */
     public static final int RING = dev.luizloyola.autarkia.core.earthwork.FlattenPlan.Rules.MAX_RING;
 
@@ -86,6 +89,22 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     /** Whether it stands, growing or not: lived in, its stations the party's. */
     public boolean stands() {
         return phase == Phase.BUILT || phase == Phase.GROWING;
+    }
+
+    /** Whether a block is within its walls: over {@link #built}, from layer 0 up {@link #WALLS_HIGH}. */
+    public boolean holds(Pos at) {
+        return at.x() >= built.minX() && at.x() <= built.maxX() && at.z() >= built.minZ() && at.z() <= built.maxZ()
+                && at.y() >= anchor.y() && at.y() <= anchor.y() + WALLS_HIGH;
+    }
+
+    /** Whether a door is a house's, shut after passing: within the walls of one that stands. */
+    public static boolean houseDoor(java.util.Collection<Structure> structures, Pos door) {
+        for (Structure structure : structures) {
+            if (structure.stands() && structure.holds(door)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Structure at(Phase next, String why) {
