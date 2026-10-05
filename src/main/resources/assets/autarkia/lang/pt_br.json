@@ -377,6 +377,7 @@
   "autarkia.direction.line.home": "Encontrar um LAR",
   "autarkia.direction.home.claimed": "o grupo tem um LAR",
   "autarkia.direction.home.searching": "procurando um lugar para morar",
+  "autarkia.direction.home.stranded": "não achou onde morar",
   "autarkia.direction.home.off": "sem procurar: home.explore está desligado",
   "autarkia.doing.levelling.1": "Estava nivelando o terreno %1$s.",
   "autarkia.doing.levelling.2": "Passei um tempo %1$s cavando e aterrando pra deixar o chão plano.",

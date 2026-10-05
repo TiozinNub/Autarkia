@@ -70,6 +70,11 @@ public interface PartyView {
         return structures().stream().anyMatch(s -> s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.GROWING);
     }
 
+    /** Where the party's HOME search on its board stands. Empty with none, or for a test view. */
+    default Optional<HomeSearch.Phase> homeSearch() {
+        return Optional.empty();
+    }
+
     int members();
 
     /**

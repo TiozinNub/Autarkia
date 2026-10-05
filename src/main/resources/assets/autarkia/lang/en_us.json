@@ -377,6 +377,7 @@
   "autarkia.direction.line.home": "Find a HOME",
   "autarkia.direction.home.claimed": "the party has a HOME",
   "autarkia.direction.home.searching": "looking for somewhere to live",
+  "autarkia.direction.home.stranded": "found nowhere to live",
   "autarkia.direction.home.off": "not looking: home.explore is off",
   "autarkia.doing.levelling.1": "I was levelling some ground %1$s.",
   "autarkia.doing.levelling.2": "Spent a while %1$s digging and filling to make the ground flat.",

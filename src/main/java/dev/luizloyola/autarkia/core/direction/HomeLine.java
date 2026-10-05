@@ -36,6 +36,10 @@ public final class HomeLine implements DirectionLine {
         if (!HomeKnob.EXPLORE.b()) {
             return Status.of(Status.Reading.WAITING, "autarkia.direction.home.off");
         }
+        // Stranded is final, and the search stays on the board offering nothing.
+        if (party.homeSearch().filter(phase -> phase == HomeSearch.Phase.STRANDED).isPresent()) {
+            return Status.of(Status.Reading.UNMET, "autarkia.direction.home.stranded");
+        }
         return Status.of(Status.Reading.UNMET, "autarkia.direction.home.searching");
     }
 

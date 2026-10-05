@@ -13,11 +13,14 @@ import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.inv.StoreContents;
+import dev.luizloyola.autarkia.core.board.Explore;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.direction.Home;
+import dev.luizloyola.autarkia.core.direction.HomeSearch;
 import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.core.direction.PartyView;
+import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +63,14 @@ final class HomeView implements PartyView {
     @Override
     public Optional<Home> home() {
         return Optional.ofNullable(progress.home());
+    }
+
+    @Override
+    public Optional<HomeSearch.Phase> homeSearch() {
+        return PartyBoards.of(server, party).projects().stream()
+                .filter(project -> project instanceof Explore explore && explore.party().equals(party))
+                .map(project -> ((Explore) project).search().phase())
+                .findFirst();
     }
 
     @Override
