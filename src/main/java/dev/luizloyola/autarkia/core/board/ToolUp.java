@@ -173,8 +173,9 @@ public final class ToolUp implements StandingProject, GrowsBudget {
     }
 
     /**
-     * One sound tool at the tier and each worn one beside it, then everything older. A second
-     * sound one is cargo, as it always was. Golden counts as old: kept, never the one at the tier.
+     * One sound tool at the tier, its spare, and each worn one beside them, then everything older.
+     * The spare is {@code SettlerPack}'s: a pack that lays it out must not stow it. A third sound
+     * one is cargo. Golden counts as old: kept, never the one at the tier.
      */
     @Override
     public List<ItemCall> reserved() {
@@ -184,7 +185,7 @@ public final class ToolUp implements StandingProject, GrowsBudget {
             (t >= tier ? current : old).add(family.at(Tools.TIERS.get(t)));
         }
         return List.of(
-                ItemCall.need(ItemSpec.anyOf(current), 1 + worn),
+                ItemCall.need(ItemSpec.anyOf(current), 2 + worn),
                 ItemCall.want(ItemSpec.anyOf(old), OLD_KEPT));
     }
 

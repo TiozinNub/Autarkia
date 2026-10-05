@@ -149,7 +149,7 @@ class ToolUpTest {
     }
 
     @Test
-    void theOldToolsAndTheWornOneAreKeptAndASecondSoundOneIsNot() {
+    void theOldToolsTheWornOneAndASpareAreKeptAndAThirdSoundOneIsNot() {
         stoneReached = true;
         Inventory pack = ctx.inventory();
         pack.add(tool("minecraft:wooden_pickaxe"));
@@ -157,11 +157,22 @@ class ToolUpTest {
         pack.add(worn("minecraft:stone_pickaxe", 0.1));
         pack.add(tool("minecraft:stone_pickaxe"));
         pack.add(tool("minecraft:iron_pickaxe"));
+        pack.add(tool("minecraft:stone_pickaxe"));
         ticks(1);
         List<Integer> cargo = Surplus.slots(pack, pickaxes.reserved(), stack -> false);
-        assertEquals(1, cargo.size(), "one sound tool and the worn one at the tier, every old one");
-        String spare = pack.get(cargo.get(0)).id();
-        assertTrue(Set.of("minecraft:stone_pickaxe", "minecraft:iron_pickaxe").contains(spare));
+        assertEquals(1, cargo.size(), "one sound tool, its spare and the worn one at the tier, every old one");
+        String extra = pack.get(cargo.get(0)).id();
+        assertTrue(Set.of("minecraft:stone_pickaxe", "minecraft:iron_pickaxe").contains(extra));
+    }
+
+    @Test
+    void aSpareOfTheTierIsNotStowed() {
+        Inventory pack = ctx.inventory();
+        pack.add(tool("minecraft:wooden_pickaxe"));
+        pack.add(tool("minecraft:wooden_pickaxe"));
+        ticks(1);
+        assertTrue(Surplus.slots(pack, pickaxes.reserved(), stack -> false).isEmpty(),
+                "the second is the pack's spare, not cargo");
     }
 
     /** A settler's four, on a board of their own, ticked to the first beat that posts. */
