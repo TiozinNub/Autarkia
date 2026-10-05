@@ -68,7 +68,17 @@ class FoodLineTest {
 
         @Override
         public OptionalInt takeableAtHome(ItemSpec spec) {
-            return spec == RawFood.SPEC ? OptionalInt.of(raw - walledIn) : storedAtHome(spec);
+            return spec == RawFood.SPEC ? OptionalInt.of(raw - walledIn)
+                    : spec == Food.SPEC ? OptionalInt.of(items - foodWalledIn) : storedAtHome(spec);
+        }
+
+        /** Of {@link #items} and {@link #points}, how much is in a store with no side to stand at. */
+        int foodWalledIn = 0;
+        int pointsWalledIn = 0;
+
+        @Override
+        public OptionalInt takeableFoodAtHome() {
+            return points.isPresent() ? OptionalInt.of(points.getAsInt() - pointsWalledIn) : points;
         }
 
         @Override
@@ -214,6 +224,18 @@ class FoodLineTest {
         party.raw = 3;
         assertEquals(2, assertInstanceOf(Cook.class, FoodLine.INSTANCE.post(FOOD, party, 0.4)).count(),
                 "what can be taken is cooked, and only that much");
+    }
+
+    @Test
+    void foodNoWalkCanTakeOutIsGatheredAgain() {
+        party.points = OptionalInt.of(40);
+        party.items = 10;
+        party.pointsWalledIn = 40;
+        party.foodWalledIn = 10;
+
+        assertEquals(48, assertInstanceOf(Gather.class, FoodLine.INSTANCE.post(FOOD, party, 0.4)).target(),
+                "the whole 96 points short, none of the walled-in ten counted as there");
+        assertEquals(OptionalInt.of(0), FoodLine.INSTANCE.measure(FOOD, party));
     }
 
     @Test

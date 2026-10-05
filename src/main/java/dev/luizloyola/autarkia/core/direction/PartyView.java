@@ -100,6 +100,11 @@ public interface PartyView {
      */
     OptionalInt foodAtHome();
 
+    /** {@link #foodAtHome}, counting only the stores {@link #takeableAtHome} counts. */
+    default OptionalInt takeableFoodAtHome() {
+        return foodAtHome();
+    }
+
     /** Whether this Direction's work has got nowhere for a while — {@link PartyProgress.Stall#stuck}. */
     default boolean stuck(DirectionId direction) {
         return false;

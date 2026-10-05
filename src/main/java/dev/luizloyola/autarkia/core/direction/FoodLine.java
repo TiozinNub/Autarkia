@@ -93,10 +93,13 @@ public final class FoodLine implements DirectionLine {
         return party.stuck(direction.id());
     }
 
-    /** HOME's food in points: what the line's work, any of it, raises. */
+    /**
+     * HOME's food in points a walk can take out: what the line's work, any of it, raises. Food in a
+     * walled-in store raises nothing the work could do.
+     */
     @Override
     public OptionalInt measure(Direction direction, PartyView party) {
-        return party.foodAtHome();
+        return party.takeableFoodAtHome();
     }
 
     @Override
@@ -109,8 +112,9 @@ public final class FoodLine implements DirectionLine {
             }
             return new SetUp(List.of(SetUp.CAMPFIRE), party.spot().orElseThrow(), Math.max(priority, Direction.BUILDING));
         }
-        int shortfall = Math.max(0, wanted(direction, party) - party.foodAtHome().orElse(0));
-        int target = party.storedAtHome(Food.SPEC).orElse(0)
+        // Sized by what a walk can take out, as the cook is: food walled in feeds nobody.
+        int shortfall = Math.max(0, wanted(direction, party) - party.takeableFoodAtHome().orElse(0));
+        int target = party.takeableAtHome(Food.SPEC).orElse(0)
                 + (shortfall + POINTS_PER_ITEM - 1) / POINTS_PER_ITEM;
         return new Gather(Food.SPEC, Math.max(1, target), priority, party.party(), CarrySplit.INSTANCE);
     }

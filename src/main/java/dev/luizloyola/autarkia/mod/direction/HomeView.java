@@ -208,6 +208,11 @@ final class HomeView implements PartyView {
     }
 
     @Override
+    public OptionalInt takeableFoodAtHome() {
+        return readHome(Food.SPEC::matches, StoreContents.Reading::nutrition, true);
+    }
+
+    @Override
     public OptionalInt freeSlotsAtHome() {
         return readHome(id -> false, StoreContents.Reading::free, false);
     }
