@@ -282,7 +282,10 @@ public final class MinePatch implements CompoundTask {
             for (int i = 0; i < cells.size(); i++) {
                 Pos cell = cells.get(i);
                 Pos stand = standFor(ctx, cell);
-                steps.add(new Try(new GoTo(stand.x(), stand.y(), stand.z())));
+                GoTo walk = new GoTo(stand.x(), stand.y(), stand.z());
+                // A walk to the first cell that never arrived fails the trip: Yield would judge the
+                // patch by whatever lay where it stopped. Later cells come after the patch is judged.
+                steps.add(i == 0 ? walk : new Try(walk));
                 steps.add(new Try(new BreakBlock(cell.x(), cell.y(), cell.z())));
                 if (i == 0) {
                     steps.add(new Try(new GatherNearbyDrops(wanted)));

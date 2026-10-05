@@ -306,6 +306,20 @@ class MineStoneTest {
     }
 
     @Test
+    void aWalkThatNeverReachedThePatchFailsTheTrip() {
+        flatField(12);
+        MinePatch trip = new MinePatch(patch, new Region(new Pos(12, G + 1, 0), new Pos(12, G + 1, 0)),
+                Stock.FURNACE_STONE, true);
+
+        List<Task> steps = trip.methods().get(0).decompose(ctx);
+
+        assertInstanceOf(GoTo.class, steps.get(0), "a stranded first walk is not tried past");
+        assertTrue(steps.stream().skip(1).noneMatch(GoTo.class::isInstance)
+                        && steps.stream().anyMatch(t -> t instanceof Try tried && tried.attempt() instanceof GoTo),
+                "a later cell missed costs only that cell: " + steps);
+    }
+
+    @Test
     void aLastResortPassNeverDigsBelowOneLayer() {
         flatField(12);
         // Three of the nine columns round a one-column patch were cut by an earlier pass.
