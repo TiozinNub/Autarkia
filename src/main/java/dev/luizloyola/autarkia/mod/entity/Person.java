@@ -253,7 +253,7 @@ public class Person extends Avatar implements AgentBody {
     /**
      * The directory name, cached on the SERVER when the identity projects ({@link #applyIdentity}).
      * Never synced — a client learns names only through its contact book. Null on the client, and
-     * on the server only until the first tick resolves the identity.
+     * on the server only until the first tick resolves the identity, or {@link #assignPerson} does.
      */
     private @Nullable String identityName;
 
@@ -1324,6 +1324,12 @@ public class Person extends Avatar implements AgentBody {
      */
     public void assignPerson(AgentId id) {
         setAgentId(id);
+        // Named now, not on the first tick: a command in the spawn's own batch replies with the name.
+        // The rest of the identity still projects on that tick.
+        if (level() instanceof ServerLevel serverLevel) {
+            PersonDirectory.get(serverLevel.getServer()).find(id)
+                    .ifPresent(identity -> this.identityName = identity.name());
+        }
     }
 
     /** Sets this person's identity handle and mirrors it to the synced field, so clients can match
