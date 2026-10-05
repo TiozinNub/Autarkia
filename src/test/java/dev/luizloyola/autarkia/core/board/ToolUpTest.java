@@ -230,6 +230,27 @@ class ToolUpTest {
     }
 
     @Test
+    void aRunThatMakesNothingCoolsEveryFamilyItTried() {
+        PersonalBoard own = new PersonalBoard();
+        List<ToolUp> all = ToolUp.settlerDefaults();
+        all.forEach(own::post);
+        for (int i = 0; i < ToolUp.CHECK_INTERVAL * 2; i++) {
+            own.tick(ctx);
+            ctx.advance(1);
+        }
+        WorkSource four = own.viewFor(() -> me);
+        WorkItem item = four.bestAvailable(ctx).orElseThrow();
+        four.claimed(item, ctx);
+        four.completed(item, ctx); // a superflat: no wood, nothing made
+
+        assertTrue(four.bestAvailable(ctx).isEmpty(), "no family re-runs the bench without the first");
+        for (ToolUp family : all) {
+            KeepStocked.State state = family.snapshot();
+            assertEquals(List.of(600, 1), List.of(state.cooldown(), state.failures()), family.describe());
+        }
+    }
+
+    @Test
     void aClaimedErrandSurvivesARestart() {
         ticks(ToolUp.CHECK_INTERVAL * 2);
         WorkItem item = work.bestAvailable(ctx).orElseThrow();

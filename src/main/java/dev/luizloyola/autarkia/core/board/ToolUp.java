@@ -37,7 +37,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>One item per family, so a tool that cannot be made does not hold up the others; but the one
  * claimed makes every family posted beside it too, {@link AtOneBench at one bench}, so the table
- * goes down once for them all (in-world, 2026-10-01: three put-downs in 3 s).
+ * goes down once for them all (in-world, 2026-10-01: three put-downs in 3 s). A family that run
+ * left short sits out its cooldown with the claimed one, so a round costs one run, not 4+3+2+1.
  */
 public final class ToolUp implements StandingProject, GrowsBudget {
 
@@ -193,9 +194,9 @@ public final class ToolUp implements StandingProject, GrowsBudget {
     }
 
     /**
-     * A run at one bench lets a tool it could not make go, so success is judged here: this family
+     * A run at one bench lets a tool it could not make go, so success is judged here: a family
      * still short sits out the cooldown as a failure would, and a family the run made is withdrawn
-     * rather than claimed for nothing.
+     * rather than claimed for nothing. Every other family posted and unclaimed was in the run.
      */
     @Override
     public void completed(WorkItem item, BrainContext ctx) {
@@ -207,8 +208,16 @@ public final class ToolUp implements StandingProject, GrowsBudget {
             ctx.journal().record(Category.PROJECT, item.describe(), "not made, retry cooldown (" + backOff() + "t)");
         }
         for (ToolUp other : bench) {
-            if (other != this && other.open != null && !other.claimed && other.coveredNow(ctx)) {
+            if (other == this || other.open == null || other.claimed) {
+                continue;
+            }
+            if (other.coveredNow(ctx)) {
                 other.withdraw(ctx);
+            } else {
+                // Claimed next, it would run the bench again, short for the same reason.
+                ctx.journal().record(Category.PROJECT, other.open.describe(),
+                        "not made at one bench, retry cooldown (" + other.backOff() + "t)");
+                other.clear();
             }
         }
     }
