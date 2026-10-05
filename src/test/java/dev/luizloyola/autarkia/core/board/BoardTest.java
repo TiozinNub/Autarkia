@@ -325,6 +325,27 @@ class BoardTest {
         assertTrue(board.cancel(keepHandle).isPresent());
     }
 
+    /**
+     * An item minted for its taker, like an {@code Explore} companion's, is never in {@code open()};
+     * its lease outliving the cancel kept the member walking a withdrawn step.
+     */
+    @Test
+    void cancellingDropsTheClaimOnAnItemTheProjectOwnsButNeverOffered() {
+        WorkItem companion = new FakeItem("accompany", 0.5, 0.0);
+        RecordingProject search = new RecordingProject() {
+            @Override
+            public boolean owns(WorkItem item) {
+                return item == companion || super.owns(item);
+            }
+        };
+        int handle = board.post(search);
+        assertTrue(board.claim(companion, alice, ctx.now()));
+
+        board.cancel(handle);
+
+        assertFalse(board.holds(companion, alice, ctx.now()), "the withdrawn step is nobody's");
+    }
+
     // ---- offer: bestFor runs every tick, but a reason only speaks when it changes --------
 
     /**

@@ -591,11 +591,15 @@ public class Board {
         return null;
     }
 
-    /** Drops every hold on a departing project's items, so the record cannot outlive the work. */
+    /**
+     * Drops every hold on a departing project's items, so the record cannot outlive the work.
+     *
+     * <p>By {@link Project#owns}, not {@link Project#open}: an item minted for its taker (an
+     * {@code Explore} companion's) never appears in {@code open()}, and a lease left on it is
+     * renewed by every heartbeat, so its holder walks a withdrawn step for good.
+     */
     private void forget(Project project) {
-        for (WorkItem item : project.open()) {
-            leases.remove(item);
-        }
+        leases.keySet().removeIf(project::owns);
         budgetSteps.remove(project);
     }
 
