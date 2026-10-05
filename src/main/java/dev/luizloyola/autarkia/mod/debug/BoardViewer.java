@@ -101,9 +101,9 @@ public final class BoardViewer {
     private static final int GATHER_CHEST_FILL = 0x40FFD700;
 
     // The live sweep's coverage, shaded by how well the cell is known.
-    private static final int COVER_KNOWN = 0x5040E060;
-    private static final int COVER_PARTIAL = 0x40C0C040;
-    private static final int COVER_UNKNOWN = 0x30FF6060;
+    static final int COVER_KNOWN = 0x5040E060;
+    static final int COVER_PARTIAL = 0x40C0C040;
+    static final int COVER_UNKNOWN = 0x30FF6060;
 
     private static final int LABEL_COLOR = 0xFFFFFFFF;
 
@@ -318,16 +318,32 @@ public final class BoardViewer {
 
     private static void paintCoverage(Frame frame, SurveyArea sweep) {
         Region area = sweep.area();
-        for (int x = area.min().x(); x <= area.max().x(); x += SurveyArea.CELL) {
-            for (int z = area.min().z(); z <= area.max().z(); z += SurveyArea.CELL) {
-                double known = sweep.confidenceAt(new Pos(x, area.min().y(), z));
-                int colour = known >= 1.0 ? COVER_KNOWN
-                        : known >= SurveyArea.ENOUGH ? COVER_PARTIAL
-                        : COVER_UNKNOWN;
-                frame.groundPane(x, z, Math.min(x + SurveyArea.CELL - 1, area.max().x()),
-                        Math.min(z + SurveyArea.CELL - 1, area.max().z()), 0, colour, 0.0F);
-            }
+        CoverageGrid cells = new CoverageGrid(area);
+        int[] colours = coverColours(sweep);
+        for (int cell = 0; cell < colours.length; cell++) {
+            Pos corner = cells.cornerOf(cell);
+            frame.groundPane(corner.x(), corner.z(), Math.min(corner.x() + SurveyArea.CELL - 1, area.max().x()),
+                    Math.min(corner.z() + SurveyArea.CELL - 1, area.max().z()), 0, colours[cell], 0.0F);
         }
+    }
+
+    /**
+     * Each cell's shade, known by the sweep's own rule — a look of {@link SurveyArea#ENOUGH}, or a
+     * walk that settled it — rebuilt from its public state. Not by raw confidence: a walk settles a
+     * cell at 0.75.
+     */
+    static int[] coverColours(SurveyArea sweep) {
+        SurveyArea.State state = sweep.snapshot();
+        CoverageGrid walked = new CoverageGrid(sweep.area());
+        int[] colours = new int[walked.cells()];
+        for (int cell = 0; cell < colours.length; cell++) {
+            walked.markMask(walked.cornerOf(cell), state.masks().get(cell));
+            double looked = state.looked().get(cell);
+            colours[cell] = looked >= SurveyArea.ENOUGH || walked.settled(cell) ? COVER_KNOWN
+                    : walked.confidence(cell) >= SurveyArea.ENOUGH ? COVER_PARTIAL
+                    : COVER_UNKNOWN;
+        }
+        return colours;
     }
 
     private static Pos centreOf(Region box) {
