@@ -171,10 +171,19 @@ public final class ComposedBoards implements WorkSource {
         sourceOf(item).heartbeat(item, ctx);
     }
 
-    /** Likewise the question — only the board that lent the errand out can say whose it is. */
+    /**
+     * Likewise the question — only the board that lent the errand out can say whose it is.
+     *
+     * <p>A no ends the route: the arbiter is the only caller and drops the claim on it without
+     * reporting an outcome, so nothing else would ever remove the entry.
+     */
     @Override
     public boolean stillMine(WorkItem item, BrainContext ctx) {
-        return sourceOf(item).stillMine(item, ctx);
+        boolean mine = sourceOf(item).stillMine(item, ctx);
+        if (!mine) {
+            offeredBy.remove(item);
+        }
+        return mine;
     }
 
     @Override

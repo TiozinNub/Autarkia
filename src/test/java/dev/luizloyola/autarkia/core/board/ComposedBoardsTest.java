@@ -1,6 +1,7 @@
 package dev.luizloyola.autarkia.core.board;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -200,6 +201,18 @@ class ComposedBoardsTest {
         work.claimed(item, ctx);
         ctx.advance(Board.ttlTicks() + 1);
         assertTrue(party.heldBy(me, ctx.now()).isEmpty());
+    }
+
+    /** A lapse reports no outcome, so the arbiter's "no longer yours" is the route's last use. */
+    @Test
+    void aLapsedClaimLetsGoOfItsRoute() {
+        party.post(new Minting());
+        WorkItem item = work.bestAvailable(ctx).orElseThrow();
+        work.claimed(item, ctx);
+        ctx.advance(Board.ttlTicks() + 1);
+
+        assertFalse(work.stillMine(item, ctx));
+        assertEquals(0, work.routesHeld(), "the dead trip is not pinned by its route");
     }
 
     /**
