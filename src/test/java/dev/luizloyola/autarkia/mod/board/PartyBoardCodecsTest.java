@@ -13,6 +13,7 @@ import dev.luizloyola.anima.core.brain.knowledge.Region;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.mod.store.StoreGuard;
 import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Gather;
@@ -119,6 +120,69 @@ class PartyBoardCodecsTest {
                 java.util.Map.of(new Pos(4, 64, 4), 3), java.util.Map.of(new Pos(6, 64, 4), true));
 
         assertEquals(state, roundTrip(new PartyBoard.Row(state, List.of())).project());
+    }
+
+    /** A party with two projects, one holding a member's errand, as the store writes it. */
+    private static JsonObject savedBoards() {
+        AgentId alice = AgentId.random();
+        PartyBoard.Row held = new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()),
+                List.of(new PartyBoard.Hold(new WorkKey.AtPlace(WorkKey.SURVEY, new Pos(0, 60, 0)),
+                        alice)));
+        PartyBoard.Row other = new PartyBoard.Row(state(FellTrees.Phase.WORKING, List.of()), List.of());
+        JsonObject board = new JsonObject();
+        board.add("party", UUIDUtil.CODEC.encodeStart(JsonOps.INSTANCE, UUID.randomUUID()).getOrThrow());
+        board.add("projects", PartyBoardCodecs.ROW.listOf()
+                .encodeStart(JsonOps.INSTANCE, List.of(held, other)).getOrThrow());
+        JsonArray boards = new JsonArray();
+        boards.add(board);
+        JsonObject legacy = new JsonObject();
+        legacy.addProperty("version", 1);
+        legacy.add("boards", boards);
+        // Read and written back, so the counts are the store's own and not this test's.
+        PartyBoardData read = PartyBoardData.CODEC.parse(JsonOps.INSTANCE, legacy).getOrThrow();
+        return PartyBoardData.CODEC.encodeStart(JsonOps.INSTANCE, read).getOrThrow().getAsJsonObject();
+    }
+
+    private static PartyBoardData loadPartially(JsonObject saved) {
+        return PartyBoardData.CODEC.parse(JsonOps.INSTANCE, saved)
+                .resultOrPartial(error -> { }).orElseThrow();
+    }
+
+    @Test
+    void theStoreCountsItsProjectsAndHoldsBesideItsParties() {
+        JsonObject saved = savedBoards();
+
+        assertEquals(1, saved.get("rows").getAsInt());
+        assertEquals(3, saved.get("entries").getAsInt(), "two projects and one hold");
+        PartyBoardData healthy = loadPartially(saved);
+        assertEquals(healthy.declaredRows(), healthy.actualRows());
+    }
+
+    @Test
+    void aProjectOfAnUnknownTypeIsALossTheGuardSees() {
+        JsonObject saved = savedBoards();
+        saved.getAsJsonArray("boards").get(0).getAsJsonObject().getAsJsonArray("projects").get(1)
+                .getAsJsonObject().getAsJsonObject("project").addProperty("type", "no_such_project");
+
+        PartyBoardData read = loadPartially(saved);
+
+        assertEquals(1, read.parties().size(), "the party itself still decodes, so rows alone pass");
+        assertEquals(1, read.take(read.parties().get(0)).projects().size());
+        assertTrue(read.declaredRows() != read.actualRows(),
+                "the dropped project is caught before an autosave makes it permanent");
+    }
+
+    @Test
+    void aSaveFromBeforeEntriesWereCountedStillLoads() {
+        JsonObject saved = savedBoards();
+        saved.remove("entries");
+        saved.getAsJsonArray("boards").get(0).getAsJsonObject().getAsJsonArray("projects").get(1)
+                .getAsJsonObject().getAsJsonObject("project").addProperty("type", "no_such_project");
+
+        PartyBoardData read = loadPartially(saved);
+
+        assertEquals(read.declaredRows(), read.actualRows(), "checked on parties alone, as before");
+        assertTrue(read.declaredRows() != StoreGuard.UNCOUNTED);
     }
 
     @Test
@@ -282,7 +346,7 @@ class PartyBoardCodecsTest {
     void aRowWrittenBeforeTheFrontierLoadsItsSweptGroundAsCoveredCells() {
         // Pre-2026-08-23 saves named whole settled corners and a pass that is no longer a state.
         // Dropping either puts a settler back on ground the party had already walked, and a short
-        // read presents as a clearing that finished early — which is what StoreGuard's count is for.
+        // read presents as a clearing that finished early; StoreGuard counts projects, not cells.
         JsonObject legacy = new JsonObject();
         legacy.addProperty("clearing", "trees");
         legacy.add("bounds", PartyBoardCodecs.REGION.encodeStart(JsonOps.INSTANCE,
@@ -364,7 +428,7 @@ class PartyBoardCodecsTest {
 
         assertEquals(new WorkKey.AtPlace(WorkKey.SURVEY, new Pos(0, 60, 48)), read.key(),
                 "a hold saved before this change is a place key — losing it costs a settler the "
-                        + "errand they were walking to, and StoreGuard counts rows, not holds");
+                        + "errand they were walking to, and StoreGuard would refuse the boot");
     }
 
     @Test

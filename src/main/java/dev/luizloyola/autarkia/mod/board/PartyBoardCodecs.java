@@ -41,7 +41,8 @@ import net.minecraft.core.UUIDUtil;
  *
  * <p>Vanilla parses saved data with {@code resultOrPartial}, so a row shape that stops decoding
  * does not fail the load: the store comes back with fewer rows and the next autosave makes it
- * permanent. {@code StoreGuard} catches that at boot; this catches it before the build ships.
+ * permanent. {@code StoreGuard} catches a lost party, project or hold at boot by counting them;
+ * this catches it before the build ships.
  */
 public final class PartyBoardCodecs {
 
@@ -111,8 +112,8 @@ public final class PartyBoardCodecs {
                             .forGetter(FellTrees.State::targets),
                     Codec.INT.optionalFieldOf("felled_since_reopen", 0)
                             .forGetter(FellTrees.State::felledSinceReopen),
-                    // The frontier itself. A short read here is a box re-swept from scratch, which
-                    // is what StoreGuard's row count is for.
+                    // The frontier itself. A short read here is a box re-swept from scratch, and
+                    // StoreGuard counts projects, not cells: only this codec's tests catch it.
                     CELL_MASK.listOf().optionalFieldOf("covered", List.of())
                             .forGetter(FellTrees.State::covered),
                     // Pre-2026-08-23 saves listed whole settled corners under this name. Read them
@@ -684,8 +685,8 @@ public final class PartyBoardCodecs {
      * Which flat shape a {@code type} value decodes as. A closed set the codec layer knows by hand,
      * like {@link #workKeyCodecFor} — not {@code PartyProjects}' runtime registry, which answers a
      * different question (how a state RESTORES, not how it reads off disk). An id neither branch
-     * claims fails decode outright: the row drops and {@code StoreGuard}'s count catches it, a
-     * different accident from an unknown {@code Felling} id inside a row that DID decode.
+     * claims fails decode outright: the row drops and {@code StoreGuard}'s entry count catches it,
+     * a different accident from an unknown {@code Felling} id inside a row that DID decode.
      */
     private static DataResult<? extends MapCodec<? extends ProjectState>> projectCodecFor(String type) {
         return switch (type) {

@@ -238,7 +238,8 @@ public final class PartyBoard extends Board {
      *         nothing {@link PartyProjects} has, or (an unknown {@link Felling} id, today) that
      *         type's own {@link ProjectType#restore} refused it — never silently zero. A row whose
      *         type the CODEC never recognised at all never reaches here: that failure is caught
-     *         earlier, by {@code StoreGuard}'s row count, and is a different accident from this one.
+     *         earlier, by {@code StoreGuard}'s count of projects and holds, and is a different
+     *         accident from this one.
      */
     public int restore(List<Row> rows, long now) {
         int unknown = 0;

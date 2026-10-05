@@ -61,11 +61,18 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
                     .forGetter(PartyRow::pacing)
     ).apply(row, PartyRow::new));
 
-    private static final Codec<PartyBoardData> CODEC =
+    /**
+     * {@code rows} counts parties, so a project or hold dropped inside a party that still decoded
+     * passes it; {@code entries} counts those. A count of its own rather than a new meaning for
+     * {@code rows}, which would refuse every save written before it.
+     */
+    static final Codec<PartyBoardData> CODEC =
             RecordCodecBuilder.create(data -> data.group(
                     Codec.INT.optionalFieldOf("version", 0).forGetter(d -> SCHEMA),
                     Codec.INT.optionalFieldOf("rows", StoreGuard.UNCOUNTED)
                             .forGetter(d -> d.rows().size()),
+                    Codec.INT.optionalFieldOf("entries", StoreGuard.UNCOUNTED)
+                            .forGetter(d -> entries(d.rows())),
                     PARTY_ROW.listOf().fieldOf("boards").forGetter(PartyBoardData::rows)
             ).apply(data, PartyBoardData::fromRows));
 
@@ -76,6 +83,7 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
     private final Map<PartyId, Saved> loaded;
     private final int loadedVersion;
     private final int declaredRows;
+    private final int declaredEntries;
 
     /**
      * How many rows decoded, fixed at construction.
@@ -86,21 +94,26 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
      * thing a save format should depend on.
      */
     private final int decodedRows;
+    /** Projects plus holds that decoded, fixed at construction for the same reason. */
+    private final int decodedEntries;
 
     /** Set once the boards exist; from then on the live boards answer for what is saved. */
     private @Nullable MinecraftServer live;
 
     /** Constructs an empty store (the {@link SavedDataType} supplier for a fresh save). */
     public PartyBoardData() {
-        this(new LinkedHashMap<>(), StoreGuard.NEVER_LOADED, StoreGuard.UNCOUNTED);
+        this(new LinkedHashMap<>(), StoreGuard.NEVER_LOADED, StoreGuard.UNCOUNTED,
+                StoreGuard.UNCOUNTED, 0);
     }
 
     private PartyBoardData(Map<PartyId, Saved> loaded, int loadedVersion,
-                           int declaredRows) {
+                           int declaredRows, int declaredEntries, int decodedEntries) {
         this.loaded = loaded;
         this.loadedVersion = loadedVersion;
         this.declaredRows = declaredRows;
+        this.declaredEntries = declaredEntries;
         this.decodedRows = loaded.size();
+        this.decodedEntries = decodedEntries;
     }
 
     /** Resolves the single, server-global store (kept on the overworld's data storage). */
@@ -113,19 +126,29 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
         return loadedVersion;
     }
 
+    /**
+     * Parties plus {@code entries} when the file has both, so the guard's one comparison sees a
+     * lost project or hold too: a partial parse only ever drops, so the sums differ exactly when
+     * either count does. A save from before {@code entries} is checked on parties alone.
+     */
     @Override
     public int declaredRows() {
-        return declaredRows;
+        return declaredRows == StoreGuard.UNCOUNTED || declaredEntries == StoreGuard.UNCOUNTED
+                ? declaredRows
+                : declaredRows + declaredEntries;
     }
 
     /**
-     * How many rows decoded — always what came off DISK, never the live boards. The guard runs at
-     * boot to compare the file's own count against what survived parsing; answering with the live
-     * count would compare the file against itself and pass every time.
+     * What decoded, counted as {@link #declaredRows} counts — always what came off DISK, never the
+     * live boards. The guard runs at boot to compare the file's own count against what survived
+     * parsing; answering with the live count would compare the file against itself and pass every
+     * time.
      */
     @Override
     public int actualRows() {
-        return decodedRows;
+        return declaredRows == StoreGuard.UNCOUNTED || declaredEntries == StoreGuard.UNCOUNTED
+                ? decodedRows
+                : decodedRows + decodedEntries;
     }
 
     /** What was saved for this party, and never twice — a board is restored once, at boot. */
@@ -170,12 +193,24 @@ public final class PartyBoardData extends SavedData implements StoreGuard.Checke
         return rows;
     }
 
-    private static PartyBoardData fromRows(int version, int declaredRows, List<PartyRow> rows) {
+    private static PartyBoardData fromRows(int version, int declaredRows, int declaredEntries,
+                                           List<PartyRow> rows) {
         Map<PartyId, Saved> loaded = new LinkedHashMap<>();
         for (PartyRow row : rows) {
             loaded.put(PartyId.of(row.party()), new Saved(row.projects(), row.pacing()));
         }
-        return new PartyBoardData(loaded, version, declaredRows);
+        return new PartyBoardData(loaded, version, declaredRows, declaredEntries, entries(rows));
+    }
+
+    /** Every project and every hold on it, across all boards. */
+    private static int entries(List<PartyRow> rows) {
+        int entries = 0;
+        for (PartyRow row : rows) {
+            for (PartyBoard.Row project : row.projects()) {
+                entries += 1 + project.holds().size();
+            }
+        }
+        return entries;
     }
 
     /**
