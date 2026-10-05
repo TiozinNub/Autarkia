@@ -69,6 +69,16 @@ public final class HaulingErrand implements CompoundTask {
         return work;
     }
 
+    /**
+     * The wrapped work's answer: until the plan expands down to the fell, the running chain is only
+     * this node and the sweep around it, and a false here lets the escape drive mine out the pillar
+     * the body stands on.
+     */
+    @Override
+    public boolean reshapesGround() {
+        return work.reshapesGround();
+    }
+
     /** The work comes first, before the haul. */
     @Override
     public void rejoin(List<Task> subtasks) {
