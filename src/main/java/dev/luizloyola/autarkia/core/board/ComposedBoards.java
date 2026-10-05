@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The one {@link WorkSource} an agent's brain actually holds: its personal board and its party's,
@@ -26,6 +28,8 @@ import java.util.function.Supplier;
  * the worker is still walking to it.
  */
 public final class ComposedBoards implements WorkSource {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("autarkia/board");
 
     private final WorkSource personal;
     /**
@@ -100,12 +104,18 @@ public final class ComposedBoards implements WorkSource {
      * The moment an offer becomes a commitment — and so the only moment worth remembering a route
      * for. {@code Arbiter.grantWork} calls this straight after {@link #bestAvailable} with the same
      * item, which is what makes one slot enough.
+     *
+     * <p>Nothing enforces that order, and a claim that breaks it would otherwise fail silently: it
+     * falls to the personal side, which leases a phantom and drops the outcome.
      */
     @Override
     public void claimed(WorkItem item, BrainContext ctx) {
         if (lastOffer != null && lastOffer.item() == item) {
             offeredBy.put(item, lastOffer.from());
             lastOffer = null;
+        } else {
+            LOGGER.warn("claimed {}, which was not the last offer: offer-then-claim broke",
+                    item.describe());
         }
         sourceOf(item).claimed(item, ctx);
     }
