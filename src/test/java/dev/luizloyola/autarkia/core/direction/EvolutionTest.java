@@ -57,6 +57,7 @@ class EvolutionTest {
     private final class Stores implements PartyView {
         OptionalInt logs = OptionalInt.of(0);
         SortedSet<ChunkKey> area = new TreeSet<>(Set.of(HERE));
+        boolean base = true;
 
         @Override
         public SortedSet<ChunkKey> area() {
@@ -88,10 +89,9 @@ class EvolutionTest {
             return logs;
         }
 
-        /** The base stands in these tests: they are about the lines that wait for it. */
         @Override
         public boolean hasAtHome(PoiKind kind) {
-            return true;
+            return base;
         }
 
         @Override
@@ -173,6 +173,18 @@ class EvolutionTest {
         assertEquals(1, outcome.withdrawn().size());
         assertTrue(board.projects().stream().noneMatch(p -> p instanceof Gather));
         assertEquals(List.of(), outcome.reached(), "the pool still wants the plot cleared");
+    }
+
+    @Test
+    void workWithNoStoreToHaulToIsWithdrawn() {
+        beat();
+        view.base = false;
+        Evolution.Outcome outcome = beat();
+        assertEquals(2, outcome.withdrawn().size(), "the gather and the clearing would carry to nowhere");
+        assertTrue(board.projects().stream().noneMatch(p -> p instanceof Gather));
+
+        view.base = true;
+        assertEquals(2, beat().posted().size(), "posted again once the base stands");
     }
 
     @Test

@@ -5,23 +5,29 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.luizloyola.anima.core.brain.act.Placing;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
+import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.GrowBuilding;
+import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.board.SiteBuilding;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.builder.Growth;
+import dev.luizloyola.autarkia.core.builder.Laying;
+import dev.luizloyola.autarkia.core.builder.Section;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -226,5 +232,33 @@ class HouseLineTest {
         party.growth = Optional.of(new Growth(built.id(), Map.of("base", "lv3")));
 
         assertEquals("autarkia.direction.house.grow.furnace", HouseLine.INSTANCE.judge(DIRECTION, party).langKey());
+    }
+
+    @Test
+    void aHouseGoingUpOverTheBaseKeepsItsBuild() {
+        Party party = new Party();
+        Structure building = house(Structure.Phase.BUILDING);
+        party.structures.add(building);
+        party.base = false;
+        assertEquals("autarkia.direction.house.building", HouseLine.INSTANCE.judge(DIRECTION, party).langKey(),
+                "the site took the base down: the house is what the line waits on");
+
+        Lines.register(HouseLine.INSTANCE);
+        try {
+            Node node = new Node("autarkia:wood", NodeKind.CORE, List.of(), true, Requirements.NONE,
+                    List.of(DIRECTION), Set.of(), Set.of());
+            Tree tree = Tree.build(List.of(node), Set.of("minecraft:oak_log"), key -> false).tree();
+            PartyBoard board = new PartyBoard(party.party());
+            Placing plank = new Placing("minecraft:oak_planks", new Pos(1, 65, 1), "minecraft:oak_planks", Map.of());
+            Build build = new Build(building.id(), HouseLine.BLUEPRINT,
+                    List.of(new Laying(Section.WALLS, plank, List.of(), new Pos(1, 64, 3), 1)), 0.5);
+            board.post(build);
+
+            Evolution.Outcome outcome = Evolution.beat(tree, new PartyProgress(), party, board);
+            assertTrue(outcome.withdrawn().isEmpty());
+            assertTrue(board.projects().contains(build));
+        } finally {
+            Lines.clear();
+        }
     }
 }

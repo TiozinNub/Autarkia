@@ -52,7 +52,8 @@ public final class Evolution {
         List<Posted> posted = new ArrayList<>();
         List<Withdrawn> withdrawn = new ArrayList<>();
         List<DirectionId> completed = new ArrayList<>();
-        for (Direction direction : tree.inForce(progress.reached())) {
+        List<Direction> inForce = tree.inForce(progress.reached());
+        for (Direction direction : inForce) {
             Optional<DirectionLine> line = Lines.byId(direction.line());
             if (line.isEmpty()) {
                 continue;
@@ -69,13 +70,7 @@ public final class Evolution {
                     }
                     // Met from the world, whoever did it: whatever is still posted toward it is
                     // work nobody needs — a gather an operator's own delivery already covered.
-                    if (work.isPresent() && !work.get().finished()) {
-                        OptionalInt handle = board.handleOf(work.get());
-                        if (handle.isPresent()) {
-                            board.cancel(handle.getAsInt());
-                            withdrawn.add(new Withdrawn(direction, work.get()));
-                        }
-                    }
+                    withdraw(board, direction, work, withdrawn);
                 }
                 case UNMET -> {
                     stalls |= watch(line.get(), direction, view, progress, work.filter(worked.negate()).isPresent());
@@ -99,8 +94,17 @@ public final class Evolution {
                         }
                     }
                 }
-                case UNKNOWN, WAITING -> {
-                    // Nothing to go on: a store out of sight, or nowhere to put anything yet.
+                case WAITING -> {
+                    // No base: what is posted would carry to stores that are not there. A line's own
+                    // waits (a house going up) keep their work, as does work another line still wants:
+                    // the base's set-up is the storage line's too. HOME cleared is Directions.unsettle's.
+                    if (status.equals(Status.NO_BASE)
+                            && work.filter(w -> !wantedElsewhere(w, direction, inForce, view)).isPresent()) {
+                        withdraw(board, direction, work, withdrawn);
+                    }
+                }
+                case UNKNOWN -> {
+                    // A store out of sight: nothing to go on.
                 }
             }
         }
@@ -108,6 +112,29 @@ public final class Evolution {
         reached.forEach(progress::reach);
         ahead(tree, progress.reached(), view).ifPresent(more -> board.foresee(more, view.members()));
         return new Outcome(posted, withdrawn, completed, reached, stalls);
+    }
+
+    private static boolean wantedElsewhere(Project work, Direction waiting, List<Direction> inForce,
+                                           PartyView view) {
+        for (Direction other : inForce) {
+            Optional<DirectionLine> line = Lines.byId(other.line());
+            if (other != waiting && line.isPresent() && line.get().isWork(work, other, view)
+                    && !line.get().judge(other, view).equals(Status.NO_BASE)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void withdraw(PartyBoard board, Direction direction, Optional<Project> work,
+                                 List<Withdrawn> withdrawn) {
+        if (work.isPresent() && !work.get().finished()) {
+            OptionalInt handle = board.handleOf(work.get());
+            if (handle.isPresent()) {
+                board.cancel(handle.getAsInt());
+                withdrawn.add(new Withdrawn(direction, work.get()));
+            }
+        }
     }
 
     /**

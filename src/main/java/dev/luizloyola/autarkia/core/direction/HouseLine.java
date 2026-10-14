@@ -55,10 +55,9 @@ public final class HouseLine implements DirectionLine {
         if (party.home().isEmpty() || party.area().isEmpty()) {
             return Status.NO_HOME;
         }
-        if (!party.baseReady()) {
-            return Status.NO_BASE;
-        }
         // A house that stands is judged first: one more sited after it is not what the line waits on.
+        // Any house is judged before the base, which a site over it takes down mid-build: NO_BASE
+        // then would withdraw the Build.
         List<Structure> houses = party.structures().stream().filter(s -> s.blueprint().equals(BLUEPRINT))
                 .sorted(java.util.Comparator.comparing(s -> !s.stands())).toList();
         for (Structure structure : houses) {
@@ -88,6 +87,9 @@ public final class HouseLine implements DirectionLine {
                 case REFUSED -> {
                 }
             }
+        }
+        if (!party.baseReady()) {
+            return Status.NO_BASE;
         }
         return Status.of(Status.Reading.UNMET, "autarkia.direction.house.none");
     }
