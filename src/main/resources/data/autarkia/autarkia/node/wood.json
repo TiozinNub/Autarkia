@@ -4,6 +4,7 @@
   "parents": [],
   "directions": [
     {"line": "home"},
+    {"line": "shelter", "priority": 0.55},
     {"line": "base"},
     {"line": "area"},
     {"line": "house"},

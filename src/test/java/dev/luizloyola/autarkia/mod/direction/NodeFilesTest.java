@@ -48,6 +48,7 @@ class NodeFilesTest {
         Lines.register(dev.luizloyola.autarkia.core.direction.CharcoalLine.INSTANCE);
         Lines.register(HomeLine.INSTANCE);
         Lines.register(dev.luizloyola.autarkia.core.direction.HouseLine.INSTANCE);
+        Lines.register(dev.luizloyola.autarkia.core.direction.ShelterLine.INSTANCE);
     }
 
     @AfterEach
@@ -116,6 +117,16 @@ class NodeFilesTest {
         Direction area = new Direction(new DirectionId("autarkia:wood", "area"), 0, null);
         assertEquals(Direction.TOWARD_CORE, tree.priorityOf(house, Set.of()));
         assertEquals(Direction.UPKEEP, tree.priorityOf(area, Set.of()));
+    }
+
+    /** Luiz, 2026-10-20: a shelter right after HOME, over everything else the wood node asks. */
+    @Test
+    void theShelterComesRightAfterHomeAndOutbidsTheRest() throws IOException {
+        List<Direction> directions = shipped("wood").directions();
+        assertEquals(new DirectionId("autarkia:wood", "home"), directions.get(0).id());
+        Direction shelter = directions.get(1);
+        assertEquals(new DirectionId("autarkia:wood", "shelter"), shelter.id());
+        assertEquals(0.55, shelter.priority().doubleValue());
     }
 
     @Test
