@@ -5,18 +5,16 @@ import dev.luizloyola.anima.core.brain.knowledge.BlockProbe;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.CompoundTask;
 import dev.luizloyola.anima.core.brain.task.Method;
-import dev.luizloyola.anima.core.brain.task.PlaceFrom;
 import dev.luizloyola.anima.core.brain.task.Task;
-import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Place a run of a building's steps in order, each from a stand that reaches it. A step already
- * standing is passed over; the first that cannot be placed fails the piece. A step may be placed
- * against one before it in its piece ({@link BuildOrder}), so the rest are left for the next trip
- * rather than tried against a gap: 22 tried past one refusal each raised a pillar for nothing
- * (2026-10-20).
+ * Place a run of a building's steps in order, each from a stand that reaches it ({@link LayStep}),
+ * then once more in reverse for those that would not go in. The proved order runs a chain one way,
+ * but a step refused for want of the one before it can often go against the one after: a roof row
+ * whose first stair had no stand was left three short, and handed back, by a piece that stopped
+ * there (2026-10-20). A step out of its item ends the piece.
  */
 public final class LayPiece implements CompoundTask {
 
@@ -61,18 +59,18 @@ public final class LayPiece implements CompoundTask {
         @Override
         public List<Task> decompose(BrainContext ctx) {
             BlockProbe probe = ctx.percepts().blocks();
+            List<Laying> left = steps.stream().filter(step -> !standing(probe, step)).toList();
             List<Task> tasks = new ArrayList<>();
-            for (Laying step : steps) {
-                if (!standing(probe, step)) {
-                    tasks.add(new PlaceFrom(step.placing(), step.also(), step.stand(), true, Stock.BRIDGING));
-                }
+            left.forEach(step -> tasks.add(new LayStep(step)));
+            for (int i = left.size() - 1; i >= 0; i--) {
+                tasks.add(new LayStep(left.get(i)));
             }
             return tasks;
         }
 
         @Override
         public String describe() {
-            return "place each in the proved order";
+            return "place each in the proved order, then the rest backwards";
         }
     }
 }

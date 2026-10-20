@@ -316,6 +316,17 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void aStepOfAPieceComesBackWithItsLaying() {
+        var step = new dev.luizloyola.autarkia.core.builder.Laying(dev.luizloyola.autarkia.core.builder.Section.CEILING,
+                new dev.luizloyola.anima.core.brain.act.Placing("minecraft:oak_stairs", new Pos(1, 70, 2),
+                        "minecraft:oak_stairs", java.util.Map.of("facing", "east")),
+                java.util.List.of(), new Pos(1, 68, 4), 1).in(9, 16);
+        var back = assertInstanceOf(dev.luizloyola.autarkia.core.builder.LayStep.class,
+                roundTrip(new dev.luizloyola.autarkia.core.builder.LayStep(step)));
+        assertEquals(step, back.step());
+    }
+
+    @Test
     void aPersonalBoardWritesDownItsBudgetAndBackOff() {
         var saved = java.util.List.of(new dev.luizloyola.autarkia.core.board.KeepStocked.State(1200, 37, 4, false, false, 2, 3));
         var json = AutarkiaTasks.PERSONAL_BOARD.encodeStart(JsonOps.INSTANCE, saved).getOrThrow();
