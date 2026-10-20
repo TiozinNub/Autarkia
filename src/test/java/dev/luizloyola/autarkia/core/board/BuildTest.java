@@ -203,8 +203,19 @@ class BuildTest {
         assertEquals("build 1 of autarkia:test_house's floor from (1, 64, 0)", only(build).describe());
         stand(ctx, order.get(1));
         build.completed(only(build), ctx);
-        assertTrue(build.finished());
-        assertTrue(build.describe().contains("1 handed back"), build.describe());
+        assertFalse(build.finished(), "a step went up since: what it is placed against may stand now");
+        assertEquals("build 1 of autarkia:test_house's floor from (0, 64, 0)", only(build).describe());
+
+        Build back = Build.restore(build.snapshot(), now);
+        for (int tries = 0; tries < Build.REFUSE_AFTER; tries++) {
+            now += 1_000_000;
+            back.tick(now);
+            ctx.percepts.time = now;
+            back.failed(only(back), ctx);
+        }
+        back.tick(now + 1_000_000);
+        assertTrue(back.finished(), "nothing went up since the second hand-back: done");
+        assertTrue(back.describe().contains("1 handed back"), back.describe());
     }
 
     @Test

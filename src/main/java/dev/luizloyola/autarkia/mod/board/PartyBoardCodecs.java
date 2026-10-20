@@ -589,11 +589,13 @@ public final class PartyBoardCodecs {
                     BUILD_SHORTAGE.listOf().optionalFieldOf("shortages", List.of())
                             .forGetter(dev.luizloyola.autarkia.core.board.Build.State::shortages),
                     Codec.unboundedMap(Codec.STRING, Codec.LONG).optionalFieldOf("unobtainable", Map.of())
-                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::unobtainable)
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::unobtainable),
+                    Codec.INT.optionalFieldOf("handed_back_at", 0)
+                            .forGetter(dev.luizloyola.autarkia.core.board.Build.State::handedBackAt)
             ).apply(project, (structure, name, priority, order, done, failures, refused, builders, cooldowns,
-                    shortages, unobtainable) -> new dev.luizloyola.autarkia.core.board.Build.State(structure, name,
-                    priority, order, done, failures, refused, builders.stream().map(AgentId::new).toList(), cooldowns,
-                    shortages, unobtainable)));
+                    shortages, unobtainable, handedBackAt) -> new dev.luizloyola.autarkia.core.board.Build.State(
+                    structure, name, priority, order, done, failures, refused,
+                    builders.stream().map(AgentId::new).toList(), cooldowns, shortages, unobtainable, handedBackAt)));
 
     private static <E extends Enum<E>> Codec<E> lowerCase(Class<E> type) {
         return Codec.STRING.comapFlatMap(name -> {

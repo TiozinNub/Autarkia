@@ -61,6 +61,8 @@ public final class Build implements PartyProject {
     private final boolean[] done;
     private final int[] failures;
     private final Set<Integer> refused = new TreeSet<>();
+    /** How many steps stood at the last hand-back: more since, and the handed-back are worth a try. */
+    private int handedBackAt;
     private final Set<AgentId> builders = new LinkedHashSet<>();
     /** A piece paced after a fruitless trip, by piece number: when it may be offered again. */
     private final Map<Integer, Long> retryAfter = new LinkedHashMap<>();
@@ -148,7 +150,16 @@ public final class Build implements PartyProject {
 
     @Override
     public boolean finished() {
-        return next() < 0;
+        return next() < 0 && !worthAnotherTry();
+    }
+
+    /**
+     * Steps handed back while others went up after them: what one is placed against can come from a
+     * later piece, even a later wave — a roof row's stairs were handed back before the stair that
+     * anchors them went in, and never tried again (2026-10-20). Asked only once nothing else is left.
+     */
+    private boolean worthAnotherTry() {
+        return !refused.isEmpty() && placed() > handedBackAt;
     }
 
     private int next() {
@@ -171,6 +182,12 @@ public final class Build implements PartyProject {
      * place. A held piece is never withdrawn: the arbiter claims what it was offered a tick ago.
      */
     private void refresh() {
+        if (next() < 0 && worthAnotherTry()) {
+            for (int i : refused) {
+                failures[i] = 0;
+            }
+            refused.clear();
+        }
         int first = next();
         Map<Integer, List<Integer>> pieces = new LinkedHashMap<>();
         if (first >= 0) {
@@ -342,6 +359,7 @@ public final class Build implements PartyProject {
         failures[first]++;
         if (failures[first] >= REFUSE_AFTER) {
             refused.add(first);
+            handedBackAt = placed();
             ctx.journal().record(Category.PROJECT, describe(), "handed back " + order.get(first).placing()
                     + ": it would not go in");
             return;
@@ -507,11 +525,19 @@ public final class Build implements PartyProject {
     /** Everything a build carries between ticks: the world steps are the plan's copy. */
     public record State(UUID structure, String name, double priority, List<Laying> order, List<Integer> done,
                         List<Integer> failures, List<Integer> refused, List<AgentId> builders,
-                        List<Cooldown> cooldowns, List<Shortage> shortages, Map<String, Long> unobtainable)
+                        List<Cooldown> cooldowns, List<Shortage> shortages, Map<String, Long> unobtainable,
+                        int handedBackAt)
             implements ProjectState {
 
         public State {
             unobtainable = Map.copyOf(unobtainable);
+        }
+
+        public State(UUID structure, String name, double priority, List<Laying> order, List<Integer> done,
+                     List<Integer> failures, List<Integer> refused, List<AgentId> builders, List<Cooldown> cooldowns,
+                     List<Shortage> shortages, Map<String, Long> unobtainable) {
+            this(structure, name, priority, order, done, failures, refused, builders, cooldowns, shortages,
+                    unobtainable, 0);
         }
 
         public State(UUID structure, String name, double priority, List<Laying> order, List<Integer> done,
@@ -550,7 +576,7 @@ public final class Build implements PartyProject {
         List<Cooldown> cooldowns = new ArrayList<>();
         retryAfter.forEach((piece, until) -> cooldowns.add(new Cooldown(piece, until)));
         return new State(structure, name, priority, order, placed, tries, List.copyOf(refused),
-                List.copyOf(builders), cooldowns, List.copyOf(shortages.values()), Map.copyOf(unobtainable));
+                List.copyOf(builders), cooldowns, List.copyOf(shortages.values()), Map.copyOf(unobtainable), handedBackAt);
     }
 
     public static Build restore(State state, long now) {
@@ -572,6 +598,7 @@ public final class Build implements PartyProject {
             project.shortages.put(shortage.piece(), shortage);
         }
         project.unobtainable.putAll(state.unobtainable());
+        project.handedBackAt = state.handedBackAt();
         project.lastTick = now;
         project.refresh();
         return project;

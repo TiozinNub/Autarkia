@@ -634,7 +634,7 @@ class PartyBoardCodecsTest {
                 List.of(new dev.luizloyola.autarkia.core.board.Build.Cooldown(3, 900L)),
                 List.of(new dev.luizloyola.autarkia.core.board.Build.Shortage(5,
                         java.util.Map.of("minecraft:oak_stairs", 7), 1200L)),
-                java.util.Map.of("minecraft:dark_oak_log", 600L));
+                java.util.Map.of("minecraft:dark_oak_log", 600L), 7);
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
         assertEquals(before, after.project());
     }
