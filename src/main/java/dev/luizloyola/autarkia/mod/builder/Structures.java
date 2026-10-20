@@ -119,6 +119,7 @@ public final class Structures {
                 }
             }
             MovingIn.foldStrays(server, party, data.of(party)).forEach(line -> journal(server, party, line));
+            ShelterShowing.show(server, party, data.of(party));
         }
     }
 
