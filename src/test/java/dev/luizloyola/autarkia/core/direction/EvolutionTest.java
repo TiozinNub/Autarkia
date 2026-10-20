@@ -379,6 +379,28 @@ class EvolutionTest {
         assertEquals(PLOT, clearingOnTheBoard().bounds(), "then the rest, nearest the store first");
     }
 
+    /** A sited building's ground is the house's critical path: it bids no less than the house. */
+    @Test
+    void aSitedBuildingsGroundBidsAsTheHouse() {
+        ChunkKey far = new ChunkKey(ChunkKey.OVERWORLD, 3, 0);
+        view.area.add(far);
+        Structure house = new Structure(new UUID(4, 4), "autarkia:basic_wooden_house", 3, Map.of(), Map.of(),
+                new Pos(66, 64, 6), Placement.AS_DRAWN, new Footprint(62, 1, 66, 10), new Footprint(60, 0, 67, 12),
+                Structure.Phase.SITED, 0L, "");
+        view.structures.add(house);
+        Direction area = new Direction(new DirectionId(WOOD, "area"), 0, null);
+
+        FellTrees ground = (FellTrees) AreaLine.INSTANCE.post(area, view, Direction.UPKEEP);
+        assertEquals(Home.region(far, SPOT.y()), ground.bounds());
+        assertEquals(Direction.TOWARD_CORE, ground.priority());
+        assertEquals(0.6, AreaLine.INSTANCE.post(area, view, 0.6).priority(), "never lowered");
+
+        view.structures.set(0, house.at(Structure.Phase.CLEARING, ""));
+        FellTrees rest = (FellTrees) AreaLine.INSTANCE.post(area, view, Direction.UPKEEP);
+        assertEquals(PLOT, rest.bounds());
+        assertEquals(Direction.UPKEEP, rest.priority());
+    }
+
     private void finish(FellTrees posted) {
         board.cancel(board.handleOf(posted).orElseThrow());
         FellTrees done = FellTrees.restore(new FellTrees.State("trees", posted.bounds(), 0.5,

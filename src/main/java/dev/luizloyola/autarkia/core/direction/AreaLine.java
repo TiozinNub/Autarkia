@@ -67,8 +67,11 @@ public final class AreaLine implements DirectionLine {
         Home home = party.home().orElseThrow();
         // The base stands before this line posts, so there is a store and with it a spot.
         Pos spot = party.spot().orElseThrow();
-        ChunkKey next = home.unfelled(party.area(), spot, waitedOn(party)).get(0);
-        return new FellTrees(TreeFelling.INSTANCE, Home.region(next, spot.y()), priority, true, party.members());
+        Set<ChunkKey> waited = waitedOn(party);
+        ChunkKey next = home.unfelled(party.area(), spot, waited).get(0);
+        // A building's ground is the house's critical path: it bids no less than the house does.
+        double bid = waited.contains(next) ? Math.max(priority, Direction.TOWARD_CORE) : priority;
+        return new FellTrees(TreeFelling.INSTANCE, Home.region(next, spot.y()), bid, true, party.members());
     }
 
     /** The ground chunks of the party's buildings still waiting for their trees to be felled. */
