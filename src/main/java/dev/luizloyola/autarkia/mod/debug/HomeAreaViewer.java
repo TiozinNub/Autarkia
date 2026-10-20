@@ -28,7 +28,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * What HOME adds to Anima's territory view, drawn whenever that view is on: where each party's next store goes, a
- * ring inside every chunk not yet cleared, and a label naming the HOME.
+ * ring inside every chunk not yet felled, and a label naming the HOME.
  */
 public final class HomeAreaViewer {
 
@@ -39,7 +39,7 @@ public final class HomeAreaViewer {
     private static final int REFRESH_TICKS = 20;
     private static final int TTL_TICKS = REFRESH_TICKS * 3;
     private static final int SPOT = 0xFF40FF40;
-    private static final int UNCLEARED = 0xFFFFB020;
+    private static final int UNFELLED = 0xFFFFB020;
     private static final int LABEL = 0xFFFFFFFF;
 
     /** Who was shown a frame, so turning the territory view off clears this one too. */
@@ -69,7 +69,7 @@ public final class HomeAreaViewer {
         }
         int reach = TerritoryViewer.RANGE_BLOCKS;
         List<CellOverlayPayload.Box> spots = new ArrayList<>();
-        List<CellOverlayPayload.Box> uncleared = new ArrayList<>();
+        List<CellOverlayPayload.Box> unfelled = new ArrayList<>();
         List<CellOverlayPayload.Label> labels = new ArrayList<>();
         for (Map.Entry<PartyId, PartyProgress> entry : DirectionsData.get(server).parties().entrySet()) {
             Home home = entry.getValue().home();
@@ -83,21 +83,21 @@ public final class HomeAreaViewer {
                 continue;
             }
             SortedSet<ChunkKey> area = view.area();
-            List<ChunkKey> left = home.uncleared(area);
+            List<ChunkKey> left = home.unfelled(area);
             BlockPos spot = new BlockPos(next.get().x(), next.get().y(), next.get().z());
             spots.add(new CellOverlayPayload.Box(spot, spot));
             for (ChunkKey chunk : left) {
                 int y = groundAt(level, chunk, spot.getY() - 1);
-                uncleared.add(new CellOverlayPayload.Box(
+                unfelled.add(new CellOverlayPayload.Box(
                         new BlockPos(chunk.minBlockX() + 2, y, chunk.minBlockZ() + 2),
                         new BlockPos(chunk.maxBlockX() - 2, y, chunk.maxBlockZ() - 2)));
             }
             labels.add(new CellOverlayPayload.Label("HOME — " + area.size() + " chunks, "
-                    + (area.size() - left.size()) + " cleared", LABEL, spot.above(2)));
+                    + (area.size() - left.size()) + " felled", LABEL, spot.above(2)));
         }
         CellOverlays.show(player, new CellOverlayPayload(SOURCE, TTL_TICKS, List.of(), List.of(), List.of(
                 new CellOverlayPayload.BoxGroup(SPOT, 3.0F, 0x6040FF40, true, spots),
-                new CellOverlayPayload.BoxGroup(UNCLEARED, 2.0F, 0, false, uncleared)), labels));
+                new CellOverlayPayload.BoxGroup(UNFELLED, 2.0F, 0, false, unfelled)), labels));
     }
 
     /** The ground at the chunk's middle, without loading a chunk to ask. */

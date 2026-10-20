@@ -227,7 +227,7 @@ public final class DirectionsCommands {
                     .withStyle(ChatFormatting.GRAY);
         }
         return Component.translatable("autarkia.command.directions.home", area.size(),
-                area.size() - home.uncleared(area).size(), spot.map(DirectionsCommands::at).orElse("—"));
+                area.size() - home.unfelled(area).size(), spot.map(DirectionsCommands::at).orElse("—"));
     }
 
     /** {@code [x, z]} of the area's first and last chunks along each axis. */
@@ -357,14 +357,14 @@ public final class DirectionsCommands {
         Optional<Pos> spot = DirectionsData.get(source.getServer()).find(party)
                 .flatMap(progress -> Directions.view(source.getServer(), party, progress).spot());
         send(source, Component.translatable("autarkia.command.home.show", person.getName(), area.size(),
-                area.size() - home.uncleared(area).size(), corners[0], corners[1],
+                area.size() - home.unfelled(area).size(), corners[0], corners[1],
                 spot.map(DirectionsCommands::at).orElse("—")));
         return 1;
     }
 
     /**
      * The chunks a square round a centre touches. Setting it again is a new HOME, and a new HOME is
-     * one nobody has cleared.
+     * one nobody has felled.
      */
     private static int homeSet(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();

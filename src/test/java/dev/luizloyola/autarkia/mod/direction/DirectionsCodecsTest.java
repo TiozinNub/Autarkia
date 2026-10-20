@@ -34,8 +34,8 @@ class DirectionsCodecsTest {
         PartyRow row = new PartyRow(new UUID(1, 2), List.of("autarkia:wood", "autarkia:stone"),
                 List.of(new DirectionId("autarkia:wood", "wood"), new DirectionId("autarkia:wood", "area")),
                 Optional.of(new SavedHome(Home.fresh()
-                        .withCleared(new ChunkKey(ChunkKey.OVERWORLD, -1, 0))
-                        .withCleared(new ChunkKey(ChunkKey.OVERWORLD, 0, 0)), Optional.empty())));
+                        .withFelled(new ChunkKey(ChunkKey.OVERWORLD, -1, 0))
+                        .withFelled(new ChunkKey(ChunkKey.OVERWORLD, 0, 0)), Optional.empty())));
         assertEquals(row, roundTrip(DirectionsCodecs.PARTY_ROW, row));
     }
 
@@ -48,11 +48,23 @@ class DirectionsCodecsTest {
         old.addProperty("cleared", true);
         old.add("plot", PartyBoardCodecs.REGION.encodeStart(JsonOps.INSTANCE, plot).getOrThrow());
         SavedHome saved = DirectionsCodecs.HOME.parse(JsonOps.INSTANCE, old).getOrThrow();
-        assertTrue(saved.home().cleared().isEmpty(), "a square's clearing is not a chunk's");
+        assertTrue(saved.home().felled().isEmpty(), "a square's clearing is not a chunk's");
         assertEquals(plot, saved.plot().orElseThrow());
         JsonObject written = DirectionsCodecs.HOME.encodeStart(JsonOps.INSTANCE, saved).getOrThrow()
                 .getAsJsonObject();
         assertFalse(written.has("plot"), "and it is never written again");
+    }
+
+    /** Plants are pulled up round buildings now, not by chunk: an old save's cleared chunks are dropped. */
+    @Test
+    void aHomeSavedWithClearedChunksKeepsOnlyItsFelling() {
+        SavedHome felled = new SavedHome(Home.fresh().withFelled(new ChunkKey(ChunkKey.OVERWORLD, 2, 3)),
+                Optional.empty());
+        JsonObject old = DirectionsCodecs.HOME.encodeStart(JsonOps.INSTANCE, felled).getOrThrow().getAsJsonObject();
+        old.add("cleared_chunks", old.get("felled_chunks"));
+        assertEquals(felled, DirectionsCodecs.HOME.parse(JsonOps.INSTANCE, old).getOrThrow());
+        assertFalse(DirectionsCodecs.HOME.encodeStart(JsonOps.INSTANCE, felled).getOrThrow().getAsJsonObject()
+                .has("cleared_chunks"));
     }
 
     @Test

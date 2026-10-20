@@ -11,7 +11,6 @@ import dev.luizloyola.anima.core.brain.task.Food;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.territory.ChunkKey;
-import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.Expedition;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Fellings;
@@ -19,7 +18,11 @@ import dev.luizloyola.autarkia.core.board.Gather;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.Stock;
+import dev.luizloyola.autarkia.core.bp.Footprint;
+import dev.luizloyola.autarkia.core.bp.Placement;
+import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.tree.TreeFelling;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,10 +61,16 @@ class EvolutionTest {
         OptionalInt logs = OptionalInt.of(0);
         SortedSet<ChunkKey> area = new TreeSet<>(Set.of(HERE));
         boolean base = true;
+        List<Structure> structures = new ArrayList<>();
 
         @Override
         public SortedSet<ChunkKey> area() {
             return area;
+        }
+
+        @Override
+        public List<Structure> structures() {
+            return structures;
         }
 
         @Override
@@ -172,7 +181,7 @@ class EvolutionTest {
         assertEquals(List.of(new DirectionId(WOOD, "wood")), outcome.completed());
         assertEquals(1, outcome.withdrawn().size());
         assertTrue(board.projects().stream().noneMatch(p -> p instanceof Gather));
-        assertEquals(List.of(), outcome.reached(), "the pool still wants the plot cleared");
+        assertEquals(List.of(), outcome.reached(), "the pool still wants the plot felled");
     }
 
     @Test
@@ -291,13 +300,9 @@ class EvolutionTest {
         assertEquals(List.of(new DirectionId(WOOD, "area")),
                 Evolution.collect(tree, progress, view, board.closeFinished()));
         assertTrue(progress.home().felled().contains(HERE), "the finished felling is the party's knowledge");
-        assertTrue(progress.home().cleared().isEmpty(), "felled is not yet cleared: the plants are next");
 
-        beat();
-        finish(plantsOnTheBoard());
         Evolution.Outcome outcome = beat();
-        assertTrue(progress.home().cleared().contains(HERE));
-        assertTrue(outcome.completed().contains(new DirectionId(WOOD, "area")));
+        assertTrue(outcome.completed().contains(new DirectionId(WOOD, "area")), "no plants follow it");
         assertEquals(List.of(STONE), outcome.reached());
         assertTrue(progress.reached().contains(STONE));
 
@@ -307,11 +312,6 @@ class EvolutionTest {
                 "Stone's version of the line is in force now");
         assertEquals(Direction.UPKEEP, next.posted().get(0).project().priority(),
                 "and it leads nowhere new in a two-node tree");
-    }
-
-    private ClearPlants plantsOnTheBoard() {
-        return (ClearPlants) board.projects().stream().filter(p -> p instanceof ClearPlants)
-                .findFirst().orElseThrow();
     }
 
     private FellTrees clearingOnTheBoard() {
@@ -339,15 +339,12 @@ class EvolutionTest {
         board.cancel(board.handleOf(posted).orElseThrow());
         Evolution.Outcome outcome = beat();
         assertEquals(List.of("area"), outcome.posted().stream().map(p -> p.direction().line()).toList());
-        assertTrue(progress.home().cleared().isEmpty(), "cancelled is not finished");
+        assertTrue(progress.home().felled().isEmpty(), "cancelled is not finished");
     }
 
-    /**
-     * A chunk at a time, the nearest the party's store first, felled and then its plants pulled up; a chunk
-     * the area grows into is uncleared.
-     */
+    /** A chunk at a time, the nearest the party's store first; a chunk the area grows into is unfelled. */
     @Test
-    void eachChunkOfTheAreaIsClearedInTurn() {
+    void eachChunkOfTheAreaIsFelledInTurn() {
         view.area.add(EAST);
         beat();
         assertEquals(PLOT, clearingOnTheBoard().bounds(), "the store's own chunk first");
@@ -355,18 +352,31 @@ class EvolutionTest {
         assertEquals(Set.of(HERE), progress.home().felled());
 
         beat();
-        assertEquals(PLOT, plantsOnTheBoard().bounds(), "its plants before the next chunk's trees");
-        assertTrue(Evolution.ownWork(tree, progress, view, board).contains(plantsOnTheBoard()),
-                "a plant clearing is this HOME's work too");
-        finish(plantsOnTheBoard());
-        assertEquals(Set.of(HERE), progress.home().cleared());
-
-        beat();
-        assertEquals(Home.region(EAST, SPOT.y()), clearingOnTheBoard().bounds());
+        assertEquals(Home.region(EAST, SPOT.y()), clearingOnTheBoard().bounds(), "no plants between the two");
+        assertTrue(Evolution.ownWork(tree, progress, view, board).contains(clearingOnTheBoard()));
         finish(clearingOnTheBoard());
+        assertEquals(Set.of(HERE, EAST), progress.home().felled());
+        assertTrue(beat().completed().contains(new DirectionId(WOOD, "area")));
+    }
+
+    /** The house waits only on the trees on its ground: those chunks go before nearer ones. */
+    @Test
+    void aSitedBuildingsGroundIsFelledFirst() {
+        ChunkKey far = new ChunkKey(ChunkKey.OVERWORLD, 3, 0);
+        view.area.add(EAST);
+        view.area.add(far);
+        // The pad and the flatten's ring span x 52..75: chunks 3 and 4, of which the area holds 3.
+        Structure house = new Structure(new UUID(4, 4), "autarkia:basic_wooden_house", 3, Map.of(), Map.of(),
+                new Pos(66, 64, 6), Placement.AS_DRAWN, new Footprint(62, 1, 66, 10), new Footprint(60, 0, 67, 12),
+                Structure.Phase.SITED, 0L, "");
+        view.structures.add(house);
         beat();
-        finish(plantsOnTheBoard());
-        assertEquals(Set.of(HERE, EAST), progress.home().cleared());
+        assertEquals(Home.region(far, SPOT.y()), clearingOnTheBoard().bounds(), "the house's chunk, not the store's");
+
+        finish(clearingOnTheBoard());
+        view.structures.set(0, house.at(Structure.Phase.CLEARING, ""));
+        beat();
+        assertEquals(PLOT, clearingOnTheBoard().bounds(), "then the rest, nearest the store first");
     }
 
     private void finish(FellTrees posted) {
@@ -378,11 +388,4 @@ class EvolutionTest {
         Evolution.collect(tree, progress, view, board.closeFinished());
     }
 
-    private void finish(ClearPlants posted) {
-        board.cancel(board.handleOf(posted).orElseThrow());
-        ClearPlants done = ClearPlants.restore(new ClearPlants.State(posted.bounds(), 0.5,
-                List.of(0, 1, 2, 3), List.of(), List.of(), 0L, 1), 0L).orElseThrow();
-        board.post(done);
-        Evolution.collect(tree, progress, view, board.closeFinished());
-    }
 }

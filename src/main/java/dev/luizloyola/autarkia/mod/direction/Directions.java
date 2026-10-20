@@ -287,7 +287,7 @@ public final class Directions {
     }
 
     /**
-     * A new HOME on exactly these chunks, nothing cleared. The party's area is swapped in one claim,
+     * A new HOME on exactly these chunks, nothing felled. The party's area is swapped in one claim,
      * refused whole — a site that cannot be had leaves the old HOME as it was. The work the
      * Directions had out was for the old area, so it is withdrawn; the next beat posts again.
      *
@@ -303,9 +303,8 @@ public final class Directions {
     }
 
     /**
-     * A building of the party's stands on these chunks, so they are ready ground: felled and cleared,
-     * since a clearing over them now would pull up the flowers it was built with. A party with no
-     * HOME is given one, on the area the building founded. Whether it was.
+     * A building of the party's stands on these chunks, so they are ready ground: felled. A party with
+     * no HOME is given one, on the area the building founded. Whether it was.
      */
     public static boolean built(MinecraftServer server, PartyId party, Collection<ChunkKey> footprint) {
         DirectionsData data = DirectionsData.get(server);
@@ -313,7 +312,7 @@ public final class Directions {
         boolean founded = progress.home() == null;
         Home home = founded ? Home.fresh() : progress.home();
         for (ChunkKey chunk : footprint) {
-            home = home.withFelled(chunk).withCleared(chunk);
+            home = home.withFelled(chunk);
         }
         progress.home(home);
         data.setDirty();
