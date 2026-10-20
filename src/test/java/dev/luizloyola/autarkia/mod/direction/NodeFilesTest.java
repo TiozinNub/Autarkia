@@ -11,6 +11,7 @@ import dev.luizloyola.anima.core.brain.task.ReadyFood;
 import dev.luizloyola.anima.core.inv.ItemStack;
 import dev.luizloyola.autarkia.core.direction.AreaLine;
 import dev.luizloyola.autarkia.core.direction.BaseLine;
+import dev.luizloyola.autarkia.core.direction.Direction;
 import dev.luizloyola.autarkia.core.direction.DirectionId;
 import dev.luizloyola.autarkia.core.direction.FoodLine;
 import dev.luizloyola.autarkia.core.direction.HomeLine;
@@ -70,14 +71,7 @@ class NodeFilesTest {
                 file.directions(), Set.of(), Set.copyOf(file.acts()));
     }
 
-    @Test
-    void theShippedTreePassesEveryRule() throws IOException {
-        NodeFiles.NodeFile wood = shipped("wood");
-        NodeFiles.NodeFile stone = shipped("stone");
-        assertEquals(List.of("#autarkia:node/wood"), wood.items());
-        assertEquals(new DirectionId("autarkia:wood", "wood"), stone.requirements().key());
-
-        List<Node> nodes = new ArrayList<>(List.of(unresolved(wood), unresolved(stone)));
+    private static Tree.Built shippedTree(List<Node> nodes) {
         // A server installs what is food as it starts, before the tree is built; this is that.
         ReadyFood.install(new FoodLookup() {
             @Override
@@ -91,12 +85,37 @@ class NodeFilesTest {
                 return Optional.empty();
             }
         });
-        Tree.Built built = Tree.build(nodes, Set.of("minecraft:oak_log", "minecraft:sweet_berries",
-                        "minecraft:charcoal"),
+        return Tree.build(nodes, Set.of("minecraft:oak_log", "minecraft:sweet_berries", "minecraft:charcoal"),
                 key -> false);
+    }
+
+    @Test
+    void theShippedTreePassesEveryRule() throws IOException {
+        NodeFiles.NodeFile wood = shipped("wood");
+        NodeFiles.NodeFile stone = shipped("stone");
+        assertEquals(List.of("#autarkia:node/wood"), wood.items());
+        assertEquals(new DirectionId("autarkia:wood", "wood"), stone.requirements().key());
+
+        List<Node> nodes = new ArrayList<>(List.of(unresolved(wood), unresolved(stone)));
+        Tree.Built built = shippedTree(nodes);
         assertTrue(built.errors().isEmpty(), () -> "the shipped tree is refused: " + built.errors());
         assertEquals(Set.of("autarkia:wood"), built.tree().roots());
         assertEquals(NodeKind.CORE, built.tree().node("autarkia:stone").orElseThrow().kind());
+    }
+
+    /** Luiz, 2026-10-20: the house standing makes Stone, so the house bids toward it and the felling does not. */
+    @Test
+    void theStoneAgeWaitsForTheHouseNotTheArea() throws IOException {
+        NodeFiles.NodeFile stone = shipped("stone");
+        assertEquals(List.of(new DirectionId("autarkia:wood", "house"), new DirectionId("autarkia:wood", "base")),
+                stone.requirements().pool());
+        assertEquals(2, stone.requirements().of());
+
+        Tree tree = shippedTree(List.of(unresolved(shipped("wood")), unresolved(stone))).tree();
+        Direction house = new Direction(new DirectionId("autarkia:wood", "house"), 0, null);
+        Direction area = new Direction(new DirectionId("autarkia:wood", "area"), 0, null);
+        assertEquals(Direction.TOWARD_CORE, tree.priorityOf(house, Set.of()));
+        assertEquals(Direction.UPKEEP, tree.priorityOf(area, Set.of()));
     }
 
     @Test

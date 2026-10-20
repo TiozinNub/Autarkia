@@ -1,11 +1,11 @@
 {
-  "note": "PLACEHOLDER (2026-09-24): the node table is Luiz's to write. The key, the pool and the count are stand-ins that prove the machinery.",
+  "note": "PLACEHOLDER (2026-09-24): the node table is Luiz's to write. The key, the pool and the count are stand-ins that prove the machinery, except that Stone waits for the house standing, not the area cleared (Luiz, 2026-10-20).",
   "kind": "core",
   "parents": ["autarkia:wood"],
   "needs": "all",
   "requires": {
     "key": "autarkia:wood/wood",
-    "pool": ["autarkia:wood/area", "autarkia:wood/base"],
+    "pool": ["autarkia:wood/house", "autarkia:wood/base"],
     "of": 2
   },
   "directions": [
