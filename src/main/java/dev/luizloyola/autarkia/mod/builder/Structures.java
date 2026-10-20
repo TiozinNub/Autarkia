@@ -3,6 +3,7 @@ package dev.luizloyola.autarkia.mod.builder;
 import dev.luizloyola.anima.compat.terrain.NaturalGroundReader;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.DigIn;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.terrain.NaturalGround;
@@ -35,6 +36,7 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.stream.Collectors;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -68,6 +70,25 @@ public final class Structures {
         });
         PartyBoards.onClosed(Structures::closed);
         Doorways.houseDoors(Structures::houseDoor);
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> live = server);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
+        DigIn.keepOffBy(Structures::keepsOffDigging);
+    }
+
+    private static volatile @Nullable MinecraftServer live;
+
+    /** Anima's dig-in fence: no pocket is dug on a building's pad, nor beside it. */
+    private static boolean keepsOffDigging(int x, int z) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return false;
+        }
+        for (List<Structure> party : StructuresData.get(server).parties().values()) {
+            if (Structure.onAPad(party, x, z)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** {@link Doorways}' house doors. Buildings are only ever sited in the overworld. */

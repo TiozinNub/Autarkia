@@ -84,4 +84,12 @@ class StructureTest {
         assertTrue(dev.luizloyola.autarkia.core.board.SetUp.onASite(List.of(house(Structure.Phase.LEVELLED)),
                 besideIt), "a house does");
     }
+
+    @Test
+    void noPocketIsDugOnAPadPlannedOrStandingAndARefusedOneIsNobodys() {
+        assertTrue(Structure.onAPad(List.of(house(Structure.Phase.SITED)), 5, 6), "planned");
+        assertTrue(Structure.onAPad(List.of(house(Structure.Phase.BUILT)), 0, 12), "standing, its pad's edge");
+        assertFalse(Structure.onAPad(List.of(house(Structure.Phase.BUILT)), 12, 6), "off it");
+        assertFalse(Structure.onAPad(List.of(house(Structure.Phase.REFUSED)), 5, 6));
+    }
 }

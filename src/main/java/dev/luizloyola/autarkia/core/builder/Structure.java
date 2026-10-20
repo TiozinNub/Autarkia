@@ -135,6 +135,21 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     }
 
     /** Whether a door is a house's, shut after passing: within the walls of one that stands. */
+    /**
+     * Whether a column is on the pad of one of these buildings, planned or standing — ground no body
+     * digs in for the night: a pocket dug in a half-built house cut its floor (2026-10-20).
+     */
+    public static boolean onAPad(java.util.Collection<Structure> structures, int x, int z) {
+        for (Structure structure : structures) {
+            Footprint pad = structure.pad();
+            if (structure.phase() != Phase.REFUSED && x >= pad.minX() && x <= pad.maxX() && z >= pad.minZ()
+                    && z <= pad.maxZ()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean houseDoor(java.util.Collection<Structure> structures, Pos door) {
         for (Structure structure : structures) {
             if (structure.stands() && structure.holds(door)) {
