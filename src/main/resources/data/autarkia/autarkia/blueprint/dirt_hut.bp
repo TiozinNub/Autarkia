@@ -1,0 +1,39 @@
+bp 1
+
+name        Dirt Hut
+author      TiozinNub
+version     1
+orientation all
+flippable   true
+
+materials
+  2 option overworld_wood
+
+palette
+  1 option dirt|cobblestone
+  3 option $1|dirt          // dirt three huts in four, unless the party holds cobblestone
+
+legend
+  # $3
+  d $2 door[facing=south,hinge=right]
+  O $2 door[facing=south,half=upper,hinge=right]
+
+layer 0
+  ~~~~
+  ~~~~
+  ~~~~
+
+layer 1
+  #d##
+  #..#
+  ####
+
+layer 2
+  #O##
+  #..#
+  ####
+
+layer 3
+  ####
+  ####
+  ####

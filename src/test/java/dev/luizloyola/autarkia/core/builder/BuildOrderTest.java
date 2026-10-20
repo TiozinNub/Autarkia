@@ -34,6 +34,7 @@ class BuildOrderTest {
     private static final Support CUBES = Support.solidCubes(DICT);
     private static final List<String> SHIPPED = List.of("/data/autarkia/autarkia/blueprint/basic_wooden_house.bp",
             "/data/autarkia/autarkia/blueprint/growing_cottage.bp", "/data/autarkia/autarkia/blueprint/road_segment.bp",
+            "/data/autarkia/autarkia/blueprint/dirt_hut.bp",
             "/bp/worked_house.bp");
 
     static String read(String path) throws IOException {
