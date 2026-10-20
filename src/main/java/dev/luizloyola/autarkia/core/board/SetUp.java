@@ -75,7 +75,8 @@ public final class SetUp implements PartyProject {
     public static boolean onASite(List<Structure> structures, Pos near) {
         for (Structure structure : structures) {
             Footprint pad = structure.pad();
-            if ((structure.phase() == Structure.Phase.LEVELLED || structure.phase() == Structure.Phase.BUILDING)
+            if (!structure.quick()
+                    && (structure.phase() == Structure.Phase.LEVELLED || structure.phase() == Structure.Phase.BUILDING)
                     && near.x() >= pad.minX() - REACH && near.x() <= pad.maxX() + REACH
                     && near.z() >= pad.minZ() - REACH && near.z() <= pad.maxZ() + REACH) {
                 return true;

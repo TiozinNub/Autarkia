@@ -123,6 +123,9 @@ class ShelterLineTest {
         assertTrue(ShelterLine.INSTANCE.isWork(ask, DIRECTION, party), "so it is never posted twice");
         assertFalse(ShelterLine.INSTANCE.isWork(new SiteBuilding(HouseLine.BLUEPRINT, HouseLine.VARIANTS, 0.5),
                 DIRECTION, party), "the house is the house line's");
+        assertFalse(ShelterLine.INSTANCE.isWork(new dev.luizloyola.autarkia.core.board.Build(new UUID(3, 3),
+                ShelterLine.BLUEPRINT, List.of(), 0.55), DIRECTION, party),
+                "the hut's build is its building's: met another way, the line leaves it standing half built");
     }
 
     @Test
@@ -148,5 +151,17 @@ class ShelterLineTest {
         party.known = true;
         assertEquals("autarkia.direction.shelter.known", judge(party).langKey());
         assertEquals(Status.Reading.MET, judge(party).reading());
+    }
+
+    @Test
+    void aHutGoingUpIsNoBuildingTheBaseWaitsFor() {
+        Party party = new Party();
+        party.structures.add(hut(Structure.Phase.BUILDING));
+        assertFalse(party.building(), "it never stands over the base");
+    }
+
+    @Test
+    void theHutIsAQuickBuilding() {
+        assertTrue(Structure.QUICK.contains(ShelterLine.BLUEPRINT));
     }
 }

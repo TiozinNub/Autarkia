@@ -44,11 +44,14 @@ public interface PartyView {
 
     /**
      * Whether a building of the party's is about to go up or going up: its base is moved off the
-     * site for the length of it, and nothing is set up again until the building replaces it.
+     * site for the length of it, and nothing is set up again until the building replaces it. Not a
+     * {@link dev.luizloyola.autarkia.core.builder.Structure#quick quick} one, which never stands over
+     * the base.
      */
     default boolean building() {
-        return structures().stream().anyMatch(s -> s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.LEVELLED
-                || s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILDING);
+        return structures().stream().anyMatch(s -> !s.quick()
+                && (s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.LEVELLED
+                || s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.BUILDING));
     }
 
     /**

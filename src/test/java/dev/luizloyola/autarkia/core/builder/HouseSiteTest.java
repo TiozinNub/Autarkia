@@ -435,6 +435,50 @@ class HouseSiteTest {
         assertEquals(3, kept.proofs(), "a rebuilt dictionary proves again");
     }
 
+    // ---- the first nights' hut, which goes up at once ----------------------------------------
+
+    private static List<Shape> hutShapes() throws IOException {
+        Blueprint hut = BuildOrderTest.bind(BuildOrderTest.read("/data/autarkia/autarkia/blueprint/dirt_hut.bp"));
+        return Shape.of(BuildOrderTest.plan(hut, Map.of()), BuildOrderTest.DICT, ALL);
+    }
+
+    @Test
+    void aHutIsNeverSitedOnATrunkSinceNobodyFellsItsGroundFirst() throws IOException {
+        // A trunk every third column each way: no pad the hut needs misses one.
+        Terrain wood = meadow(sample -> {
+            for (int x = MIN; x < MIN + SIZE; x += 3) {
+                for (int z = MIN; z < MIN + SIZE; z += 3) {
+                    sample.set(x, z, LEVEL, GroundSample.STANDING);
+                }
+            }
+        });
+        List<Shape> hut = hutShapes();
+        HouseSite.Result quick = HouseSite.choose(wood, hut, new Fake(), HouseSite.Weights.DEFAULTS, 16, true);
+        assertTrue(quick.best().isEmpty(), "every pad has a trunk: " + quick.best());
+        assertTrue(quick.refused().getOrDefault(HouseSite.Refusal.TREES, 0) > 0);
+        assertFalse(choose(wood, hut, new Fake()).best().isEmpty(),
+                "a building that waits for the felling may stand among trees");
+        assertFalse(HouseSite.choose(meadow(sample -> { }), hut, new Fake(), HouseSite.Weights.DEFAULTS, 16,
+                true).best().isEmpty(), "with the trees gone it has a site");
+    }
+
+    @Test
+    void aHutIsNeverSitedOverTheBaseSinceNothingMovesIt() throws IOException {
+        Terrain ground = meadow(sample -> {
+            sample.unflag(CHEST.x(), CHEST.z(), GroundSample.USED);
+            sample.unflag(BENCH.x(), BENCH.z(), GroundSample.USED);
+        });
+        HouseSite.Result result = HouseSite.choose(ground, hutShapes(), new Fake(), HouseSite.Weights.DEFAULTS, 16,
+                true);
+        assertTrue(result.refused().getOrDefault(HouseSite.Refusal.BASE, 0) > 0);
+        assertFalse(result.best().isEmpty());
+        for (Choice choice : result.best()) {
+            for (Pos station : List.of(CHEST, BENCH)) {
+                assertFalse(overlaps(choice.pad(), station.x(), station.z()), choice + " over the base");
+            }
+        }
+    }
+
     /** Report only: fifty parties siting the house, each with its own binding, proved each time or kept. */
     @Test
     void timeFiftySitings() {

@@ -1,7 +1,6 @@
 package dev.luizloyola.autarkia.core.direction;
 
 import dev.luizloyola.anima.core.inv.ItemSpec;
-import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SiteBuilding;
@@ -54,10 +53,13 @@ public final class ShelterLine implements DirectionLine {
         return Status.of(Status.Reading.UNMET, "autarkia.direction.shelter.none");
     }
 
+    /**
+     * The ask for a site only. The hut's own clearing, levelling and build are its building's, so a
+     * shelter met another way (one remembered near HOME) does not withdraw a hut half built.
+     */
     @Override
     public boolean isWork(Project project, Direction direction, PartyView party) {
-        return project instanceof SiteBuilding site && site.blueprint().equals(BLUEPRINT)
-                || project instanceof Build build && build.name().equals(BLUEPRINT);
+        return project instanceof SiteBuilding site && site.blueprint().equals(BLUEPRINT);
     }
 
     @Override

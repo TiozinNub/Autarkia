@@ -59,4 +59,29 @@ class StructureTest {
     void itsPlantsArePulledUpTwoBlocksPastThePad() {
         assertEquals(new Footprint(-2, -2, 13, 14), house(Structure.Phase.SITED).plantsArea());
     }
+
+    // ---- the first nights' hut ----------------------------------------------------------------
+
+    private static Structure hut(Structure.Phase phase) {
+        return new Structure(new UUID(9, 1), dev.luizloyola.autarkia.core.direction.ShelterLine.BLUEPRINT, 1,
+                Map.of(), Map.of(), new Pos(2, 64, 1), Placement.AS_DRAWN, new Footprint(0, 0, 3, 2),
+                new Footprint(0, -2, 3, 2), phase, 0L, "");
+    }
+
+    @Test
+    void theHutGoesUpAtOnceAndBidsTheShelterLines() {
+        assertTrue(hut(Structure.Phase.SITED).quick());
+        assertFalse(house(Structure.Phase.SITED).quick());
+        assertEquals(0.55, hut(Structure.Phase.SITED).bid(0.5));
+        assertEquals(0.5, house(Structure.Phase.SITED).bid(0.5));
+    }
+
+    @Test
+    void aHutGoingUpHoldsNothingOfTheBase() {
+        Pos besideIt = new Pos(5, 65, 1);
+        assertFalse(dev.luizloyola.autarkia.core.board.SetUp.onASite(List.of(hut(Structure.Phase.LEVELLED)),
+                besideIt), "it never stands over the base, so nothing set up waits on it");
+        assertTrue(dev.luizloyola.autarkia.core.board.SetUp.onASite(List.of(house(Structure.Phase.LEVELLED)),
+                besideIt), "a house does");
+    }
 }

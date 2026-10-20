@@ -7,6 +7,7 @@ import dev.luizloyola.autarkia.core.bp.Placement;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -80,6 +81,16 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     /** How far past the pad its plants are pulled up (Luiz, 2026-10-20: one or two blocks). */
     public static final int PLANTS_PAST = 2;
 
+    /**
+     * Blueprints that go up at once, the first nights' hut (Luiz, 2026-10-20): nobody fells their
+     * ground first, so a pad with a trunk on it is refused, and they never stand over the base, so
+     * nothing of it waits on them.
+     */
+    public static final Set<String> QUICK = Set.of("autarkia:dirt_hut");
+
+    /** What a quick building's work bids: the shelter line's, so it goes before the base's and the area's. */
+    public static final double QUICK_PRIORITY = 0.55;
+
     public Structure {
         Objects.requireNonNull(id, "id");
         variants = Map.copyOf(variants);
@@ -103,6 +114,16 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     }
 
     /** Whether it stands, growing or not: lived in, its stations the party's. */
+    /** Whether this goes up at once — see {@link #QUICK}. */
+    public boolean quick() {
+        return QUICK.contains(blueprint);
+    }
+
+    /** What this building's work bids: {@code usual}, or {@link #QUICK_PRIORITY} for a quick one. */
+    public double bid(double usual) {
+        return quick() ? QUICK_PRIORITY : usual;
+    }
+
     public boolean stands() {
         return phase == Phase.BUILT || phase == Phase.GROWING;
     }

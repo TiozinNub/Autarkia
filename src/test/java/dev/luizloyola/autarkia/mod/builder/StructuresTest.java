@@ -58,4 +58,14 @@ class StructuresTest {
         assertTrue(Structures.clears(new ClearPlants(Home.region(-2, -2, 13, 14, 90), 0.5, 2), HOUSE),
                 "read by its columns: the height follows the anchor");
     }
+
+    @Test
+    void aHutsClearingBidsTheShelterLines() {
+        Structure hut = new Structure(new UUID(4, 4), "autarkia:dirt_hut", 1, Map.of(), Map.of(), new Pos(2, 64, 1),
+                Placement.AS_DRAWN, new Footprint(0, 0, 3, 2), new Footprint(0, -2, 3, 2), Structure.Phase.SITED,
+                0L, "");
+        assertEquals(0.55, Structures.clearing(hut, 1).priority(), "before the base's and the area's 0.5");
+        assertFalse(Structures.fellsFirst(hut), "its pad was chosen with no trunk on it");
+        assertTrue(Structures.fellsFirst(HOUSE));
+    }
 }

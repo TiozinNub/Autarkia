@@ -43,7 +43,11 @@ public final class HouseSite {
         /** Over the pad of a building already sited. */
         SITED,
         /** No walk from the stores to the door. */
-        NO_ROUTE
+        NO_ROUTE,
+        /** A trunk on the pad of a building whose ground nobody fells first. */
+        TREES,
+        /** Over the party's set-ups, for a building that does not move them. */
+        BASE
     }
 
     /** At least this many free blocks between a building and anything built (decision 5). */
@@ -271,10 +275,19 @@ public final class HouseSite {
      * area and a chunk round it, read with no used margin: the gap to what is built is priced here.
      */
     public static Result choose(Terrain ground, List<Shape> shapes, Party party, Weights weights, int shortlist) {
-        return new HouseSite(ground, party, weights).choose(shapes, shortlist);
+        return choose(ground, shapes, party, weights, shortlist, false);
     }
 
-    private Result choose(List<Shape> shapes, int shortlist) {
+    /**
+     * @param quick for a building that goes up at once ({@link Structure#QUICK}): no trunk on its
+     *              pad, since its flatten would refuse one, and not over the party's set-ups
+     */
+    public static Result choose(Terrain ground, List<Shape> shapes, Party party, Weights weights, int shortlist,
+                                boolean quick) {
+        return new HouseSite(ground, party, weights).choose(shapes, shortlist, quick);
+    }
+
+    private Result choose(List<Shape> shapes, int shortlist, boolean quick) {
         Map<Refusal, Integer> refused = new EnumMap<>(Refusal.class);
         if (area.isEmpty()) {
             return new Result(List.of(), refused);
@@ -297,6 +310,14 @@ public final class HouseSite {
                     }
                     if (party.planned().stream().anyMatch(p -> overlap(p.pad(), padAt))) {
                         refused.merge(Refusal.SITED, 1, Integer::sum);
+                        continue;
+                    }
+                    if (quick && covered(padAt) > 0) {
+                        refused.merge(Refusal.BASE, 1, Integer::sum);
+                        continue;
+                    }
+                    if (quick && rects.fit(padAt.minX(), padAt.minZ()).map(Terrain.Rect::trees).orElse(0) > 0) {
+                        refused.merge(Refusal.TREES, 1, Integer::sum);
                         continue;
                     }
                     int gap = gap(shift(shape.built(), ax, az));

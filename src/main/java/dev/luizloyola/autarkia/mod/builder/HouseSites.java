@@ -99,7 +99,7 @@ public final class HouseSites {
     /** The plan's sites over these inputs, best first. */
     public static HouseSite.Result choose(Inputs inputs, BuildPlan plan, List<Placement> placements) {
         return HouseSite.choose(inputs.ground(), HouseSite.Shape.of(plan, Blueprints.dictionary(), placements),
-                inputs.party(), HouseSite.Weights.DEFAULTS, SHORTLIST);
+                inputs.party(), HouseSite.Weights.DEFAULTS, SHORTLIST, Structure.QUICK.contains(plan.id()));
     }
 
     /** What taking a site did: the growth, and the record when the area could take it. */

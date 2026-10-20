@@ -178,18 +178,29 @@ public final class Structures {
 
     /**
      * The felling round its pad goes on the board. Only there, not over its chunks: felling those
-     * nine took 40,000 ticks before the levelling could start (Luiz, 2026-10-20).
+     * nine took 40,000 ticks before the levelling could start (Luiz, 2026-10-20). A
+     * {@link Structure#quick quick} one skips it: its pad was chosen with no trunk on it, and
+     * felling 8 round a 4×3 hut costs its first night more than the rare trunk on an eased ring
+     * column, whose refused flatten has the line site another hut.
      */
     private static Structure fell(MinecraftServer server, PartyId party, Structure structure) {
+        if (!fellsFirst(structure)) {
+            return structure.at(Phase.FELLED, "");
+        }
         PartyBoards.of(server, party).post(felling(structure, PartyData.get(server).members(party).size()));
         PartyBoards.touch(server);
         return structure.at(Phase.FELLING, "");
     }
 
+    /** Whether the trees round this site are felled before its plants are pulled up. */
+    static boolean fellsFirst(Structure structure) {
+        return !structure.quick();
+    }
+
     static FellTrees felling(Structure structure, int members) {
         Footprint area = structure.fellingArea();
         return new FellTrees(TreeFelling.INSTANCE, Home.region(area.minX(), area.minZ(), area.maxX(), area.maxZ(),
-                structure.anchor().y()), FLATTEN_PRIORITY, true, members);
+                structure.anchor().y()), structure.bid(FLATTEN_PRIORITY), true, members);
     }
 
     /** A felling gone from the board without finishing was cancelled: it is posted again. */
@@ -215,7 +226,7 @@ public final class Structures {
     static ClearPlants clearing(Structure structure, int members) {
         Footprint area = structure.plantsArea();
         return new ClearPlants(Home.region(area.minX(), area.minZ(), area.maxX(), area.maxZ(), structure.anchor().y()),
-                FLATTEN_PRIORITY, members);
+                structure.bid(FLATTEN_PRIORITY), members);
     }
 
     /** A clearing gone from the board without finishing was cancelled: it is posted again. */
@@ -244,7 +255,7 @@ public final class Structures {
             return structure.at(Phase.REFUSED, "the pad cannot be levelled: " + why);
         }
         PartyBoards.of(server, party).post(Flatten.of(plan, pad.minX(), pad.minZ(), pad.maxX(), pad.maxZ(), 0,
-                FLATTEN_PRIORITY));
+                structure.bid(FLATTEN_PRIORITY)));
         PartyBoards.touch(server);
         return structure.at(Phase.LEVELLING, "");
     }

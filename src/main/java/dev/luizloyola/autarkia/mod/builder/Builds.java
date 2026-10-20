@@ -78,7 +78,7 @@ public final class Builds {
         if (itemless > 0) {
             notes.add(itemless + " steps nothing places");
         }
-        Build build = new Build(structure.id(), structure.blueprint(), order, PRIORITY);
+        Build build = new Build(structure.id(), structure.blueprint(), order, structure.bid(PRIORITY));
         LevelProbe probe = new LevelProbe(level);
         build.standing(step -> step.standsAs(probe.idAt(step.cell().x(), step.cell().y(), step.cell().z()),
                 probe.stateAt(step.cell().x(), step.cell().y(), step.cell().z())));
