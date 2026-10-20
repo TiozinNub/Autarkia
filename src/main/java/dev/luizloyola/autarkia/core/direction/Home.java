@@ -67,14 +67,8 @@ public record Home(SortedSet<ChunkKey> felled) {
 
     /** The chunks of {@code area} not yet felled, nearest {@code from} first. */
     public List<ChunkKey> unfelled(Collection<ChunkKey> area, Pos from) {
-        return unfelled(area, from, Set.of());
-    }
-
-    /** The chunks of {@code area} not yet felled: {@code first}'s, then the rest, each nearest {@code from} first. */
-    public List<ChunkKey> unfelled(Collection<ChunkKey> area, Pos from, Set<ChunkKey> first) {
         List<ChunkKey> left = unfelled(area);
-        left.sort(java.util.Comparator.<ChunkKey, Boolean>comparing(chunk -> !first.contains(chunk))
-                .thenComparingLong(chunk -> distance(chunk, from)));
+        left.sort((a, b) -> Long.compare(distance(a, from), distance(b, from)));
         return left;
     }
 

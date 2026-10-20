@@ -44,14 +44,4 @@ class HomeTest {
 
         assertEquals(List.of(chunk(1, 0), chunk(3, 0)), left);
     }
-
-    @Test
-    void chunksAskedForFirstComeBeforeNearerOnes() {
-        List<ChunkKey> area = List.of(chunk(0, 0), chunk(1, 0), chunk(3, 0), chunk(4, 0));
-        List<ChunkKey> left = Home.fresh().unfelled(area, new Pos(8, 64, 8),
-                Set.of(chunk(4, 0), chunk(3, 0), chunk(9, 9)));
-
-        assertEquals(List.of(chunk(3, 0), chunk(4, 0), chunk(0, 0), chunk(1, 0)), left,
-                "each group nearest first, and a chunk off the area is never asked for");
-    }
 }

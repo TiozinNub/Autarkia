@@ -6,22 +6,18 @@ import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
-import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import java.util.Optional;
-import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * {@code area}: the trees on every chunk of HOME's area have been felled, each chunk once
  * (docs/superpowers/specs/2026-10-01-home-area-design.md, decision 4). Plants are not this line's:
- * a building pulls up those round its own pad (Luiz, 2026-10-20).
+ * a building fells and pulls up those round its own pad (Luiz, 2026-10-20).
  *
  * <p>What the party knows of a chunk is its own work's ledger, and nothing else — nobody shares the
  * trees they walked past. So a chunk is felled once a felling of it has finished, and a chunk the
- * area grows into is one nobody has touched. One felling is out at a time, a felling's slicing and
- * ledger being a single region's: on the ground of a building waiting for it first, since the house
- * waits on nothing else, then on the unfelled chunk nearest the party's stores.
+ * area grows into is one nobody has touched. One job is out at a time, on the unfelled chunk nearest
+ * the party's stores: a felling's slicing and ledger are a single region's.
  */
 public final class AreaLine implements DirectionLine {
 
@@ -67,22 +63,8 @@ public final class AreaLine implements DirectionLine {
         Home home = party.home().orElseThrow();
         // The base stands before this line posts, so there is a store and with it a spot.
         Pos spot = party.spot().orElseThrow();
-        Set<ChunkKey> waited = waitedOn(party);
-        ChunkKey next = home.unfelled(party.area(), spot, waited).get(0);
-        // A building's ground is the house's critical path: it bids no less than the house does.
-        double bid = waited.contains(next) ? Math.max(priority, Direction.TOWARD_CORE) : priority;
-        return new FellTrees(TreeFelling.INSTANCE, Home.region(next, spot.y()), bid, true, party.members());
-    }
-
-    /** The ground chunks of the party's buildings still waiting for their trees to be felled. */
-    private static Set<ChunkKey> waitedOn(PartyView party) {
-        Set<ChunkKey> chunks = new TreeSet<>();
-        for (Structure structure : party.structures()) {
-            if (structure.phase() == Structure.Phase.SITED) {
-                chunks.addAll(structure.groundChunks());
-            }
-        }
-        return chunks;
+        ChunkKey next = home.unfelled(party.area(), spot).get(0);
+        return new FellTrees(TreeFelling.INSTANCE, Home.region(next, spot.y()), priority, true, party.members());
     }
 
     @Override
