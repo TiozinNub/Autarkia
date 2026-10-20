@@ -37,6 +37,15 @@ class StructuresDataTest {
     }
 
     @Test
+    void aSiteWhosePlantsAreBeingPulledUpReadsBackSo() {
+        for (Structure.Phase phase : List.of(Structure.Phase.CLEARING, Structure.Phase.CLEARED)) {
+            Structure at = SITED.at(phase, "");
+            assertEquals(at, StructuresData.STRUCTURE.parse(JsonOps.INSTANCE,
+                    StructuresData.STRUCTURE.encodeStart(JsonOps.INSTANCE, at).getOrThrow()).getOrThrow());
+        }
+    }
+
+    @Test
     void aBuiltBuildingKeepsWhoBuiltItAndWhen() {
         Structure built = SITED.at(Structure.Phase.BUILT, "2 steps handed back").with(new Structure.Work(
                 List.of(new AgentId(new UUID(7, 1)), new AgentId(new UUID(7, 2))), 200_000L, 214_800L));

@@ -39,6 +39,16 @@ class ClearPlantsTest {
         assertTrue(project.open().isEmpty());
     }
 
+    /** A pad and the ground round it is no chunk: its strips still cover it to the block, the last one short. */
+    @Test
+    void aRectangleIsCutIntoStripsToItsEdges() {
+        ClearPlants project = new ClearPlants(new Region(new Pos(-2, 48, -2), new Pos(13, 112, 14)), 0.5, 2);
+        assertEquals(List.of("clear the plants from (-2, -2) to (13, 1)", "clear the plants from (-2, 2) to (13, 5)",
+                        "clear the plants from (-2, 6) to (13, 9)", "clear the plants from (-2, 10) to (13, 13)",
+                        "clear the plants from (-2, 14) to (13, 14)"),
+                project.open().stream().map(item -> ((ClearStrip) item.root()).describe()).toList());
+    }
+
     @Test
     void aStripThreeMembersFailedAtIsWrittenOffAndOneMemberCountsOnce() {
         ClearPlants project = new ClearPlants(CHUNK, 0.5, 3);

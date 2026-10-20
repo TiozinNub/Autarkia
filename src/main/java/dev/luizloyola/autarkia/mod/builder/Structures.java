@@ -6,12 +6,12 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.terrain.NaturalGround;
-import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Doorways;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.core.board.Build;
+import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.GrowBuilding;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
@@ -35,8 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
@@ -46,15 +44,18 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Moves a party's sited buildings along (docs/superpowers/specs/2026-10-01-house-site-design.md,
- * *After the choice*): a site waits for its ground to be cleared, then its pad is flattened, dead
- * level at the height it was chosen at, and then the building goes up in its proved order (builder
- * spec, rung 2).
+ * *After the choice*): a site waits for the trees on its ground to be felled, then the plants round
+ * its pad are pulled up, then its pad is flattened, dead level at the height it was chosen at, and
+ * then the building goes up in its proved order (builder spec, rung 2).
  */
 public final class Structures {
 
     /** How often sited buildings are looked at: their ground clears in minutes, not ticks. */
     private static final int BEAT_TICKS = 100;
-    /** As a felling's, so a flatten neither jumps the queue nor waits behind every gather. */
+    /**
+     * As a felling's, so a flatten neither jumps the queue nor waits behind every gather. The pad's
+     * plants bid it too.
+     */
     private static final double FLATTEN_PRIORITY = 0.5;
 
     private Structures() {
@@ -102,7 +103,9 @@ public final class Structures {
             }
             for (Structure structure : List.copyOf(entry.getValue())) {
                 Structure next = switch (structure.phase()) {
-                    case SITED -> level(server, party, structure);
+                    case SITED -> clear(server, party, structure);
+                    case CLEARING -> stillClearing(server, party, structure);
+                    case CLEARED -> level(server, party, structure);
                     case LEVELLING -> stillLevelling(server, party, structure);
                     case LEVELLED -> build(server, party, structure);
                     case BUILDING -> stillBuilding(server, party, structure);
@@ -171,12 +174,39 @@ public final class Structures {
     private static final Map<SiteBuilding, Long> NEXT_TRY = new java.util.WeakHashMap<>();
     private static final int RETRY_TICKS = 2400;
 
-    /** Its ground cleared, the pad's flatten goes on the board; until then it waits. */
-    private static Structure level(MinecraftServer server, PartyId party, Structure structure) {
+    /**
+     * Its ground felled, the plants round its pad go on the board; until then it waits. Only there:
+     * pulling them over whole chunks cost thousands of ticks for ground nobody builds on (Luiz,
+     * 2026-10-20).
+     */
+    private static Structure clear(MinecraftServer server, PartyId party, Structure structure) {
         Home home = DirectionsData.get(server).find(party).map(PartyProgress::home).orElse(null);
-        if (home == null || !cleared(server, party, home, structure)) {
+        if (home == null || !structure.groundFelled(Territories.of(server).area(party), home.felled())) {
             return structure;
         }
+        PartyBoards.of(server, party).post(clearing(structure, PartyData.get(server).members(party).size()));
+        PartyBoards.touch(server);
+        return structure.at(Phase.CLEARING, "");
+    }
+
+    static ClearPlants clearing(Structure structure, int members) {
+        Footprint area = structure.plantsArea();
+        return new ClearPlants(Home.region(area.minX(), area.minZ(), area.maxX(), area.maxZ(), structure.anchor().y()),
+                FLATTEN_PRIORITY, members);
+    }
+
+    /** A clearing gone from the board without finishing was cancelled: the site waits to be cleared again. */
+    private static Structure stillClearing(MinecraftServer server, PartyId party, Structure structure) {
+        for (Project project : PartyBoards.of(server, party).projects()) {
+            if (project instanceof ClearPlants plants && clears(plants, structure)) {
+                return structure;
+            }
+        }
+        return structure.at(Phase.SITED, "");
+    }
+
+    /** Its plants pulled up, the pad's flatten goes on the board. */
+    private static Structure level(MinecraftServer server, PartyId party, Structure structure) {
         Footprint pad = structure.pad();
         ServerLevel level = server.overworld();
         NaturalGround scan = NaturalGroundReader.read(level, pad.minX() - Structure.RING,
@@ -194,21 +224,6 @@ public final class Structures {
                 FLATTEN_PRIORITY));
         PartyBoards.touch(server);
         return structure.at(Phase.LEVELLING, "");
-    }
-
-    /**
-     * Whether the pad and the ring a flatten eases into are cleared — those of their chunks the
-     * area holds. A margin chunk skipped as taken is nobody's to clear, and waiting on it would be
-     * waiting for ever; the flatten refuses a tree there itself.
-     */
-    private static boolean cleared(MinecraftServer server, PartyId party, Home home, Structure structure) {
-        SortedSet<ChunkKey> area = new TreeSet<>(Territories.of(server).area(party));
-        for (ChunkKey chunk : structure.groundChunks()) {
-            if (area.contains(chunk) && !home.cleared().contains(chunk)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** A flatten gone from the board without finishing was cancelled: the site waits to be levelled again. */
@@ -283,7 +298,10 @@ public final class Structures {
         for (Structure structure : data.of(party)) {
             for (Project project : finished) {
                 Structure next = structure;
-                if (structure.phase() == Phase.LEVELLING && project instanceof Flatten flatten
+                if (structure.phase() == Phase.CLEARING && project instanceof ClearPlants plants
+                        && clears(plants, structure)) {
+                    next = structure.at(Phase.CLEARED, "");
+                } else if (structure.phase() == Phase.LEVELLING && project instanceof Flatten flatten
                         && levels(flatten, structure)) {
                     next = structure.at(Phase.LEVELLED, "");
                 } else if (structure.phase() == Phase.GROWING && project instanceof Build build
@@ -315,6 +333,13 @@ public final class Structures {
         Footprint pad = structure.pad();
         return flatten.area().min().x() == pad.minX() && flatten.area().min().z() == pad.minZ()
                 && flatten.area().max().x() == pad.maxX() && flatten.area().max().z() == pad.maxZ();
+    }
+
+    /** Whether this clearing is the one round this building's pad: its columns, at any height. */
+    static boolean clears(ClearPlants plants, Structure structure) {
+        Footprint area = structure.plantsArea();
+        return plants.bounds().min().x() == area.minX() && plants.bounds().min().z() == area.minZ()
+                && plants.bounds().max().x() == area.maxX() && plants.bounds().max().z() == area.maxZ();
     }
 
     private static void tell(MinecraftServer server, PartyId party, Structure structure) {

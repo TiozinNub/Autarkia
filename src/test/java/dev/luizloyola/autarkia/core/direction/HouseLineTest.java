@@ -143,12 +143,14 @@ class HouseLineTest {
 
     @Test
     void aSitedHouseIsWaitedOnAtEveryPhase() {
-        for (Structure.Phase phase : List.of(Structure.Phase.SITED, Structure.Phase.LEVELLING,
-                Structure.Phase.LEVELLED)) {
+        for (Structure.Phase phase : List.of(Structure.Phase.SITED, Structure.Phase.CLEARING,
+                Structure.Phase.CLEARED, Structure.Phase.LEVELLING, Structure.Phase.LEVELLED)) {
             Party party = new Party();
             party.structures.add(house(phase));
 
             assertEquals(Status.Reading.WAITING, reading(party), phase + " posts nothing more");
+            assertEquals("autarkia.direction.house." + phase.name().toLowerCase(java.util.Locale.ROOT),
+                    HouseLine.INSTANCE.judge(DIRECTION, party).langKey(), "a phase of its own, never a second house");
         }
     }
 

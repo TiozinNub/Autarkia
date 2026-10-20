@@ -16,8 +16,8 @@ import java.util.Optional;
 /**
  * {@code house}: a house stands with a crafting table and storage, to replace the starter blocks
  * (docs/superpowers/specs/2026-10-01-house-site-design.md, decisions 6–9). Until one is sited the
- * line posts the choice of where; then it waits — for the ground to be cleared, for the pad to be
- * levelled, for the builder. A refused site is no house, and the next choice keeps off its pad.
+ * line posts the choice of where; then it waits — for the trees on its ground to be felled, for the
+ * plants round its pad to be pulled up, for the pad to be levelled, for the builder. A refused site is no house, and the next choice keeps off its pad.
  * The line is met once the house stands and holds every kind of station the party keeps at HOME.
  *
  * <p><b>The house wants an upgrade</b> (2026-10-02): a station kept outside it — the starter furnace
@@ -64,6 +64,12 @@ public final class HouseLine implements DirectionLine {
             switch (structure.phase()) {
                 case SITED -> {
                     return Status.of(Status.Reading.WAITING, "autarkia.direction.house.sited");
+                }
+                case CLEARING -> {
+                    return Status.of(Status.Reading.WAITING, "autarkia.direction.house.clearing");
+                }
+                case CLEARED -> {
+                    return Status.of(Status.Reading.WAITING, "autarkia.direction.house.cleared");
                 }
                 case LEVELLING -> {
                     return Status.of(Status.Reading.WAITING, "autarkia.direction.house.levelling");

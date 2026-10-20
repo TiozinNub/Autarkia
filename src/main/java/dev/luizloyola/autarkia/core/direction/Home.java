@@ -84,8 +84,12 @@ public record Home(SortedSet<ChunkKey> felled, SortedSet<ChunkKey> cleared) {
 
     /** What work on this chunk covers: its columns, from below {@code y} to above it. */
     public static Region region(ChunkKey chunk, int y) {
-        return new Region(new Pos(chunk.minBlockX(), y - BELOW, chunk.minBlockZ()),
-                new Pos(chunk.maxBlockX(), y + ABOVE, chunk.maxBlockZ()));
+        return region(chunk.minBlockX(), chunk.minBlockZ(), chunk.maxBlockX(), chunk.maxBlockZ(), y);
+    }
+
+    /** What work on these columns covers, from below {@code y} to above it. */
+    public static Region region(int minX, int minZ, int maxX, int maxZ, int y) {
+        return new Region(new Pos(minX, y - BELOW, minZ), new Pos(maxX, y + ABOVE, maxZ));
     }
 
     /**

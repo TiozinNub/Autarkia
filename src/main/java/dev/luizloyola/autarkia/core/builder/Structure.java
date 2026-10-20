@@ -42,8 +42,12 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     }
 
     public enum Phase {
-        /** Chosen and its ground claimed; waiting for its chunks to be cleared. */
+        /** Chosen and its ground claimed; waiting for the trees on its chunks to be felled. */
         SITED,
+        /** The plants round its pad are being pulled up: that clearing is on the board. */
+        CLEARING,
+        /** Its plants are pulled up; the pad's flatten goes on the board next. */
+        CLEARED,
         /** The pad's flatten is on the board. */
         LEVELLING,
         /** The pad is level; waiting for the builder. */
@@ -61,8 +65,11 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     /** How far above layer 0 its walls are taken to reach: the record keeps no height. */
     public static final int WALLS_HIGH = 16;
 
-    /** How far past the pad a flatten eases the ground: its chunks must be cleared too. */
+    /** How far past the pad a flatten eases the ground: its chunks' trees must be felled too. */
     public static final int RING = dev.luizloyola.autarkia.core.earthwork.FlattenPlan.Rules.MAX_RING;
+
+    /** How far past the pad its plants are pulled up (Luiz, 2026-10-20: one or two blocks). */
+    public static final int PLANTS_PAST = 2;
 
     public Structure {
         Objects.requireNonNull(id, "id");
@@ -140,9 +147,29 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
                 sitedAt, why, work, Map.of());
     }
 
-    /** The chunks that must be cleared before the pad is levelled: the pad and the ring round it. */
+    /** The chunks whose trees must be felled before the pad is levelled: the pad and the ring round it. */
     public SortedSet<ChunkKey> groundChunks() {
         return ChunkKey.covering(ChunkKey.OVERWORLD, pad.minX() - RING, pad.minZ() - RING, pad.maxX() + RING,
                 pad.maxZ() + RING);
+    }
+
+    /**
+     * Whether the trees are felled on those of its ground chunks the area holds. A margin chunk
+     * skipped as taken is nobody's to fell, and waiting on it would be waiting for ever; the flatten
+     * refuses a tree there itself.
+     */
+    public boolean groundFelled(java.util.Set<ChunkKey> area, java.util.Set<ChunkKey> felled) {
+        for (ChunkKey chunk : groundChunks()) {
+            if (area.contains(chunk) && !felled.contains(chunk)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The columns its plants are pulled up from: the pad and {@link #PLANTS_PAST} round it. */
+    public Footprint plantsArea() {
+        return new Footprint(pad.minX() - PLANTS_PAST, pad.minZ() - PLANTS_PAST, pad.maxX() + PLANTS_PAST,
+                pad.maxZ() + PLANTS_PAST);
     }
 }
