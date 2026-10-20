@@ -1,19 +1,27 @@
 package dev.luizloyola.autarkia.mod.direction;
 
-import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
-import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.compat.sense.LevelProbe;
+import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.knowledge.KnowledgeRegistry;
+import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
+import dev.luizloyola.anima.core.brain.knowledge.PoiMemory;
+import dev.luizloyola.anima.core.brain.knowledge.ShelterNoter;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.EnsureTable;
 import dev.luizloyola.anima.core.brain.task.Food;
+import dev.luizloyola.anima.core.brain.task.Refuge;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.PlaceRow;
 import dev.luizloyola.anima.core.store.Store;
 import dev.luizloyola.anima.core.territory.ChunkKey;
+import dev.luizloyola.anima.mod.brain.KnowledgeData;
+import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.inv.StoreContents;
 import dev.luizloyola.autarkia.core.board.Explore;
+import dev.luizloyola.autarkia.core.bp.Facts;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.direction.Home;
@@ -21,14 +29,17 @@ import dev.luizloyola.autarkia.core.direction.HomeSearch;
 import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.core.direction.PartyView;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
+import dev.luizloyola.autarkia.mod.bp.Blueprints;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 import net.minecraft.core.BlockPos;
@@ -175,6 +186,44 @@ final class HomeView implements PartyView {
     @Override
     public Optional<dev.luizloyola.autarkia.core.builder.Growth> growth(dev.luizloyola.autarkia.core.board.SetUp.Station station) {
         return dev.luizloyola.autarkia.mod.builder.Growths.of(structures(), station);
+    }
+
+    @Override
+    public boolean shelterStands() {
+        for (Structure structure : structures()) {
+            if (structure.stands() && hasDoor(structure.blueprint())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether a blueprint has a way in by a door, by its facts; kept per text, which a reload changes. */
+    private static boolean hasDoor(String blueprint) {
+        return Blueprints.find(blueprint).map(entry -> DOORED.computeIfAbsent(entry.text(), text -> {
+            var compiled = entry.compiled().blueprint();
+            return compiled != null && !Facts.of(compiled, Blueprints.dictionary()).entrances().isEmpty();
+        })).orElse(false);
+    }
+
+    private static final Map<String, Boolean> DOORED = new ConcurrentHashMap<>();
+
+    @Override
+    public boolean shelterNearHome() {
+        Optional<Pos> home = spot();
+        if (home.isEmpty()) {
+            return false;
+        }
+        KnowledgeRegistry known = KnowledgeData.get(server).registry();
+        for (AgentId member : PartyData.get(server).members(party)) {
+            for (PoiMemory way : known.forPerson(member).sighted(PoiKind.SHELTER)) {
+                if (!ShelterNoter.dug(way) && Math.hypot(way.anchor().x() - home.get().x(),
+                        way.anchor().z() - home.get().z()) <= Refuge.NEAR_HOME) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

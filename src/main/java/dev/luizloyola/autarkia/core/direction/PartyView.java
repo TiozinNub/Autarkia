@@ -65,6 +65,19 @@ public interface PartyView {
         return false;
     }
 
+    /** Whether one of the party's buildings stands with a door: a shelter of its own. No for a test view. */
+    default boolean shelterStands() {
+        return false;
+    }
+
+    /**
+     * Whether a member remembers a way into a shelter within
+     * {@link dev.luizloyola.anima.core.brain.task.Refuge#NEAR_HOME} of HOME. No for a test view.
+     */
+    default boolean shelterNearHome() {
+        return false;
+    }
+
     /** Whether one of the party's buildings is growing: what a growth adds is on its way. */
     default boolean growing() {
         return structures().stream().anyMatch(s -> s.phase() == dev.luizloyola.autarkia.core.builder.Structure.Phase.GROWING);

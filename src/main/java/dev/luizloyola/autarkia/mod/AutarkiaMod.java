@@ -229,6 +229,9 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.autarkia.core.direction.FoodLine.INSTANCE);
         dev.luizloyola.autarkia.core.direction.Lines.register(
                 dev.luizloyola.autarkia.core.direction.CharcoalLine.INSTANCE);
+        // The first nights' hut: the line posts it, and Structures sites it as it does a house.
+        dev.luizloyola.autarkia.core.direction.Lines.register(
+                dev.luizloyola.autarkia.core.direction.ShelterLine.INSTANCE);
         // A house: the line posts where to put it, and the mod's Structures chooses and claims it.
         dev.luizloyola.autarkia.core.direction.Lines.register(
                 dev.luizloyola.autarkia.core.direction.HouseLine.INSTANCE);
