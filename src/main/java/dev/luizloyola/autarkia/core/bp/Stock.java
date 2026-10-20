@@ -98,6 +98,37 @@ public final class Stock {
         return !enough.isEmpty() ? enough : known;
     }
 
+    /** The choices the party holds enough of for the cells that read them, as indices, in order. */
+    public List<Integer> enough(List<Choice> choices) {
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < choices.size(); i++) {
+            int has = 0;
+            for (String material : materials(choices.get(i).blocks())) {
+                has += held(material);
+            }
+            if (has > 0 && has >= choices.get(i).need()) {
+                out.add(i);
+            }
+        }
+        return out;
+    }
+
+    /** The choices the party has seen most of growing, as indices, or empty when none. */
+    public List<Integer> mostGrowing(List<Choice> choices) {
+        List<Integer> out = new ArrayList<>();
+        int most = 0;
+        for (int i = 0; i < choices.size(); i++) {
+            int grows = 0;
+            for (String material : materials(choices.get(i).blocks())) {
+                grows += growing(material);
+            }
+            if (grows > 0) {
+                most = keep(out, i, grows, most);
+            }
+        }
+        return out;
+    }
+
     private static int keep(List<Integer> best, int i, int score, int top) {
         if (score > top) {
             best.clear();

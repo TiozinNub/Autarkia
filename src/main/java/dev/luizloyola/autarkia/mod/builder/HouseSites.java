@@ -133,8 +133,9 @@ public final class HouseSites {
      */
     public static @Nullable BuildPlan plan(Blueprint bp, Map<String, String> variants, Stock stock, Diagnostics out) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        return Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, Map.of(), variants,
-                Chooser.stocked(stock, Chooser.random(random)), random, out);
+        Chooser chooser = Structure.QUICK.contains(bp.id()) ? Chooser.heldElseFirst(stock, Chooser.random(random))
+                : Chooser.stocked(stock, Chooser.random(random));
+        return Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, Map.of(), variants, chooser, random, out);
     }
 
     public static Inputs inputs(ServerLevel level, PartyId party) {

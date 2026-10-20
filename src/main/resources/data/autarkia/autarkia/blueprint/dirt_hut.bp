@@ -10,11 +10,10 @@ materials
   2 option overworld_wood
 
 palette
-  1 option dirt|cobblestone
-  3 option $1|dirt          // dirt three huts in four, unless the party holds cobblestone
+  1 option dirt|cobblestone   // dirt, unless the party already holds cobblestone for all of it
 
 legend
-  # $3
+  # $1
   d $2 door[facing=south,hinge=right]
   O $2 door[facing=south,half=upper,hinge=right]
 

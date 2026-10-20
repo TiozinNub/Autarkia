@@ -58,6 +58,30 @@ public interface Chooser {
         };
     }
 
+    /**
+     * For a building that goes up at once: a way the party already holds enough of for every cell
+     * that reads it; else the one it has seen most of growing, a wood; else the first, which such a
+     * blueprint lists as the way any party can get now. Rolled, or bound to what was held but too
+     * little, the first nights' hut went to cobblestone a Wood Age party may not seek, and never
+     * stood (2026-10-20). Ties, and a variant selection, are {@code otherwise}'s.
+     */
+    static Chooser heldElseFirst(Stock stock, Chooser otherwise) {
+        return (what, choices) -> {
+            if (what.equals(VARIANTS)) {
+                return otherwise.choose(what, choices);
+            }
+            List<Integer> best = stock.enough(choices);
+            if (best.isEmpty()) {
+                best = stock.mostGrowing(choices);
+            }
+            if (best.isEmpty()) {
+                return 0;
+            }
+            int picked = otherwise.choose(what, best.stream().map(choices::get).toList());
+            return best.get(Math.max(0, Math.min(picked, best.size() - 1)));
+        };
+    }
+
     /** A draw by weight, so {@code option oak|nether_wood} is oak half the time. */
     static Chooser random(RandomGenerator random) {
         return (what, choices) -> {

@@ -6,10 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
 import dev.luizloyola.autarkia.core.bp.BpCompiler;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
+import dev.luizloyola.autarkia.core.bp.Chooser;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Facts;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Planner;
+import dev.luizloyola.autarkia.core.bp.Stock;
 import dev.luizloyola.autarkia.core.bp.Support;
 import java.io.IOException;
 import java.util.Map;
@@ -64,5 +66,24 @@ class DirtHutTest {
             }
         });
         return out;
+    }
+
+    /** A party holding cobblestone but not a hut's worth, as in the flight that never built one. */
+    @Test
+    void aWoodAgePartyGetsDirtAndCobblestoneOnlyWhenItHoldsAHutsWorth() throws IOException {
+        Blueprint hut = BuildOrderTest.bind(BuildOrderTest.read(PATH));
+        assertEquals(30, blocks(held(hut, Map.of())).get("minecraft:dirt"), "nothing held");
+        assertEquals(30, blocks(held(hut, Map.of("minecraft:cobblestone", 29))).get("minecraft:dirt"),
+                "some cobblestone, not enough: it could not seek the rest");
+        assertEquals(30, blocks(held(hut, Map.of("minecraft:cobblestone", 30))).get("minecraft:cobblestone"));
+    }
+
+    private static BuildPlan held(Blueprint hut, Map<String, Integer> items) {
+        Diagnostics out = new Diagnostics();
+        BuildPlan plan = Planner.plan(hut, BuildOrderTest.DICT, Support.solidCubes(BuildOrderTest.DICT), Map.of(),
+                Map.of(), Chooser.heldElseFirst(Stock.of(BuildOrderTest.DICT, items, Map.of()),
+                        (what, choices) -> 0), new Random(3), out);
+        assertTrue(plan != null, out.list()::toString);
+        return plan;
     }
 }
