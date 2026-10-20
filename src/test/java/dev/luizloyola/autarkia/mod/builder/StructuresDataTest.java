@@ -1,12 +1,10 @@
 package dev.luizloyola.autarkia.mod.builder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Pos;
-import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Facing;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
@@ -38,7 +36,8 @@ class StructuresDataTest {
 
     @Test
     void aSiteWhosePlantsAreBeingPulledUpReadsBackSo() {
-        for (Structure.Phase phase : List.of(Structure.Phase.CLEARING, Structure.Phase.CLEARED)) {
+        for (Structure.Phase phase : List.of(Structure.Phase.FELLING, Structure.Phase.FELLED,
+                Structure.Phase.CLEARING, Structure.Phase.CLEARED)) {
             Structure at = SITED.at(phase, "");
             assertEquals(at, StructuresData.STRUCTURE.parse(JsonOps.INSTANCE,
                     StructuresData.STRUCTURE.encodeStart(JsonOps.INSTANCE, at).getOrThrow()).getOrThrow());
@@ -75,9 +74,8 @@ class StructuresDataTest {
     }
 
     @Test
-    void itWaitsOnThePadAndTheRingAFlattenEasesInto() {
+    void itFellsThePadAndTheRingAFlattenEasesInto() {
         // The pad spans x -194..-182, z -187..-175; eight more each way is -202..-174, -195..-167.
-        assertEquals(ChunkKey.covering(ChunkKey.OVERWORLD, -202, -195, -174, -167), SITED.groundChunks());
-        assertTrue(SITED.groundChunks().contains(ChunkKey.at(ChunkKey.OVERWORLD, -200, -170)));
+        assertEquals(new Footprint(-202, -195, -174, -167), SITED.fellingArea());
     }
 }

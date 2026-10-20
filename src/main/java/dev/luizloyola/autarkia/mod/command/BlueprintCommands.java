@@ -548,9 +548,8 @@ public final class BlueprintCommands {
     }
 
     /**
-     * Takes the best site: the area grows to hold it and the party records it, sited. Its ground is
-     * felled by the area line, then its pad cleared of plants and flattened ({@code Structures});
-     * nothing is built.
+     * Takes the best site: the area grows to hold it and the party records it, sited. The trees and
+     * plants round its pad are cleared and the pad flattened ({@code Structures}); nothing is built.
      */
     private static int applySite(CommandSourceStack source, Entry entry, BuildPlan plan, PartyId party,
                                  HouseSite.Choice choice) {
@@ -571,8 +570,8 @@ public final class BlueprintCommands {
 
     /**
      * {@code bp build <id> [pos] party=<person> [pins]}: the party's building, sited here rather than
-     * by the scorer. From there it goes as the house line's does: its chunks felled, its pad's plants
-     * pulled up, its footprint levelled at this height, then built. Building before the clearing lost a house's posts to it
+     * by the scorer. From there it goes as the house line's does: the trees and plants round its pad
+     * cleared, its footprint levelled at this height, then built. Building before the clearing lost a house's posts to it
      * as logs nobody could name.
      */
     private static int build(CommandSourceStack source, Entry entry, @Nullable BlockPos pos, String words) {

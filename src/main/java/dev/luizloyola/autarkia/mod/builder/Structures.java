@@ -9,9 +9,9 @@ import dev.luizloyola.anima.core.terrain.NaturalGround;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Doorways;
 import dev.luizloyola.anima.mod.social.PartyData;
-import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.ClearPlants;
+import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.GrowBuilding;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
@@ -26,11 +26,10 @@ import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.builder.Structure.Phase;
 import dev.luizloyola.autarkia.core.direction.Home;
-import dev.luizloyola.autarkia.core.direction.PartyProgress;
 import dev.luizloyola.autarkia.core.earthwork.FlattenPlan;
+import dev.luizloyola.autarkia.core.tree.TreeFelling;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
-import dev.luizloyola.autarkia.mod.direction.DirectionsData;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
@@ -44,8 +43,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Moves a party's sited buildings along (docs/superpowers/specs/2026-10-01-house-site-design.md,
- * *After the choice*): a site waits for the trees on its ground to be felled, then the plants round
- * its pad are pulled up, then its pad is flattened, dead level at the height it was chosen at, and
+ * *After the choice*): the trees round a site's pad are felled, then the plants round it pulled up,
+ * then its pad is flattened, dead level at the height it was chosen at, and
  * then the building goes up in its proved order (builder spec, rung 2).
  */
 public final class Structures {
@@ -53,8 +52,8 @@ public final class Structures {
     /** How often sited buildings are looked at: their ground clears in minutes, not ticks. */
     private static final int BEAT_TICKS = 100;
     /**
-     * As a felling's, so a flatten neither jumps the queue nor waits behind every gather. The pad's
-     * plants bid it too.
+     * As a felling's, so a flatten neither jumps the queue nor waits behind every gather. The
+     * felling and the plants round the pad bid it too: the building's own work.
      */
     private static final double FLATTEN_PRIORITY = 0.5;
 
@@ -103,7 +102,9 @@ public final class Structures {
             }
             for (Structure structure : List.copyOf(entry.getValue())) {
                 Structure next = switch (structure.phase()) {
-                    case SITED -> clear(server, party, structure);
+                    case SITED -> fell(server, party, structure);
+                    case FELLING -> stillFelling(server, party, structure);
+                    case FELLED -> clear(server, party, structure);
                     case CLEARING -> stillClearing(server, party, structure);
                     case CLEARED -> level(server, party, structure);
                     case LEVELLING -> stillLevelling(server, party, structure);
@@ -175,15 +176,36 @@ public final class Structures {
     private static final int RETRY_TICKS = 2400;
 
     /**
-     * Its ground felled, the plants round its pad go on the board; until then it waits. Only there:
-     * pulling them over whole chunks cost thousands of ticks for ground nobody builds on (Luiz,
-     * 2026-10-20).
+     * The felling round its pad goes on the board. Only there, not over its chunks: felling those
+     * nine took 40,000 ticks before the levelling could start (Luiz, 2026-10-20).
+     */
+    private static Structure fell(MinecraftServer server, PartyId party, Structure structure) {
+        PartyBoards.of(server, party).post(felling(structure, PartyData.get(server).members(party).size()));
+        PartyBoards.touch(server);
+        return structure.at(Phase.FELLING, "");
+    }
+
+    static FellTrees felling(Structure structure, int members) {
+        Footprint area = structure.fellingArea();
+        return new FellTrees(TreeFelling.INSTANCE, Home.region(area.minX(), area.minZ(), area.maxX(), area.maxZ(),
+                structure.anchor().y()), FLATTEN_PRIORITY, true, members);
+    }
+
+    /** A felling gone from the board without finishing was cancelled: it is posted again. */
+    private static Structure stillFelling(MinecraftServer server, PartyId party, Structure structure) {
+        for (Project project : PartyBoards.of(server, party).projects()) {
+            if (project instanceof FellTrees felling && fells(felling, structure)) {
+                return structure;
+            }
+        }
+        return structure.at(Phase.SITED, "");
+    }
+
+    /**
+     * Its trees felled, the plants round its pad go on the board. Only there: pulling them over whole
+     * chunks cost thousands of ticks for ground nobody builds on (Luiz, 2026-10-20).
      */
     private static Structure clear(MinecraftServer server, PartyId party, Structure structure) {
-        Home home = DirectionsData.get(server).find(party).map(PartyProgress::home).orElse(null);
-        if (home == null || !structure.groundFelled(Territories.of(server).area(party), home.felled())) {
-            return structure;
-        }
         PartyBoards.of(server, party).post(clearing(structure, PartyData.get(server).members(party).size()));
         PartyBoards.touch(server);
         return structure.at(Phase.CLEARING, "");
@@ -195,14 +217,14 @@ public final class Structures {
                 FLATTEN_PRIORITY, members);
     }
 
-    /** A clearing gone from the board without finishing was cancelled: the site waits to be cleared again. */
+    /** A clearing gone from the board without finishing was cancelled: it is posted again. */
     private static Structure stillClearing(MinecraftServer server, PartyId party, Structure structure) {
         for (Project project : PartyBoards.of(server, party).projects()) {
             if (project instanceof ClearPlants plants && clears(plants, structure)) {
                 return structure;
             }
         }
-        return structure.at(Phase.SITED, "");
+        return structure.at(Phase.FELLED, "");
     }
 
     /** Its plants pulled up, the pad's flatten goes on the board. */
@@ -298,7 +320,10 @@ public final class Structures {
         for (Structure structure : data.of(party)) {
             for (Project project : finished) {
                 Structure next = structure;
-                if (structure.phase() == Phase.CLEARING && project instanceof ClearPlants plants
+                if (structure.phase() == Phase.FELLING && project instanceof FellTrees felling
+                        && fells(felling, structure)) {
+                    next = structure.at(Phase.FELLED, "");
+                } else if (structure.phase() == Phase.CLEARING && project instanceof ClearPlants plants
                         && clears(plants, structure)) {
                     next = structure.at(Phase.CLEARED, "");
                 } else if (structure.phase() == Phase.LEVELLING && project instanceof Flatten flatten
@@ -333,6 +358,13 @@ public final class Structures {
         Footprint pad = structure.pad();
         return flatten.area().min().x() == pad.minX() && flatten.area().min().z() == pad.minZ()
                 && flatten.area().max().x() == pad.maxX() && flatten.area().max().z() == pad.maxZ();
+    }
+
+    /** Whether this felling is the one round this building's pad: its columns, at any height. */
+    static boolean fells(FellTrees felling, Structure structure) {
+        Footprint area = structure.fellingArea();
+        return felling.bounds().min().x() == area.minX() && felling.bounds().min().z() == area.minZ()
+                && felling.bounds().max().x() == area.maxX() && felling.bounds().max().z() == area.maxZ();
     }
 
     /** Whether this clearing is the one round this building's pad: its columns, at any height. */

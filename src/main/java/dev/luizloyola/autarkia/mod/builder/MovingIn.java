@@ -156,8 +156,8 @@ final class MovingIn {
     static List<String> foldStrays(MinecraftServer server, PartyId party, List<Structure> structures) {
         List<Structure> standing = structures.stream().filter(Structure::stands).toList();
         if (standing.isEmpty() || structures.stream().anyMatch(s -> s.phase() != Phase.BUILT
-                && s.phase() != Phase.REFUSED && s.phase() != Phase.SITED && s.phase() != Phase.CLEARING
-                && s.phase() != Phase.CLEARED)) {
+                && s.phase() != Phase.REFUSED && s.phase() != Phase.SITED && s.phase() != Phase.FELLING
+                && s.phase() != Phase.FELLED && s.phase() != Phase.CLEARING && s.phase() != Phase.CLEARED)) {
             return List.of();
         }
         Places places = PlacesData.get(server).places();

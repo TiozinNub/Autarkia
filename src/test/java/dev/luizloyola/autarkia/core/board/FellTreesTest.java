@@ -778,6 +778,26 @@ class FellTreesTest {
         assertEquals(1, project.ledger().size());
     }
 
+    /**
+     * A building's felling is its pad and the flatten's ring: no chunk, off the cell grid. It is one
+     * slice, takes only what stands inside it, and closes once that is down.
+     */
+    @Test
+    void aPadsFellingIsABoxLikeAnyOther() {
+        Region pad = new Region(new Pos(-202, 47, -195), new Pos(-174, 111, -167));
+        FellTrees project = new FellTrees(ABLE, pad, 0.5, true, 2);
+        project.tick(0L);
+        assertEquals(List.of(pad), project.slices());
+        BoardBrainContext ctx = new BoardBrainContext();
+        ctx.remember(THING, new Pos(-202, 63, -167));
+        ctx.remember(THING, new Pos(-203, 63, -180));
+
+        project.completed(surveyItem(project), ctx);
+        assertEquals(java.util.Set.of(new Pos(-202, 63, -167)), project.ledger().keySet(), "the corner, not past it");
+        project.completed(clearItem(project), ctx);
+        assertEquals(FellTrees.Phase.DONE, project.phase());
+    }
+
     // ── giving up ────────────────────────────────────────────────────────────────────────────
 
     @Test

@@ -143,7 +143,8 @@ class HouseLineTest {
 
     @Test
     void aSitedHouseIsWaitedOnAtEveryPhase() {
-        for (Structure.Phase phase : List.of(Structure.Phase.SITED, Structure.Phase.CLEARING,
+        for (Structure.Phase phase : List.of(Structure.Phase.SITED, Structure.Phase.FELLING,
+                Structure.Phase.FELLED, Structure.Phase.CLEARING,
                 Structure.Phase.CLEARED, Structure.Phase.LEVELLING, Structure.Phase.LEVELLED)) {
             Party party = new Party();
             party.structures.add(house(phase));

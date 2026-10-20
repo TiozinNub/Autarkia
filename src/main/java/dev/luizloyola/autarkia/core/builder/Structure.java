@@ -2,13 +2,11 @@ package dev.luizloyola.autarkia.core.builder;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Pos;
-import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.SortedSet;
 import java.util.UUID;
 
 /**
@@ -42,8 +40,12 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     }
 
     public enum Phase {
-        /** Chosen and its ground claimed; waiting for the trees on its chunks to be felled. */
+        /** Chosen and its ground claimed; the felling round its pad goes on the board next. */
         SITED,
+        /** The trees round its pad are being felled: that felling is on the board. */
+        FELLING,
+        /** The trees round its pad are felled; the clearing of its plants goes on the board next. */
+        FELLED,
         /** The plants round its pad are being pulled up: that clearing is on the board. */
         CLEARING,
         /** Its plants are pulled up; the pad's flatten goes on the board next. */
@@ -65,8 +67,15 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
     /** How far above layer 0 its walls are taken to reach: the record keeps no height. */
     public static final int WALLS_HIGH = 16;
 
-    /** How far past the pad a flatten eases the ground: its chunks' trees must be felled too. */
+    /** How far past the pad a flatten eases the ground. */
     public static final int RING = dev.luizloyola.autarkia.core.earthwork.FlattenPlan.Rules.MAX_RING;
+
+    /**
+     * How far past the pad its trees are felled (Luiz, 2026-10-20: the trees near the site, not its
+     * chunks'): the flatten's ring, since a trunk on a column the ring eases refuses the pad for good.
+     * It takes in the builder's stands and scaffold too, which reach 5 past the walls.
+     */
+    public static final int FELL_PAST = RING;
 
     /** How far past the pad its plants are pulled up (Luiz, 2026-10-20: one or two blocks). */
     public static final int PLANTS_PAST = 2;
@@ -147,24 +156,10 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
                 sitedAt, why, work, Map.of());
     }
 
-    /** The chunks whose trees must be felled before the pad is levelled: the pad and the ring round it. */
-    public SortedSet<ChunkKey> groundChunks() {
-        return ChunkKey.covering(ChunkKey.OVERWORLD, pad.minX() - RING, pad.minZ() - RING, pad.maxX() + RING,
-                pad.maxZ() + RING);
-    }
-
-    /**
-     * Whether the trees are felled on those of its ground chunks the area holds. A margin chunk
-     * skipped as taken is nobody's to fell, and waiting on it would be waiting for ever; the flatten
-     * refuses a tree there itself.
-     */
-    public boolean groundFelled(java.util.Set<ChunkKey> area, java.util.Set<ChunkKey> felled) {
-        for (ChunkKey chunk : groundChunks()) {
-            if (area.contains(chunk) && !felled.contains(chunk)) {
-                return false;
-            }
-        }
-        return true;
+    /** The columns its trees are felled from: the pad and {@link #FELL_PAST} round it. */
+    public Footprint fellingArea() {
+        return new Footprint(pad.minX() - FELL_PAST, pad.minZ() - FELL_PAST, pad.maxX() + FELL_PAST,
+                pad.maxZ() + FELL_PAST);
     }
 
     /** The columns its plants are pulled up from: the pad and {@link #PLANTS_PAST} round it. */
