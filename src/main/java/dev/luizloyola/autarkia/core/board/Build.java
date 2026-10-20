@@ -304,11 +304,17 @@ public final class Build implements PartyProject {
                 moved++;
             }
         }
-        if (moved > 0) {
-            shortages.remove(piece.piece);
-            retryAfter.remove(piece.piece);
-        } else {
+        if (moved == 0) {
             fruitless(piece, ctx, now);
+        } else {
+            retryAfter.remove(piece.piece);
+            // A piece stops at its first failed step: blocks run out mid-piece wait like none at all.
+            Map<String, Integer> missing = piece.missing(ctx.percepts().inventory());
+            if (missing.isEmpty()) {
+                shortages.remove(piece.piece);
+            } else {
+                shortOf(piece, missing, ctx, now);
+            }
         }
         refresh();
         if (finished()) {
@@ -325,8 +331,7 @@ public final class Build implements PartyProject {
     private void fruitless(PieceItem piece, BrainContext ctx, long now) {
         Map<String, Integer> missing = piece.missing(ctx.percepts().inventory());
         if (!missing.isEmpty()) {
-            shortages.put(piece.piece, new Shortage(piece.piece, missing, now + MATERIAL_WAIT));
-            ctx.journal().record(Category.PROJECT, describe(), "short of " + words(missing));
+            shortOf(piece, missing, ctx, now);
             return;
         }
         int first = piece.steps.stream().filter(i -> !done[i]).findFirst().orElse(piece.steps.get(0));
@@ -342,6 +347,11 @@ public final class Build implements PartyProject {
             return;
         }
         retryAfter.put(piece.piece, now + FellTrees.cooldownAfter(failures[first]));
+    }
+
+    private void shortOf(PieceItem piece, Map<String, Integer> missing, BrainContext ctx, long now) {
+        shortages.put(piece.piece, new Shortage(piece.piece, missing, now + MATERIAL_WAIT));
+        ctx.journal().record(Category.PROJECT, describe(), "short of " + words(missing));
     }
 
     private static String words(Map<String, Integer> counts) {
@@ -424,9 +434,16 @@ public final class Build implements PartyProject {
             return uses;
         }
 
+        /** What the steps still to place take that the pack lacks. */
         Map<String, Integer> missing(Inventory pack) {
+            Map<String, Integer> left = new LinkedHashMap<>();
+            for (int i : steps) {
+                if (!done[i]) {
+                    left.merge(order.get(i).placing().itemId(), order.get(i).count(), Integer::sum);
+                }
+            }
             Map<String, Integer> missing = new LinkedHashMap<>();
-            bill().forEach((id, count) -> {
+            left.forEach((id, count) -> {
                 int held = pack.count(id);
                 if (held < count) {
                     missing.put(id, count - held);

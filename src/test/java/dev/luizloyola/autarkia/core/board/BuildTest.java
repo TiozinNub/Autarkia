@@ -170,6 +170,21 @@ class BuildTest {
     }
 
     @Test
+    void aPieceThatRanOutPartWayIsPostedFromWhereItStoppedAndSaysWhatItIsShortOf() {
+        List<Laying> order = house(3, 0);
+        Build build = build(order);
+        FakeContext ctx = new FakeContext();
+        stand(ctx, order.get(0));
+        build.failed(only(build), ctx);
+
+        assertEquals("build 2 of autarkia:test_house's floor from (1, 64, 0)", only(build).describe());
+        assertTrue(ctx.journalService.recent(ctx.journal().id(), Integer.MAX_VALUE).stream()
+                .anyMatch(e -> e.detail().equals("short of 2 " + PLANKS)), "one block standing still says why");
+        assertTrue(build.describe().contains("short of 2 " + PLANKS), build.describe());
+        assertFalse(build.offerableTo(only(build), AgentId.random(), ctx), "and it waits for planks");
+    }
+
+    @Test
     void aStepThatWillNotGoInIsHandedBackAndTheRestGoOn() {
         List<Laying> order = house(2, 0);
         Build build = build(order);

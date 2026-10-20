@@ -7,15 +7,16 @@ import dev.luizloyola.anima.core.brain.task.CompoundTask;
 import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.PlaceFrom;
 import dev.luizloyola.anima.core.brain.task.Task;
-import dev.luizloyola.anima.core.brain.task.Try;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Place a run of a building's steps in order, each from a stand that reaches it. A step already
- * standing is passed over; one that cannot be placed is left for the project to see, and the rest
- * go on.
+ * standing is passed over; the first that cannot be placed fails the piece. A step may be placed
+ * against one before it in its piece ({@link BuildOrder}), so the rest are left for the next trip
+ * rather than tried against a gap: 22 tried past one refusal each raised a pillar for nothing
+ * (2026-10-20).
  */
 public final class LayPiece implements CompoundTask {
 
@@ -63,7 +64,7 @@ public final class LayPiece implements CompoundTask {
             List<Task> tasks = new ArrayList<>();
             for (Laying step : steps) {
                 if (!standing(probe, step)) {
-                    tasks.add(new Try(new PlaceFrom(step.placing(), step.also(), step.stand(), true, Stock.BRIDGING)));
+                    tasks.add(new PlaceFrom(step.placing(), step.also(), step.stand(), true, Stock.BRIDGING));
                 }
             }
             return tasks;
