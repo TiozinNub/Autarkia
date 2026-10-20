@@ -27,6 +27,13 @@ public final class PersonSpecies {
             .set(ProfileAspect.FLEE_APPROACH_BONUS, 1.3)
             // A look back of 8 ticks: four to whip round at a startle's 48° a tick, four to see.
             .set(ProfileAspect.FLEE_LOOK_TICKS, 8)
+            // A flight ending a block nearer home is worth more fright than a zombie 22 blocks off
+            // gives (0.002), so a tie goes home; a creeper by the way still turns it (2026-10-20).
+            .set(ProfileAspect.FLEE_HOME_PULL, 0.003)
+            // Above mind.preempt at night, so it stops work to get under cover; through dusk it
+            // passes work's 0.5 about two thirds of the way (Luiz, 2026-10-20).
+            .set(ProfileAspect.NIGHT_SHELTER_PRESSURE, 0.7)
+            .set(ProfileAspect.NIGHT_DIG_IN, true)
             // Takes a fight it would last one and a half times as long as, keeps it down to even,
             // and fights at half that when nothing can be outrun (combat spec, 2026-09-27).
             .set(ProfileAspect.FIGHT_START_RATIO, 1.5)
