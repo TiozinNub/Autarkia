@@ -1,6 +1,6 @@
 bp 1
 
-name        Dirt Hut
+name        First-Night Hut
 author      TiozinNub
 version     1
 orientation all
@@ -10,7 +10,7 @@ materials
   2 option overworld_wood
 
 palette
-  1 option dirt|cobblestone   // dirt, unless the party already holds cobblestone for all of it
+  1 option $2 planks|dirt|cobblestone   // whichever the party can get now: planks in the Wood Age
 
 legend
   # $1

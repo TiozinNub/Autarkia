@@ -2,10 +2,13 @@ package dev.luizloyola.autarkia.mod.builder;
 
 import dev.luizloyola.anima.compat.nav.LevelGrid;
 import dev.luizloyola.anima.compat.terrain.GroundReader;
+import dev.luizloyola.anima.core.agent.AgentId;
+import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.knowledge.PoiKind;
 import dev.luizloyola.anima.core.brain.sense.DangerField;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.sense.SetbackField;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.nav.MoveCapabilities;
 import dev.luizloyola.anima.core.nav.Path;
 import dev.luizloyola.anima.core.nav.Pathfinder;
@@ -19,14 +22,17 @@ import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.core.territory.Claimed;
 import dev.luizloyola.anima.core.territory.Reason;
 import dev.luizloyola.anima.mod.nav.PathfinderService;
+import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.anima.mod.territory.Territories;
 import dev.luizloyola.autarkia.compat.bp.Placer;
+import dev.luizloyola.autarkia.core.board.Board;
 import dev.luizloyola.autarkia.core.board.SetUp;
 import dev.luizloyola.autarkia.core.bp.Blueprint;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Chooser;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
+import dev.luizloyola.autarkia.core.bp.Dictionary;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Planner;
 import dev.luizloyola.autarkia.core.bp.Stock;
@@ -34,14 +40,17 @@ import dev.luizloyola.autarkia.core.builder.HouseSite;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.core.config.AutarkiaConfig;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
+import dev.luizloyola.autarkia.mod.entity.Person;
+import dev.luizloyola.autarkia.mod.entity.Persons;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -129,13 +138,39 @@ public final class HouseSites {
     /**
      * A plan of {@code bp} with these variants and no pinned materials, each slot bound to what
      * {@code stock} has most of, or null with why in {@code out}. A random binding waited on dark
-     * oak in a jungle for good (2026-10-01).
+     * oak in a jungle for good (2026-10-01). A {@link Structure#QUICK quick} building is bound only
+     * to what {@code canGet} says the party can get now ({@link Chooser#gettable}).
      */
-    public static @Nullable BuildPlan plan(Blueprint bp, Map<String, String> variants, Stock stock, Diagnostics out) {
+    public static @Nullable BuildPlan plan(Blueprint bp, Map<String, String> variants, Stock stock,
+                                           Predicate<Set<String>> canGet, Diagnostics out) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        Chooser chooser = Structure.QUICK.contains(bp.id()) ? Chooser.heldElseFirst(stock, Chooser.random(random))
+        Chooser chooser = Structure.QUICK.contains(bp.id()) ? Chooser.gettable(stock, canGet, Chooser.random(random))
                 : Chooser.stocked(stock, Chooser.random(random));
         return Planner.plan(bp, Blueprints.dictionary(), Placer.SUPPORT, Map.of(), variants, chooser, random, out);
+    }
+
+    /**
+     * Whether a member of the party could get every one of these blocks' items now, by the board's
+     * own test ({@link Board#coverable}), asked as the first loaded member. With none loaded, yes:
+     * the binding falls to the blueprint's order, the way any party can get first.
+     */
+    public static Predicate<Set<String>> gettable(MinecraftServer server, PartyId party) {
+        BrainContext ctx = null;
+        for (AgentId member : PartyData.get(server).members(party)) {
+            Person body = Persons.findLoaded(server, member);
+            if (body != null) {
+                ctx = body.brain().context();
+                break;
+            }
+        }
+        if (ctx == null) {
+            return blocks -> true;
+        }
+        BrainContext asker = ctx;
+        Dictionary dict = Blueprints.dictionary();
+        return blocks -> blocks.stream().allMatch(block -> dict.block(block).map(Dictionary.BlockInfo::item)
+                .filter(item -> !item.isEmpty())
+                .map(item -> Board.coverable(ItemSpec.anyOf(Set.of(item)), asker)).orElse(false));
     }
 
     public static Inputs inputs(ServerLevel level, PartyId party) {

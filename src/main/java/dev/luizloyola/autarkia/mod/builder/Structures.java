@@ -157,7 +157,8 @@ public final class Structures {
         NEXT_TRY.put(ask, now + RETRY_TICKS);
         Blueprint bp = Blueprints.find(ask.blueprint()).map(entry -> entry.compiled().blueprint()).orElse(null);
         Diagnostics out = new Diagnostics();
-        BuildPlan plan = bp == null ? null : HouseSites.plan(bp, ask.variants(), PartyStock.of(server, party), out);
+        BuildPlan plan = bp == null ? null : HouseSites.plan(bp, ask.variants(), PartyStock.of(server, party),
+                HouseSites.gettable(server, party), out);
         if (plan == null) {
             journal(server, party, "cannot plan " + ask.blueprint() + ": " + out.list());
             return;

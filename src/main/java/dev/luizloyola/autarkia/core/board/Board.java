@@ -11,6 +11,7 @@ import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.Producers;
 import dev.luizloyola.anima.core.continuity.Ephemeral;
 import dev.luizloyola.anima.core.inv.ItemCall;
+import dev.luizloyola.anima.core.inv.ItemSpec;
 import dev.luizloyola.anima.core.log.Category;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -265,15 +266,22 @@ public class Board {
     private static List<ItemCall> uncoverable(List<ItemCall> missing, BrainContext ctx) {
         List<ItemCall> unreachable = new ArrayList<>();
         for (ItemCall need : missing) {
-            if (!ctx.gate().maySeek(need.spec())) {
-                unreachable.add(need);
-            } else if (!Producers.knows(need.spec())
-                    && !dev.luizloyola.anima.core.brain.task.CraftFor.anyReachable(need.spec(), ctx)
-                    && !dev.luizloyola.anima.core.brain.task.TakeFromStore.seenHolding(ctx, need.spec())) {
+            if (!coverable(need.spec(), ctx)) {
                 unreachable.add(need);
             }
         }
         return unreachable;
+    }
+
+    /**
+     * Whether this body could get {@code spec} at all, the board's own test: what the gate lets it
+     * seek, with a producer, a reachable recipe or a store seen holding it. A building bound to a
+     * way the party can get asks it too.
+     */
+    public static boolean coverable(ItemSpec spec, BrainContext ctx) {
+        return ctx.gate().maySeek(spec) && (Producers.knows(spec)
+                || dev.luizloyola.anima.core.brain.task.CraftFor.anyReachable(spec, ctx)
+                || dev.luizloyola.anima.core.brain.task.TakeFromStore.seenHolding(ctx, spec));
     }
 
     /**

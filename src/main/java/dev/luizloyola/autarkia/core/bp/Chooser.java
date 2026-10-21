@@ -59,20 +59,32 @@ public interface Chooser {
     }
 
     /**
-     * For a building that goes up at once: a way the party already holds enough of for every cell
-     * that reads it; else the one it has seen most of growing, a wood; else the first, which such a
-     * blueprint lists as the way any party can get now. Rolled, or bound to what was held but too
-     * little, the first nights' hut went to cobblestone a Wood Age party may not seek, and never
-     * stood (2026-10-20). Ties, and a variant selection, are {@code otherwise}'s.
+     * For a building that goes up at once, never a way the party cannot get now: one it already
+     * holds enough of for every cell that reads it; else, of those {@code canGet} its blocks, the
+     * one it has seen most of growing (a wood), else the first; else the blueprint's first. Rolled,
+     * the first nights' hut went to cobblestone a Wood Age party may not seek, and bound to dirt it
+     * waited on dirt nobody could dig from flat ground; it never stood (2026-10-20). Ties, and a
+     * variant selection, are {@code otherwise}'s.
+     *
+     * @param canGet whether a body of the party could get every one of these blocks' items now
      */
-    static Chooser heldElseFirst(Stock stock, Chooser otherwise) {
+    static Chooser gettable(Stock stock, java.util.function.Predicate<java.util.Set<String>> canGet,
+                            Chooser otherwise) {
         return (what, choices) -> {
             if (what.equals(VARIANTS)) {
                 return otherwise.choose(what, choices);
             }
             List<Integer> best = stock.enough(choices);
             if (best.isEmpty()) {
-                best = stock.mostGrowing(choices);
+                List<Integer> open = new java.util.ArrayList<>();
+                for (int i = 0; i < choices.size(); i++) {
+                    if (canGet.test(choices.get(i).blocks())) {
+                        open.add(i);
+                    }
+                }
+                List<Integer> growing = stock.mostGrowing(open.stream().map(choices::get).toList());
+                best = growing.isEmpty() ? open.stream().limit(1).toList()
+                        : growing.stream().map(open::get).toList();
             }
             if (best.isEmpty()) {
                 return 0;

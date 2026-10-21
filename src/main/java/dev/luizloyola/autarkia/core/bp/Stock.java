@@ -17,17 +17,21 @@ import java.util.Set;
  */
 public final class Stock {
 
-    public static final Stock NONE = new Stock(Map.of(), Map.of(), Map.of());
+    public static final Stock NONE = new Stock(Map.of(), Map.of(), Map.of(), Map.of());
 
     /** A block or item to the leaf material it is a form of. */
     private final Map<String, String> materialOf;
     private final Map<String, Integer> held;
     private final Map<String, Integer> growing;
+    /** What is held by item, for a block that is no material's form: dirt. */
+    private final Map<String, Integer> heldItems;
 
-    private Stock(Map<String, String> materialOf, Map<String, Integer> held, Map<String, Integer> growing) {
+    private Stock(Map<String, String> materialOf, Map<String, Integer> held, Map<String, Integer> growing,
+                  Map<String, Integer> heldItems) {
         this.materialOf = materialOf;
         this.held = held;
         this.growing = growing;
+        this.heldItems = heldItems;
     }
 
     /**
@@ -43,7 +47,8 @@ public final class Stock {
                         .ifPresent(item -> materialOf.putIfAbsent(item, material.id()));
             }
         }
-        return new Stock(materialOf, tally(materialOf, heldItems), tally(materialOf, growingItems));
+        return new Stock(materialOf, tally(materialOf, heldItems), tally(materialOf, growingItems),
+                Map.copyOf(heldItems));
     }
 
     private static Map<String, Integer> tally(Map<String, String> materialOf, Map<String, Integer> items) {
@@ -98,13 +103,21 @@ public final class Stock {
         return !enough.isEmpty() ? enough : known;
     }
 
-    /** The choices the party holds enough of for the cells that read them, as indices, in order. */
+    /**
+     * The choices the party holds enough of for the cells that read them, as indices, in order. A
+     * block that is no material's form is counted as its own item.
+     */
     public List<Integer> enough(List<Choice> choices) {
         List<Integer> out = new ArrayList<>();
         for (int i = 0; i < choices.size(); i++) {
             int has = 0;
             for (String material : materials(choices.get(i).blocks())) {
                 has += held(material);
+            }
+            for (String block : choices.get(i).blocks()) {
+                if (!materialOf.containsKey(block)) {
+                    has += heldItems.getOrDefault(block, 0);
+                }
             }
             if (has > 0 && has >= choices.get(i).need()) {
                 out.add(i);
