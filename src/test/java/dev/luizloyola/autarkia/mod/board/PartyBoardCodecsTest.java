@@ -645,4 +645,11 @@ class PartyBoardCodecsTest {
                 List.of(dev.luizloyola.anima.core.agent.AgentId.random()), 0.5);
         assertEquals(come, roundTrip(new PartyBoard.Row(come, List.of())).project());
     }
+
+    @Test
+    void aFetchStillToMakeReadsBackAsItWasWritten() {
+        var fetch = new dev.luizloyola.autarkia.core.board.FetchStation.State(new dev.luizloyola.anima.core.brain.sense.Pos(300, 64, 300),
+                List.of(dev.luizloyola.anima.core.agent.AgentId.random()), 0.45, false);
+        assertEquals(fetch, roundTrip(new PartyBoard.Row(fetch, List.of())).project());
+    }
 }

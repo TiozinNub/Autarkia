@@ -186,6 +186,18 @@ public final class AutarkiaTasks {
                         Codec.INT.fieldOf("count").forGetter(dev.luizloyola.autarkia.core.board.CookErrand::count)
                 ).apply(t, dev.luizloyola.autarkia.core.board.CookErrand::new)));
 
+        // The pack as it stood when the fetch set out rides with the carry, or a restart after the take
+        // would bring home the body's own kit as if it had come out of the chest.
+        TaskCodecs.register("autarkia:fetch_errand", dev.luizloyola.autarkia.core.board.FetchErrand.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.FetchErrand::at)
+                ).apply(t, dev.luizloyola.autarkia.core.board.FetchErrand::new)));
+        TaskCodecs.register("autarkia:bring_gained", dev.luizloyola.autarkia.core.board.FetchErrand.BringGained.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        Codec.unboundedMap(Codec.STRING, Codec.INT).fieldOf("before")
+                                .forGetter(dev.luizloyola.autarkia.core.board.FetchErrand.BringGained::before)
+                ).apply(t, dev.luizloyola.autarkia.core.board.FetchErrand.BringGained::new)));
+
         TaskCodecs.register("autarkia:bring_back", BringBack.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),

@@ -9,8 +9,11 @@ import dev.luizloyola.anima.core.social.GroupUps;
 import dev.luizloyola.anima.core.social.Ledger;
 import dev.luizloyola.anima.core.social.Ledgers;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.core.social.PlaceRow;
+import dev.luizloyola.anima.core.social.Places;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.store.Depot;
+import dev.luizloyola.anima.core.store.Store;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.body.AgentBodies;
 import dev.luizloyola.anima.mod.body.AgentBody;
@@ -18,7 +21,9 @@ import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.anima.mod.social.EncounterData;
 import dev.luizloyola.anima.mod.social.LedgerData;
 import dev.luizloyola.anima.mod.social.PartyData;
+import dev.luizloyola.anima.mod.social.PlacesData;
 import dev.luizloyola.autarkia.core.board.ComeHome;
+import dev.luizloyola.autarkia.core.board.FetchStation;
 import dev.luizloyola.autarkia.core.person.Joining.Mover;
 import dev.luizloyola.autarkia.core.person.Joining.Side;
 import dev.luizloyola.autarkia.core.person.Joining;
@@ -49,6 +54,9 @@ public final class PersonGroupUp implements GroupUp {
     /** Over the HOME search's 0.40 and the seek's 0.45: the first thing a newcomer takes. A starting value. */
     static final double COME_HOME_PRIORITY = 0.5;
 
+    /** Under the walk home: a newcomer goes home first and back for its things after. A starting value. */
+    static final double FETCH_PRIORITY = 0.45;
+
     /** Which refusal names the line that counts most against. */
     private static final Map<String, String> TOPICS = Map.of(
             LedgerData.NEWCOMER, "newcomers",
@@ -70,6 +78,7 @@ public final class PersonGroupUp implements GroupUp {
             live = server;
             PartyLines.install(server);
             PartyData.get(server).onArrival((into, who) -> comeHome(server, into, who));
+            PartyData.get(server).onMerge(merged -> farStations(server, merged));
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         GroupUps.install(new PersonGroupUp());
@@ -157,6 +166,29 @@ public final class PersonGroupUp implements GroupUp {
         if (!walking.isEmpty()) {
             PartyBoards.of(server, into).post(new ComeHome(site.get().hint(), walking, COME_HOME_PRIORITY));
             PartyBoards.touch(server);
+        }
+    }
+
+    /**
+     * What a joining party had claimed outside its new home's area (decision 21): a store is fetched
+     * home by one of the newcomers and then let go; anything else is let go now.
+     */
+    private static void farStations(MinecraftServer server, PartyData.Merged merged) {
+        Optional<Depot.Site> site = merged.members().stream().map(Depot::of).flatMap(Optional::stream).findFirst();
+        if (site.isEmpty()) {
+            return; // two homeless parties: nowhere is far from a home neither has
+        }
+        Places places = PlacesData.get(server).places();
+        for (PlaceRow row : merged.places()) {
+            if (site.get().holds(row.at())) {
+                continue;
+            }
+            if (row.kind().equals(Store.POI)) {
+                PartyBoards.of(server, merged.into()).post(new FetchStation(row.at(), merged.members(), FETCH_PRIORITY));
+                PartyBoards.touch(server);
+            } else {
+                places.drop(row.kind(), row.at());
+            }
         }
     }
 

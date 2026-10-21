@@ -350,4 +350,15 @@ class AutarkiaTaskCodecsTest {
                 AutarkiaTasks.PERSONAL_BOARD.parse(JsonOps.INSTANCE, json).getOrThrow(),
                 "a body saved before either starts from none");
     }
+
+    @Test
+    void aFetchKeepsWhereItGoesAndThePackItSetOutWith() {
+        var errand = assertInstanceOf(dev.luizloyola.autarkia.core.board.FetchErrand.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.FetchErrand(new Pos(300, 64, 300))));
+        assertEquals(new Pos(300, 64, 300), errand.at());
+        var carry = assertInstanceOf(dev.luizloyola.autarkia.core.board.FetchErrand.BringGained.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.FetchErrand.BringGained(java.util.Map.of("minecraft:bread", 2))));
+        assertEquals(java.util.Map.of("minecraft:bread", 2), carry.before(),
+                "or a restart after the take would carry the body's own kit home");
+    }
 }

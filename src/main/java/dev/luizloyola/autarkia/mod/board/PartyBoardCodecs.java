@@ -511,6 +511,17 @@ public final class PartyBoardCodecs {
             ).apply(project, (home, newcomers, priority) -> new dev.luizloyola.autarkia.core.board.ComeHome.State(
                     home, newcomers.stream().map(AgentId::of).toList(), priority)));
 
+    /** Everything a {@code fetch_station} row carries: the store, who may fetch from it, and whether done. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.FetchStation.State> FETCH_STATION =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    POS.fieldOf("at").forGetter(dev.luizloyola.autarkia.core.board.FetchStation.State::at),
+                    UUIDUtil.CODEC.listOf().fieldOf("newcomers")
+                            .forGetter(state -> state.newcomers().stream().map(AgentId::value).toList()),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.FetchStation.State::priority),
+                    Codec.BOOL.optionalFieldOf("done", false).forGetter(dev.luizloyola.autarkia.core.board.FetchStation.State::done)
+            ).apply(project, (at, newcomers, priority, done) -> new dev.luizloyola.autarkia.core.board.FetchStation.State(
+                    at, newcomers.stream().map(AgentId::of).toList(), priority, done)));
+
     /** Everything a {@code site_building} row carries: what to site, and whether it was. */
     public static final MapCodec<dev.luizloyola.autarkia.core.board.SiteBuilding.State> SITE_BUILDING =
             RecordCodecBuilder.mapCodec(project -> project.group(
@@ -714,6 +725,7 @@ public final class PartyBoardCodecs {
             case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
             case "site_building" -> DataResult.success(SITE_BUILDING);
             case "come_home" -> DataResult.success(COME_HOME);
+            case "fetch_station" -> DataResult.success(FETCH_STATION);
             case "grow_building" -> DataResult.success(GROW_BUILDING);
             case "build" -> DataResult.success(BUILD);
             case "deconstruct" -> DataResult.success(DECONSTRUCT);

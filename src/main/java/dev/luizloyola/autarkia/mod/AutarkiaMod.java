@@ -242,6 +242,8 @@ public class AutarkiaMod implements ModInitializer {
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.ComeHome.TYPE);
         dev.luizloyola.autarkia.core.board.PartyProjects.register(
+                dev.luizloyola.autarkia.core.board.FetchStation.TYPE);
+        dev.luizloyola.autarkia.core.board.PartyProjects.register(
                 dev.luizloyola.autarkia.core.board.GrowBuilding.TYPE);
         // The line a party with no HOME works on: a search for one, which reads the world through
         // the mod's looks.
