@@ -185,15 +185,19 @@ class EvolutionTest {
     }
 
     @Test
-    void workWithNoStoreToHaulToIsWithdrawn() {
+    void workWithNoStoreToHaulToIsWithdrawnButTheWoodTheBaseIsMadeOf() {
+        // Withdrawn too, the base's chest short of planks went three days with nothing fetching
+        // its logs (2026-10-21).
         beat();
         view.base = false;
         Evolution.Outcome outcome = beat();
-        assertEquals(2, outcome.withdrawn().size(), "the gather and the clearing would carry to nowhere");
-        assertTrue(board.projects().stream().noneMatch(p -> p instanceof Gather));
+        assertEquals(1, outcome.withdrawn().size(), "the clearing would carry to nowhere");
+        assertInstanceOf(FellTrees.class, outcome.withdrawn().get(0).project());
+        assertTrue(board.projects().stream().anyMatch(p -> p instanceof Gather),
+                "the logs come home in the pack for the base's own set-up");
 
         view.base = true;
-        assertEquals(2, beat().posted().size(), "posted again once the base stands");
+        assertEquals(1, beat().posted().size(), "the clearing posted again once the base stands");
     }
 
     @Test

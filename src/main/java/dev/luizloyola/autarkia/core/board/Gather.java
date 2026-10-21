@@ -319,9 +319,17 @@ public final class Gather implements PartyProject {
         return size <= 0 ? offer : new TripItem(size);
     }
 
-    /** This project's own sizing question — one call, the split's whole answer. */
+    /**
+     * This project's own sizing question — the split's answer, and with no store at HOME no more
+     * than {@link CarrySplit#MIN_TRIP} in the pack: the load waits there for the base's set-up, and
+     * no chest would ever count it, so trip after trip would each find it already held.
+     */
     private int tripFor(BrainContext ctx) {
-        return split.tripFor(remainder(), spec, ctx);
+        int size = split.tripFor(remainder(), spec, ctx);
+        if (BringBack.noStoreAtHome(ctx)) {
+            size = Math.min(size, CarrySplit.MIN_TRIP - ctx.percepts().inventory().count(spec.matcher()));
+        }
+        return Math.max(0, size);
     }
 
     /** Whether this member's last trip of this project failed too recently to try again. */

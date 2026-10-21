@@ -4,6 +4,7 @@ import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.board.PartyProject;
 import dev.luizloyola.autarkia.core.board.Project;
 import dev.luizloyola.autarkia.core.board.SetUp;
+import dev.luizloyola.autarkia.core.board.Stock;
 import dev.luizloyola.anima.core.inv.ItemSpec;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -98,7 +99,10 @@ public final class Evolution {
                     // No base: what is posted would carry to stores that are not there. A line's own
                     // waits (a house going up) keep their work, as does work another line still wants:
                     // the base's set-up is the storage line's too. HOME cleared is Directions.unsettle's.
-                    if (status.equals(Status.NO_BASE)
+                    // The wood the base is built of is kept: with no store a trip brings it home in
+                    // the pack for the base's set-up. Withdrawn, nothing fetched the chest's planks
+                    // for three days (2026-10-21). Still nothing is posted before the base stands.
+                    if (status.equals(Status.NO_BASE) && !buildsTheBase(line.get())
                             && work.filter(w -> !wantedElsewhere(w, direction, inForce, view)).isPresent()) {
                         withdraw(board, direction, work, withdrawn);
                     }
@@ -112,6 +116,11 @@ public final class Evolution {
         reached.forEach(progress::reach);
         ahead(tree, progress.reached(), view).ifPresent(more -> board.foresee(more, view.members()));
         return new Outcome(posted, withdrawn, completed, reached, stalls);
+    }
+
+    /** A line gathering what the base's stations are made of: logs, for a table and a chest. */
+    private static boolean buildsTheBase(DirectionLine line) {
+        return line.seeks().filter(Stock.LOGS::equals).isPresent();
     }
 
     private static boolean wantedElsewhere(Project work, Direction waiting, List<Direction> inForce,

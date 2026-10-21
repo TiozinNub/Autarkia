@@ -712,6 +712,19 @@ class GatherTest {
     }
 
     @Test
+    void withNoStoreAtHomeOneSmallLoadWaitsInThePack() {
+        Gather project = posted(64);
+        BoardBrainContext ctx = member();
+        WorkItem slice = project.open().get(0);
+        assertEquals(CarrySplit.MIN_TRIP, tripSize(project.realise(slice, KYLE, ctx)), "the base needs three logs");
+
+        ctx.inventory().set(0, ItemStack.of("minecraft:oak_log", CarrySplit.MIN_TRIP, 64));
+        assertFalse(project.offerableTo(slice, KYLE, ctx), "held already: no trip that finds it so");
+        saw(ctx, CHEST, 0, ctx.now());
+        assertTrue(project.offerableTo(slice, KYLE, ctx), "a store stands: the trips go on");
+    }
+
+    @Test
     void withNoStoreAtHomeTheLoadComesHomeInThePackAndTheTripIsDone() {
         // A far fetch made the chest from its own four logs, had nothing left to put, and the trip
         // failed (2026-10-21).
