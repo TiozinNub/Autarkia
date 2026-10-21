@@ -160,4 +160,17 @@ class LayPieceTest {
         assertEquals(wanted, placed, "every stair of the row stands after one trip");
         assertTrue(ctx.placer.attempts.size() > steps.size(), "some went in only on the way back");
     }
+
+    @Test
+    void aTripThatPlacedNothingFailsAndSaysSo() {
+        FakeContext ctx = new FakeContext();
+        ctx.percepts.position = new Pos(0, 64, 30);
+        ctx.percepts.inventory.add(ItemStack.of(PLANKS, 2, 64));
+        ctx.placer.refuse = true;
+        TaskExecutor executor = new TaskExecutor();
+        fly(new LayPiece(List.of(step(0), step(10))), ctx, executor);
+
+        assertEquals(Optional.of(TaskStatus.FAILED), executor.lastStatus(), "passing over every step is no success");
+        assertEquals(Optional.of("none of the 2 would go in"), executor.failureReason());
+    }
 }

@@ -327,6 +327,17 @@ class AutarkiaTaskCodecsTest {
     }
 
     @Test
+    void aPiecesCheckComesBackWithTheStepsItWaitsOn() {
+        var step = new dev.luizloyola.autarkia.core.builder.Laying(dev.luizloyola.autarkia.core.builder.Section.CEILING,
+                new dev.luizloyola.anima.core.brain.act.Placing("minecraft:birch_planks", new Pos(1, 70, 2),
+                        "minecraft:birch_planks", java.util.Map.of()),
+                java.util.List.of(), new Pos(1, 68, 4), 1).in(3, 7);
+        var back = assertInstanceOf(dev.luizloyola.autarkia.core.builder.LayPiece.WentIn.class,
+                roundTrip(new dev.luizloyola.autarkia.core.builder.LayPiece.WentIn(java.util.List.of(step))));
+        assertEquals(java.util.List.of(step), back.steps());
+    }
+
+    @Test
     void aPersonalBoardWritesDownItsBudgetAndBackOff() {
         var saved = java.util.List.of(new dev.luizloyola.autarkia.core.board.KeepStocked.State(1200, 37, 4, false, false, 2, 3));
         var json = AutarkiaTasks.PERSONAL_BOARD.encodeStart(JsonOps.INSTANCE, saved).getOrThrow();
