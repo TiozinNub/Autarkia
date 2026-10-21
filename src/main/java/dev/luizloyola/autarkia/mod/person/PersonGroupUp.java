@@ -34,10 +34,11 @@ import org.jspecify.annotations.Nullable;
 public final class PersonGroupUp implements GroupUp {
 
     /**
-     * How hard a homeless settler willing to join goes looking for a party: under answering a call
-     * (0.55) and a lonely body's company (0.5), so it never talks over either. A starting value.
+     * How hard a homeless settler willing to join goes looking for a party: over its own HOME search
+     * (0.40), which walked a loner away from a settled pair in sight (flight, 2026-10-21); under
+     * answering a call (0.55). It only ever targets somebody already perceived. A starting value.
      */
-    static final double SEEKING = 0.3;
+    static final double SEEKING = 0.45;
 
     /** Which refusal names the line that counts most against. */
     private static final Map<String, String> TOPICS = Map.of(
