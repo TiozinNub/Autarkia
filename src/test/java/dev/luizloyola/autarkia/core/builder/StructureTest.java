@@ -89,7 +89,8 @@ class StructureTest {
     void noPocketIsDugOnAPadPlannedOrStandingAndARefusedOneIsNobodys() {
         assertTrue(Structure.onAPad(List.of(house(Structure.Phase.SITED)), 5, 6), "planned");
         assertTrue(Structure.onAPad(List.of(house(Structure.Phase.BUILT)), 0, 12), "standing, its pad's edge");
-        assertFalse(Structure.onAPad(List.of(house(Structure.Phase.BUILT)), 12, 6), "off it");
+        assertTrue(Structure.onAPad(List.of(house(Structure.Phase.BUILT)), 19, 6), "the ground eased round it");
+        assertFalse(Structure.onAPad(List.of(house(Structure.Phase.BUILT)), 20, 6), "off it");
         assertFalse(Structure.onAPad(List.of(house(Structure.Phase.REFUSED)), 5, 6));
     }
 }

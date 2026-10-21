@@ -136,12 +136,13 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
 
     /** Whether a door is a house's, shut after passing: within the walls of one that stands. */
     /**
-     * Whether a column is on the pad of one of these buildings, planned or standing — ground no body
-     * digs in for the night: a pocket dug in a half-built house cut its floor (2026-10-20).
+     * Whether a column is on the ground of one of these buildings, planned or standing: its pad and
+     * the {@link #FELL_PAST} round it the flatten eases. No body digs in for the night there: a
+     * pocket dug in a half-built house cut its floor (2026-10-20).
      */
     public static boolean onAPad(java.util.Collection<Structure> structures, int x, int z) {
         for (Structure structure : structures) {
-            Footprint pad = structure.pad();
+            Footprint pad = structure.fellingArea();
             if (structure.phase() != Phase.REFUSED && x >= pad.minX() && x <= pad.maxX() && z >= pad.minZ()
                     && z <= pad.maxZ()) {
                 return true;
