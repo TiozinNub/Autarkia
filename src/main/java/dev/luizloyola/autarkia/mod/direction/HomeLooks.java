@@ -17,6 +17,7 @@ import dev.luizloyola.autarkia.core.direction.HomeJudge.Want;
 import dev.luizloyola.autarkia.core.direction.HomeKnob;
 import dev.luizloyola.autarkia.core.direction.HomeLooking;
 import dev.luizloyola.autarkia.core.direction.HomeSearch;
+import dev.luizloyola.autarkia.core.person.Joining;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -65,7 +66,8 @@ public final class HomeLooks implements HomeLooking {
             return;
         }
         PartyData parties = PartyData.get(server);
-        if (parties.leader(party).isEmpty() && parties.currentPartyOf(scout).filter(party::equals).isPresent()) {
+        if (Joining.scoutLeads(parties.members(party).size(), parties.leader(party).isPresent())
+                && parties.currentPartyOf(scout).filter(party::equals).isPresent()) {
             parties.lead(scout);
         }
     }

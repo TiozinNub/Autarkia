@@ -65,4 +65,11 @@ class JoiningTest {
         // An invitation to someone who must stay is not one either.
         assertFalse(Joining.holds(homeless(false, 1), settled(3), Ask.INVITE));
     }
+
+    @Test
+    void aScoutLeadsOnlyAPartyWithCompanyAndNoLeader() {
+        assertFalse(Joining.scoutLeads(1, false), "a loner searching alone leads nobody");
+        assertTrue(Joining.scoutLeads(2, false));
+        assertFalse(Joining.scoutLeads(2, true), "a player who joined first keeps the lead");
+    }
 }

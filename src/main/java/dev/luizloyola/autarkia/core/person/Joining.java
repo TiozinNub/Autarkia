@@ -30,6 +30,15 @@ public final class Joining {
     private Joining() {
     }
 
+    /**
+     * Whether the scout of a party's HOME search becomes its leader. Only with company: a loner
+     * searching alone leads nobody, so a player who forms a party with one leads it (decision 13;
+     * found in flight 2026-10-21, when every loner had led itself from the first step).
+     */
+    public static boolean scoutLeads(int members, boolean led) {
+        return !led && members >= 2;
+    }
+
     /** Who moves between {@code self} and {@code other}, before anything is said. */
     public static Mover between(Side self, Side other) {
         if (!self.homeless() && !other.homeless()) {
