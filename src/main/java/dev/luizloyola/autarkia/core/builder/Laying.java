@@ -31,6 +31,9 @@ public record Laying(Section section, Placing placing, List<Pos> also, Pos stand
         }
     }
 
+    private static final String DIRT = "minecraft:dirt";
+    private static final String GRASS = "minecraft:grass_block";
+
     public Laying {
         also = List.copyOf(also);
         uses = List.copyOf(uses);
@@ -64,7 +67,9 @@ public record Laying(Section section, Placing placing, List<Pos> also, Pos stand
      */
     public boolean standsAs(String id, Map<String, String> state) {
         if (!block().equals(id)) {
-            return false;
+            // Grass spreads onto a dirt wall in the light: the hut's dirt read as somebody else's
+            // grass, and the step tried to place again into its own block (2026-10-20).
+            return block().equals(DIRT) && id.equals(GRASS);
         }
         for (Map.Entry<String, String> wanted : placing.state().entrySet()) {
             boolean counted = Planner.COUNTS.contains(wanted.getKey())
