@@ -22,6 +22,7 @@ import dev.luizloyola.anima.core.social.speech.Picker;
 import dev.luizloyola.anima.core.social.speech.SpeechAct;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
 import dev.luizloyola.anima.core.social.speech.Utterance;
+import dev.luizloyola.autarkia.core.board.Explore;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,7 +32,7 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The part with the personality — a seventeen-rung ladder, first match wins, every rung gated on the
+ * The part with the personality — an eighteen-rung ladder, first match wins, every rung gated on the
  * act being in {@link Turn#applicable()}: the picker filters, this only wants.
  *
  * <ol>
@@ -60,6 +61,8 @@ import org.jspecify.annotations.Nullable;
  *   <li>Say hello before anything else — unless something past the greetings has already been
  *       said, by either side: a hello after a request reads backwards (decision: Luiz, 2026-10-03).
  *       The engine folds that into {@link Turn#greeted()}.</li>
+ *   <li>Talking to the player who leads its party, with a place found for it: put the place to them,
+ *       once a record (group-up spec, decision 14).</li>
  *   <li>Peckish or worse, with no ready food on it: ask for some, once a record. Right after the
  *       greeting, whatever opened the chat — the hail is the same hail, and the first line after it
  *       is what says what the caller wanted (decision: Luiz, 2026-10-02).</li>
@@ -75,7 +78,7 @@ import org.jspecify.annotations.Nullable;
  *       whole turn cap (2026-09-14).</li>
  *   <li>Still wanting company: small talk, a remark or a question ({@link Topics#volunteer}) —
  *       only ever something not already brought up here, by either side ({@link Topics.Said}).</li>
- *   <li>Rung 15 would speak but has nothing new left to say: say goodbye. Running out of things to
+ *   <li>Rung 16 would speak but has nothing new left to say: say goodbye. Running out of things to
  *       say is how a chat ends, not a reason to say them again (decision: Luiz, 2026-09-23).</li>
  *   <li>Nothing pressing, and nobody has spoken for this body's patience: say goodbye. Leaving
  *       the moment nothing is pressing reads as bolting — two seconds after learning a name, on
@@ -128,6 +131,10 @@ public final class PersonChooser implements Chooser {
 
         if (greets(turn)) {
             return Line.of(SpeechActs.GREETING);
+        }
+
+        if (suggestsHome(ctx, turn)) {
+            return whereThePlaceIs(ctx, turn);
         }
 
         if (asksForFood(ctx, turn)) {
@@ -203,26 +210,29 @@ public final class PersonChooser implements Chooser {
                 new Rung(greets(turn), "10 greet",
                         (turn.greeted() ? "greeted, or past the greetings" : "not greeted yet")
                                 + ", greeting " + offer(turn, SpeechActs.GREETING)),
-                new Rung(asksForFood(ctx, turn), "11 ask for food", foodFacts(ctx, turn)),
-                new Rung(asksTheirName(ctx, turn), "12 ask their name", nameFacts(ctx, turn)
+                new Rung(suggestsHome(ctx, turn), "11 put a found place to the leader",
+                        homeSuggestion(ctx, turn).map(plot -> "found " + plot.x() + ", " + plot.z())
+                                .orElse("nothing to put to them")),
+                new Rung(asksForFood(ctx, turn), "12 ask for food", foodFacts(ctx, turn)),
+                new Rung(asksTheirName(ctx, turn), "13 ask their name", nameFacts(ctx, turn)
                         + (alreadyAsked(turn) ? ", already asked here" : ", not asked here yet")
                         + ", ask_identity " + offer(turn, PersonActs.ASK_IDENTITY)),
-                new Rung(asksToGroupUp(ctx, turn), "13 ask to group up",
+                new Rung(asksToGroupUp(ctx, turn), "14 ask to group up",
                         groupUpAsk(ctx, turn).map(ask -> "would " + (ask == GroupUp.Ask.JOIN ? "ask_join" : "invite"))
                                 .orElse("no ask the rule allows")
                                 + (said(turn, SpeechActs.ASK_JOIN) || said(turn, SpeechActs.INVITE)
                                         ? ", already asked here" : "")),
-                new Rung(repliesToSmallTalk(turn), "14 reply to their small talk",
+                new Rung(repliesToSmallTalk(turn), "15 reply to their small talk",
                         "last said " + Picker.lastSpoken(turn.encounter())
                                 .map(line -> (theirs(turn, line) ? "theirs " : "ours ") + line.act())
                                 .orElse("nothing")
                                 + ", small_talk_reply " + offer(turn, PersonActs.SMALL_TALK_REPLY)),
-                new Rung(makesSmallTalk(ctx, turn), "15 small talk", "company " + number(company)
+                new Rung(makesSmallTalk(ctx, turn), "16 small talk", "company " + number(company)
                         + (company < boundary ? " < " : " ≥ ") + "content " + number(boundary)
                         + ", small_talk " + offer(turn, PersonActs.SMALL_TALK)),
-                new Rung(runsOutOfThingsToSay(ctx, turn), "16 out of things to say",
+                new Rung(runsOutOfThingsToSay(ctx, turn), "17 out of things to say",
                         saidFacts(ctx, turn) + ", end_chat " + offer(turn, SpeechActs.END_CHAT)),
-                new Rung(saysGoodbye(ctx, turn), "17 say goodbye",
+                new Rung(saysGoodbye(ctx, turn), "18 say goodbye",
                         "silent " + silence(ctx, turn) + " of " + patience(ctx) + " ticks, end_chat "
                                 + offer(turn, SpeechActs.END_CHAT)));
 
@@ -304,7 +314,7 @@ public final class PersonChooser implements Chooser {
         return gift.unwanted().isEmpty() ? "all wanted" : gift.why() + " " + gift.unwanted();
     }
 
-    /** Rung 11: greeted, peckish or worse, nothing ready to eat on it, and not yet asked here. */
+    /** Rung 12: greeted, peckish or worse, nothing ready to eat on it, and not yet asked here. */
     private static boolean asksForFood(BrainContext ctx, Turn turn) {
         return turn.greeted() && turn.applicable().contains(SpeechActs.ASK_FOOD)
                 && peckish(ctx) && carried(ctx).isEmpty() && !said(turn, SpeechActs.ASK_FOOD);
@@ -358,7 +368,7 @@ public final class PersonChooser implements Chooser {
     }
 
     /**
-     * Rung 14: the last thing said was a remark of theirs — a question is rung 6's, and a reply is
+     * Rung 15: the last thing said was a remark of theirs — a question is rung 6's, and a reply is
      * never replied to.
      */
     private static boolean repliesToSmallTalk(Turn turn) {
@@ -394,14 +404,14 @@ public final class PersonChooser implements Chooser {
                 && Topics.anythingLeft(ctx, counterpartSeen(ctx, turn), saidHere(turn));
     }
 
-    /** Rung 16: rung 15's reason to speak holds, and everything this body could say has been said. */
+    /** Rung 17: rung 16's reason to speak holds, and everything this body could say has been said. */
     private static boolean runsOutOfThingsToSay(BrainContext ctx, Turn turn) {
         return wouldChat(ctx, turn)
                 && !Topics.anythingLeft(ctx, counterpartSeen(ctx, turn), saidHere(turn))
                 && turn.applicable().contains(SpeechActs.END_CHAT);
     }
 
-    /** Rung 15's reason to speak, before asking whether there is anything new to say. */
+    /** Rung 16's reason to speak, before asking whether there is anything new to say. */
     private static boolean wouldChat(BrainContext ctx, Turn turn) {
         return turn.applicable().contains(PersonActs.SMALL_TALK) && wantsCompany(ctx);
     }
@@ -449,7 +459,7 @@ public final class PersonChooser implements Chooser {
                 + (items.isEmpty() ? "nothing" : items.toString());
     }
 
-    /** What rung 11 tells the readout. */
+    /** What rung 12 tells the readout. */
     private static String foodFacts(BrainContext ctx, Turn turn) {
         return "hunger " + number(ctx.percepts().needs().value(NeedKind.HUNGER))
                 + (peckish(ctx) ? " peckish" : " fed") + ", " + carried(ctx).size()
@@ -464,7 +474,7 @@ public final class PersonChooser implements Chooser {
                 .orElse("nothing outstanding");
     }
 
-    /** What rung 16 tells the readout: how much has been said here, and whether anything is left. */
+    /** What rung 17 tells the readout: how much has been said here, and whether anything is left. */
     private static String saidFacts(BrainContext ctx, Turn turn) {
         Topics.Said said = saidHere(turn);
         return "said " + said.topics().size() + " topic(s) and " + said.deeds().size()
@@ -483,7 +493,7 @@ public final class PersonChooser implements Chooser {
 
     /**
      * The three facts {@link #isUnintroducedCounterpart} and {@link #counterpartAlreadySaidItsName}
-     * read, spelled out — which of them refused rung 12 is the whole question when a settler will
+     * read, spelled out — which of them refused rung 13 is the whole question when a settler will
      * not ask a stranger's name.
      */
     private static String nameFacts(BrainContext ctx, Turn turn) {
@@ -577,7 +587,33 @@ public final class PersonChooser implements Chooser {
         return points[Math.floorMod(Math.round(heading / 45.0), 8)];
     }
 
-    /** Rung 13: names known, greeted, not yet asked here, and the rule allows an ask. */
+    /**
+     * Rung 11: talking to the player who leads this body's party, with a place found for it — put it
+     * to them, once a record, after the greeting (decision 14). They settle it or say keep looking.
+     */
+    private static boolean suggestsHome(BrainContext ctx, Turn turn) {
+        return turn.greeted() && turn.applicable().contains(SpeechActs.SUGGEST_HOME)
+                && !said(turn, SpeechActs.SUGGEST_HOME) && homeSuggestion(ctx, turn).isPresent();
+    }
+
+    private static Optional<Pos> homeSuggestion(BrainContext ctx, Turn turn) {
+        AgentId self = ctx.self();
+        return self == null ? Optional.empty()
+                : turn.counterpart().flatMap(leader -> Explore.suggestionFor(self, leader));
+    }
+
+    /** The place, from where the leader stands, by compass point and blocks. */
+    private static Line whereThePlaceIs(BrainContext ctx, Turn turn) {
+        Pos plot = homeSuggestion(ctx, turn).orElseThrow();
+        Pos from = counterpartSeen(ctx, turn).map(Being::pos).orElse(ctx.percepts().position());
+        int dx = plot.x() - from.x();
+        int dz = plot.z() - from.z();
+        int distance = (int) Math.round(Math.sqrt((double) dx * dx + (double) dz * dz));
+        return new Line(SpeechActs.SUGGEST_HOME, LineSlots.with(Map.of(), List.of(
+                Slot.lang("anima.compass." + compass(dx, dz)), Slot.name(Integer.toString(distance)))));
+    }
+
+    /** Rung 14: names known, greeted, not yet asked here, and the rule allows an ask. */
     private static boolean asksToGroupUp(BrainContext ctx, Turn turn) {
         return turn.greeted() && !said(turn, SpeechActs.ASK_JOIN) && !said(turn, SpeechActs.INVITE)
                 && groupUpAsk(ctx, turn).filter(ask -> turn.applicable().contains(

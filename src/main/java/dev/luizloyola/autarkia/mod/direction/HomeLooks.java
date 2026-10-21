@@ -1,13 +1,21 @@
 package dev.luizloyola.autarkia.mod.direction;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.Pos;
-import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.social.PartyId;
-import dev.luizloyola.anima.mod.social.PartyData;
-import dev.luizloyola.anima.core.territory.Reason;
+import dev.luizloyola.anima.core.social.speech.Encounter;
+import dev.luizloyola.anima.core.social.speech.Handover;
+import dev.luizloyola.anima.core.social.speech.SpeechActs;
+import dev.luizloyola.anima.core.social.speech.Utterance;
 import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
+import dev.luizloyola.anima.core.territory.Reason;
+import dev.luizloyola.anima.mod.body.AgentBodies;
+import dev.luizloyola.anima.mod.body.AgentBody;
+import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.anima.mod.social.PartyData;
+import dev.luizloyola.anima.mod.social.SpeechEffects;
 import dev.luizloyola.autarkia.core.board.Explore;
 import dev.luizloyola.autarkia.core.direction.Home;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate;
@@ -18,6 +26,7 @@ import dev.luizloyola.autarkia.core.direction.HomeKnob;
 import dev.luizloyola.autarkia.core.direction.HomeLooking;
 import dev.luizloyola.autarkia.core.direction.HomeSearch;
 import dev.luizloyola.autarkia.core.person.Joining;
+import dev.luizloyola.autarkia.mod.board.PartyBoards;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -57,6 +66,57 @@ public final class HomeLooks implements HomeLooking {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> live = server);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         Explore.install(new HomeLooks());
+        // The leader's word on a found place (group-up spec, decision 14).
+        SpeechEffects.on(SpeechActs.SETTLE_HERE.key(), (server, e, index) -> answered(server, e, index, true));
+        SpeechEffects.on(SpeechActs.KEEP_LOOKING.key(), (server, e, index) -> answered(server, e, index, false));
+    }
+
+    /** The finder's party's search, told by the leader what to do with the place it was shown. */
+    private static void answered(MinecraftServer server, Encounter e, int index, boolean settle) {
+        Optional<Utterance> asked = Handover.answered(e, index)
+                .filter(u -> u.act().equals(SpeechActs.SUGGEST_HOME.key()));
+        if (asked.isEmpty() || asked.get().author() == null) {
+            return;
+        }
+        AgentId finder = asked.get().author();
+        AgentBody body = AgentBodies.findLoaded(server, finder);
+        explore(server, finder).ifPresent(explore -> {
+            if (!settle) {
+                explore.leaderDeclines();
+            } else if (body != null) {
+                explore.leaderSettles(body.brain().knowledge());
+            }
+            PartyBoards.touch(server);
+        });
+    }
+
+    private static Optional<Explore> explore(MinecraftServer server, AgentId member) {
+        return PartyData.get(server).currentPartyOf(member).flatMap(party -> PartyBoards.of(server, party)
+                .projects().stream().filter(Explore.class::isInstance).map(Explore.class::cast).findFirst());
+    }
+
+    /** A party led by a player waits on that player for HOME; one led by a settler does not. */
+    @Override
+    public Optional<AgentId> waitingLeader(PartyId party) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return Optional.empty();
+        }
+        return PartyData.get(server).leader(party)
+                .filter(leader -> AgentDirectory.of(server).identity(leader).isEmpty());
+    }
+
+    @Override
+    public Optional<Pos> suggestion(AgentId self, AgentId leader) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return Optional.empty();
+        }
+        Optional<PartyId> party = PartyData.get(server).currentPartyOf(self);
+        if (party.isEmpty() || !waitingLeader(party.get()).filter(leader::equals).isPresent()) {
+            return Optional.empty();
+        }
+        return explore(server, self).flatMap(Explore::suggestion);
     }
 
     @Override

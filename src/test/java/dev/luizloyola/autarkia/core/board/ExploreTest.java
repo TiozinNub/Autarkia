@@ -14,6 +14,7 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.Follow;
 import dev.luizloyola.anima.core.brain.task.GoTo;
+import dev.luizloyola.anima.core.brain.task.SeekCompany;
 import dev.luizloyola.anima.core.brain.task.LookRound;
 import dev.luizloyola.anima.core.brain.task.WaitForCompany;
 import dev.luizloyola.anima.core.inv.ItemSpec;
@@ -63,6 +64,12 @@ class ExploreTest {
         final List<Candidate> claimed = new ArrayList<>();
         final List<AgentId> scouts = new ArrayList<>();
         boolean allow = true;
+        AgentId leader;
+
+        @Override
+        public Optional<AgentId> waitingLeader(PartyId party) {
+            return Optional.ofNullable(leader);
+        }
 
         @Override
         public void scouting(PartyId party, AgentId scout) {
@@ -404,5 +411,52 @@ class ExploreTest {
         explore.claimed(only(explore), ada);
 
         assertEquals(List.of(ada), world.scouts);
+    }
+
+    /** Under a player leader the plot that passes is put to them, never claimed (decisions 14–16). */
+    @Test
+    void underAPlayerLeaderTheFindIsTheirsToDecide() {
+        Stub world = new Stub();
+        world.leader = AgentId.random();
+        world.looks.add(List.of(plot(10, 0, 95)));
+        Explore.install(world);
+        Explore explore = new Explore(party, 0.5);
+        FakeContext ctx = new FakeContext();
+
+        WorkItem look = only(explore);
+        explore.claimed(look, ctx.self);
+        explore.completed(look, ctx); // 95 clears the bar at once
+        explore.completed(only(explore), ctx); // walked to the plot: the settle step
+
+        assertTrue(world.claimed.isEmpty(), "nothing claimed without the leader");
+        assertEquals(Optional.of(new Pos(10, 63, 0)).map(Pos::x), explore.suggestion().map(Pos::x));
+        WorkItem tell = only(explore);
+        assertTrue(explore.offerableTo(tell, ctx.self, ctx), "the finder goes to tell");
+        assertFalse(explore.offerableTo(tell, AgentId.random(), ctx));
+        assertInstanceOf(SeekCompany.class, tell.root());
+
+        assertTrue(explore.leaderSettles(ctx.knowledge()));
+        assertEquals(1, world.claimed.size(), "the leader's word claims it");
+        assertTrue(explore.finished());
+    }
+
+    @Test
+    void keepLookingDropsThePlotAndTheSearchGoesOn() {
+        Stub world = new Stub();
+        world.leader = AgentId.random();
+        world.looks.add(List.of(plot(10, 0, 95)));
+        Explore.install(world);
+        Explore explore = new Explore(party, 0.5);
+        FakeContext ctx = new FakeContext();
+        WorkItem look = only(explore);
+        explore.claimed(look, ctx.self);
+        explore.completed(look, ctx);
+        explore.completed(only(explore), ctx);
+
+        explore.leaderDeclines();
+
+        assertTrue(explore.suggestion().isEmpty());
+        assertFalse(explore.finished());
+        assertFalse(only(explore).describe().contains("tell"), "back to searching");
     }
 }

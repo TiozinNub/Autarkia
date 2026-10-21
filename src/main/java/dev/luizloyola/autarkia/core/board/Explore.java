@@ -4,22 +4,24 @@ import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.BrainContext;
 import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.history.Deed;
-import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Follow;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.LookRound;
+import dev.luizloyola.anima.core.brain.task.SeekCompany;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.brain.task.WaitForCompany;
 import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.store.Store;
-import dev.luizloyola.autarkia.core.direction.HomeJudge;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate;
+import dev.luizloyola.autarkia.core.direction.HomeJudge;
 import dev.luizloyola.autarkia.core.direction.HomeKnob;
 import dev.luizloyola.autarkia.core.direction.HomeLooking;
-import dev.luizloyola.autarkia.core.direction.HomeSearch;
 import dev.luizloyola.autarkia.core.direction.HomeSearch.Phase;
+import dev.luizloyola.autarkia.core.direction.HomeSearch;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -86,6 +88,17 @@ public final class Explore implements PartyProject {
     /** The offer to keep with the scout, one object for everybody; see {@link #realise}. */
     private final AccompanyOffer offer = new AccompanyOffer();
 
+    /**
+     * Under a player leader a plot that passes is not claimed: it is put to the leader, who decides
+     * (group-up spec, decisions 14–16). Until then the search waits on that word, and only the finder
+     * has anything to do: go and tell.
+     */
+    private boolean suggested;
+    private final Tell tell = new Tell();
+
+    /** How long a finder leaves the leader before putting the place to them again. */
+    static final int TELL_PAUSE = 1200;
+
     public Explore(PartyId party, double priority) {
         this(party, priority, new HomeSearch());
     }
@@ -131,13 +144,16 @@ public final class Explore implements PartyProject {
         if (!searching()) {
             return List.of();
         }
+        if (suggested) {
+            return List.of(tell);
+        }
         return scout == null ? List.of(current) : List.of(current, offer);
     }
 
     /** A companion's item is on offer to nobody; it is minted for its taker. */
     @Override
     public boolean owns(WorkItem item) {
-        return item == current || item == offer
+        return item == current || item == offer || item == tell
                 || (item instanceof Accompany accompany && accompany.owner() == this);
     }
 
@@ -184,6 +200,9 @@ public final class Explore implements PartyProject {
         if (item == offer) {
             return scout != null && !asker.equals(scout);
         }
+        if (item == tell) {
+            return asker.equals(scout);
+        }
         if (item instanceof Accompany accompany) {
             return accompany.who().equals(asker);
         }
@@ -221,6 +240,12 @@ public final class Explore implements PartyProject {
 
     @Override
     public void completed(WorkItem item, BrainContext ctx) {
+        if (item == tell) {
+            if (scout != null) {
+                cooldownUntil.put(scout, ctx.percepts().time() + TELL_PAUSE); // told; give them time
+            }
+            return;
+        }
         if (item instanceof Accompany accompany) {
             accompanying.remove(accompany.who());
             return;
@@ -256,10 +281,15 @@ public final class Explore implements PartyProject {
         current = step();
     }
 
-    /** The second judge of the best plot, and HOME if it passes. */
+    /** The second judge of the best plot, and HOME if it passes — or, under a player leader, theirs to decide. */
     private void claim(@Nullable HomeLooking world, BrainContext ctx) {
         Candidate best = search.best();
         Pos plot = search.settleAt();
+        if (best != null && world != null && world.waitingLeader(party).isPresent()) {
+            suggested = true;
+            journal(ctx, "found a place at " + at(plot) + ": the leader decides");
+            return;
+        }
         if (best != null && world != null && world.claim(party, best, ctx.knowledge())) {
             search.claimed();
             journal(ctx, "settled at " + at(plot) + ": " + breakdown(best));
@@ -271,6 +301,10 @@ public final class Explore implements PartyProject {
 
     @Override
     public void failed(WorkItem item, AgentId who, BrainContext ctx) {
+        if (item == tell) {
+            cooldownUntil.put(who, ctx.percepts().time() + FAIL_COOLDOWN); // the leader is not in sight
+            return;
+        }
         if (item instanceof Accompany accompany) {
             accompanying.remove(accompany.who());
             // Nobody at the meeting place is expected once the scout has gone on to a new one: the
@@ -311,13 +345,54 @@ public final class Explore implements PartyProject {
     public void failed(WorkItem item, BrainContext ctx) {
     }
 
+    /** The place put to the leader, while it waits on their word. */
+    public Optional<Pos> suggestion() {
+        return suggested ? Optional.ofNullable(search.settleAt()) : Optional.empty();
+    }
+
+    /**
+     * The leader said settle there: the plot is judged a second time from what {@code knowledge}
+     * knows, as a scout's own claim is, and becomes HOME if it passes. Whether it did.
+     */
+    public boolean leaderSettles(AgentKnowledge knowledge) {
+        if (!suggested) {
+            return false;
+        }
+        suggested = false;
+        Candidate best = search.best();
+        HomeLooking world = looking;
+        boolean settled = best != null && world != null && world.claim(party, best, knowledge);
+        if (settled) {
+            search.claimed();
+        } else {
+            search.claimRefused();
+        }
+        current = step();
+        return settled;
+    }
+
+    /** The leader said keep looking: the plot is dropped and the search goes on. */
+    public void leaderDeclines() {
+        if (suggested) {
+            suggested = false;
+            search.claimRefused();
+            current = step();
+        }
+    }
+
+    /** The place {@code self}'s party found, to put to {@code leader}, when that is who it waits on. */
+    public static Optional<Pos> suggestionFor(AgentId self, AgentId leader) {
+        HomeLooking world = looking;
+        return world == null ? Optional.empty() : world.suggestion(self, leader);
+    }
+
     @Override
     public ProjectState snapshot() {
         List<Gather.Cooldown> cooldowns = new ArrayList<>();
         cooldownUntil.forEach((who, until) -> cooldowns.add(new Gather.Cooldown(who, until)));
         return new State(party, priority, search.snapshot(), Optional.ofNullable(scout),
                 List.copyOf(cooldowns), lastTick, List.copyOf(companions),
-                List.copyOf(accompanying.keySet()), gathered, stepSince);
+                List.copyOf(accompanying.keySet()), gathered, stepSince, suggested);
     }
 
     /** The scout's own step, named by the scout: nobody else is handed it back after a restart. */
@@ -489,6 +564,32 @@ public final class Explore implements PartyProject {
         }
     }
 
+    /** The finder goes to the leader with the place; the conversation is where it is put to them. */
+    private final class Tell implements WorkItem {
+
+        @Override
+        public double priority() {
+            return priority;
+        }
+
+        @Override
+        public Task root() {
+            HomeLooking world = looking;
+            AgentId leader = world == null ? null : world.waitingLeader(party).orElse(null);
+            return new SeekCompany(BeingId.of(leader == null ? party.value() : leader.value()));
+        }
+
+        @Override
+        public Deed doing() {
+            return Deed.of(WorkDoings.EXPLORING);
+        }
+
+        @Override
+        public String describe() {
+            return "tell the leader about the place";
+        }
+    }
+
     /** One companion's keeping with the scout (decision 2: the party travels together). */
     private final class Accompany implements WorkItem {
         private final AgentId who;
@@ -542,7 +643,7 @@ public final class Explore implements PartyProject {
     public record State(PartyId party, double priority, HomeSearch.State search,
                         Optional<AgentId> scout, List<Gather.Cooldown> cooldowns, long lastTick,
                         List<AgentId> companions, List<AgentId> accompanying, boolean gathered,
-                        long stepSince) implements ProjectState {
+                        long stepSince, boolean suggested) implements ProjectState {
 
         public State {
             companions = List.copyOf(companions);
@@ -568,6 +669,7 @@ public final class Explore implements PartyProject {
         }
         project.gathered = state.gathered();
         project.stepSince = state.stepSince();
+        project.suggested = state.suggested();
         project.current = project.step();
         return Optional.of(project);
     }

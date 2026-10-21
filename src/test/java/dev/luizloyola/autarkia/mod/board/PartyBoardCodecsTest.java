@@ -84,7 +84,7 @@ class PartyBoardCodecsTest {
                 dev.luizloyola.autarkia.core.direction.HomeSearch.Phase.SETTLE, List.of(), 2,
                 List.of(plot));
         var state = new dev.luizloyola.autarkia.core.board.Explore.State(PartyId.random(), 0.5, search,
-                java.util.Optional.of(CREW), List.of(), 100, List.of(), List.of(), true, 90);
+                java.util.Optional.of(CREW), List.of(), 100, List.of(), List.of(), true, 90, true);
 
         assertEquals(state, roundTrip(new PartyBoard.Row(state, List.of())).project());
     }

@@ -37,6 +37,16 @@ public interface HomeLooking {
     default void scouting(PartyId party, AgentId scout) {
     }
 
+    /** The player who leads {@code party} and so decides its HOME, if one does (decisions 14–16). */
+    default Optional<AgentId> waitingLeader(PartyId party) {
+        return Optional.empty();
+    }
+
+    /** The place {@code self}'s party found, to put to {@code leader} if that is who it waits on. */
+    default Optional<Pos> suggestion(AgentId self, AgentId leader) {
+        return Optional.empty();
+    }
+
     /**
      * What one stop saw.
      *

@@ -142,4 +142,35 @@ class GroupUpRungsTest {
         assertEquals("southwest", PersonChooser.compass(-10, 10));
         assertEquals("northwest", PersonChooser.compass(-10, -9));
     }
+
+    @Test
+    void aPlaceFoundIsPutToTheLeaderFromWhereTheyStand() {
+        dev.luizloyola.autarkia.core.board.Explore.install(new dev.luizloyola.autarkia.core.direction.HomeLooking() {
+            @Override
+            public Optional<Look> look(Pos at, dev.luizloyola.anima.core.social.PartyId party,
+                    dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge knowledge) {
+                return Optional.empty();
+            }
+
+            @Override
+            public boolean claim(dev.luizloyola.anima.core.social.PartyId party,
+                    dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate plot,
+                    dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge knowledge) {
+                return false;
+            }
+
+            @Override
+            public Optional<Pos> suggestion(AgentId self, AgentId leader) {
+                return leader.equals(other) ? Optional.of(new Pos(100, 64, 0)) : Optional.empty();
+            }
+        });
+        try {
+            Chooser.Line line = chooser.choose(ctx, turn(encounter(), Optional.empty(),
+                    SpeechActs.SUGGEST_HOME, SpeechActs.END_CHAT));
+            assertEquals(SpeechActs.SUGGEST_HOME, line.act());
+            assertEquals(Slot.lang("anima.compass.east"), LineSlots.of(line.payload()).orElseThrow().get(0));
+        } finally {
+            dev.luizloyola.autarkia.core.board.Explore.install(null);
+        }
+    }
 }

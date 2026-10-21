@@ -686,12 +686,13 @@ public final class PartyBoardCodecs {
                     UUIDUtil.CODEC.listOf().optionalFieldOf("accompanying", List.of())
                             .forGetter(state -> state.accompanying().stream().map(AgentId::value).toList()),
                     Codec.BOOL.optionalFieldOf("gathered", false).forGetter(Explore.State::gathered),
-                    Codec.LONG.optionalFieldOf("step_since", 0L).forGetter(Explore.State::stepSince)
+                    Codec.LONG.optionalFieldOf("step_since", 0L).forGetter(Explore.State::stepSince),
+                    Codec.BOOL.optionalFieldOf("suggested", false).forGetter(Explore.State::suggested)
             ).apply(project, (party, priority, search, scout, cooldowns, lastTick, companions,
-                    accompanying, gathered, stepSince) -> new Explore.State(PartyId.of(party), priority,
+                    accompanying, gathered, stepSince, suggested) -> new Explore.State(PartyId.of(party), priority,
                     search, scout.map(AgentId::of), cooldowns, lastTick,
                     companions.stream().map(AgentId::of).toList(),
-                    accompanying.stream().map(AgentId::of).toList(), gathered, stepSince)));
+                    accompanying.stream().map(AgentId::of).toList(), gathered, stepSince, suggested)));
 
     /**
      * The {@code type} field every row now carries. Unlike {@link #WORK_KEY}'s {@code kind}, this

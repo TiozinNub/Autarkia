@@ -437,25 +437,25 @@ class PersonChooserTest {
 
         List<String> lines = chooser.explain(ctx, turn);
 
-        assertEquals(17, lines.size(), "one line per rung, whatever happens");
+        assertEquals(18, lines.size(), "one line per rung, whatever happens");
         List<String> fired = lines.stream().filter(line -> line.startsWith("fired")).toList();
         assertEquals(1, fired.size(), "first match wins — exactly one rung takes the turn");
-        assertTrue(fired.get(0).contains("12 ask their name"), fired.get(0));
+        assertTrue(fired.get(0).contains("13 ask their name"), fired.get(0));
         assertEquals(PersonActs.ASK_IDENTITY, chooser.choose(ctx, turn).act(),
                 "the rung explain() marks fired is the one choose() actually took");
 
-        // Live facts, not canned text: the pending act, rung 12's percept, rung 15's two numbers.
+        // Live facts, not canned text: the pending act, rung 13's percept, rung 16's two numbers.
         assertTrue(lines.get(1).contains("pending none"), lines.get(1));
-        assertTrue(lines.get(10).contains("fed"), lines.get(10));
-        assertTrue(lines.get(11).contains("seen at INDIVIDUAL"), lines.get(11));
-        assertTrue(lines.get(13).contains("last said nothing"), lines.get(13));
-        assertTrue(lines.get(14).contains("company 0.50 < content 0.85"), lines.get(14));
-        // Rung 16 reads skipped: nothing has been said here yet, so plenty is left to say.
-        assertTrue(lines.get(15).startsWith("skipped"), lines.get(15));
-        assertTrue(lines.get(15).contains("something new left"), lines.get(15));
-        // Rung 17 reads skipped: rung 12 spoke, and the silence it waits for has not run either.
+        assertTrue(lines.get(11).contains("fed"), lines.get(11));
+        assertTrue(lines.get(12).contains("seen at INDIVIDUAL"), lines.get(12));
+        assertTrue(lines.get(14).contains("last said nothing"), lines.get(14));
+        assertTrue(lines.get(15).contains("company 0.50 < content 0.85"), lines.get(15));
+        // Rung 17 reads skipped: nothing has been said here yet, so plenty is left to say.
         assertTrue(lines.get(16).startsWith("skipped"), lines.get(16));
-        assertTrue(lines.get(16).contains("silent 0 of 300 ticks"), lines.get(16));
+        assertTrue(lines.get(16).contains("something new left"), lines.get(16));
+        // Rung 18 reads skipped: rung 13 spoke, and the silence it waits for has not run either.
+        assertTrue(lines.get(17).startsWith("skipped"), lines.get(17));
+        assertTrue(lines.get(17).contains("silent 0 of 300 ticks"), lines.get(17));
     }
 
     // ── the full two-party conversation ──────────────────────────────────────────────────────
@@ -706,8 +706,8 @@ class PersonChooserTest {
 
         assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, chatting(e)),
                 "running out of things to say is how a chat ends");
-        String rung16 = chooser.explain(ctx, chatting(e)).get(15);
-        assertTrue(rung16.startsWith("fired:   16 out of things to say"), rung16);
+        String rung17 = chooser.explain(ctx, chatting(e)).get(16);
+        assertTrue(rung17.startsWith("fired:   17 out of things to say"), rung17);
     }
 
     @Test
