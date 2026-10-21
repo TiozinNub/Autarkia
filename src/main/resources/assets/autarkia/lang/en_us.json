@@ -509,5 +509,10 @@
   "autarkia.command.bp.capture.missing": "No local blueprint %s to add a variant to; capture its base first.",
   "autarkia.command.bp.capture.started": "Capturing %1$s: %2$s cells, layer 0 at y %3$s…",
   "autarkia.command.bp.capture.failed": "Could not capture %1$s: %2$s",
-  "autarkia.command.bp.capture.done": "Captured %1$s into %2$s: %3$s error(s), %4$s note(s)"
+  "autarkia.command.bp.capture.done": "Captured %1$s into %2$s: %3$s error(s), %4$s note(s)",
+  "autarkia.ledger.food": "food to spare",
+  "autarkia.ledger.hungry": "hungry members",
+  "autarkia.ledger.beds": "beds",
+  "autarkia.ledger.stuck": "work that is stuck",
+  "autarkia.ledger.homeless": "no home"
 }

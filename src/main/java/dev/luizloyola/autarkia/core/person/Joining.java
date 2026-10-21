@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.person;
 
+import dev.luizloyola.anima.core.social.GroupUp.Ask;
 import java.util.Optional;
 
 /**
@@ -17,14 +18,6 @@ public final class Joining {
     /** Who would move, read from either side's point of view. */
     public enum Mover {
         SELF, OTHER, EITHER, NEITHER
-    }
-
-    /** The two ways to raise it. */
-    public enum Ask {
-        /** "Can I join you?" — the asker moves. */
-        JOIN,
-        /** "Want to join us?" — the invited side moves. */
-        INVITE
     }
 
     private Joining() {

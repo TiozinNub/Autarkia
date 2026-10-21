@@ -509,5 +509,10 @@
   "autarkia.command.bp.capture.missing": "Nenhuma planta local %s para receber uma variante; capture a base primeiro.",
   "autarkia.command.bp.capture.started": "Capturando %1$s: %2$s células, camada 0 em y %3$s…",
   "autarkia.command.bp.capture.failed": "Não foi possível capturar %1$s: %2$s",
-  "autarkia.command.bp.capture.done": "%1$s capturada em %2$s: %3$s erro(s), %4$s nota(s)"
+  "autarkia.command.bp.capture.done": "%1$s capturada em %2$s: %3$s erro(s), %4$s nota(s)",
+  "autarkia.ledger.food": "comida de sobra",
+  "autarkia.ledger.hungry": "membros com fome",
+  "autarkia.ledger.beds": "camas",
+  "autarkia.ledger.stuck": "trabalho travado",
+  "autarkia.ledger.homeless": "sem casa"
 }

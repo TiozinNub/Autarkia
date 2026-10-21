@@ -102,6 +102,8 @@ public class AutarkiaMod implements ModInitializer {
         // walks SpeechActs.all() on every turn, so registration has to be finished before a
         // chooser can be handed a conversation to decide on.
         Choosers.provide(new PersonChooser());
+        // Who groups up with whom, and the lines a settler's party weighs it by (group-up spec).
+        dev.luizloyola.autarkia.mod.person.PersonGroupUp.init();
         // A player chatting draws from the same vocabulary, read off the player.
         dev.luizloyola.anima.mod.social.PlayerTopics.provide(
                 new dev.luizloyola.autarkia.mod.person.PlayerSmallTalk());

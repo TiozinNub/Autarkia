@@ -132,6 +132,8 @@ public final class PersonSpecies {
             .set(ProfileAspect.SOCIAL_JOIN_MERGED, -15.0)
             .set(ProfileAspect.SOCIAL_JOIN_MERGED_DAYS, 3)
             .set(ProfileAspect.SOCIAL_JOIN_COMPANY, 10.0)
+            .set(ProfileAspect.SOCIAL_OPENNESS_THRESHOLD, -25.0)
+            .set(ProfileAspect.SOCIAL_JOIN_THRESHOLD, -10.0)
             // --- body: a 1.8 hitbox, a vanilla jump, and vanilla's sprint-jump limit ----------
             .set(ProfileAspect.BODY_HEIGHT, 1.8)   // the real hitbox, not a cell count
             .set(ProfileAspect.BODY_JUMP_HEIGHT, 1)

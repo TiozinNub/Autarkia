@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.luizloyola.autarkia.core.person.Joining.Ask;
+import dev.luizloyola.anima.core.social.GroupUp.Ask;
 import dev.luizloyola.autarkia.core.person.Joining.Mover;
 import dev.luizloyola.autarkia.core.person.Joining.Side;
 import java.util.Optional;
