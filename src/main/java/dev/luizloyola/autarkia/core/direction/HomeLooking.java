@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.direction;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.social.PartyId;
@@ -28,6 +29,13 @@ public interface HomeLooking {
      * stands, still allows it and nothing refuses it. Whether it did.
      */
     boolean claim(PartyId party, Candidate plot, AgentKnowledge knowledge);
+
+    /**
+     * {@code scout} took the search's step. A party that has no leader is led from now on by
+     * whoever first scouts its search (decision: Luiz, 2026-10-21, group-up spec).
+     */
+    default void scouting(PartyId party, AgentId scout) {
+    }
 
     /**
      * What one stop saw.

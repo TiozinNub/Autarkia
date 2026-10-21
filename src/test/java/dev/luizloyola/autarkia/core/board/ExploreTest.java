@@ -1,5 +1,6 @@
 package dev.luizloyola.autarkia.core.board;
 
+import dev.luizloyola.anima.core.agent.AgentId;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -60,7 +61,13 @@ class ExploreTest {
     private static final class Stub implements HomeLooking {
         final Deque<List<Candidate>> looks = new ArrayDeque<>();
         final List<Candidate> claimed = new ArrayList<>();
+        final List<AgentId> scouts = new ArrayList<>();
         boolean allow = true;
+
+        @Override
+        public void scouting(PartyId party, AgentId scout) {
+            scouts.add(scout);
+        }
 
         @Override
         public Optional<Look> look(Pos at, PartyId party, AgentKnowledge knowledge) {
@@ -383,5 +390,19 @@ class ExploreTest {
 
         assertTrue(explore.offerableTo(explore.open().get(1), companion.self, companion),
                 "a new leg's end to meet at, so no cooldown");
+    }
+
+    @Test
+    void whoeverTakesTheStepIsToldToTheWorldAsTheScout() {
+        // The world makes the first scout the party's leader; Explore only has to say who scouts.
+        Stub world = new Stub();
+        world.looks.add(List.of());
+        Explore.install(world);
+        Explore explore = new Explore(party, 0.5);
+        AgentId ada = AgentId.random();
+
+        explore.claimed(only(explore), ada);
+
+        assertEquals(List.of(ada), world.scouts);
     }
 }

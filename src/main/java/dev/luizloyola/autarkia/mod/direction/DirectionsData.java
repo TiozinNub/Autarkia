@@ -124,6 +124,14 @@ public final class DirectionsData extends SavedData implements StoreGuard.Checke
         return Optional.ofNullable(parties.get(party));
     }
 
+    /** A party that ceased to exist: its climb, its HOME and any old plot go with it. */
+    public void forget(PartyId party) {
+        boolean had = parties.remove(party) != null;
+        if (oldPlots.remove(party) != null || had) {
+            setDirty();
+        }
+    }
+
     /** This party's climb, begun on first ask. */
     public PartyProgress progress(PartyId party) {
         return parties.computeIfAbsent(party, p -> new PartyProgress());

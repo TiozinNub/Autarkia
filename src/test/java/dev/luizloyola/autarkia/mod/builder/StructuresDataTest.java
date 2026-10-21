@@ -1,10 +1,13 @@
 package dev.luizloyola.autarkia.mod.builder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.JsonOps;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.autarkia.core.bp.Blueprint.Facing;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.bp.Placement;
@@ -77,5 +80,22 @@ class StructuresDataTest {
     void itFellsThePadAndTheRingAFlattenEasesInto() {
         // The pad spans x -194..-182, z -187..-175; eight more each way is -202..-174, -195..-167.
         assertEquals(new Footprint(-202, -195, -174, -167), SITED.fellingArea());
+    }
+
+    @Test
+    void aPartyThatEndedTakesItsBuildingsOffTheBooks() {
+        StructuresData data = new StructuresData();
+        PartyId gone = PartyId.random();
+        PartyId staying = PartyId.random();
+        data.add(gone, SITED);
+        data.add(staying, SITED);
+        data.setDirty(false);
+
+        assertTrue(data.forget(gone));
+
+        assertTrue(data.of(gone).isEmpty());
+        assertEquals(List.of(SITED), data.of(staying));
+        assertTrue(data.isDirty(), "or the gone party's sites come back on the next load");
+        assertFalse(data.forget(gone), "nothing left to forget");
     }
 }

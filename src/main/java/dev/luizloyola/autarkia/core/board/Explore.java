@@ -199,6 +199,10 @@ public final class Explore implements PartyProject {
             }
             scout = who;
             stepSince = lastTick;
+            HomeLooking world = looking;
+            if (world != null) {
+                world.scouting(party, who);
+            }
         } else if (item instanceof Accompany accompany) {
             accompanying.put(who, accompany);
             companions.add(who);

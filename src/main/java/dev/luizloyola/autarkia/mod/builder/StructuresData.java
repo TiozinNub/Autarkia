@@ -153,6 +153,15 @@ public final class StructuresData extends SavedData implements StoreGuard.Checke
         return List.copyOf(parties.getOrDefault(party, List.of()));
     }
 
+    /** A party that ceased to exist; whether it had any structures. */
+    public boolean forget(PartyId party) {
+        boolean had = parties.remove(party) != null;
+        if (had) {
+            setDirty();
+        }
+        return had;
+    }
+
     public void add(PartyId party, Structure structure) {
         parties.computeIfAbsent(party, p -> new ArrayList<>()).add(structure);
         setDirty();

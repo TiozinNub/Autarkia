@@ -73,7 +73,12 @@ public final class Structures {
         });
         PartyBoards.onClosed(Structures::closed);
         Doorways.houseDoors(Structures::houseDoor);
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> live = server);
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            live = server;
+            // A party that ended has nobody to build for, and its sites would post to a fresh
+            // board for it on the next beat.
+            PartyData.get(server).onDisband(party -> StructuresData.get(server).forget(party));
+        });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         DigIn.keepOffBy(Structures::keepsOffDigging);
     }

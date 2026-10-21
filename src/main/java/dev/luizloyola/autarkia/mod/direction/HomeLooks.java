@@ -2,7 +2,9 @@ package dev.luizloyola.autarkia.mod.direction;
 
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.social.PartyId;
+import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.core.territory.Reason;
 import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
@@ -54,6 +56,18 @@ public final class HomeLooks implements HomeLooking {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> live = server);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         Explore.install(new HomeLooks());
+    }
+
+    @Override
+    public void scouting(PartyId party, AgentId scout) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return;
+        }
+        PartyData parties = PartyData.get(server);
+        if (parties.leader(party).isEmpty() && parties.currentPartyOf(scout).filter(party::equals).isPresent()) {
+            parties.lead(scout);
+        }
     }
 
     @Override

@@ -88,6 +88,8 @@ public final class Directions {
             rebuild();
             Territories.of(server).namedBy(party -> named(server, party));
             claimOldPlots(server);
+            // Here, not in init, for PartyBoards' reason: one roster per server.
+            PartyData.get(server).onDisband(party -> DirectionsData.get(server).forget(party));
         });
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, manager, success) -> rebuild());
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
@@ -298,8 +300,21 @@ public final class Directions {
         Claimed claimed = Territories.of(server).move(party, chunks, why, Territories.now(server));
         if (claimed.granted()) {
             replace(server, party, Home.fresh(), old);
+            ledOnceSettled(server, party);
         }
         return claimed;
+    }
+
+    /**
+     * Every settled party has a leader: a search's scout already leads, and a party settled any
+     * other way ({@code home set}, a first building) is led by its first member.
+     */
+    private static void ledOnceSettled(MinecraftServer server, PartyId party) {
+        PartyData parties = PartyData.get(server);
+        List<AgentId> members = parties.members(party);
+        if (parties.leader(party).isEmpty() && !members.isEmpty()) {
+            parties.lead(members.get(0));
+        }
     }
 
     /**
@@ -316,6 +331,9 @@ public final class Directions {
         }
         progress.home(home);
         data.setDirty();
+        if (founded) {
+            ledOnceSettled(server, party);
+        }
         return founded;
     }
 
