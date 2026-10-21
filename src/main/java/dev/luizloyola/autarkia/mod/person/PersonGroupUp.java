@@ -54,8 +54,11 @@ public final class PersonGroupUp implements GroupUp {
     /** Over the HOME search's 0.40 and the seek's 0.45: the first thing a newcomer takes. A starting value. */
     static final double COME_HOME_PRIORITY = 0.5;
 
-    /** Under the walk home: a newcomer goes home first and back for its things after. A starting value. */
-    static final double FETCH_PRIORITY = 0.45;
+    /**
+     * Under the walk home and the base's set-up (0.52), over a personal kit want (0.46): a newcomer
+     * fetches its own logs before trying to make a sword from none (flight, 2026-10-21). A starting value.
+     */
+    static final double FETCH_PRIORITY = 0.48;
 
     /** Which refusal names the line that counts most against. */
     private static final Map<String, String> TOPICS = Map.of(
