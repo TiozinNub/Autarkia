@@ -74,10 +74,14 @@ public final class ReturnAndTell implements CompoundTask {
             return back != null;
         }
 
+        /**
+         * Free: a search walks hundreds of blocks from where it set out, and a finder priced out of
+         * coming back could never tell the leader at all (client run, 2026-10-21: 430 blocks against
+         * a tolerance of 72).
+         */
         @Override
         public double estimateCost(BrainContext ctx) {
-            Pos at = ctx.percepts().position();
-            return Math.hypot(back.x() - at.x(), back.z() - at.z());
+            return 0.0;
         }
 
         @Override

@@ -34,4 +34,10 @@ class ReturnAndTellTest {
         assertInstanceOf(GoTo.class, tell.methods().get(1).decompose(ctx).get(0));
         assertFalse(new ReturnAndTell(null, leader).methods().get(1).applicable(ctx), "nowhere known to go back to");
     }
+
+    @Test
+    void comingBackIsNeverPricedOut() {
+        ReturnAndTell tell = new ReturnAndTell(new Pos(5000, 64, 5000), leader);
+        org.junit.jupiter.api.Assertions.assertEquals(0.0, tell.methods().get(1).estimateCost(ctx));
+    }
 }
