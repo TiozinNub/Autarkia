@@ -15,6 +15,8 @@ import dev.luizloyola.anima.core.brain.board.WorkItem;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.EnsureStore;
+import dev.luizloyola.anima.core.brain.task.GoTo;
+import dev.luizloyola.anima.core.brain.task.Method;
 import dev.luizloyola.anima.core.brain.task.ObtainItem;
 import dev.luizloyola.anima.core.brain.task.PutItems;
 import dev.luizloyola.anima.core.brain.task.Task;
@@ -687,7 +689,7 @@ class GatherTest {
         BringBack back = assertInstanceOf(BringBack.class, steps.get(1));
         List<Task> delivery = back.methods().get(0).decompose(new BoardBrainContext());
         assertInstanceOf(EnsureStore.class, delivery.get(0),
-                "the depot is what grows a chest when HOME has none");
+                "the depot is what grows a chest when HOME's are full");
 
         PutItems deposit = assertInstanceOf(PutItems.class, delivery.get(1));
         assertEquals(Stock.LOGS, deposit.spec());
@@ -707,6 +709,29 @@ class GatherTest {
         assertTrue(back.methods().get(0).applicable(ctx), "nine of sixty-four still go home");
         ctx.percepts.position = new dev.luizloyola.anima.core.brain.sense.Pos(140, 64, 10);
         assertEquals(0.0, back.methods().get(0).estimateCost(ctx), "however far out the fetch ended");
+    }
+
+    @Test
+    void withNoStoreAtHomeTheLoadComesHomeInThePackAndTheTripIsDone() {
+        // A far fetch made the chest from its own four logs, had nothing left to put, and the trip
+        // failed (2026-10-21).
+        BringBack back = new BringBack(Stock.LOGS, 64);
+        BoardBrainContext ctx = member();
+        ctx.inventory().set(0, ItemStack.of("minecraft:oak_log", 4, 64));
+        ctx.standAt(new Pos(-27, 64, -124));
+        Method deliver = back.methods().get(0);
+        Method keep = back.methods().get(1);
+
+        assertFalse(deliver.applicable(ctx), "no chest to put it in, and none made of the load");
+        assertTrue(keep.applicable(ctx));
+        GoTo home = assertInstanceOf(GoTo.class, keep.decompose(ctx).get(0));
+        assertTrue(Math.abs(home.x() - HINT.x()) <= 1 && Math.abs(home.z() - HINT.z()) <= 1, "to the base's spot");
+        ctx.standAt(HINT);
+        assertTrue(keep.decompose(ctx).isEmpty(), "home with it: done");
+
+        saw(ctx, CHEST, 0, ctx.now());
+        assertTrue(deliver.applicable(ctx), "a store stands: it goes in");
+        assertFalse(keep.applicable(ctx));
     }
 
     /** A slice is scored and shown, never run: {@code realise} replaces it before it is leased. */
