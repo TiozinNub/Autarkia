@@ -141,6 +141,8 @@ public class AutarkiaMod implements ModInitializer {
                 ChopForLogs::new);
         // What a walk may lay is Anima's tag; which of it a settler keeps is ours to spell.
         Stock.layableBy(dev.luizloyola.anima.mod.nav.Laying::layable);
+        // And what a builder breaks out of a cell before it builds there.
+        dev.luizloyola.autarkia.core.builder.Clearance.softBy(dev.luizloyola.autarkia.compat.bp.Clearable::soft);
         // And where no walk may lay or cut: a party's HOME and the places it keeps.
         dev.luizloyola.anima.mod.nav.WorkFence.rule(
                 dev.luizloyola.autarkia.mod.direction.SettledGround::around);

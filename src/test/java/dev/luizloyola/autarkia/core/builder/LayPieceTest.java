@@ -173,4 +173,50 @@ class LayPieceTest {
         assertEquals(Optional.of(TaskStatus.FAILED), executor.lastStatus(), "passing over every step is no success");
         assertEquals(Optional.of("none of the 2 would go in"), executor.failureReason());
     }
+
+    @Test
+    void leavesInTheCellAreBrokenFromAStandTheArmGetsThroughFrom() {
+        FakeContext ctx = new FakeContext();
+        Pos inside = new Pos(0, 64, 0);
+        Pos cell = new Pos(0, 66, 2);
+        ctx.percepts.position = inside;
+        ctx.percepts.inventory.add(ItemStack.of(PLANKS, 1, 64));
+        ctx.percepts.blocks.set(cell.x(), cell.y(), cell.z(), BlockKind.LEAVES);
+        // A wall between the inside stand and the cell: in reach, but not to an arm.
+        for (int y = 64; y <= 67; y++) {
+            for (int x = -1; x <= 1; x++) {
+                ctx.percepts.blocks.set(x, y, 1, BlockKind.OTHER);
+            }
+        }
+        Laying roof = new Laying(Section.CEILING, new Placing(PLANKS, cell, PLANKS, Map.of()), List.of(), inside, 1);
+        TaskExecutor executor = new TaskExecutor();
+        executor.run(new LayPiece(List.of(roof)), ctx);
+        int walks = 0;
+        int placed = 0;
+        for (int tick = 0; tick < 600 && executor.isBusy(); tick++) {
+            ctx.percepts.time++;
+            if (ctx.mover.moveToCalls > walks) {
+                walks = ctx.mover.moveToCalls;
+                ctx.percepts.position = new Pos(ctx.mover.lastX, ctx.mover.lastY, ctx.mover.lastZ);
+                ctx.mover.setState(MoveState.ARRIVED);
+            }
+            // The real breaker refuses through the wall.
+            ctx.breaker.refuseBegin = ctx.percepts.position.equals(inside);
+            if (ctx.breaker.state == dev.luizloyola.anima.core.brain.act.BreakState.BREAKING) {
+                Pos at = ctx.breaker.target;
+                ctx.percepts.blocks.set(at.x(), at.y(), at.z(), BlockKind.AIR);
+                ctx.breaker.state = dev.luizloyola.anima.core.brain.act.BreakState.FINISHED;
+            }
+            for (; placed < ctx.placer.placings.size(); placed++) {
+                Placing put = ctx.placer.placings.get(placed);
+                ctx.percepts.blocks.set(put.cell().x(), put.cell().y(), put.cell().z(), BlockKind.OTHER);
+                ctx.percepts.blocks.setId(put.cell().x(), put.cell().y(), put.cell().z(), put.block());
+            }
+            executor.tick(ctx);
+        }
+
+        assertEquals(Optional.of(TaskStatus.SUCCESS), executor.lastStatus(), executor.failureReason().toString());
+        assertEquals(List.of(cell), ctx.breaker.targets, "the leaves, broken from outside the wall");
+        assertEquals(List.of(cell), ctx.placer.placed.stream().map(FakePlacer.Placement::cell).toList());
+    }
 }
