@@ -768,6 +768,10 @@ public final class PartyBoardCodecs {
                     .optionalFieldOf("flailing", Map.of()).forGetter(Board.Pacing::flailing),
             Codec.unboundedMap(Codec.STRING.xmap(s -> AgentId.of(java.util.UUID.fromString(s)),
                             who -> who.value().toString()), Codec.LONG)
-                    .optionalFieldOf("benched", Map.of()).forGetter(Board.Pacing::benched)
+                    .optionalFieldOf("benched", Map.of()).forGetter(Board.Pacing::benched),
+            Codec.unboundedMap(Codec.STRING.xmap(s -> AgentId.of(java.util.UUID.fromString(s)),
+                            who -> who.value().toString()),
+                            Codec.unboundedMap(Codec.STRING.xmap(Integer::valueOf, String::valueOf), Codec.LONG))
+                    .optionalFieldOf("sitting_out", Map.of()).forGetter(Board.Pacing::sittingOut)
     ).apply(pacing, Board.Pacing::new));
 }

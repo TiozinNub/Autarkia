@@ -57,7 +57,8 @@ class PartyBoardContinuityTest {
         BoardBrainContext ctx = new BoardBrainContext();
         WorkItem trip = gather.realise(gather.open().get(0), walker, ctx);
         assertTrue(live.claim(trip, walker, 100L));
-        live.restorePacing(new Board.Pacing(0, Map.of(flailer, 2), Map.of(benched, 900L)));
+        live.restorePacing(new Board.Pacing(0, Map.of(flailer, 2), Map.of(benched, 900L),
+                Map.of(flailer, Map.of(1, 900L))));
 
         long now = 400L; // the lease has run a while: it has less than a fresh TTL left
         PartyBoard back = reloaded(live, now);
@@ -67,6 +68,8 @@ class PartyBoardContinuityTest {
                 back.handleOf(back.projects().get(back.projects().size() - 1)).orElseThrow(),
                 "the #n an operator refers to");
         assertTrue(back.isBenched(benched, now), "a stood-down member stays stood down");
+        assertEquals(live.pacing(now), back.pacing(now), "and a project sat out stays sat out");
+        assertEquals(Map.of(1, 900L), back.pacing(now).sittingOut().get(flailer));
     }
 
     /** Budget earned by being priced out stays earned across a restart, and success spends it. */

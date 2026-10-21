@@ -532,6 +532,56 @@ class BoardTest {
         assertTrue(his.bestAvailable(ctx).isEmpty(), "one board, one pool: bob sees it is taken");
     }
 
+    @Test
+    void aTopProjectFailingEveryTimeIsSatOutAndTheNextIsTried() {
+        // A hut's pieces at 0.55 failed at once for want of planks and stood the settler down,
+        // over and over; the base's table at 0.52, a table in her pack, was never claimed (2026-10-21).
+        FakeProject hut = new FakeProject("hut");
+        for (int i = 0; i < 6; i++) {
+            hut.add(new FakeItem("floor " + i, 0.55, 0.0));
+        }
+        FakeProject base = new FakeProject("base");
+        WorkItem table = base.add(new FakeItem("table", 0.52, 0.0));
+        board.post(hut);
+        board.post(base);
+
+        WorkItem got = null;
+        for (int tries = 0; tries < 10; tries++) {
+            got = board.bestFor(alice, ctx, ctx.now()).orElse(null);
+            assertTrue(got != null, "never stood down while the table is there to put down");
+            board.claim(got, alice, ctx.now());
+            if (got == table) {
+                break;
+            }
+            board.failed(got, alice, ctx);
+        }
+        assertSame(table, got);
+        board.completed(table, alice, ctx);
+        assertTrue(base.events.contains("completed:table"));
+        assertFalse(board.isBenched(alice, ctx.now()));
+        assertSame(table, board.bestFor(alice, ctx, ctx.now()).orElseThrow(), "the hut is sat out a while");
+        assertTrue(hut.open().contains(board.bestFor(alice, ctx, ctx.now() + Board.BENCH_TICKS).orElseThrow()),
+                "then it is tried again");
+    }
+
+    @Test
+    void failingEveryProjectStillStandsTheWorkerDown() {
+        FakeProject one = new FakeProject("one");
+        FakeProject two = new FakeProject("two");
+        for (int i = 0; i < 6; i++) {
+            one.add(new FakeItem("a " + i, 0.55, 0.0));
+            two.add(new FakeItem("b " + i, 0.5, 0.0));
+        }
+        board.post(one);
+        board.post(two);
+        for (int tries = 0; tries < Board.BENCH_AFTER + 1; tries++) {
+            WorkItem got = board.bestFor(alice, ctx, ctx.now()).orElseThrow();
+            board.claim(got, alice, ctx.now());
+            board.failed(got, alice, ctx);
+        }
+        assertTrue(board.isBenched(alice, ctx.now()), "one project sat out, the last failing too: stood down");
+    }
+
     /** Drives {@code who}'s failure streak to the bench threshold — the only way in from outside. */
     private static void bench(Board board, BrainContext ctx, AgentId who) {
         WorkItem failing = new StubItem("failing", 0.5);

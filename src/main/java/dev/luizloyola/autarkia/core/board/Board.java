@@ -88,18 +88,28 @@ public class Board {
     }
 
     /**
-     * A board's bookkeeping apart from its projects: the next handle, who is failing and who is
-     * stood down — pacing a restart must not forgive.
+     * A board's bookkeeping apart from its projects: the next handle, who is failing, who is stood
+     * down and who sits which project out, by handle — pacing a restart must not forgive.
      */
-    public record Pacing(int nextHandle, Map<AgentId, Integer> flailing, Map<AgentId, Long> benched) {
+    public record Pacing(int nextHandle, Map<AgentId, Integer> flailing, Map<AgentId, Long> benched,
+                         Map<AgentId, Map<Integer, Long>> sittingOut) {
         public static final Pacing NONE = new Pacing(0, Map.of(), Map.of());
 
+        public Pacing {
+            sittingOut = Map.copyOf(sittingOut);
+        }
+
+        /** Pacing saved before a project could be sat out. */
+        public Pacing(int nextHandle, Map<AgentId, Integer> flailing, Map<AgentId, Long> benched) {
+            this(nextHandle, flailing, benched, Map.of());
+        }
+
         public boolean isEmpty() {
-            return nextHandle <= 1 && flailing.isEmpty() && benched.isEmpty();
+            return nextHandle <= 1 && flailing.isEmpty() && benched.isEmpty() && sittingOut.isEmpty();
         }
     }
 
-    /** This board's pacing, for the save; a bench already over is left out. */
+    /** This board's pacing, for the save; a bench or a sit-out already over is left out. */
     public Pacing pacing(long now) {
         Map<AgentId, Long> standing = new java.util.LinkedHashMap<>();
         benched.forEach((who, until) -> {
@@ -107,13 +117,27 @@ public class Board {
                 standing.put(who, until);
             }
         });
-        return new Pacing(nextHandle, Map.copyOf(flailing), Map.copyOf(standing));
+        Map<AgentId, Map<Integer, Long>> sitting = new java.util.LinkedHashMap<>();
+        sittingOut.forEach((who, projects) -> {
+            Map<Integer, Long> live = new java.util.LinkedHashMap<>();
+            projects.forEach((handle, until) -> {
+                if (until > now) {
+                    live.put(handle, until);
+                }
+            });
+            if (!live.isEmpty()) {
+                sitting.put(who, Map.copyOf(live));
+            }
+        });
+        return new Pacing(nextHandle, Map.copyOf(flailing), Map.copyOf(standing), sitting);
     }
 
     public void restorePacing(Pacing pacing) {
         nextHandle = Math.max(nextHandle, pacing.nextHandle());
         flailing.putAll(pacing.flailing());
         benched.putAll(pacing.benched());
+        pacing.sittingOut().forEach((who, projects) ->
+                sittingOut.computeIfAbsent(who, k -> new java.util.HashMap<>()).putAll(projects));
     }
 
     /**
@@ -207,6 +231,9 @@ public class Board {
         Project bestProject = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         for (Entry entry : entries) {
+            if (sitsOut(asker, entry.handle(), now)) {
+                continue;
+            }
             for (WorkItem item : entry.project().open()) {
                 Lease lease = leases.get(item);
                 if (lease != null && lease.liveAt(now)) {
@@ -396,7 +423,7 @@ public class Board {
         if (owner != null) {
             owner.failed(item, who, ctx);
         }
-        benchIfFlailing(who, ctx);
+        benchIfFlailing(who, owner, ctx);
     }
 
     /**
@@ -406,18 +433,56 @@ public class Board {
      * the whole ledger in seconds, and every failure is recorded against the WORK rather than
      * against it. Not benching cost a hundred and thirty-four trees; benching costs one worker for
      * {@link #BENCH_TICKS}. The streak resets on any success.
+     *
+     * <p><b>One project failing is not everything failing.</b> While another project has an item
+     * this worker could take, the streak sits it out of the one that failed last instead, and the
+     * streak runs on: each further failure sits its own project out, and the board stands down once
+     * nothing else is left. A first-night hut's pieces, failing at once for want of planks, outbid
+     * the base's table for days and stood a settler carrying two tables down every time (2026-10-21).
      */
-    private void benchIfFlailing(AgentId who, BrainContext ctx) {
+    private void benchIfFlailing(AgentId who, @org.jspecify.annotations.Nullable Project failed, BrainContext ctx) {
         if (who == null) {
             return;
         }
         int streak = flailing.merge(who, 1, Integer::sum);
-        if (streak >= BENCH_AFTER) {
-            benched.put(who, ctx.percepts().time() + BENCH_TICKS);
-            flailing.remove(who);
-            ctx.journal().record(Category.PROJECT, "board",
-                    "nothing is working — standing down from errands for " + BENCH_TICKS + "t");
+        if (streak < BENCH_AFTER) {
+            return;
         }
+        long now = ctx.percepts().time();
+        java.util.OptionalInt handle = failed == null ? java.util.OptionalInt.empty() : handleOf(failed);
+        if (handle.isPresent() && otherWorkFor(who, handle.getAsInt(), ctx, now)) {
+            sittingOut.computeIfAbsent(who, k -> new java.util.HashMap<>()).put(handle.getAsInt(), now + BENCH_TICKS);
+            ctx.journal().record(Category.PROJECT, "board", failed.describe()
+                    + " is not working — other errands first for " + BENCH_TICKS + "t");
+            return;
+        }
+        benched.put(who, now + BENCH_TICKS);
+        flailing.remove(who);
+        ctx.journal().record(Category.PROJECT, "board",
+                "nothing is working — standing down from errands for " + BENCH_TICKS + "t");
+    }
+
+    private boolean sitsOut(AgentId who, int handle, long now) {
+        Map<Integer, Long> projects = sittingOut.get(who);
+        Long until = projects == null ? null : projects.get(handle);
+        return until != null && until > now;
+    }
+
+    /** Whether a project but this one, and none sat out, has an item {@code who} could take now. */
+    private boolean otherWorkFor(AgentId who, int failed, BrainContext ctx, long now) {
+        for (Entry entry : entries) {
+            if (entry.handle() == failed || sitsOut(who, entry.handle(), now)) {
+                continue;
+            }
+            for (WorkItem item : entry.project().open()) {
+                Lease lease = leases.get(item);
+                if ((lease == null || !lease.liveAt(now)) && entry.project().offerableTo(item, who, ctx)
+                        && uncoverable(item.kit().missingNeeds(ctx.percepts().inventory()), ctx).isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Consecutive failures, with no success in between, before a worker is stood down. */
@@ -431,6 +496,9 @@ public class Board {
 
     /** Workers stood down, and the tick they may be offered work again. */
     private final Map<AgentId, Long> benched = new java.util.HashMap<>();
+
+    /** Projects a worker sits out, by handle, and the tick it may be offered them again. */
+    private final Map<AgentId, Map<Integer, Long>> sittingOut = new java.util.HashMap<>();
 
     /** Whether this worker is currently stood down — the offer scan skips them. */
     public boolean isBenched(AgentId who, long now) {
