@@ -14,7 +14,6 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.FakeContext;
 import dev.luizloyola.anima.core.brain.task.Follow;
 import dev.luizloyola.anima.core.brain.task.GoTo;
-import dev.luizloyola.anima.core.brain.task.SeekCompany;
 import dev.luizloyola.anima.core.brain.task.LookRound;
 import dev.luizloyola.anima.core.brain.task.WaitForCompany;
 import dev.luizloyola.anima.core.inv.ItemSpec;
@@ -433,7 +432,7 @@ class ExploreTest {
         WorkItem tell = only(explore);
         assertTrue(explore.offerableTo(tell, ctx.self, ctx), "the finder goes to tell");
         assertFalse(explore.offerableTo(tell, AgentId.random(), ctx));
-        assertInstanceOf(SeekCompany.class, tell.root());
+        assertInstanceOf(ReturnAndTell.class, tell.root());
 
         assertTrue(explore.leaderSettles(ctx.knowledge()));
         assertEquals(1, world.claimed.size(), "the leader's word claims it");

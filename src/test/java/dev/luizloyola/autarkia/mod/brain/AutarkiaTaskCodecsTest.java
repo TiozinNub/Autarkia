@@ -361,4 +361,13 @@ class AutarkiaTaskCodecsTest {
         assertEquals(java.util.Map.of("minecraft:bread", 2), carry.before(),
                 "or a restart after the take would carry the body's own kit home");
     }
+
+    @Test
+    void takingAPlaceToTheLeaderKeepsWhereToGoBackTo() {
+        var leader = dev.luizloyola.anima.core.brain.sense.BeingId.of(java.util.UUID.randomUUID());
+        var after = assertInstanceOf(dev.luizloyola.autarkia.core.board.ReturnAndTell.class,
+                roundTrip(new dev.luizloyola.autarkia.core.board.ReturnAndTell(new Pos(5, 64, -9), leader)));
+        assertEquals(new Pos(5, 64, -9), after.back());
+        assertEquals(leader, after.leader());
+    }
 }

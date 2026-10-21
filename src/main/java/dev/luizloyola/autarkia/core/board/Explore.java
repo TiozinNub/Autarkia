@@ -10,7 +10,6 @@ import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.brain.task.Follow;
 import dev.luizloyola.anima.core.brain.task.GoTo;
 import dev.luizloyola.anima.core.brain.task.LookRound;
-import dev.luizloyola.anima.core.brain.task.SeekCompany;
 import dev.luizloyola.anima.core.brain.task.Task;
 import dev.luizloyola.anima.core.brain.task.WaitForCompany;
 import dev.luizloyola.anima.core.log.Category;
@@ -576,7 +575,7 @@ public final class Explore implements PartyProject {
         public Task root() {
             HomeLooking world = looking;
             AgentId leader = world == null ? null : world.waitingLeader(party).orElse(null);
-            return new SeekCompany(BeingId.of(leader == null ? party.value() : leader.value()));
+            return new ReturnAndTell(search.start(), BeingId.of(leader == null ? party.value() : leader.value()));
         }
 
         @Override

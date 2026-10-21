@@ -198,6 +198,13 @@ public final class AutarkiaTasks {
                                 .forGetter(dev.luizloyola.autarkia.core.board.FetchErrand.BringGained::before)
                 ).apply(t, dev.luizloyola.autarkia.core.board.FetchErrand.BringGained::new)));
 
+        TaskCodecs.register("autarkia:return_and_tell", dev.luizloyola.autarkia.core.board.ReturnAndTell.class,
+                RecordCodecBuilder.mapCodec(t -> t.group(
+                        POS.optionalFieldOf("back").forGetter(task -> java.util.Optional.ofNullable(task.back())),
+                        net.minecraft.core.UUIDUtil.CODEC.fieldOf("leader").forGetter(task -> task.leader().value())
+                ).apply(t, (back, leader) -> new dev.luizloyola.autarkia.core.board.ReturnAndTell(back.orElse(null),
+                        dev.luizloyola.anima.core.brain.sense.BeingId.of(leader)))));
+
         TaskCodecs.register("autarkia:bring_back", BringBack.class,
                 RecordCodecBuilder.mapCodec(t -> t.group(
                         ITEM_SPEC.fieldOf("spec").forGetter(BringBack::spec),
