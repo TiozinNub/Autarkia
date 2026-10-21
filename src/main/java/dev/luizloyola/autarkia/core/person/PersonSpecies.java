@@ -124,6 +124,14 @@ public final class PersonSpecies {
             // Fifteen seconds on an unanswered question before it reads as a snub.
             .set(ProfileAspect.SOCIAL_PATIENCE_TICKS, 300)
             .set(ProfileAspect.SOCIAL_SHARE_FRACTION, 0.25)
+            // The group-up ledgers (2026-10-21): starting values, to be tuned on the forest.
+            .set(ProfileAspect.SOCIAL_OPENNESS_NEWCOMER, -10.0)
+            .set(ProfileAspect.SOCIAL_OPENNESS_NEWCOMER_DAYS, 3)
+            .set(ProfileAspect.SOCIAL_OPENNESS_MEMBER, -2.0)
+            .set(ProfileAspect.SOCIAL_OPENNESS_COMPANY, 10.0)
+            .set(ProfileAspect.SOCIAL_JOIN_MERGED, -15.0)
+            .set(ProfileAspect.SOCIAL_JOIN_MERGED_DAYS, 3)
+            .set(ProfileAspect.SOCIAL_JOIN_COMPANY, 10.0)
             // --- body: a 1.8 hitbox, a vanilla jump, and vanilla's sprint-jump limit ----------
             .set(ProfileAspect.BODY_HEIGHT, 1.8)   // the real hitbox, not a cell count
             .set(ProfileAspect.BODY_JUMP_HEIGHT, 1)
