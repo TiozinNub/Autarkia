@@ -434,11 +434,13 @@ public class Board {
      * against it. Not benching cost a hundred and thirty-four trees; benching costs one worker for
      * {@link #BENCH_TICKS}. The streak resets on any success.
      *
-     * <p><b>One project failing is not everything failing.</b> While another project has an item
-     * this worker could take, the streak sits it out of the one that failed last instead, and the
-     * streak runs on: each further failure sits its own project out, and the board stands down once
-     * nothing else is left. A first-night hut's pieces, failing at once for want of planks, outbid
-     * the base's table for days and stood a settler carrying two tables down every time (2026-10-21).
+     * <p><b>One project failing is not everything failing.</b> The streak sits the worker out of
+     * the project that failed last instead, and runs on: each further failure sits its own project
+     * out, so a worker failing everything is offered nothing soon enough, one failure a project. A
+     * first-night hut's pieces, failing at once for want of planks, outbid the base's table for days
+     * and stood a settler carrying two tables down every time; benched because nothing else was on
+     * offer at that moment, it missed the gather that came off its cooldown a minute later
+     * (2026-10-21). Only a failure no project owns stands the worker down from the whole board.
      */
     private void benchIfFlailing(AgentId who, @org.jspecify.annotations.Nullable Project failed, BrainContext ctx) {
         if (who == null) {
@@ -450,10 +452,10 @@ public class Board {
         }
         long now = ctx.percepts().time();
         java.util.OptionalInt handle = failed == null ? java.util.OptionalInt.empty() : handleOf(failed);
-        if (handle.isPresent() && otherWorkFor(who, handle.getAsInt(), ctx, now)) {
+        if (handle.isPresent()) {
             sittingOut.computeIfAbsent(who, k -> new java.util.HashMap<>()).put(handle.getAsInt(), now + BENCH_TICKS);
             ctx.journal().record(Category.PROJECT, "board", failed.describe()
-                    + " is not working — other errands first for " + BENCH_TICKS + "t");
+                    + " is not working — sat out for " + BENCH_TICKS + "t");
             return;
         }
         benched.put(who, now + BENCH_TICKS);
@@ -466,23 +468,6 @@ public class Board {
         Map<Integer, Long> projects = sittingOut.get(who);
         Long until = projects == null ? null : projects.get(handle);
         return until != null && until > now;
-    }
-
-    /** Whether a project but this one, and none sat out, has an item {@code who} could take now. */
-    private boolean otherWorkFor(AgentId who, int failed, BrainContext ctx, long now) {
-        for (Entry entry : entries) {
-            if (entry.handle() == failed || sitsOut(who, entry.handle(), now)) {
-                continue;
-            }
-            for (WorkItem item : entry.project().open()) {
-                Lease lease = leases.get(item);
-                if ((lease == null || !lease.liveAt(now)) && entry.project().offerableTo(item, who, ctx)
-                        && uncoverable(item.kit().missingNeeds(ctx.percepts().inventory()), ctx).isEmpty()) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /** Consecutive failures, with no success in between, before a worker is stood down. */

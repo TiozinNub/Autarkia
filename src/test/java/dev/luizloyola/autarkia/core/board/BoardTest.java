@@ -556,6 +556,7 @@ class BoardTest {
             board.failed(got, alice, ctx);
         }
         assertSame(table, got);
+        assertTrue(ctx.journal().recent(Integer.MAX_VALUE).stream().noneMatch(e -> e.detail().contains("standing down")));
         board.completed(table, alice, ctx);
         assertTrue(base.events.contains("completed:table"));
         assertFalse(board.isBenched(alice, ctx.now()));
@@ -565,7 +566,30 @@ class BoardTest {
     }
 
     @Test
-    void failingEveryProjectStillStandsTheWorkerDown() {
+    void workComingOffItsCooldownIsOfferedWhileTheFailingProjectIsSatOut() {
+        // Four hut failures with the gather cooling stood the settler down; the gather came off
+        // its cooldown a minute into the bench and waited it out (2026-10-21).
+        FakeProject hut = new FakeProject("hut");
+        for (int i = 0; i < 6; i++) {
+            hut.add(new FakeItem("wall " + i, 0.55, 0.0));
+        }
+        FakeProject gather = new FakeProject("gather");
+        WorkItem trip = gather.add(new FakeItem("trip", 0.5, 0.0));
+        gather.allow = (item, asker) -> false;
+        board.post(hut);
+        board.post(gather);
+        for (int i = 0; i < Board.BENCH_AFTER; i++) {
+            WorkItem got = board.bestFor(alice, ctx, ctx.now()).orElseThrow();
+            board.claim(got, alice, ctx.now());
+            board.failed(got, alice, ctx);
+        }
+        assertFalse(board.isBenched(alice, ctx.now()));
+        gather.allow = (item, asker) -> true;
+        assertSame(trip, board.bestFor(alice, ctx, ctx.now() + 100).orElseThrow());
+    }
+
+    @Test
+    void failingEveryProjectSitsEachOneOut() {
         FakeProject one = new FakeProject("one");
         FakeProject two = new FakeProject("two");
         for (int i = 0; i < 6; i++) {
@@ -579,7 +603,9 @@ class BoardTest {
             board.claim(got, alice, ctx.now());
             board.failed(got, alice, ctx);
         }
-        assertTrue(board.isBenched(alice, ctx.now()), "one project sat out, the last failing too: stood down");
+        assertFalse(board.isBenched(alice, ctx.now()));
+        assertTrue(board.bestFor(alice, ctx, ctx.now()).isEmpty(), "both sat out: nothing is offered");
+        assertTrue(board.bestFor(alice, ctx, ctx.now() + Board.BENCH_TICKS).isPresent());
     }
 
     /** Drives {@code who}'s failure streak to the bench threshold — the only way in from outside. */
