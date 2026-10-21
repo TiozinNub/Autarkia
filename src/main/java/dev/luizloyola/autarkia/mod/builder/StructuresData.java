@@ -174,6 +174,16 @@ public final class StructuresData extends SavedData implements StoreGuard.Checke
         return false;
     }
 
+    /** Drops the structure with this id; whether there was one. */
+    public boolean remove(PartyId party, UUID id) {
+        List<Structure> list = parties.get(party);
+        if (list == null || !list.removeIf(s -> s.id().equals(id))) {
+            return false;
+        }
+        setDirty();
+        return true;
+    }
+
     public Optional<Structure> find(PartyId party, UUID id) {
         return parties.getOrDefault(party, List.of()).stream().filter(s -> s.id().equals(id)).findFirst();
     }

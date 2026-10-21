@@ -13,7 +13,7 @@ import java.util.Optional;
  * right after HOME is chosen and claimed, a small dirt hut with a door). Met by any building of the
  * party's that stands with a door, the house included, or by a shelter a member remembers within
  * {@link dev.luizloyola.anima.core.brain.task.Refuge#NEAR_HOME} of HOME; until then it posts the
- * hut. The hut is kept once the house stands.
+ * hut. The hut is taken down once the house stands (Luiz, 2026-10-21), which goes on meeting it.
  */
 public final class ShelterLine implements DirectionLine {
 

@@ -12,6 +12,7 @@ import dev.luizloyola.anima.mod.nav.Doorways;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.ClearPlants;
+import dev.luizloyola.autarkia.core.board.Deconstruct;
 import dev.luizloyola.autarkia.core.board.FellTrees;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.GrowBuilding;
@@ -132,9 +133,14 @@ public final class Structures {
                     case LEVELLED -> build(server, party, structure);
                     case BUILDING -> stillBuilding(server, party, structure);
                     case GROWING -> Growths.step(server, party, structure);
-                    case BUILT, REFUSED -> structure;
+                    case BUILT -> HutTakeDown.due(server, party, structure, entry.getValue())
+                            ? HutTakeDown.takeDown(server, party, structure) : structure;
+                    case TAKING_DOWN -> HutTakeDown.stillTakingDown(server, party, structure);
+                    case REFUSED -> structure;
                 };
-                if (next != structure) {
+                if (next == null) {
+                    gone(server, party, structure);
+                } else if (next != structure) {
                     data.replace(party, next);
                     tell(server, party, next);
                 }
@@ -374,6 +380,11 @@ public final class Structures {
                             .with(new Structure.Work(List.copyOf(build.builders()), structure.work().begunAt(),
                                     server.overworld().getGameTime()));
                 }
+                if (structure.phase() == Phase.TAKING_DOWN && project instanceof Deconstruct deconstruct
+                        && HutTakeDown.takesDown(deconstruct, structure)) {
+                    gone(server, party, structure);
+                    break;
+                }
                 if (next != structure) {
                     data.replace(party, next);
                     tell(server, party, next);
@@ -385,6 +396,14 @@ public final class Structures {
                 }
             }
         }
+    }
+
+    /** A quick building taken down: its record goes, and nobody remembers a way into it. */
+    private static void gone(MinecraftServer server, PartyId party, Structure structure) {
+        HutTakeDown.forgetIt(server, party, structure);
+        StructuresData.get(server).remove(party, structure.id());
+        journal(server, party, structure.blueprint() + " at (" + structure.anchor().x() + ", "
+                + structure.anchor().y() + ", " + structure.anchor().z() + ") is taken down");
     }
 
     /** Whether this flatten is the one over this building's pad: its columns, at any height. */
@@ -412,7 +431,7 @@ public final class Structures {
         journal(server, party, describe(structure));
     }
 
-    private static void journal(MinecraftServer server, PartyId party, String line) {
+    static void journal(MinecraftServer server, PartyId party, String line) {
         for (AgentId member : PartyData.get(server).members(party)) {
             Journals.of(server).record(member, Category.PROJECT, "structures", line);
         }

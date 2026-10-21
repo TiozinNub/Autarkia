@@ -61,6 +61,11 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         BUILT,
         /** It stands, and grows into {@link #variants} from {@link #grownFrom}: its diff is being built. */
         GROWING,
+        /**
+         * A quick one no longer wanted, the house standing: its taking down is on the board, and the
+         * record goes once that is done (Luiz, 2026-10-21).
+         */
+        TAKING_DOWN,
         /** The pad cannot be levelled; {@link #note} says why. */
         REFUSED
     }
