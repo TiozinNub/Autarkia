@@ -9,12 +9,14 @@ import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Chooser;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Planner;
+import dev.luizloyola.autarkia.core.bp.Rebind;
 import dev.luizloyola.autarkia.core.builder.BuildOrder;
 import dev.luizloyola.autarkia.core.builder.Laying;
 import dev.luizloyola.autarkia.core.builder.Structure;
 import dev.luizloyola.autarkia.mod.bp.Blueprints;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -80,8 +82,13 @@ public final class Builds {
         }
         Build build = new Build(structure.id(), structure.blueprint(), order, structure.bid(PRIORITY));
         LevelProbe probe = new LevelProbe(level);
-        build.standing(step -> step.standsAs(probe.idAt(step.cell().x(), step.cell().y(), step.cell().z()),
-                probe.stateAt(step.cell().x(), step.cell().y(), step.cell().z())));
+        build.standing(step -> {
+            String id = probe.idAt(step.cell().x(), step.cell().y(), step.cell().z());
+            Map<String, String> state = probe.stateAt(step.cell().x(), step.cell().y(), step.cell().z());
+            // A quick building bound to another wood keeps what stands of the first.
+            return step.standsAs(id, state) || structure.quick()
+                    && Rebind.sameForm(Blueprints.dictionary(), step.block(), id) && step.standsAs(step.block(), state);
+        });
         return build;
     }
 }

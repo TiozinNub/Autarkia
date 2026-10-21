@@ -360,7 +360,8 @@ public final class Structures {
                 structure.bindings(), unobtainable, build.placedItems(), build.left(), stock).orElse(null);
         if (rebound == null && !starved.isEmpty()) {
             rebound = Rebind.held(bp, Blueprints.dictionary(), Placer.SUPPORT,
-                    structure.bindings(), structure.variants(), starved, build.placedItems(), stock).orElse(null);
+                    structure.bindings(), structure.variants(), starved, build.placedItems(), build.left(), stock)
+                    .orElse(null);
         }
         if (rebound == null) {
             return null;
