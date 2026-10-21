@@ -638,4 +638,11 @@ class PartyBoardCodecsTest {
         PartyBoard.Row after = roundTrip(new PartyBoard.Row(before, List.of()));
         assertEquals(before, after.project());
     }
+
+    @Test
+    void aWalkHomeStillToTakeReadsBackAsItWasWritten() {
+        var come = new dev.luizloyola.autarkia.core.board.ComeHome.State(new dev.luizloyola.anima.core.brain.sense.Pos(1, 64, -2),
+                List.of(dev.luizloyola.anima.core.agent.AgentId.random()), 0.5);
+        assertEquals(come, roundTrip(new PartyBoard.Row(come, List.of())).project());
+    }
 }

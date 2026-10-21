@@ -59,6 +59,9 @@ public final class WorkDoings {
             "deconstructing", "autarkia.doing.deconstructing", List.of(), true));
     public static final Doing EXPLORING = Doings.register(new Doing(
             "exploring", "autarkia.doing.exploring", List.of(), true));
+    /** Walking home to a party just joined (group-up spec). */
+    public static final Doing MOVING_IN = Doings.register(new Doing(
+            "moving_in", "autarkia.doing.moving_in", List.of(), true));
     /** Putting a building up. */
     public static final Doing BUILDING = Doings.register(new Doing(
             "building", "autarkia.doing.building", List.of(), true));

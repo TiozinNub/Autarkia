@@ -501,6 +501,16 @@ public final class PartyBoardCodecs {
                 return new dev.luizloyola.autarkia.core.board.Deconstruct.State(targets, why, priority, trips, gone);
             }));
 
+    /** Everything a {@code come_home} row carries: where home is, and who has still to walk there. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.ComeHome.State> COME_HOME =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    POS.fieldOf("home").forGetter(dev.luizloyola.autarkia.core.board.ComeHome.State::home),
+                    UUIDUtil.CODEC.listOf().fieldOf("newcomers")
+                            .forGetter(state -> state.newcomers().stream().map(AgentId::value).toList()),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.ComeHome.State::priority)
+            ).apply(project, (home, newcomers, priority) -> new dev.luizloyola.autarkia.core.board.ComeHome.State(
+                    home, newcomers.stream().map(AgentId::of).toList(), priority)));
+
     /** Everything a {@code site_building} row carries: what to site, and whether it was. */
     public static final MapCodec<dev.luizloyola.autarkia.core.board.SiteBuilding.State> SITE_BUILDING =
             RecordCodecBuilder.mapCodec(project -> project.group(
@@ -703,6 +713,7 @@ public final class PartyBoardCodecs {
             case "flatten" -> DataResult.success(FLATTEN);
             case "clear_plants" -> DataResult.success(CLEAR_PLANTS);
             case "site_building" -> DataResult.success(SITE_BUILDING);
+            case "come_home" -> DataResult.success(COME_HOME);
             case "grow_building" -> DataResult.success(GROW_BUILDING);
             case "build" -> DataResult.success(BUILD);
             case "deconstruct" -> DataResult.success(DECONSTRUCT);

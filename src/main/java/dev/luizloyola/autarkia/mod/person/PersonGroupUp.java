@@ -10,15 +10,21 @@ import dev.luizloyola.anima.core.social.Ledger;
 import dev.luizloyola.anima.core.social.Ledgers;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
+import dev.luizloyola.anima.core.store.Depot;
+import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.body.AgentBodies;
 import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.anima.mod.social.EncounterData;
 import dev.luizloyola.anima.mod.social.LedgerData;
 import dev.luizloyola.anima.mod.social.PartyData;
-import dev.luizloyola.autarkia.core.person.Joining;
+import dev.luizloyola.autarkia.core.board.ComeHome;
 import dev.luizloyola.autarkia.core.person.Joining.Mover;
 import dev.luizloyola.autarkia.core.person.Joining.Side;
+import dev.luizloyola.autarkia.core.person.Joining;
+import dev.luizloyola.autarkia.mod.board.PartyBoards;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -40,6 +46,9 @@ public final class PersonGroupUp implements GroupUp {
      */
     static final double SEEKING = 0.45;
 
+    /** Over the HOME search's 0.40 and the seek's 0.45: the first thing a newcomer takes. A starting value. */
+    static final double COME_HOME_PRIORITY = 0.5;
+
     /** Which refusal names the line that counts most against. */
     private static final Map<String, String> TOPICS = Map.of(
             LedgerData.NEWCOMER, "newcomers",
@@ -60,6 +69,7 @@ public final class PersonGroupUp implements GroupUp {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             live = server;
             PartyLines.install(server);
+            PartyData.get(server).onArrival((into, who) -> comeHome(server, into, who));
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         GroupUps.install(new PersonGroupUp());
@@ -127,6 +137,27 @@ public final class PersonGroupUp implements GroupUp {
         PartyId askers = parties.partyOf(asker);
         PartyId askeds = parties.partyOf(asked);
         return Optional.of(ask == Ask.JOIN ? new Move(askers, askeds) : new Move(askeds, askers));
+    }
+
+    /**
+     * Newcomers to a settled party walk home first (decision 20): those loaded and not already in its
+     * area get one walk each on the party's board.
+     */
+    private static void comeHome(MinecraftServer server, PartyId into, List<AgentId> newcomers) {
+        List<AgentId> walking = new ArrayList<>();
+        Optional<Depot.Site> site = Optional.empty();
+        for (AgentId who : newcomers) {
+            AgentBody body = AgentBodies.findLoaded(server, who);
+            site = site.isPresent() ? site : Depot.of(who);
+            if (body != null && site.isPresent() && !site.get().area().contains(ChunkKey.at(ChunkKey.OVERWORLD,
+                    body.entity().getBlockX(), body.entity().getBlockZ()))) {
+                walking.add(who);
+            }
+        }
+        if (!walking.isEmpty()) {
+            PartyBoards.of(server, into).post(new ComeHome(site.get().hint(), walking, COME_HOME_PRIORITY));
+            PartyBoards.touch(server);
+        }
     }
 
     /** One side as {@link Joining} reads it; somebody in no party yet is a homeless party of one. */
