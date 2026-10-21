@@ -83,6 +83,55 @@ public final class Rebind {
         return Optional.empty();
     }
 
+    /**
+     * A quick building's palette slot whose block its pieces came back short of, bound again to a
+     * way of the slot the party holds enough of for every cell that reads it. A first-night hut
+     * bound to oak planks gave up its floor 336 times with no logs to be had while its settler
+     * carried 57 dirt (2026-10-21). As in {@link #of}, only while none of the slot's block stands; a
+     * material slot (the door's wood) stays as bound.
+     *
+     * @param starved item ids the build's pieces came back short of
+     * @param placed  item ids of the steps that stand
+     */
+    public static Optional<Rebound> held(Blueprint bp, Dictionary dict, Support support, Map<Integer, String> bindings,
+                                         Map<String, String> variants, Set<String> starved, Set<String> placed,
+                                         Stock stock) {
+        for (SlotInfo slot : bp.slots()) {
+            String bound = bindings.get(slot.number());
+            if (slot.kind() != SlotKind.PALETTE || slot.binding() != Binding.OPTION || bound == null
+                    || bound.startsWith("$")) {
+                continue;
+            }
+            String item = itemOf(dict, Ids.qualify(bound));
+            if (!starved.contains(item) || placed.contains(item)) {
+                continue;
+            }
+            Map<Integer, String> pins = new LinkedHashMap<>(bindings);
+            pins.remove(slot.number());
+            // Nothing is gettable but what is held in full, and the first way otherwise: the bound one.
+            BuildPlan plan = Planner.plan(bp, dict, support, pins, variants,
+                    Chooser.gettable(stock, blocks -> false, (what, choices) -> 0), new java.util.Random(0),
+                    new Diagnostics());
+            String to = plan == null ? null : plan.bindings().get(slot.number());
+            if (to == null || to.equals(bound) || to.startsWith("$")) {
+                continue;
+            }
+            String toBlock = Ids.qualify(to);
+            String toItem = itemOf(dict, toBlock);
+            int need = plan.bill().stream().filter(line -> line.items().contains(toItem))
+                    .mapToInt(BuildPlan.BillLine::count).sum();
+            // The chooser's fallback is the slot's first way, which need not be held at all.
+            if (!stock.enough(List.of(new Choice(to, Set.of(toBlock), 0, need))).isEmpty()) {
+                return Optional.of(new Rebound(slot.number(), bound, to, Set.of(item), plan.bindings()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static String itemOf(Dictionary dict, String block) {
+        return dict.block(block).map(Dictionary.BlockInfo::item).filter(id -> !id.isEmpty()).orElse(block);
+    }
+
     /** The items the slot's forms of this material are placed with. */
     private static Set<String> items(Dictionary dict, String material, SlotInfo slot) {
         Set<String> items = new TreeSet<>();

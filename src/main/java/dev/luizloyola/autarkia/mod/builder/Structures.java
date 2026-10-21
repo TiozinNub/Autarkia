@@ -10,6 +10,7 @@ import dev.luizloyola.anima.core.terrain.NaturalGround;
 import dev.luizloyola.anima.mod.log.Journals;
 import dev.luizloyola.anima.mod.nav.Doorways;
 import dev.luizloyola.anima.mod.social.PartyData;
+import dev.luizloyola.autarkia.compat.bp.Placer;
 import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.Deconstruct;
@@ -23,6 +24,7 @@ import dev.luizloyola.autarkia.core.bp.Blueprint;
 import dev.luizloyola.autarkia.core.bp.BuildPlan;
 import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Rebind;
+import dev.luizloyola.autarkia.core.bp.Stock;
 import dev.luizloyola.autarkia.core.builder.HouseSite;
 import dev.luizloyola.autarkia.core.bp.Footprint;
 import dev.luizloyola.autarkia.core.builder.Structure;
@@ -337,15 +339,29 @@ public final class Structures {
         return structure.at(Phase.LEVELLED, "");
     }
 
-    /** The structure with a slot bound again, said once in the journals, or null when none should be. */
+    /**
+     * The structure with a slot bound again, said once in the journals, or null when none should be:
+     * a material nobody can get ({@link Rebind#of}), or for a quick building one its pieces came back
+     * short of while the party holds enough of another way ({@link Rebind#held}).
+     */
     private static @Nullable Structure rebind(MinecraftServer server, PartyId party, Structure structure, Build build) {
-        Set<String> unobtainable = build.unobtainable(server.overworld().getGameTime());
-        if (unobtainable.isEmpty()) {
+        long now = server.overworld().getGameTime();
+        Set<String> unobtainable = build.unobtainable(now);
+        Set<String> starved = structure.quick() ? build.shortOf(now) : Set.of();
+        if (unobtainable.isEmpty() && starved.isEmpty()) {
             return null;
         }
         Blueprint bp = Blueprints.find(structure.blueprint()).map(entry -> entry.compiled().blueprint()).orElse(null);
-        Rebind.Rebound rebound = bp == null ? null : Rebind.of(bp, Blueprints.dictionary(), structure.bindings(),
-                unobtainable, build.placedItems(), build.left(), PartyStock.of(server, party)).orElse(null);
+        if (bp == null) {
+            return null;
+        }
+        Stock stock = PartyStock.of(server, party);
+        Rebind.Rebound rebound = unobtainable.isEmpty() ? null : Rebind.of(bp, Blueprints.dictionary(),
+                structure.bindings(), unobtainable, build.placedItems(), build.left(), stock).orElse(null);
+        if (rebound == null && !starved.isEmpty()) {
+            rebound = Rebind.held(bp, Blueprints.dictionary(), Placer.SUPPORT,
+                    structure.bindings(), structure.variants(), starved, build.placedItems(), stock).orElse(null);
+        }
         if (rebound == null) {
             return null;
         }

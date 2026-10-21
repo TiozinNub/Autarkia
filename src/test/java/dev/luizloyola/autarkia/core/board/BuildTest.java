@@ -157,6 +157,8 @@ class BuildTest {
         build.tick(100);
         assertEquals(2, build.open().size(), "the rest of the wave goes on");
         assertTrue(build.describe().contains("short of 24 " + PLANKS), build.describe());
+        assertEquals(java.util.Set.of(PLANKS), build.shortOf(100), "what a quick building may be bound away from");
+        assertTrue(build.shortOf(100 + Build.MATERIAL_WAIT).isEmpty());
         AgentId asker = AgentId.random();
         assertFalse(build.offerableTo(first, asker, empty), "nobody without planks gets it back yet");
         assertTrue(build.offerableTo(second, asker, empty), "the other piece is not waiting");

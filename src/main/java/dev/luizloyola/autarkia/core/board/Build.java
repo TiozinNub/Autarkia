@@ -268,6 +268,17 @@ public final class Build implements PartyProject {
         return proved;
     }
 
+    /** The items a piece's builder came back short of, while the piece waits for them. */
+    public Set<String> shortOf(long now) {
+        Set<String> items = new TreeSet<>();
+        for (Shortage shortage : shortages.values()) {
+            if (shortage.until() > now) {
+                items.addAll(shortage.missing().keySet());
+            }
+        }
+        return items;
+    }
+
     /** The items of the steps that stand. */
     public Set<String> placedItems() {
         Set<String> items = new TreeSet<>();

@@ -11,6 +11,7 @@ import dev.luizloyola.autarkia.core.bp.Diagnostics;
 import dev.luizloyola.autarkia.core.bp.Facts;
 import dev.luizloyola.autarkia.core.bp.Placement;
 import dev.luizloyola.autarkia.core.bp.Planner;
+import dev.luizloyola.autarkia.core.bp.Rebind;
 import dev.luizloyola.autarkia.core.bp.Stock;
 import dev.luizloyola.autarkia.core.bp.Support;
 import java.io.IOException;
@@ -104,6 +105,37 @@ class DirtHutTest {
                 block -> block.equals("minecraft:dirt") || block.endsWith("_door"));
         assertEquals(30, blocks(held(hut, Map.of(), Map.of("minecraft:oak_log", 20), dirtOnly))
                 .get("minecraft:dirt"), "dirt in a store seen, no logs to be had: not the planks first in line");
+    }
+
+    @Test
+    void aHutShortOfItsPlanksIsBoundToTheDirtHeldAndKeepsItsDoor() throws IOException {
+        // Bound to oak planks with nothing held, its floor given up 336 times while its settler
+        // came to carry 57 dirt (2026-10-21).
+        Blueprint hut = BuildOrderTest.bind(BuildOrderTest.read(PATH));
+        Map<Integer, String> oak = held(hut, Map.of(), Map.of("minecraft:oak_log", 20), WOOD_AGE).bindings();
+        Stock dirt = Stock.of(BuildOrderTest.DICT, Map.of("minecraft:dirt", 57), Map.of());
+        Set<String> short_ = Set.of("minecraft:oak_planks");
+
+        Rebind.Rebound rebound = Rebind.held(hut, BuildOrderTest.DICT, Support.solidCubes(BuildOrderTest.DICT), oak,
+                Map.of(), short_, Set.of(), dirt).orElseThrow();
+        assertEquals("dirt", rebound.to());
+        assertEquals(oak.get(2), rebound.bindings().get(2), "the door's wood stays");
+        Map<String, Integer> got = blocks(Planner.plan(hut, BuildOrderTest.DICT, Support.solidCubes(BuildOrderTest.DICT),
+                rebound.bindings(), Map.of(), (what, choices) -> 0, new Random(3), new Diagnostics()));
+        assertEquals(30, got.get("minecraft:dirt"));
+        assertEquals(2, got.get("minecraft:oak_door"));
+
+        Stock little = Stock.of(BuildOrderTest.DICT, Map.of("minecraft:dirt", 12), Map.of());
+        assertTrue(Rebind.held(hut, BuildOrderTest.DICT, Support.solidCubes(BuildOrderTest.DICT), oak, Map.of(),
+                short_, Set.of(), little).isEmpty(), "too little dirt for the walls: it waits for planks");
+        assertTrue(Rebind.held(hut, BuildOrderTest.DICT, Support.solidCubes(BuildOrderTest.DICT), oak, Map.of(),
+                short_, short_, dirt).isEmpty(), "planks standing: one wall is not two materials");
+        assertTrue(Rebind.held(hut, BuildOrderTest.DICT, Support.solidCubes(BuildOrderTest.DICT), oak, Map.of(),
+                Set.of("minecraft:oak_door"), Set.of(), dirt).isEmpty(), "short of its door only: the walls stay");
+        Map<Integer, String> dug = held(hut, Map.of("minecraft:dirt", 30), Map.of(), WOOD_AGE).bindings();
+        assertTrue(Rebind.held(hut, BuildOrderTest.DICT, Support.solidCubes(BuildOrderTest.DICT), dug, Map.of(),
+                Set.of("minecraft:dirt"), Set.of(), Stock.of(BuildOrderTest.DICT, Map.of(), Map.of())).isEmpty(),
+                "nothing else held in full: not the planks first in line");
     }
 
     private static String only(Map<String, Integer> blocks, String suffix) {
