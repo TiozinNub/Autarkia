@@ -101,14 +101,22 @@ final class MovingIn {
             replace(server, party, built, structures, added, said);
             return said;
         }
-        boolean first = structures.stream().noneMatch(other -> !other.id().equals(built.id()) && other.stands());
-        if (!first || !housed.contains(SetUp.STORE.kind())) {
+        if (!first(structures, built) || !housed.contains(SetUp.STORE.kind())) {
             return said;
         }
         Set<PoiKind> starter = new LinkedHashSet<>(housed);
         starter.retainAll(List.of(SetUp.STORE.kind(), SetUp.WORKBENCH.kind()));
         replace(server, party, built, structures, starter, said);
         return said;
+    }
+
+    /**
+     * Whether {@code built} is the party's first building to stand. A quick one does not count: the
+     * first-night hut stood beside every house, and no starter base was ever moved in (2026-10-21).
+     */
+    static boolean first(List<Structure> structures, Structure built) {
+        return structures.stream().noneMatch(other -> !other.id().equals(built.id()) && other.stands()
+                && !other.quick());
     }
 
     /**
