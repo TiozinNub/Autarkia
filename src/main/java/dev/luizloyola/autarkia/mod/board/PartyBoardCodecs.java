@@ -522,6 +522,19 @@ public final class PartyBoardCodecs {
             ).apply(project, (at, newcomers, priority, done) -> new dev.luizloyola.autarkia.core.board.FetchStation.State(
                     at, newcomers.stream().map(AgentId::of).toList(), priority, done)));
 
+    /** Everything a {@code follow_leader} row carries: whom to keep with, who does, and their pauses. */
+    public static final MapCodec<dev.luizloyola.autarkia.core.board.FollowLeader.State> FOLLOW_LEADER =
+            RecordCodecBuilder.mapCodec(project -> project.group(
+                    UUIDUtil.CODEC.fieldOf("leader").forGetter(state -> state.leader().value()),
+                    UUIDUtil.CODEC.listOf().fieldOf("followers")
+                            .forGetter(state -> state.followers().stream().map(AgentId::value).toList()),
+                    Codec.DOUBLE.fieldOf("priority").forGetter(dev.luizloyola.autarkia.core.board.FollowLeader.State::priority),
+                    GATHER_COOLDOWN.listOf().optionalFieldOf("paused", List.of())
+                            .forGetter(dev.luizloyola.autarkia.core.board.FollowLeader.State::paused),
+                    Codec.BOOL.optionalFieldOf("ended", false).forGetter(dev.luizloyola.autarkia.core.board.FollowLeader.State::ended)
+            ).apply(project, (leader, followers, priority, paused, ended) -> new dev.luizloyola.autarkia.core.board.FollowLeader.State(
+                    AgentId.of(leader), followers.stream().map(AgentId::of).toList(), priority, paused, ended)));
+
     /** Everything a {@code site_building} row carries: what to site, and whether it was. */
     public static final MapCodec<dev.luizloyola.autarkia.core.board.SiteBuilding.State> SITE_BUILDING =
             RecordCodecBuilder.mapCodec(project -> project.group(
@@ -727,6 +740,7 @@ public final class PartyBoardCodecs {
             case "site_building" -> DataResult.success(SITE_BUILDING);
             case "come_home" -> DataResult.success(COME_HOME);
             case "fetch_station" -> DataResult.success(FETCH_STATION);
+            case "follow_leader" -> DataResult.success(FOLLOW_LEADER);
             case "grow_building" -> DataResult.success(GROW_BUILDING);
             case "build" -> DataResult.success(BUILD);
             case "deconstruct" -> DataResult.success(DECONSTRUCT);

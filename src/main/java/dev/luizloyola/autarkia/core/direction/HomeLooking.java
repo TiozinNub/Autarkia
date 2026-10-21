@@ -42,6 +42,14 @@ public interface HomeLooking {
         return Optional.empty();
     }
 
+    /**
+     * Why the spot {@code at} will not do as {@code self}'s party's HOME — a {@code not_here} topic —
+     * or empty when it passes, judged as a search judges a plot against the bar it has reached.
+     */
+    default Optional<String> judgeHere(AgentId self, Pos at, AgentKnowledge knowledge) {
+        return Optional.of("poor");
+    }
+
     /** The place {@code self}'s party found, to put to {@code leader} if that is who it waits on. */
     default Optional<Pos> suggestion(AgentId self, AgentId leader) {
         return Optional.empty();

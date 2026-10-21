@@ -652,4 +652,13 @@ class PartyBoardCodecsTest {
                 List.of(dev.luizloyola.anima.core.agent.AgentId.random()), 0.45, false);
         assertEquals(fetch, roundTrip(new PartyBoard.Row(fetch, List.of())).project());
     }
+
+    @Test
+    void aWalkWithTheLeaderReadsBackAsItWasWritten() {
+        var pia = dev.luizloyola.anima.core.agent.AgentId.random();
+        var follow = new dev.luizloyola.autarkia.core.board.FollowLeader.State(
+                dev.luizloyola.anima.core.agent.AgentId.random(), List.of(pia), 0.6,
+                List.of(new dev.luizloyola.autarkia.core.board.Gather.Cooldown(pia, 400L)), false);
+        assertEquals(follow, roundTrip(new PartyBoard.Row(follow, List.of())).project());
+    }
 }

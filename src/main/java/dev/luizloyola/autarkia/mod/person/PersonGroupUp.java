@@ -2,6 +2,7 @@ package dev.luizloyola.autarkia.mod.person;
 
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.agent.ProfileAspect;
+import dev.luizloyola.anima.core.brain.sense.Pos;
 import dev.luizloyola.anima.core.config.Config;
 import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.anima.core.social.GroupUp;
@@ -11,29 +12,38 @@ import dev.luizloyola.anima.core.social.Ledgers;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.PlaceRow;
 import dev.luizloyola.anima.core.social.Places;
+import dev.luizloyola.anima.core.social.speech.Encounter;
+import dev.luizloyola.anima.core.social.speech.Handover;
 import dev.luizloyola.anima.core.social.speech.SpeechActs;
+import dev.luizloyola.anima.core.social.speech.Utterance;
 import dev.luizloyola.anima.core.store.Depot;
 import dev.luizloyola.anima.core.store.Store;
 import dev.luizloyola.anima.core.territory.ChunkKey;
 import dev.luizloyola.anima.mod.body.AgentBodies;
 import dev.luizloyola.anima.mod.body.AgentBody;
+import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.social.ContactData;
 import dev.luizloyola.anima.mod.social.EncounterData;
 import dev.luizloyola.anima.mod.social.LedgerData;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.social.PlacesData;
+import dev.luizloyola.anima.mod.social.SpeechEffects;
 import dev.luizloyola.autarkia.core.board.ComeHome;
 import dev.luizloyola.autarkia.core.board.FetchStation;
+import dev.luizloyola.autarkia.core.board.FollowLeader;
+import dev.luizloyola.autarkia.core.board.PartyBoard;
 import dev.luizloyola.autarkia.core.person.Joining.Mover;
 import dev.luizloyola.autarkia.core.person.Joining.Side;
 import dev.luizloyola.autarkia.core.person.Joining;
 import dev.luizloyola.autarkia.mod.board.PartyBoards;
+import dev.luizloyola.autarkia.mod.direction.HomeLooks;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -50,6 +60,9 @@ public final class PersonGroupUp implements GroupUp {
      * answering a call (0.55). It only ever targets somebody already perceived. A starting value.
      */
     static final double SEEKING = 0.45;
+
+    /** Over every piece of work (the base's set-up is 0.52): keeping up with the leader comes first. */
+    static final double FOLLOW_PRIORITY = 0.6;
 
     /** Over the HOME search's 0.40 and the seek's 0.45: the first thing a newcomer takes. A starting value. */
     static final double COME_HOME_PRIORITY = 0.5;
@@ -85,6 +98,74 @@ public final class PersonGroupUp implements GroupUp {
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         GroupUps.install(new PersonGroupUp());
+        SpeechEffects.on(SpeechActs.FOLLOW_ME.key(), PersonGroupUp::followMe);
+        SpeechEffects.on(SpeechActs.HERE_WILL_DO.key(), PersonGroupUp::hereWillDo);
+    }
+
+    /** A player leading a party with no HOME: theirs is the word that settles it. */
+    @Override
+    public boolean decidesHome(AgentId who) {
+        MinecraftServer server = live;
+        if (server == null || AgentDirectory.of(server).identity(who).isPresent()) {
+            return false; // a settler's lead is the scout's, and the search settles on its own
+        }
+        PartyData parties = PartyData.get(server);
+        return parties.currentPartyOf(who)
+                .filter(party -> parties.leader(party).filter(who::equals).isPresent())
+                .filter(party -> PartyLines.homeless(server, party)).isPresent();
+    }
+
+    /**
+     * "Follow me": every member within the leader's earshot keeps with them until they name the spot
+     * (decision 14). One order a party: a second replaces the first.
+     */
+    private static void followMe(MinecraftServer server, Encounter e, int index) {
+        AgentId leader = e.transcript().get(index).author();
+        ServerPlayer player = leader == null ? null : server.getPlayerList().getPlayer(leader.value());
+        if (player == null) {
+            return;
+        }
+        PartyData parties = PartyData.get(server);
+        Optional<PartyId> party = parties.currentPartyOf(leader);
+        if (party.isEmpty()) {
+            return;
+        }
+        List<AgentId> followers = new ArrayList<>();
+        for (AgentId member : parties.members(party.get())) {
+            AgentBody body = AgentBodies.findLoaded(server, member);
+            if (body != null && body.entity().distanceTo(player) <= body.profile().i(ProfileAspect.SOCIAL_HAIL_RADIUS)) {
+                followers.add(member);
+            }
+        }
+        PartyBoard board = PartyBoards.of(server, party.get());
+        endFollowing(board);
+        if (!followers.isEmpty()) {
+            board.post(new FollowLeader(leader, followers, FOLLOW_PRIORITY));
+        }
+        PartyBoards.touch(server);
+    }
+
+    /** "This will do", answering the leader's "Ok, here": HOME where the leader stands, and the walk ends. */
+    private static void hereWillDo(MinecraftServer server, Encounter e, int index) {
+        AgentId judge = e.transcript().get(index).author();
+        Optional<Utterance> here = Handover.answered(e, index).filter(u -> u.act().equals(SpeechActs.HERE.key()));
+        AgentBody body = judge == null ? null : AgentBodies.findLoaded(server, judge);
+        ServerPlayer leader = here.map(Utterance::author).map(id -> server.getPlayerList().getPlayer(id.value()))
+                .orElse(null);
+        Optional<PartyId> party = judge == null ? Optional.empty() : PartyData.get(server).currentPartyOf(judge);
+        if (body == null || leader == null || party.isEmpty()) {
+            return;
+        }
+        Pos at = new Pos(leader.getBlockX(), leader.getBlockY(), leader.getBlockZ());
+        if (HomeLooks.settleHere(server, party.get(), at, body.brain().knowledge())) {
+            endFollowing(PartyBoards.of(server, party.get()));
+            PartyBoards.touch(server);
+        }
+    }
+
+    private static void endFollowing(PartyBoard board) {
+        board.projects().stream().filter(FollowLeader.class::isInstance).map(FollowLeader.class::cast)
+                .forEach(FollowLeader::end);
     }
 
     @Override

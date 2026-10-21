@@ -379,6 +379,19 @@ public final class Explore implements PartyProject {
         }
     }
 
+    /** HOME was set by the leader's own pick: the search, and any suggestion, are done. */
+    public void settledByTheLeader() {
+        suggested = false;
+        search.claimed();
+        current = step();
+    }
+
+    /** Why {@code at} will not do as {@code self}'s HOME, or empty when it passes. */
+    public static Optional<String> judgeHere(AgentId self, Pos at, AgentKnowledge knowledge) {
+        HomeLooking world = looking;
+        return world == null ? Optional.of("poor") : world.judgeHere(self, at, knowledge);
+    }
+
     /** The place {@code self}'s party found, to put to {@code leader}, when that is who it waits on. */
     public static Optional<Pos> suggestionFor(AgentId self, AgentId leader) {
         HomeLooking world = looking;

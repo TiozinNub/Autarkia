@@ -22,6 +22,7 @@ import dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Known;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Table;
 import dev.luizloyola.autarkia.core.direction.HomeJudge.Want;
+import dev.luizloyola.autarkia.core.direction.HomeJudge;
 import dev.luizloyola.autarkia.core.direction.HomeKnob;
 import dev.luizloyola.autarkia.core.direction.HomeLooking;
 import dev.luizloyola.autarkia.core.direction.HomeSearch;
@@ -93,6 +94,87 @@ public final class HomeLooks implements HomeLooking {
     private static Optional<Explore> explore(MinecraftServer server, AgentId member) {
         return PartyData.get(server).currentPartyOf(member).flatMap(party -> PartyBoards.of(server, party)
                 .projects().stream().filter(Explore.class::isInstance).map(Explore.class::cast).findFirst());
+    }
+
+    @Override
+    public Optional<String> judgeHere(AgentId self, Pos at, AgentKnowledge knowledge) {
+        MinecraftServer server = live;
+        Optional<PartyId> party = server == null ? Optional.empty() : PartyData.get(server).currentPartyOf(self);
+        if (party.isEmpty()) {
+            return Optional.of("poor");
+        }
+        Spot spot = spot(server, party.get(), at, knowledge);
+        return spot.plot() == null ? Optional.of(spot.why()) : Optional.empty();
+    }
+
+    /**
+     * The leader's own pick made HOME (decision 14): judged as {@link #judgeHere} judges it, so a spot
+     * the judge passed is the spot claimed. Whether it was.
+     */
+    public static boolean settleHere(MinecraftServer server, PartyId party, Pos at, AgentKnowledge knowledge) {
+        Spot spot = spot(server, party, at, knowledge);
+        if (spot.plot() == null) {
+            return false;
+        }
+        Candidate plot = spot.plot();
+        Pos centre = new Pos(plot.x(), plot.y() + 1, plot.z());
+        boolean settled = Directions.settle(server, party, Home.square(centre, plot.size() / 2),
+                Reason.of(Reason.Kind.FOUND, "chosen by the leader at (" + centre.x() + ", " + centre.y() + ", "
+                        + centre.z() + "), worth " + Math.round(plot.value()))).granted();
+        if (settled) {
+            PartyBoards.of(server, party).projects().stream().filter(Explore.class::isInstance)
+                    .map(Explore.class::cast).forEach(Explore::settledByTheLeader);
+            PartyBoards.touch(server);
+        }
+        return settled;
+    }
+
+    /** The plot centred on {@code at} if it passes, else why not. */
+    private record Spot(@Nullable Candidate plot, String why) {
+    }
+
+    private static Spot spot(MinecraftServer server, PartyId party, Pos at, AgentKnowledge knowledge) {
+        HomeChooser.Choice choice = HomeChooser.choose(server.overworld(), new BlockPos(at.x(), at.y(), at.z()), 0,
+                party, knowledge);
+        Optional<Candidate> plot = choice.judgement().ranked().stream()
+                .filter(c -> c.x() == at.x() && c.z() == at.z()).findFirst();
+        if (plot.isEmpty()) {
+            Map<HomeJudge.Refusal, Integer> refused = choice.judgement().refused();
+            if (refused.containsKey(HomeJudge.Refusal.PARTY)) {
+                return new Spot(null, "party");
+            }
+            if (refused.containsKey(HomeJudge.Refusal.LAVA)) {
+                return new Spot(null, "lava");
+            }
+            return new Spot(null, refused.isEmpty() ? "room" : "poor");
+        }
+        Table table = choice.table();
+        double bar = PartyBoards.of(server, party).projects().stream().filter(Explore.class::isInstance)
+                .map(Explore.class::cast).map(explore -> explore.search().bar(table))
+                .filter(Double::isFinite).findFirst().orElse(table.bar(0));
+        if (plot.get().value() >= bar) {
+            return new Spot(plot.get(), "");
+        }
+        return new Spot(null, weakest(table, plot.get()));
+    }
+
+    /** The want furthest below what it could be worth: what the spot most lacks. */
+    private static String weakest(Table table, Candidate plot) {
+        String worst = "poor";
+        double most = 0;
+        for (HomeJudge.Line line : plot.lines()) {
+            double worth = switch (line.want()) {
+                case WATER -> table.water().worth();
+                case STONE -> table.stone().worth();
+                case ROOM -> table.roomWorth();
+                default -> 0;
+            };
+            if (worth - line.points() > most) {
+                most = worth - line.points();
+                worst = line.want().name().toLowerCase(java.util.Locale.ROOT);
+            }
+        }
+        return worst;
     }
 
     /** A party led by a player waits on that player for HOME; one led by a settler does not. */

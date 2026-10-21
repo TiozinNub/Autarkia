@@ -173,4 +173,39 @@ class GroupUpRungsTest {
             dev.luizloyola.autarkia.core.board.Explore.install(null);
         }
     }
+
+    @Test
+    void theSpotTheLeaderNamesIsJudged() {
+        java.util.concurrent.atomic.AtomicReference<Optional<String>> verdict =
+                new java.util.concurrent.atomic.AtomicReference<>(Optional.of("water"));
+        dev.luizloyola.autarkia.core.board.Explore.install(new dev.luizloyola.autarkia.core.direction.HomeLooking() {
+            @Override
+            public Optional<Look> look(Pos at, dev.luizloyola.anima.core.social.PartyId party,
+                    dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge knowledge) {
+                return Optional.empty();
+            }
+
+            @Override
+            public boolean claim(dev.luizloyola.anima.core.social.PartyId party,
+                    dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate plot,
+                    dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge knowledge) {
+                return false;
+            }
+
+            @Override
+            public Optional<String> judgeHere(AgentId self, Pos at,
+                    dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge knowledge) {
+                return verdict.get();
+            }
+        });
+        try {
+            Utterance here = new Utterance(other, SpeechActs.HERE.key(), Map.of(), 0);
+            Chooser.Turn turn = turn(encounter(), Optional.of(here), SpeechActs.NOT_HERE, SpeechActs.HERE_WILL_DO);
+            assertEquals(new Chooser.Line(SpeechActs.NOT_HERE, Map.of(Utterance.TOPIC, "water")), chooser.choose(ctx, turn));
+            verdict.set(Optional.empty());
+            assertEquals(Chooser.Line.of(SpeechActs.HERE_WILL_DO), chooser.choose(ctx, turn));
+        } finally {
+            dev.luizloyola.autarkia.core.board.Explore.install(null);
+        }
+    }
 }
