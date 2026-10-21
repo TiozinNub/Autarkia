@@ -319,6 +319,8 @@ class ExploreTest {
                 "nor does a companion take the scout's step");
         WorkItem mine = explore.realise(offer, companion.self, companion);
         explore.claimed(mine, companion.self);
+        assertTrue(open.get(0).awayOnPurpose() && offer.awayOnPurpose() && mine.awayOnPurpose(),
+                "out looking for a home, night catches them where they are");
         Follow follow = assertInstanceOf(Follow.class, mine.root());
         assertEquals(dev.luizloyola.anima.core.brain.sense.BeingId.of(scout.self), follow.leader());
         assertEquals(new WorkKey.ForMember(WorkKey.ACCOMPANY, companion.self),

@@ -135,6 +135,14 @@ class ExpeditionTest {
     }
 
     @Test
+    void aFarTripAndASearchAreAwayOnPurpose() {
+        Expedition far = lost(Expedition.SEARCH_PATIENCE);
+        assertTrue(far.open().stream().allMatch(WorkItem::awayOnPurpose));
+        WorkItem look = far.realise(far.open().get(1), EMILY, atHome());
+        assertTrue(look.awayOnPurpose(), "night catches a search where it is, and it digs in there");
+    }
+
+    @Test
     void onlyOneWhoKnowsNoWayIsSentLooking() {
         Expedition far = lost(Expedition.SEARCH_PATIENCE);
         WorkItem lead = far.open().get(0);

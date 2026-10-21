@@ -386,6 +386,12 @@ public final class Explore implements PartyProject {
         private final Phase phase;
         private final boolean waiting;
 
+        /** Out looking for a home: night catches it where it is (Luiz, 2026-10-21). */
+        @Override
+        public boolean awayOnPurpose() {
+            return true;
+        }
+
         private Step(Phase phase, boolean waiting) {
             this.phase = phase;
             this.waiting = waiting;
@@ -452,6 +458,12 @@ public final class Explore implements PartyProject {
     /** The offer to keep with the scout; whoever takes it gets an {@link Accompany} of their own. */
     private final class AccompanyOffer implements WorkItem {
 
+        /** Out looking for a home: night catches it where it is (Luiz, 2026-10-21). */
+        @Override
+        public boolean awayOnPurpose() {
+            return true;
+        }
+
         @Override
         public double priority() {
             return priority;
@@ -476,6 +488,12 @@ public final class Explore implements PartyProject {
     /** One companion's keeping with the scout (decision 2: the party travels together). */
     private final class Accompany implements WorkItem {
         private final AgentId who;
+
+        /** Out looking for a home: night catches it where it is (Luiz, 2026-10-21). */
+        @Override
+        public boolean awayOnPurpose() {
+            return true;
+        }
 
         /** The meeting place its follow was given. */
         private @Nullable Pos meet;

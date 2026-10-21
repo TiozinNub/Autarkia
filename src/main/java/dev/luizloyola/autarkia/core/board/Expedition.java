@@ -704,6 +704,12 @@ public final class Expedition implements PartyProject {
             return true;
         }
 
+        /** A far trip: night catches it where it is, and it digs in there (Luiz, 2026-10-21). */
+        @Override
+        public boolean awayOnPurpose() {
+            return true;
+        }
+
         @Override
         public Kit kit() {
             return Stock.gatheringKit(resource);
