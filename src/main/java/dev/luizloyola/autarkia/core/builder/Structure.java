@@ -156,6 +156,21 @@ public record Structure(UUID id, String blueprint, int version, Map<String, Stri
         return false;
     }
 
+    /**
+     * Whether a felling keeps off a block: within the walls of one going up or standing. Before
+     * that, its own felling is clearing the same ground.
+     */
+    public static boolean fencesFelling(java.util.Collection<Structure> structures, Pos at) {
+        for (Structure structure : structures) {
+            Phase phase = structure.phase();
+            boolean walls = phase == Phase.BUILDING || structure.stands() || phase == Phase.TAKING_DOWN;
+            if (walls && structure.holds(at)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean houseDoor(java.util.Collection<Structure> structures, Pos door) {
         for (Structure structure : structures) {
             if (structure.stands() && structure.holds(door)) {

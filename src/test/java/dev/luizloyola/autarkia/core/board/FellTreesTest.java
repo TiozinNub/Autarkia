@@ -417,6 +417,60 @@ class FellTreesTest {
         assertTrue(project.finished(), "the residue hook must cost a clean box nothing");
     }
 
+    // ── a building's wood ────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aHouseFrameIsNotResidue() {
+        // An unroofed frame is log columns with nothing on top: residue by the column test alone,
+        // and an area felling took 22 logs of one (2026-10-21).
+        Pos post = new Pos(3, 60, 3);
+        residue = java.util.List.of(post);
+        FellingFence.keepOffBy(post::equals);
+        try {
+            FellTrees project = posted(ABLE, oneSlice());
+            project.completed(project.open().get(0), new BoardBrainContext());
+
+            assertTrue(project.finished(), "nothing but the frame stood in the box");
+            assertTrue(project.ledger().isEmpty());
+        } finally {
+            FellingFence.keepOffBy(at -> false);
+            residue = java.util.List.of();
+        }
+    }
+
+    @Test
+    void aTreeReportedInABuildingIsNotAdmitted() {
+        Pos post = new Pos(3, 60, 3);
+        FellingFence.keepOffBy(post::equals);
+        try {
+            FellTrees project = posted(ABLE, oneSlice());
+            project.completed(project.open().get(0), ctxThatSaw(post));
+
+            assertFalse(project.ledger().containsKey(post));
+        } finally {
+            FellingFence.keepOffBy(at -> false);
+        }
+    }
+
+    @Test
+    void aRowABuildingGoesUpOverLeavesTheLedger() {
+        Pos post = new Pos(3, 60, 3);
+        FellTrees project = posted(ABLE, oneSlice());
+        project.completed(project.open().get(0), ctxThatSaw(post));
+        assertEquals(FellTrees.TargetState.OPEN, project.ledger().get(post).state());
+
+        FellingFence.keepOffBy(post::equals);
+        try {
+            project.tick(1L);
+
+            assertFalse(project.ledger().containsKey(post));
+            assertTrue(project.open().stream().noneMatch(item -> item.describe().startsWith("fell")),
+                    "and its errand is withdrawn");
+        } finally {
+            FellingFence.keepOffBy(at -> false);
+        }
+    }
+
     // ── what a report may say ────────────────────────────────────────────────────────────────
 
     @Test

@@ -15,6 +15,7 @@ import dev.luizloyola.autarkia.core.board.Build;
 import dev.luizloyola.autarkia.core.board.ClearPlants;
 import dev.luizloyola.autarkia.core.board.Deconstruct;
 import dev.luizloyola.autarkia.core.board.FellTrees;
+import dev.luizloyola.autarkia.core.board.FellingFence;
 import dev.luizloyola.autarkia.core.board.Flatten;
 import dev.luizloyola.autarkia.core.board.GrowBuilding;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
@@ -81,6 +82,7 @@ public final class Structures {
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> live = null);
         DigIn.keepOffBy(Structures::keepsOffDigging);
+        FellingFence.keepOffBy(Structures::keepsOffFelling);
     }
 
     private static volatile @Nullable MinecraftServer live;
@@ -93,6 +95,19 @@ public final class Structures {
         }
         for (List<Structure> party : StructuresData.get(server).parties().values()) {
             if (Structure.onAPad(party, x, z)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean keepsOffFelling(Pos at) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return false;
+        }
+        for (List<Structure> party : StructuresData.get(server).parties().values()) {
+            if (Structure.fencesFelling(party, at)) {
                 return true;
             }
         }

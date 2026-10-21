@@ -395,6 +395,13 @@ public final class FellTrees implements PartyProject {
     private void refreshClearing(long now) {
         for (Target target : List.copyOf(ledger.values())) {
             WorkKey.AtPlace key = new WorkKey.AtPlace(WorkKey.CLEAR, target.anchor());
+            // Admitted before its building went up, or loaded from a save older than the fence:
+            // the only way a row leaves the ledger, and the fence keeps it from coming back.
+            if (target.state() != TargetState.CLEARED && FellingFence.keepsOff(target.anchor())) {
+                ledger.remove(target.anchor());
+                withdraw(key);
+                continue;
+            }
             if (target.offerableAt(now)) {
                 open.computeIfAbsent(key, k -> new ClearItem(key));
             } else {
@@ -469,9 +476,9 @@ public final class FellTrees implements PartyProject {
      * Takes into the ledger whatever {@link Felling#residue} finds inside the bounds that the
      * ledger has never held — see that method for why a project needs eyes of its own.
      *
-     * <p><b>Terminates.</b> Add-only against a ledger no row ever leaves, so an anchor is asked
-     * once however many times the box tries to close; and every stub cleared removes wood from a
-     * box that holds finitely much.
+     * <p><b>Terminates.</b> Add-only against a ledger no row leaves but into a building, which the
+     * {@link FellingFence} keeps out of it, so an anchor is asked once however many times the box
+     * tries to close; and every stub cleared removes wood from a box that holds finitely much.
      *
      * <p><b>It costs a column read apiece</b>, over the whole box, at the close. On a 128×128 that
      * is ~16k reads in one tick against {@code SurveyArea}'s 2048-a-tick budget — a one-off spike
@@ -481,7 +488,7 @@ public final class FellTrees implements PartyProject {
     private int harvestResidue(BrainContext ctx) {
         int added = 0;
         for (Pos anchor : clearing.residue(bounds, ctx.percepts().blocks())) {
-            if (!bounds.contains(anchor) || ledger.containsKey(anchor)) {
+            if (!bounds.contains(anchor) || ledger.containsKey(anchor) || FellingFence.keepsOff(anchor)) {
                 continue;
             }
             ledger.put(anchor, Target.fresh(anchor));
@@ -701,7 +708,7 @@ public final class FellTrees implements PartyProject {
         int added = 0;
         for (PoiMemory memory : ctx.knowledge().all(clearing.kind())) {
             Pos anchor = memory.anchor();
-            if (!bounds.contains(anchor) || ledger.containsKey(anchor)) {
+            if (!bounds.contains(anchor) || ledger.containsKey(anchor) || FellingFence.keepsOff(anchor)) {
                 continue;
             }
             ledger.put(anchor, Target.fresh(anchor));

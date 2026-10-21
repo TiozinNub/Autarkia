@@ -24,6 +24,7 @@ import dev.luizloyola.anima.core.log.Category;
 import dev.luizloyola.anima.core.nav.Gait;
 import dev.luizloyola.anima.core.nav.MoveCapabilities;
 import dev.luizloyola.anima.core.nav.WalkLevel;
+import dev.luizloyola.autarkia.core.board.FellingFence;
 import dev.luizloyola.autarkia.core.board.Stock;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -406,6 +407,9 @@ public final class FellTree implements PrimitiveTask {
     }
 
     private TaskStatus step(BrainContext ctx) {
+        if (approach == null && FellingFence.keepsOff(anchor)) {
+            return fail(ctx, "that is a building's wood, not a tree");
+        }
         // The ground around the stump matters until the tree is down; a sweep re-reading it
         // journals a fresh bearing from every cell it walks through. Read before the claim, which
         // is keyed on the base this finds.
@@ -1222,7 +1226,7 @@ public final class FellTree implements PrimitiveTask {
         // from the one stand near it was never asked (2026-09-10).
         List<Pos> cells = new ArrayList<>();
         for (Pos log : climb.branches()) {
-            if (blocks.at(log.x(), log.y(), log.z()) == BlockKind.LOG
+            if (blocks.at(log.x(), log.y(), log.z()) == BlockKind.LOG && !FellingFence.keepsOff(log)
                     && Climb.reaches(arm, at.x(), at.y(), at.z(), log, 0)) {
                 cells.add(log);
             }
@@ -1672,8 +1676,8 @@ public final class FellTree implements PrimitiveTask {
                     && leaf(blocks, cell.x(), cell.y(), cell.z())) {
                 kind = BlockKind.LEAVES; // on its decay rim: solid to the probe, a leaf to the axe
             }
-            if (!kinds.contains(kind)) {
-                continue; // already gone
+            if (!kinds.contains(kind) || FellingFence.keepsOff(cell)) {
+                continue; // already gone, or a building's
             }
             if (first == null) {
                 first = cell;
@@ -1699,7 +1703,8 @@ public final class FellTree implements PrimitiveTask {
                 // The trunk's own crown is dying by the time the swing at a limb is refused for
                 // one of its leaves (2026-09-10).
                 boolean leaf = leaf(blocks, block.x(), block.y(), block.z());
-                boolean ours = inTheWay == BlockKind.LOG && climb != null && climb.owns(block);
+                boolean ours = inTheWay == BlockKind.LOG && climb != null && climb.owns(block)
+                        && !FellingFence.keepsOff(block);
                 if (!leaf && !ours) {
                     break; // something the axe is not for: the walk's problem, or nobody's
                 }

@@ -76,9 +76,10 @@ public interface Felling {
      * it. Nothing remembers the stub, so nothing targets it, and the box closes honestly clear over
      * ground that still holds wood (live, 2026-08-23).
      *
-     * <p><b>The bounds are the whole safeguard.</b> An operator drew this box, so what it may take
-     * inside it is a different question from what a settler may believe about the world at large.
-     * Answering here changes nothing outside it, and {@code TreeRule} stays exactly as strict.
+     * <p><b>The bounds and the {@link FellingFence} are the whole safeguard.</b> The box was drawn
+     * to be cleared, so what it may take inside it is a different question from what a settler may
+     * believe about the world at large; the fence keeps the parties' buildings out of it. Answering
+     * here changes nothing outside it, and {@code TreeRule} stays exactly as strict.
      */
     default java.util.List<Pos> residue(Region area, BlockProbe probe) {
         return java.util.List.of();

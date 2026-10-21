@@ -48,6 +48,23 @@ class StructureTest {
         assertFalse(Structure.houseDoor(built, new Pos(5, 64 + Structure.WALLS_HIGH + 1, 5)), "above it");
     }
 
+    @Test
+    void aFellingKeepsOffTheWallsOnceTheyGoUp() {
+        Pos post = new Pos(1, 64, 10);
+        for (Structure.Phase phase : List.of(Structure.Phase.BUILDING, Structure.Phase.BUILT,
+                Structure.Phase.GROWING, Structure.Phase.TAKING_DOWN)) {
+            assertTrue(Structure.fencesFelling(List.of(house(phase)), post), phase.name());
+        }
+        for (Structure.Phase phase : List.of(Structure.Phase.SITED, Structure.Phase.FELLING,
+                Structure.Phase.LEVELLED, Structure.Phase.REFUSED)) {
+            assertFalse(Structure.fencesFelling(List.of(house(phase)), post),
+                    phase.name() + ": its own felling is clearing that ground");
+        }
+        List<Structure> building = List.of(house(Structure.Phase.BUILDING));
+        assertFalse(Structure.fencesFelling(building, new Pos(0, 64, 5)), "on the pad, past the walls");
+        assertFalse(Structure.fencesFelling(building, new Pos(5, 63, 5)), "under its floor");
+    }
+
     /** The flatten's whole ring: a trunk on a column it eases refuses the pad. */
     @Test
     void itsTreesAreFelledAsFarPastThePadAsTheFlattenEases() {
