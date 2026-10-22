@@ -212,6 +212,7 @@ public class Person extends Avatar implements AgentBody {
      * loneliness that reset to comfortable on every restart would tell them a reboot happened.
      */
     private static final String TAG_COMPANY = "company";
+    private static final String TAG_REST = "rest";
 
     /** Whether this load has projected the directory identity onto the synced fields yet. */
     private boolean identityProjected;
@@ -424,6 +425,10 @@ public class Person extends Avatar implements AgentBody {
      */
     private final Company company = new Company(this::profile);
 
+    /** Time awake since a bed (sleep spec); saved, so a restart does not rest anybody. */
+    private final dev.luizloyola.anima.core.agent.need.Rest rest =
+            new dev.luizloyola.anima.core.agent.need.Rest(this::profile);
+
     /**
      * Everything this settler feels, in one roster: hunger (a view over the {@link #metabolism},
      * never a second number), breath (a view over the air supply the game already keeps),
@@ -435,6 +440,7 @@ public class Person extends Avatar implements AgentBody {
             .add(new FoodNeed(this.metabolism, this::profile))
             .add(new BreathNeed(this::getAirSupply, this::getMaxAirSupply, this::profile))
             .add(this.company)
+            .add(this.rest)
             .add(new Vigor(this.metabolism, BodyEffects.of(this), this::profile));
 
     /**
@@ -950,7 +956,10 @@ public class Person extends Avatar implements AgentBody {
             hurtServer((ServerLevel) level(), damageSources().starve(), 1.0F);
         }
         this.company.observe(knownPeopleNearby());
+        this.rest.observe(isSleeping(),
+                dev.luizloyola.anima.core.brain.task.NightShelterStep.nightUnderCover(this.brain.context()));
         this.needs.tick();
+        dev.luizloyola.anima.mod.rest.RestCost.keep(this, this.rest);
         recordBreathChange();
     }
 
@@ -1441,6 +1450,7 @@ public class Person extends Avatar implements AgentBody {
         output.putFloat(TAG_FOOD_SATURATION, this.metabolism.saturation());
         output.putFloat(TAG_FOOD_EXHAUSTION, this.metabolism.exhaustion());
         output.putDouble(TAG_COMPANY, this.company.value());
+        output.putDouble(TAG_REST, this.rest.value());
         // The two switches somebody set ON this body, not the working state the driver re-derives.
         // Written unconditionally: "auto is off" has to survive, and so does turning it back on.
         output.putBoolean(TAG_BRAIN_AUTO, this.brain.isAuto());
@@ -1535,6 +1545,7 @@ public class Person extends Avatar implements AgentBody {
         // the gauge still starts at its species' band centre. Any default here would be a number
         // for "we don't know", and 0.0 (the obvious one) means desperately lonely.
         input.read(TAG_COMPANY, Codec.DOUBLE).ifPresent(this.company::setValue);
+        input.read(TAG_REST, Codec.DOUBLE).ifPresent(this.rest::setValue);
         // Both default ON, which is both the spawn default and what every Person saved before
         // these tags existed should read as.
         this.brain.restoreSwitches(input.getBooleanOr(TAG_BRAIN_AUTO, true),
