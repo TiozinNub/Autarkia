@@ -27,6 +27,7 @@ import dev.luizloyola.anima.mod.social.EncounterData;
 import dev.luizloyola.anima.mod.social.LedgerData;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.social.PlacesData;
+import dev.luizloyola.anima.mod.social.SocialLog;
 import dev.luizloyola.anima.mod.social.SpeechEffects;
 import dev.luizloyola.autarkia.core.board.ComeHome;
 import dev.luizloyola.autarkia.core.board.FetchStation;
@@ -163,6 +164,16 @@ public final class PersonGroupUp implements GroupUp {
                 followers.add(member);
             }
         }
+        List<String> following = new ArrayList<>();
+        List<String> beyond = new ArrayList<>();
+        for (AgentId member : parties.members(party.get())) {
+            if (!member.equals(leader)) {
+                (followers.contains(member) ? following : beyond).add(SocialLog.name(server, member));
+            }
+        }
+        SocialLog.write(server, e, SocialLog.ORDER, player.getName().getString() + ": follow me, "
+                + (following.isEmpty() ? "nobody in earshot" : "followed by " + String.join(", ", following))
+                + (beyond.isEmpty() ? "" : "; out of earshot " + String.join(", ", beyond)));
         PartyBoard board = PartyBoards.of(server, party.get());
         endFollowing(board);
         if (!followers.isEmpty()) {
@@ -183,7 +194,10 @@ public final class PersonGroupUp implements GroupUp {
             return;
         }
         Pos at = new Pos(leader.getBlockX(), leader.getBlockY(), leader.getBlockZ());
-        if (HomeLooks.settleHere(server, party.get(), at, body.brain().knowledge())) {
+        boolean settled = HomeLooks.settleHere(server, party.get(), at, body.brain().knowledge());
+        SocialLog.write(server, e, SocialLog.ORDER, leader.getName().getString() + ": here, at " + at.x() + ", "
+                + at.y() + ", " + at.z() + (settled ? ", settled" : ", not settled: the spot no longer passes"));
+        if (settled) {
             endFollowing(PartyBoards.of(server, party.get()));
             PartyBoards.touch(server);
         }

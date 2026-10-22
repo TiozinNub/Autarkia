@@ -18,6 +18,7 @@ import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.social.EncounterData;
 import dev.luizloyola.anima.mod.social.PartyData;
+import dev.luizloyola.anima.mod.social.SocialLog;
 import dev.luizloyola.anima.mod.social.SpeechEffects;
 import dev.luizloyola.autarkia.core.board.Explore;
 import dev.luizloyola.autarkia.core.direction.Home;
@@ -85,15 +86,26 @@ public final class HomeLooks implements HomeLooking {
             return;
         }
         AgentId finder = asked.get().author();
+        SocialLog.write(server, e, SocialLog.HOME, SocialLog.name(server, e.transcript().get(index).author())
+                + (settle ? " settles " : " turns down ") + SocialLog.name(server, finder) + "'s "
+                + (BED.equals(asked.get().payload().get(Utterance.TOPIC)) ? "bed" : "place"));
         if (BED.equals(asked.get().payload().get(Utterance.TOPIC))) {
             AgentId leader = e.transcript().get(index).author();
             AgentBody body = AgentBodies.findLoaded(server, finder);
             Optional<PartyId> party = PartyData.get(server).currentPartyOf(finder);
             Optional<Pos> bed = leader == null ? Optional.empty() : bedOf(server, leader);
             if (settle && body != null && party.isPresent() && bed.isPresent()) {
-                settleHere(server, party.get(), bed.get(), body.brain().knowledge());
+                boolean settled = settleHere(server, party.get(), bed.get(), body.brain().knowledge());
+                SocialLog.write(server, e, SocialLog.HOME, settled ? "settled at the bed"
+                        : "not settled: the spot by the bed does not pass");
+            } else if (settle) {
+                SocialLog.write(server, e, SocialLog.HOME, "not settled: "
+                        + (body == null ? "the finder is not loaded" : party.isEmpty() ? "no party" : "no bed"));
             }
             return; // a bed turned down is paced by the kept records, not dropped from a search
+        }
+        if (explore(server, finder).isEmpty()) {
+            SocialLog.write(server, e, SocialLog.HOME, "no search to tell: the party is not exploring");
         }
         explore(server, finder).ifPresent(explore -> {
             if (!settle) {
