@@ -58,6 +58,8 @@ public final class PartyLines {
     private static final double PER_STUCK_LINE = -5.0;
     private static final double STUCK_MOST = -15.0;
     private static final double NO_HOME = 10.0;
+    /** A party left with no home by a leader who chose none. */
+    private static final double NO_HOME_DISTRESS = 5.0;
     /** Hungry members make a party keener to join someone, as much as they make it less open. */
     private static final double HUNGRY_JOIN = HUNGRY_ALL;
     private static final int BAR = 20;
@@ -75,6 +77,14 @@ public final class PartyLines {
         ledgers.stands(line(Ledger.JOINING, HOMELESS, (party, reader) ->
                 homeless(server, party) ? OptionalDouble.of(NO_HOME) : OptionalDouble.empty()));
         ledgers.stands(line(Ledger.JOINING, HUNGRY, (party, reader) -> hungry(server, party, HUNGRY_JOIN)));
+        // Distress, for the discontent with an absent leader (decision 17): what the party suffers.
+        ledgers.stands(line(Ledger.DISCONTENT, HUNGRY, (party, reader) -> hungry(server, party, HUNGRY_ALL)));
+        ledgers.stands(line(Ledger.DISCONTENT, STUCK, (party, reader) -> {
+            OptionalDouble stuck = stuck(server, party);
+            return stuck.isPresent() ? OptionalDouble.of(-stuck.getAsDouble()) : stuck;
+        }));
+        ledgers.stands(line(Ledger.DISCONTENT, HOMELESS, (party, reader) ->
+                homeless(server, party) ? OptionalDouble.of(NO_HOME_DISTRESS) : OptionalDouble.empty()));
     }
 
     static boolean homeless(MinecraftServer server, PartyId party) {

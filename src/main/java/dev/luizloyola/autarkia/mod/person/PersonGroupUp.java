@@ -40,6 +40,7 @@ import dev.luizloyola.autarkia.mod.direction.HomeLooks;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.MinecraftServer;
@@ -60,6 +61,9 @@ public final class PersonGroupUp implements GroupUp {
      * answering a call (0.55). It only ever targets somebody already perceived. A starting value.
      */
     static final double SEEKING = 0.45;
+
+    /** How far from the party an online leader may go and still count as there. A starting value. */
+    static final double AWAY_RADIUS = 128;
 
     /** Over every piece of work (the base's set-up is 0.52): keeping up with the leader comes first. */
     static final double FOLLOW_PRIORITY = 0.6;
@@ -100,6 +104,28 @@ public final class PersonGroupUp implements GroupUp {
         GroupUps.install(new PersonGroupUp());
         SpeechEffects.on(SpeechActs.FOLLOW_ME.key(), PersonGroupUp::followMe);
         SpeechEffects.on(SpeechActs.HERE_WILL_DO.key(), PersonGroupUp::hereWillDo);
+    }
+
+    /**
+     * Online but away from the party: further than {@link #AWAY_RADIUS} from its HOME, or, with none,
+     * from every loaded member (decision 17).
+     */
+    @Override
+    public boolean awayFromParty(AgentId leader) {
+        MinecraftServer server = live;
+        ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(leader.value());
+        if (player == null) {
+            return true;
+        }
+        Optional<Depot.Site> home = Depot.of(leader);
+        if (home.isPresent()) {
+            Pos hint = home.get().hint();
+            return player.distanceToSqr(hint.x(), hint.y(), hint.z()) > AWAY_RADIUS * AWAY_RADIUS;
+        }
+        PartyData parties = PartyData.get(server);
+        return parties.currentPartyOf(leader).map(party -> parties.members(party).stream()
+                .map(member -> AgentBodies.findLoaded(server, member)).filter(Objects::nonNull)
+                .noneMatch(body -> body.entity().distanceTo(player) <= AWAY_RADIUS)).orElse(true);
     }
 
     /** A player leading a party with no HOME: theirs is the word that settles it. */
