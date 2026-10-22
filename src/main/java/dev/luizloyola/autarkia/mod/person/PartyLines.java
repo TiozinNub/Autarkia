@@ -143,16 +143,15 @@ public final class PartyLines {
         return loaded == 0 ? OptionalDouble.empty() : OptionalDouble.of(all * hungry / loaded);
     }
 
-    /** Silent until a standing building sleeps people (decision 8); then free beds, or none. */
+    /**
+     * Silent until a standing building sleeps people (decision 8); then free beds, or none. The beds
+     * are the ones standing in it, so one a player put there counts (sleep spec).
+     */
     private static OptionalDouble beds(MinecraftServer server, PartyId party) {
         int beds = 0;
         for (Structure structure : StructuresData.get(server).of(party)) {
             if (structure.stands()) {
-                beds += switch (structure.variants().getOrDefault("beds", "none")) {
-                    case "one" -> 1;
-                    case "two" -> 2;
-                    default -> 0;
-                };
+                beds += PersonBeds.standingIn(server, structure);
             }
         }
         if (beds == 0) {

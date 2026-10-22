@@ -51,6 +51,50 @@ public final class PersonBeds {
         return true;
     }
 
+    /** How far below and above its anchor a building's beds are looked for. */
+    private static final int BELOW = 4;
+    private static final int ABOVE = 16;
+    /** How long a count stands: a minute. */
+    private static final long RECOUNT_TICKS = 1_200L;
+
+    private record Count(long at, int beds) {
+    }
+
+    private static final Map<java.util.UUID, Count> COUNTS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** The beds standing in a building's footprint, counted by their heads; 0 while it is not loaded. */
+    public static int standingIn(MinecraftServer server, Structure structure) {
+        ServerLevel level = server.overworld();
+        long now = level.getGameTime();
+        Count count = COUNTS.get(structure.id());
+        if (count != null && now - count.at() < RECOUNT_TICKS) {
+            return count.beds();
+        }
+        Footprint built = structure.built();
+        if (built == null) {
+            return 0;
+        }
+        int beds = 0;
+        BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+        int y0 = structure.anchor().y();
+        for (int x = built.minX(); x <= built.maxX(); x++) {
+            for (int z = built.minZ(); z <= built.maxZ(); z++) {
+                at.set(x, y0, z);
+                if (!level.isLoaded(at)) {
+                    return count == null ? 0 : count.beds();
+                }
+                for (int y = y0 - BELOW; y <= y0 + ABOVE; y++) {
+                    at.setY(y);
+                    if (Sleeping.head(level, at).filter(at::equals).isPresent()) {
+                        beds++;
+                    }
+                }
+            }
+        }
+        COUNTS.put(structure.id(), new Count(now, beds));
+        return beds;
+    }
+
     private static boolean inside(Footprint built, BlockPos at) {
         return built != null && at.getX() >= built.minX() && at.getX() <= built.maxX()
                 && at.getZ() >= built.minZ() && at.getZ() <= built.maxZ();
