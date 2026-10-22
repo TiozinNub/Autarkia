@@ -37,6 +37,15 @@ public interface HomeLooking {
     default void scouting(PartyId party, AgentId scout) {
     }
 
+    /**
+     * HOME on {@code plot} as it was found, without the second look a scout gives the plot it stands
+     * on: a leader says yes from wherever they are, and the plot is often far and unloaded (client
+     * run, 2026-10-21). Ground another party holds is still refused. Whether it was settled.
+     */
+    default boolean settleAsFound(PartyId party, Candidate plot) {
+        return false;
+    }
+
     /** The player who leads {@code party} and so decides its HOME, if one does (decisions 14–16). */
     default Optional<AgentId> waitingLeader(PartyId party) {
         return Optional.empty();

@@ -11,8 +11,6 @@ import dev.luizloyola.anima.core.social.speech.Utterance;
 import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
 import dev.luizloyola.anima.core.territory.Reason;
-import dev.luizloyola.anima.mod.body.AgentBodies;
-import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.social.SpeechEffects;
@@ -80,12 +78,11 @@ public final class HomeLooks implements HomeLooking {
             return;
         }
         AgentId finder = asked.get().author();
-        AgentBody body = AgentBodies.findLoaded(server, finder);
         explore(server, finder).ifPresent(explore -> {
             if (!settle) {
                 explore.leaderDeclines();
-            } else if (body != null) {
-                explore.leaderSettles(body.brain().knowledge());
+            } else {
+                explore.leaderSettles();
             }
             PartyBoards.touch(server);
         });
@@ -175,6 +172,18 @@ public final class HomeLooks implements HomeLooking {
             }
         }
         return worst;
+    }
+
+    @Override
+    public boolean settleAsFound(PartyId party, Candidate plot) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return false;
+        }
+        Pos centre = new Pos(plot.x(), plot.y() + 1, plot.z());
+        return Directions.settle(server, party, Home.square(centre, plot.size() / 2),
+                Reason.of(Reason.Kind.FOUND, "settled by the leader's word at (" + centre.x() + ", " + centre.y()
+                        + ", " + centre.z() + "), worth " + Math.round(plot.value()))).granted();
     }
 
     /** A party led by a player waits on that player for HOME; one led by a settler does not. */

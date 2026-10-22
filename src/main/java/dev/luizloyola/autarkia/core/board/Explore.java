@@ -349,18 +349,15 @@ public final class Explore implements PartyProject {
         return suggested ? Optional.ofNullable(search.settleAt()) : Optional.empty();
     }
 
-    /**
-     * The leader said settle there: the plot is judged a second time from what {@code knowledge}
-     * knows, as a scout's own claim is, and becomes HOME if it passes. Whether it did.
-     */
-    public boolean leaderSettles(AgentKnowledge knowledge) {
+    /** The leader said settle there: the plot as found becomes HOME, unless its ground is taken. Whether it did. */
+    public boolean leaderSettles() {
         if (!suggested) {
             return false;
         }
         suggested = false;
         Candidate best = search.best();
         HomeLooking world = looking;
-        boolean settled = best != null && world != null && world.claim(party, best, knowledge);
+        boolean settled = best != null && world != null && world.settleAsFound(party, best);
         if (settled) {
             search.claimed();
         } else {

@@ -70,6 +70,14 @@ class ExploreTest {
             return Optional.ofNullable(leader);
         }
 
+        final List<Candidate> settledAsFound = new ArrayList<>();
+
+        @Override
+        public boolean settleAsFound(PartyId party, Candidate plot) {
+            settledAsFound.add(plot);
+            return allow;
+        }
+
         @Override
         public void scouting(PartyId party, AgentId scout) {
             scouts.add(scout);
@@ -434,8 +442,9 @@ class ExploreTest {
         assertFalse(explore.offerableTo(tell, AgentId.random(), ctx));
         assertInstanceOf(ReturnAndTell.class, tell.root());
 
-        assertTrue(explore.leaderSettles(ctx.knowledge()));
-        assertEquals(1, world.claimed.size(), "the leader's word claims it");
+        assertTrue(explore.leaderSettles());
+        assertTrue(world.claimed.isEmpty(), "no second look: the leader may be far from it");
+        assertEquals(1, world.settledAsFound.size(), "the leader's word settles it as found");
         assertTrue(explore.finished());
     }
 
