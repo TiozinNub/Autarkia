@@ -656,6 +656,12 @@ public class Person extends Avatar implements AgentBody {
         SwingClock.advance(this);
     }
 
+    /** As {@code Player} has it: a sleeper's legs take no input. {@link Avatar} only counts the dying. */
+    @Override
+    protected boolean isImmobile() {
+        return super.isImmobile() || isSleeping();
+    }
+
     /**
      * The shoulders, on both sides: square to {@code yRot}, which is the invariant {@link Gaze}
      * already holds server-side — every writer of the pair sets them together.
@@ -754,6 +760,9 @@ public class Person extends Avatar implements AgentBody {
      * swimming, which out of water is vanilla's crawl.
      */
     private void updatePose() {
+        if (isSleeping()) {
+            return; // the bed set it, and getting up sets it back
+        }
         // Read from the organ, not the synched flag: the flag is published in baseTick, before the
         // swimmer decides, so following it put the pose two ticks behind — a settler flapping on
         // the shore after its feet were down. The flag stays a tick behind for vanilla's own uses.
