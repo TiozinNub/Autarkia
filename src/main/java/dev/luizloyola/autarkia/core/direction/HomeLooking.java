@@ -59,6 +59,14 @@ public interface HomeLooking {
         return Optional.of("poor");
     }
 
+    /**
+     * Where {@code leader}'s bed is, when it would do as {@code self}'s party's HOME and nothing found
+     * is waiting on their word (decision 14). Empty otherwise.
+     */
+    default Optional<Pos> bed(AgentId self, AgentId leader) {
+        return Optional.empty();
+    }
+
     /** The place {@code self}'s party found, to put to {@code leader} if that is who it waits on. */
     default Optional<Pos> suggestion(AgentId self, AgentId leader) {
         return Optional.empty();

@@ -3,6 +3,8 @@ package dev.luizloyola.autarkia.mod.direction;
 import dev.luizloyola.anima.core.agent.AgentId;
 import dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.config.Config;
+import dev.luizloyola.anima.core.config.Knob;
 import dev.luizloyola.anima.core.social.PartyId;
 import dev.luizloyola.anima.core.social.speech.Encounter;
 import dev.luizloyola.anima.core.social.speech.Handover;
@@ -11,7 +13,10 @@ import dev.luizloyola.anima.core.social.speech.Utterance;
 import dev.luizloyola.anima.core.terrain.Landscape;
 import dev.luizloyola.anima.core.terrain.Terrain;
 import dev.luizloyola.anima.core.territory.Reason;
+import dev.luizloyola.anima.mod.body.AgentBodies;
+import dev.luizloyola.anima.mod.body.AgentBody;
 import dev.luizloyola.anima.mod.identity.AgentDirectory;
+import dev.luizloyola.anima.mod.social.EncounterData;
 import dev.luizloyola.anima.mod.social.PartyData;
 import dev.luizloyola.anima.mod.social.SpeechEffects;
 import dev.luizloyola.autarkia.core.board.Explore;
@@ -36,6 +41,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -78,6 +85,16 @@ public final class HomeLooks implements HomeLooking {
             return;
         }
         AgentId finder = asked.get().author();
+        if (BED.equals(asked.get().payload().get(Utterance.TOPIC))) {
+            AgentId leader = e.transcript().get(index).author();
+            AgentBody body = AgentBodies.findLoaded(server, finder);
+            Optional<PartyId> party = PartyData.get(server).currentPartyOf(finder);
+            Optional<Pos> bed = leader == null ? Optional.empty() : bedOf(server, leader);
+            if (settle && body != null && party.isPresent() && bed.isPresent()) {
+                settleHere(server, party.get(), bed.get(), body.brain().knowledge());
+            }
+            return; // a bed turned down is paced by the kept records, not dropped from a search
+        }
         explore(server, finder).ifPresent(explore -> {
             if (!settle) {
                 explore.leaderDeclines();
@@ -208,6 +225,40 @@ public final class HomeLooks implements HomeLooking {
             return Optional.empty();
         }
         return explore(server, self).flatMap(Explore::suggestion);
+    }
+
+    /** The topic a {@code suggest_home} carries when the place is the leader's bed. */
+    public static final String BED = "bed";
+
+    @Override
+    public Optional<Pos> bed(AgentId self, AgentId leader) {
+        MinecraftServer server = live;
+        if (server == null) {
+            return Optional.empty();
+        }
+        Optional<PartyId> party = PartyData.get(server).currentPartyOf(self);
+        AgentBody body = AgentBodies.findLoaded(server, self);
+        if (party.isEmpty() || body == null || !waitingLeader(party.get()).filter(leader::equals).isPresent()
+                || explore(server, self).filter(explore -> explore.suggestion().isEmpty() && !explore.finished())
+                        .isEmpty()) {
+            return Optional.empty();
+        }
+        long since = server.overworld().getGameTime() - Config.get().i(Knob.SOCIAL_ENCOUNTER_RETENTION_TICKS);
+        if (EncounterData.get(server).roster().saidLately(leader, self, SpeechActs.KEEP_LOOKING.key(), since)) {
+            return Optional.empty(); // told to keep looking lately: not the bed again
+        }
+        return bedOf(server, leader).filter(at -> spot(server, party.get(), at, body.brain().knowledge()).plot() != null);
+    }
+
+    /** Where an online player last set their bed, in the overworld. */
+    private static Optional<Pos> bedOf(MinecraftServer server, AgentId leader) {
+        ServerPlayer player = server.getPlayerList().getPlayer(leader.value());
+        ServerPlayer.RespawnConfig respawn = player == null ? null : player.getRespawnConfig();
+        if (respawn == null || !respawn.respawnData().dimension().equals(Level.OVERWORLD)) {
+            return Optional.empty();
+        }
+        BlockPos at = respawn.respawnData().pos();
+        return Optional.of(new Pos(at.getX(), at.getY(), at.getZ()));
     }
 
     @Override

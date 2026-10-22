@@ -208,4 +208,34 @@ class GroupUpRungsTest {
             dev.luizloyola.autarkia.core.board.Explore.install(null);
         }
     }
+
+    @Test
+    void withNothingFoundTheLeadersBedIsPutToThem() {
+        dev.luizloyola.autarkia.core.board.Explore.install(new dev.luizloyola.autarkia.core.direction.HomeLooking() {
+            @Override
+            public Optional<Look> look(Pos at, dev.luizloyola.anima.core.social.PartyId party,
+                    dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge knowledge) {
+                return Optional.empty();
+            }
+
+            @Override
+            public boolean claim(dev.luizloyola.anima.core.social.PartyId party,
+                    dev.luizloyola.autarkia.core.direction.HomeJudge.Candidate plot,
+                    dev.luizloyola.anima.core.brain.knowledge.AgentKnowledge knowledge) {
+                return false;
+            }
+
+            @Override
+            public Optional<Pos> bed(AgentId self, AgentId leader) {
+                return Optional.of(new Pos(9, 64, 9));
+            }
+        });
+        try {
+            Chooser.Line line = chooser.choose(ctx, turn(encounter(), Optional.empty(),
+                    SpeechActs.SUGGEST_HOME, SpeechActs.END_CHAT));
+            assertEquals(new Chooser.Line(SpeechActs.SUGGEST_HOME, Map.of(Utterance.TOPIC, "bed")), line);
+        } finally {
+            dev.luizloyola.autarkia.core.board.Explore.install(null);
+        }
+    }
 }

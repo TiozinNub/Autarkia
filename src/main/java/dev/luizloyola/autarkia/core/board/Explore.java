@@ -389,6 +389,12 @@ public final class Explore implements PartyProject {
         return world == null ? Optional.of("poor") : world.judgeHere(self, at, knowledge);
     }
 
+    /** Where {@code leader}'s bed is, when it would do as {@code self}'s HOME. */
+    public static Optional<Pos> bedFor(AgentId self, AgentId leader) {
+        HomeLooking world = looking;
+        return world == null ? Optional.empty() : world.bed(self, leader);
+    }
+
     /** The place {@code self}'s party found, to put to {@code leader}, when that is who it waits on. */
     public static Optional<Pos> suggestionFor(AgentId self, AgentId leader) {
         HomeLooking world = looking;

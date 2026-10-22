@@ -615,7 +615,8 @@ public final class PersonChooser implements Chooser {
      */
     private static boolean suggestsHome(BrainContext ctx, Turn turn) {
         return turn.greeted() && turn.applicable().contains(SpeechActs.SUGGEST_HOME)
-                && !said(turn, SpeechActs.SUGGEST_HOME) && homeSuggestion(ctx, turn).isPresent();
+                && !said(turn, SpeechActs.SUGGEST_HOME)
+                && (homeSuggestion(ctx, turn).isPresent() || leadersBed(ctx, turn).isPresent());
     }
 
     private static Optional<Pos> homeSuggestion(BrainContext ctx, Turn turn) {
@@ -624,8 +625,18 @@ public final class PersonChooser implements Chooser {
                 : turn.counterpart().flatMap(leader -> Explore.suggestionFor(self, leader));
     }
 
-    /** The place, from where the leader stands, by compass point and blocks. */
+    /** Where the leader's bed is, when it would do as HOME and nothing found waits on them. */
+    private static Optional<Pos> leadersBed(BrainContext ctx, Turn turn) {
+        AgentId self = ctx.self();
+        return self == null ? Optional.empty()
+                : turn.counterpart().flatMap(leader -> Explore.bedFor(self, leader));
+    }
+
+    /** The place, from where the leader stands, by compass point and blocks — or their bed. */
     private static Line whereThePlaceIs(BrainContext ctx, Turn turn) {
+        if (homeSuggestion(ctx, turn).isEmpty()) {
+            return new Line(SpeechActs.SUGGEST_HOME, Map.of(Utterance.TOPIC, "bed"));
+        }
         Pos plot = homeSuggestion(ctx, turn).orElseThrow();
         Pos from = counterpartSeen(ctx, turn).map(Being::pos).orElse(ctx.percepts().position());
         int dx = plot.x() - from.x();
