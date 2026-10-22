@@ -169,7 +169,7 @@ public final class AutarkiaCommands {
                                 AgentCommands::places, AgentCommands::nav, AgentCommands::follow,
                                 () -> AgentCommands.brain().then(AgentCommands.place(registryAccess))
                                         .then(AgentCommands.use(registryAccess)).then(AgentCommands.gather()).then(chop())
-                                        .then(AgentCommands.sleep()).then(AgentCommands.wake())
+                                        .then(AgentCommands.sleep()).then(AgentCommands.wake()).then(AgentCommands.bed())
                                         .then(obtain(registryAccess)),
                                 AgentCommands::think, AgentCommands::log, AgentCommands::knowledge,
                                 AgentCommands::horizon, AgentCommands::survey, AgentCommands::claims,

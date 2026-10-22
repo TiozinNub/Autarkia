@@ -191,6 +191,9 @@ public class AutarkiaMod implements ModInitializer {
                 dev.luizloyola.anima.core.brain.sense.Yields::dropped,
                 Stock.gatheringKit(dev.luizloyola.anima.core.brain.task.Food.SPEC),
                 dev.luizloyola.autarkia.core.person.Hunting::create);
+        // Which beds a Person may call its own; Anima keeps the claims and does the lying down.
+        dev.luizloyola.anima.mod.rest.Beds.register(
+                dev.luizloyola.autarkia.mod.person.PersonBeds::mayHold);
         // Picking a bush is Autarkia's to know; Anima only lends the empty hand that does it.
         dev.luizloyola.anima.mod.brain.BlockUses.register(
                 dev.luizloyola.autarkia.compat.forage.BerryPicking::pick);
