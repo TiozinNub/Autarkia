@@ -198,7 +198,7 @@ public final class PersonGroupUp implements GroupUp {
     public Optional<Ask> ask(AgentId self, AgentId other) {
         MinecraftServer server = live;
         if (server == null || together(server, self, other) || !introduced(server, self, other)
-                || refusedLately(server, other, self)) {
+                || refusedLately(server, other, self) || leftLately(server, other, self)) {
             return Optional.empty();
         }
         return Joining.askFor(side(server, self), side(server, other)).filter(ask -> willing(server, self, ask));
@@ -328,6 +328,15 @@ public final class PersonGroupUp implements GroupUp {
     private static boolean refusedLately(MinecraftServer server, AgentId by, AgentId to) {
         long since = server.overworld().getGameTime() - Config.get().i(Knob.SOCIAL_ENCOUNTER_RETENTION_TICKS);
         return EncounterData.get(server).roster().saidLately(by, to, SpeechActs.REFUSE_JOIN.key(), since);
+    }
+
+    /** Leaving says no to the whole party, so no member invites the leaver back for as long as a refusal holds. */
+    private static boolean leftLately(MinecraftServer server, AgentId leaver, AgentId self) {
+        long since = server.overworld().getGameTime() - Config.get().i(Knob.SOCIAL_ENCOUNTER_RETENTION_TICKS);
+        PartyData parties = PartyData.get(server);
+        List<AgentId> party = parties.currentPartyOf(self).map(parties::members).orElse(List.of(self));
+        return party.stream().anyMatch(member ->
+                EncounterData.get(server).roster().saidLately(leaver, member, SpeechActs.LEAVE_PARTY.key(), since));
     }
 
     /**
