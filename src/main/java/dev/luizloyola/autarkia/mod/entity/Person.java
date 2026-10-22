@@ -662,12 +662,6 @@ public class Person extends Avatar implements AgentBody {
         SwingClock.advance(this);
     }
 
-    /** As {@code Player} has it: a sleeper's legs take no input. {@link Avatar} only counts the dying. */
-    @Override
-    protected boolean isImmobile() {
-        return super.isImmobile() || isSleeping();
-    }
-
     /**
      * The shoulders, on both sides: square to {@code yRot}, which is the invariant {@link Gaze}
      * already holds server-side — every writer of the pair sets them together.
