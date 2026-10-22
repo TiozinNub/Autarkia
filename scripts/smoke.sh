@@ -441,6 +441,19 @@ for who in Alma Bram; do
         || die "$who's journal never records learning a name"
 done
 
+# The same conversation from outside: one record in the run's social.log, opened, spoken in with
+# the rule that chose each line, and closed under the same id. The sink flushes every 2 s.
+sleep 3
+social="$(ls -td "$SRV"/logs/anima/2*/ | head -1)social.log"
+[[ -f "$social" ]] || die "no social.log in $(dirname "$social")"
+tag="$(awk '$4 == "open" { print $3; exit }' "$social")"
+[[ -n "$tag" ]] || die "social.log records no conversation opening"
+grep -qaE "^[0-9:]+ \[[0-9]+\] $tag say +[^ ]+: [a-z_]+.* \| " "$social" \
+    || die "social.log has no line in $tag carrying the rule that chose it"
+grep -qaE "^[0-9:]+ \[[0-9]+\] $tag close " "$social" \
+    || die "social.log never closes $tag"
+echo "==> social.log holds the conversation, $tag open to close"
+
 # Company is what the whole errand was for, and the one number that says the machinery PAID. Both
 # were set to a hard 0 above and solitude only ever drains, so anything above the floor came from
 # the meeting and the lines exchanged.
