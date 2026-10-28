@@ -10,6 +10,7 @@ import dev.luizloyola.anima.core.brain.sense.Being;
 import dev.luizloyola.anima.core.brain.sense.BeingId;
 import dev.luizloyola.anima.core.brain.sense.FoodLookup;
 import dev.luizloyola.anima.core.brain.sense.Pos;
+import dev.luizloyola.anima.core.brain.task.Converse;
 import dev.luizloyola.anima.core.brain.task.ReadyFood;
 import dev.luizloyola.anima.core.inv.Inventory;
 import dev.luizloyola.anima.core.inv.ItemStack;
@@ -83,10 +84,19 @@ import org.jspecify.annotations.Nullable;
  *       say is how a chat ends, not a reason to say them again (decision: Luiz, 2026-09-23).</li>
  *   <li>Nothing pressing, and nobody has spoken for this body's patience: say goodbye. Leaving
  *       the moment nothing is pressing reads as bolting — two seconds after learning a name, on
- *       the first client run (decision: Luiz, 2026-09-13).</li>
+ *       the first client run (decision: Luiz, 2026-09-13). That wait is for a player; with a
+ *       settler it is only {@link #LULL_TICKS}.</li>
  * </ol>
  */
 public final class PersonChooser implements Chooser {
+
+    /**
+     * How long a settler stands quiet with another settler before saying goodbye: one full beat
+     * for the other to speak, and a second on top. The other runs this same ladder, so a beat it
+     * let pass means it has nothing left; waiting out the whole patience had two content settlers
+     * standing mute for fifteen seconds before every goodbye (2026-10-28).
+     */
+    static final int LULL_TICKS = Picker.REPLY_GRACE_TICKS + Converse.JITTER_TICKS + 20;
 
     @Override
     public @Nullable Line choose(BrainContext ctx, Turn turn) {
@@ -240,7 +250,7 @@ public final class PersonChooser implements Chooser {
                 new Rung(runsOutOfThingsToSay(ctx, turn), "18 out of things to say",
                         saidFacts(ctx, turn) + ", end_chat " + offer(turn, SpeechActs.END_CHAT)),
                 new Rung(saysGoodbye(ctx, turn), "19 say goodbye",
-                        "silent " + silence(ctx, turn) + " of " + patience(ctx) + " ticks, end_chat "
+                        "silent " + silence(ctx, turn) + " of " + goodbyeWait(ctx, turn) + " ticks, end_chat "
                                 + offer(turn, SpeechActs.END_CHAT)));
 
         List<String> out = new ArrayList<>();
@@ -440,7 +450,13 @@ public final class PersonChooser implements Chooser {
 
     private static boolean saysGoodbye(BrainContext ctx, Turn turn) {
         return turn.applicable().contains(SpeechActs.END_CHAT)
-                && silence(ctx, turn) > patience(ctx);
+                && silence(ctx, turn) > goodbyeWait(ctx, turn);
+    }
+
+    /** Rung 19's wait: the lull with a settler, this body's patience with a player or the unseen. */
+    private static long goodbyeWait(BrainContext ctx, Turn turn) {
+        boolean settler = counterpartSeen(ctx, turn).filter(being -> !being.playerControlled()).isPresent();
+        return settler ? Math.min(LULL_TICKS, patience(ctx)) : patience(ctx);
     }
 
     private static long silence(BrainContext ctx, Turn turn) {

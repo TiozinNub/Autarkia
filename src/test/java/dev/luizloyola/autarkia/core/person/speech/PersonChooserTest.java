@@ -298,6 +298,43 @@ class PersonChooserTest {
     }
 
     @Test
+    @DisplayName("with a settler, the goodbye waits a lull, not the whole patience")
+    void aSettlerIsLeftAfterALull() {
+        ctx.percepts.company.setValue(1.0);
+        ctx.percepts.beings = List.of(FakePercepts.personAt(otherId, new Pos(2, 64, 0), 2.0, "Bramble"));
+        Encounter e = freshEncounter();
+        e.append(new Utterance(otherId.asPerson(), SpeechActs.GREETING.key(), Map.of(), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
+                Optional.of(otherId.asPerson()));
+
+        ctx.percepts.time = PersonChooser.LULL_TICKS;
+        assertNull(chooser.choose(ctx, turn), "the other settler still had its beat");
+
+        ctx.percepts.time = PersonChooser.LULL_TICKS + 1;
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
+    }
+
+    @Test
+    @DisplayName("with a player, the goodbye still waits the whole patience")
+    void aPlayerIsGivenTheWholePatience() {
+        ctx.percepts.company.setValue(1.0);
+        dev.luizloyola.anima.core.brain.sense.Being player = FakePercepts.playerAt(new Pos(2, 64, 0), 2.0);
+        ctx.percepts.beings = List.of(player);
+        Encounter e = ctx.speech.join(player.id(), Speech.Opening.QUIET).orElseThrow();
+        e.append(new Utterance(player.id().asPerson(), SpeechActs.GREETING.key(), Map.of(), 0));
+        Chooser.Turn turn = new Chooser.Turn(e,
+                List.of(SpeechActs.END_CHAT), Optional.empty(), Optional.empty(), true,
+                Optional.of(player.id().asPerson()));
+
+        ctx.percepts.time = 300;
+        assertNull(chooser.choose(ctx, turn), "a player may still be typing");
+
+        ctx.percepts.time = 301;
+        assertEquals(Chooser.Line.of(SpeechActs.END_CHAT), chooser.choose(ctx, turn));
+    }
+
+    @Test
     @DisplayName("priority 7 replies to their small talk on its topic, even when company wants no more")
     void priority7RepliesToTheirSmallTalkWhenContent() {
         ctx.percepts.company.setValue(1.0); // crowded — no reason of its own to chat
@@ -453,9 +490,9 @@ class PersonChooserTest {
         // Rung 18 reads skipped: nothing has been said here yet, so plenty is left to say.
         assertTrue(lines.get(17).startsWith("skipped"), lines.get(17));
         assertTrue(lines.get(17).contains("something new left"), lines.get(17));
-        // Rung 19 reads skipped: rung 14 spoke, and the silence it waits for has not run either.
+        // Rung 19 reads skipped: rung 14 spoke, and the lull a settler is given has not run either.
         assertTrue(lines.get(18).startsWith("skipped"), lines.get(18));
-        assertTrue(lines.get(18).contains("silent 0 of 300 ticks"), lines.get(18));
+        assertTrue(lines.get(18).contains("silent 0 of " + PersonChooser.LULL_TICKS + " ticks"), lines.get(18));
     }
 
     // ── the full two-party conversation ──────────────────────────────────────────────────────
@@ -529,16 +566,17 @@ class PersonChooserTest {
         // Same, the other way: B now knows A is "Alder".
         other.percepts.beings = List.of(FakePercepts.personAt(BeingId.of(ctx.self), here, 4.0, "Alder"));
 
-        clockTo(ctx, other, 7 * beat);
+        clockTo(ctx, other, 6 * beat + PersonChooser.LULL_TICKS);
         assertEquals(TaskStatus.RUNNING, taskA.tick(ctx),
-                "both names known, company at the boundary — A holds: a goodbye waits out the silence");
+                "both names known, company at the boundary — A holds: a goodbye waits out a lull");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "so does B");
         assertEquals(7, ctx.speech.roster.open().get(0).transcript().size(), "nobody spoke");
 
-        long patience = ctx.profile().i(ProfileAspect.SOCIAL_PATIENCE_TICKS);
-        long quiet = 6 * beat + patience + 1;
+        long quiet = 6 * beat + PersonChooser.LULL_TICKS + 1;
+        assertTrue(quiet < 6 * beat + ctx.profile().i(ProfileAspect.SOCIAL_PATIENCE_TICKS),
+                "a settler is not waited on for the whole patience");
         clockTo(ctx, other, quiet);
-        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "the silence has run — A says goodbye");
+        assertEquals(TaskStatus.RUNNING, taskA.tick(ctx), "the lull has run — A says goodbye");
         assertEquals(TaskStatus.RUNNING, taskB.tick(otherContext), "B's beat restarted on the goodbye");
 
         clockTo(ctx, other, quiet + beat);
