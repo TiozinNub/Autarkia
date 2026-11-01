@@ -380,6 +380,16 @@ loom {
             programArguments.add(providers.gradleProperty("join").get())
         }
 
+        // Native Wayland window instead of Xwayland. Vanilla forces GLFW onto X11 whenever both
+        // are available unless its PREFER_WAYLAND debug flag is set, and Xwayland has ONE scale
+        // for every monitor: with a 150% screen next to 100% ones the window is resampled (blurry)
+        // on whichever side Xwayland isn't drawing for. The MC_DEBUG_ENABLED master switch only
+        // unlocks the other MC_DEBUG_* properties, each still off unless set. -Px11 opts out.
+        if (name == "client" && !providers.gradleProperty("x11").isPresent) {
+            jvmArguments.add("-DMC_DEBUG_ENABLED")
+            jvmArguments.add("-DMC_DEBUG_PREFER_WAYLAND")
+        }
+
         // Hot swap (-Photswap, or scripts/{client,server}.sh --hotswap): open a JDWP port so
         // scripts/hotswap.sh can push recompiled classes into the RUNNING game, and turn on
         // enhanced class redefinition so a swap may add methods and fields — stock HotSpot
