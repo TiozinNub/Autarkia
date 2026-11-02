@@ -16,8 +16,9 @@
 # Exit codes, because CI acts on them:
 #   0  the node is written
 #   3  nothing to do — the newest build is already a committed target
-#   4  the build exists but cannot be tried yet: no Loader for it, no Fabric API for it, or a Java
-#      the toolchain map does not know. Try again later; nothing here is wrong.
+#   4  the build exists but cannot be tried yet: no Loader for it, no Fabric API for it, a Fabric API
+#      that needs a newer Loader than the pin, or a Java the toolchain map does not know. Try again
+#      later, or bump the pin; nothing here is wrong.
 #   anything else is this script failing.
 set -Eeuo pipefail
 trap 'echo "snapshot.sh: failed at line $LINENO" >&2' ERR
@@ -40,7 +41,7 @@ mkdir -p "$NODE_DIR"
 # the file itself and prints one summary line; its exit code is the verdict.
 rc=0
 python3 - "$WANT" "$NODE_FILE" <<'PY' || rc=$?
-import datetime, json, os, re, sys, urllib.parse, urllib.request
+import datetime, io, json, os, re, sys, urllib.parse, urllib.request, zipfile
 
 want, node_file = sys.argv[1], sys.argv[2]
 UA = "autarkia/snapshot.sh (modrinth.com/mod/autarkia)"
@@ -115,7 +116,44 @@ def modrinth(project, game_versions):
 fapi = modrinth("fabric-api", [mc])
 if not fapi:
     verdict(4, f"Fabric API has no build for {mc} yet")
+fapi_jar = next(f for f in fapi[0]["files"] if f["primary"])["url"]
 fapi = fapi[0]["version_number"]
+
+
+def version_key(v):
+    core, _, pre = v.split("+")[0].partition("-")
+    nums = tuple(int(p) for p in core.split("."))
+    return nums + (0,) * (4 - len(nums)), pre == "", pre
+
+
+def satisfies(version, predicate):
+    """Fabric's version predicates as fabric.mod.json writes them: a list is any of, spaces are
+    all of, each term `*` or `>=` `>` `<=` `<` `=` `^` `~` before a version."""
+    if isinstance(predicate, list):
+        return any(satisfies(version, p) for p in predicate)
+    have = version_key(version)
+    for term in predicate.split():
+        if term == "*":
+            continue
+        m = re.fullmatch(r"(>=|<=|>|<|=|\^|~)?(\d+(?:\.\d+)*(?:-[\w.]+)?)", term)
+        if not m:
+            sys.exit(f"snapshot.sh: cannot read the version predicate {term!r} in Fabric API {fapi}")
+        op, want = m.group(1) or "=", version_key(m.group(2))
+        ok = {">=": have >= want, ">": have > want, "<=": have <= want, "<": have < want,
+              "=": have == want, "^": have >= want and have[0][0] == want[0][0],
+              "~": have >= want and have[0][:2] == want[0][:2]}[op]
+        if not ok:
+            return False
+    return True
+
+
+# Fabric API names the Loader it needs, and every module refuses to load under an older one, so
+# a pin Minecraft accepts can still fail the boot. The whole jar (~2 MB) for one small file.
+with urllib.request.urlopen(urllib.request.Request(fapi_jar, headers={"User-Agent": UA}), timeout=60) as r:
+    fapi_mod = json.loads(zipfile.ZipFile(io.BytesIO(r.read())).read("fabric.mod.json"))
+fapi_loader = fapi_mod.get("depends", {}).get("fabricloader", "*")
+if not satisfies(pinned_loader, fapi_loader):
+    verdict(4, f"Fabric API {fapi} needs Fabric Loader {fapi_loader}; deps.fabric_loader is {pinned_loader} — bump the pin first")
 
 
 def committed_pin(key):
