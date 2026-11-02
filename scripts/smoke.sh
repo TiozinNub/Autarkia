@@ -114,7 +114,10 @@ fi
 # installer version is whatever Fabric's meta lists first — it is their launcher plumbing, not a
 # compatibility surface of ours, so pinning it here would only mean pinning it stale.
 SERVER_JAR="$SRV/fabric-server-launch.jar"
-if [[ ! -f "$SERVER_JAR" ]]; then
+# The launcher is built for one Minecraft and one Loader. Without the stamp, a pin bump would go on
+# booting the old Loader here, and only here: CI starts from a clean tree.
+LAUNCHER_FOR="$MC $LOADER"
+if [[ ! -f "$SERVER_JAR" || "$(cat "$SERVER_JAR.for" 2>/dev/null)" != "$LAUNCHER_FOR" ]]; then
     # Matched in bash rather than through `grep | head | cut`: head exits on the first line, grep
     # takes SIGPIPE, and under `set -o pipefail` that fails the whole substitution silently.
     meta="$(curl -fsS --retry 3 https://meta.fabricmc.net/v2/versions/installer)"
@@ -126,6 +129,7 @@ if [[ ! -f "$SERVER_JAR" ]]; then
     echo "==> fetching the Fabric server launcher (installer $INSTALLER)"
     curl -fsSL --retry 3 -o "$SERVER_JAR" \
         "https://meta.fabricmc.net/v2/versions/loader/$MC/$LOADER/$INSTALLER/server/jar"
+    echo "$LAUNCHER_FOR" > "$SERVER_JAR.for"
 fi
 
 # ── mods/ ──────────────────────────────────────────────────────────────────────────────────────
