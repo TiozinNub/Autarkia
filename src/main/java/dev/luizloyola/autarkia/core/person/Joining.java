@@ -15,6 +15,22 @@ public final class Joining {
     public record Side(boolean homeless, boolean led, int size) {
     }
 
+    /** What a body's move takes with it. */
+    public enum Going {
+        /** Its whole party: it leads it, the party has no leader, or it is a party of one. */
+        PARTY,
+        /** Only itself, its party left behind, and past a higher bar ({@link #ALONE_MARGIN}). */
+        ALONE,
+        /** Nothing: its leader is a player, who has to be asked first (not built yet). */
+        NOBODY
+    }
+
+    /**
+     * How far past its party's own threshold a member's willingness to join must reach before it
+     * leaves its party for another. A starting value.
+     */
+    public static final double ALONE_MARGIN = 20.0;
+
     /** Who would move, read from either side's point of view. */
     public enum Mover {
         SELF, OTHER, EITHER, NEITHER
@@ -30,6 +46,19 @@ public final class Joining {
      */
     public static boolean scoutLeads(int members, boolean led) {
         return !led && members >= 2;
+    }
+
+    /**
+     * What a move by a body in a party of {@code members} takes (decision 7, Luiz 2026-11-02): only
+     * a party's leader moves the party. Under a settler leader a member goes alone; under a player
+     * leader it goes nowhere until it can ask them. A party with no leader yet is moved by whichever
+     * member speaks, as before.
+     */
+    public static Going going(int members, boolean led, boolean isLeader, boolean leaderIsPlayer) {
+        if (members < 2 || !led || isLeader) {
+            return Going.PARTY;
+        }
+        return leaderIsPlayer ? Going.NOBODY : Going.ALONE;
     }
 
     /** Who moves between {@code self} and {@code other}, before anything is said. */

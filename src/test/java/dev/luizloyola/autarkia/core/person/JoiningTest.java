@@ -72,4 +72,16 @@ class JoiningTest {
         assertTrue(Joining.scoutLeads(2, false));
         assertFalse(Joining.scoutLeads(2, true), "a player who joined first keeps the lead");
     }
+
+    @Test
+    void onlyTheLeaderMovesAParty() {
+        assertEquals(Joining.Going.PARTY, Joining.going(1, false, false, false), "a loner is its own party");
+        assertEquals(Joining.Going.PARTY, Joining.going(3, true, true, false), "the leader moves the party");
+        assertEquals(Joining.Going.PARTY, Joining.going(3, false, false, false),
+                "with no leader yet, whoever speaks moves it");
+        assertEquals(Joining.Going.ALONE, Joining.going(3, true, false, false),
+                "under a settler leader a member goes alone");
+        assertEquals(Joining.Going.NOBODY, Joining.going(3, true, false, true),
+                "under a player leader it does not go before asking them");
+    }
 }

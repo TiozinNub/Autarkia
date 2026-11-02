@@ -33,6 +33,7 @@ import dev.luizloyola.autarkia.core.board.ComeHome;
 import dev.luizloyola.autarkia.core.board.FetchStation;
 import dev.luizloyola.autarkia.core.board.FollowLeader;
 import dev.luizloyola.autarkia.core.board.PartyBoard;
+import dev.luizloyola.autarkia.core.person.Joining.Going;
 import dev.luizloyola.autarkia.core.person.Joining.Mover;
 import dev.luizloyola.autarkia.core.person.Joining.Side;
 import dev.luizloyola.autarkia.core.person.Joining;
@@ -215,7 +216,9 @@ public final class PersonGroupUp implements GroupUp {
                 || refusedLately(server, other, self) || leftLately(server, other, self)) {
             return Optional.empty();
         }
-        return Joining.askFor(side(server, self), side(server, other)).filter(ask -> willing(server, self, ask));
+        return Joining.askFor(side(server, self), side(server, other))
+                .filter(ask -> going(server, ask == Ask.JOIN ? self : other) != Going.NOBODY)
+                .filter(ask -> willing(server, self, ask));
     }
 
     @Override
@@ -224,7 +227,8 @@ public final class PersonGroupUp implements GroupUp {
         if (server == null || AgentBodies.findLoaded(server, self) == null) {
             return 0;
         }
-        return side(server, self).homeless() && willing(server, self, Ask.JOIN) ? SEEKING : 0;
+        return side(server, self).homeless() && going(server, self) != Going.NOBODY
+                && willing(server, self, Ask.JOIN) ? SEEKING : 0;
     }
 
     /** Somebody this homeless body could move in with, who has not turned it down lately. */
@@ -249,10 +253,17 @@ public final class PersonGroupUp implements GroupUp {
         if (!Joining.holds(theirs, mine, ask)) {
             return Optional.of(!theirs.homeless() && !mine.homeless() ? "settled" : "not_now");
         }
-        // Asked to take somebody in, the party's openness answers; invited to move, its willingness.
+        Going going = going(server, ask == Ask.JOIN ? asker : self);
+        if (going == Going.NOBODY) {
+            return Optional.of("not_now");
+        }
+        // Asked to take somebody in, the party's openness answers; invited to move, its willingness —
+        // higher for a member who would leave its party behind.
         Ledger weighed = ask == Ask.JOIN ? Ledger.OPENNESS : Ledger.JOINING;
+        double bar = threshold(server, self, weighed)
+                + (ask == Ask.INVITE && going == Going.ALONE ? Joining.ALONE_MARGIN : 0);
         Optional<Ledgers.Reading> reading = reading(server, self, weighed);
-        if (reading.isEmpty() || reading.get().total() >= threshold(server, self, weighed)) {
+        if (reading.isEmpty() || reading.get().total() >= bar) {
             return Optional.empty();
         }
         return Optional.of(reading.get().strongestAgainst()
@@ -269,7 +280,26 @@ public final class PersonGroupUp implements GroupUp {
         PartyData parties = PartyData.get(server);
         PartyId askers = parties.partyOf(asker);
         PartyId askeds = parties.partyOf(asked);
-        return Optional.of(ask == Ask.JOIN ? new Move(askers, askeds) : new Move(askeds, askers));
+        AgentId mover = ask == Ask.JOIN ? asker : asked;
+        return switch (going(server, mover)) {
+            case NOBODY -> Optional.empty();
+            case ALONE -> Optional.of(ask == Ask.JOIN ? new Move(askers, askeds, Optional.of(mover))
+                    : new Move(askeds, askers, Optional.of(mover)));
+            case PARTY -> Optional.of(ask == Ask.JOIN ? new Move(askers, askeds) : new Move(askeds, askers));
+        };
+    }
+
+    /** What {@code who} moving takes along, by its place in its party (decision 7). */
+    static Going going(MinecraftServer server, AgentId who) {
+        PartyData parties = PartyData.get(server);
+        Optional<PartyId> party = parties.currentPartyOf(who);
+        if (party.isEmpty()) {
+            return Going.PARTY;
+        }
+        Optional<AgentId> leader = parties.leader(party.get());
+        boolean leaderIsPlayer = leader.isPresent() && AgentDirectory.of(server).identity(leader.get()).isEmpty();
+        return Joining.going(parties.members(party.get()).size(), leader.isPresent(),
+                leader.filter(who::equals).isPresent(), leaderIsPlayer);
     }
 
     /**
@@ -360,8 +390,10 @@ public final class PersonGroupUp implements GroupUp {
      */
     private static boolean willing(MinecraftServer server, AgentId self, Ask ask) {
         Ledger ledger = ask == Ask.JOIN ? Ledger.JOINING : Ledger.OPENNESS;
+        double bar = threshold(server, self, ledger)
+                + (ask == Ask.JOIN && going(server, self) == Going.ALONE ? Joining.ALONE_MARGIN : 0);
         Optional<Ledgers.Reading> reading = reading(server, self, ledger);
-        return reading.isEmpty() || reading.get().total() >= threshold(server, self, ledger);
+        return reading.isEmpty() || reading.get().total() >= bar;
     }
 
     /** {@code ledger} for {@code self}'s party as self weighs it; empty for a player, who has no nature. */
