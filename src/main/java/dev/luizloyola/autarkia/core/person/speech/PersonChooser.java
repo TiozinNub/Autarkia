@@ -434,14 +434,16 @@ public final class PersonChooser implements Chooser {
     }
 
     /**
-     * What has already been brought up in THIS record — topics by either side, deeds by this body,
-     * read the way {@link #alreadyAsked} reads it: in a two-party record a line the counterpart did
-     * not say is this body's own.
+     * What has already been brought up in this record and in the two's chats closed within the
+     * greeting window ({@link Turn#earlier}) — topics by either side, deeds by this body, read the
+     * way {@link #alreadyAsked} reads it: in a two-party record a line the counterpart did not say
+     * is this body's own.
      */
     private static Topics.Said saidHere(Turn turn) {
         AgentId counterpart = turn.counterpart().orElse(null);
-        return Topics.Said.in(turn.encounter().transcript(),
-                line -> !line.system() && !line.author().equals(counterpart));
+        List<Utterance> lines = new ArrayList<>(turn.earlier());
+        lines.addAll(turn.encounter().transcript());
+        return Topics.Said.in(lines, line -> !line.system() && !line.author().equals(counterpart));
     }
 
     private static boolean wantsCompany(BrainContext ctx) {

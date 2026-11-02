@@ -731,6 +731,25 @@ class PersonChooserTest {
     }
 
     @Test
+    @DisplayName("met again soon after, a topic from the last chat is not brought up again")
+    void priority8NeverRepeatsATopicFromTheLastChat() {
+        ctx.percepts.company.setValue(0.5);
+        Encounter last = freshEncounter();
+        List<String> topics = Topics.keys(ctx, Optional.empty());
+        for (String topic : topics.subList(1, topics.size())) {
+            last.append(mine(topic));
+        }
+        Encounter now = freshEncounter();
+        Chooser.Turn turn = new Chooser.Turn(now,
+                List.of(PersonActs.SMALL_TALK, PersonActs.SMALL_TALK_REPLY, SpeechActs.END_CHAT),
+                Optional.empty(), Optional.empty(), true, Optional.of(otherId.asPerson()),
+                last.transcript());
+
+        assertEquals(topics.get(0), chooser.choose(ctx, turn).payload().get("topic"),
+                "the last chat's topics count as said");
+    }
+
+    @Test
     @DisplayName("priority 9: everything said, by either side, it says goodbye at once rather than again")
     void priority9SaysGoodbyeWhenOutOfThingsToSay() {
         ctx.percepts.company.setValue(0.5); // still wants company — and has nothing left to say
