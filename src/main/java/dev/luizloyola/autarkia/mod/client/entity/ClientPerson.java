@@ -121,7 +121,8 @@ public class ClientPerson extends Person implements ClientAvatarEntity {
         // has projected an identity onto the body and synced it, the state a freshly summoned
         // Person is in — and this runs on the render thread, where an NPE is a crash report. A
         // blink needs no agent, only a number that differs between bodies.
-        boolean shut = Blink.shutAt(getUUID().getLeastSignificantBits(), System.currentTimeMillis());
+        boolean shut = isSleeping()
+                || Blink.shutAt(getUUID().getLeastSignificantBits(), System.currentTimeMillis());
         if (this.composed == null || this.composedFrom != base || this.eyesShut != shut) {
             this.composedFrom = base;
             this.eyesShut = shut;

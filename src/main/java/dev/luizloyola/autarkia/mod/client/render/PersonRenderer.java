@@ -93,6 +93,12 @@ public class PersonRenderer extends LivingEntityRenderer<Person, AvatarRenderSta
         state.showRightPants = true;
         state.showCape = false;
         state.id = person.getId();
+        if (state.bedOrientation != null) {
+            // Head straight on the pillow. Vanilla draws the head as yaw minus the bed's facing,
+            // so whatever the head last pointed at would show as a sleeper looking round.
+            state.yRot = 0.0F;
+            state.xRot = 0.0F;
+        }
         // last, and only here. NEA records the entity on this state from inside the super call
         // above, so swapping in the shadow now is the whole integration. Not in submit():
         // dispatch is by STATE type and an AvatarRenderState always routes to vanilla's

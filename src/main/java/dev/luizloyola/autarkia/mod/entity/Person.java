@@ -1052,12 +1052,30 @@ public class Person extends Avatar implements AgentBody {
      * vanilla made (a totem consumed, armor durability spent) is pulled back into the inventory.
      */
     private void syncEquipmentMirror() {
-        reconcile(EquipmentSlot.MAINHAND, this.inventory.selectedSlot());
-        reconcile(EquipmentSlot.OFFHAND, Inventory.OFFHAND_SLOT);
+        if (isSleeping()) {
+            // A sleeper holds nothing. The items stay in their inventory slots, and waking pushes
+            // them back because the core stack then differs from the EMPTY mirrored here.
+            putAway(EquipmentSlot.MAINHAND);
+            putAway(EquipmentSlot.OFFHAND);
+        } else {
+            reconcile(EquipmentSlot.MAINHAND, this.inventory.selectedSlot());
+            reconcile(EquipmentSlot.OFFHAND, Inventory.OFFHAND_SLOT);
+        }
         reconcile(EquipmentSlot.HEAD, armorSlotIndex(ArmorType.HEAD));
         reconcile(EquipmentSlot.CHEST, armorSlotIndex(ArmorType.CHEST));
         reconcile(EquipmentSlot.LEGS, armorSlotIndex(ArmorType.LEGS));
         reconcile(EquipmentSlot.FEET, armorSlotIndex(ArmorType.FEET));
+    }
+
+    /** Empty a hand slot without touching the inventory; nothing is pulled back while asleep. */
+    private void putAway(EquipmentSlot slot) {
+        if (dev.luizloyola.anima.core.inv.ItemStack.EMPTY.equals(this.mirroredEquipment.get(slot))
+                && getItemBySlot(slot).isEmpty()) {
+            return;
+        }
+        setItemSlot(slot, ItemStack.EMPTY);
+        this.mirroredEquipment.put(slot, dev.luizloyola.anima.core.inv.ItemStack.EMPTY);
+        this.mirroredVanilla.put(slot, ItemStack.EMPTY);
     }
 
     private static int armorSlotIndex(ArmorType type) {
