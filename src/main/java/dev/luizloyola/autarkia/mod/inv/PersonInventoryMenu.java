@@ -201,7 +201,7 @@ public final class PersonInventoryMenu extends AbstractContainerMenu {
      * frame somewhere there is no slot.
      */
     public int selectedSlot() {
-        return Mth.clamp(this.selectedSlot.get(), 0, Inventory.HOTBAR_SIZE - 1);
+        return Math.clamp(this.selectedSlot.get(), 0, Inventory.HOTBAR_SIZE - 1);
     }
 
     @Override

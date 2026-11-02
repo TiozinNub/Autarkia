@@ -19,7 +19,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(CreakingAi.class)
 public abstract class CreakingAiMixin {
 
+    //? if >=26.4-alpha {
+    /*@Inject(method = "isAttackTargetStillValid", at = @At("HEAD"), cancellable = true)
+    *///?} else {
     @Inject(method = "isAttackTargetStillReachable", at = @At("HEAD"), cancellable = true)
+    //?}
     private static void autarkia$aPerson(Creaking creaking, LivingEntity target,
                                         CallbackInfoReturnable<Boolean> cir) {
         if (target instanceof Person && creaking.level() instanceof ServerLevel level) {

@@ -69,7 +69,7 @@ public final class HomeRecords {
                     continue;
                 }
                 for (StructureStart start : chunk.getAllStarts().values()) {
-                    if (!start.isValid()) {
+                    if (start.getPieces().isEmpty()) {
                         continue;
                     }
                     Holder<Structure> holder = registry.wrapAsHolder(start.getStructure());
@@ -99,7 +99,11 @@ public final class HomeRecords {
     public static Landscape.Columns refusedBiome(ServerLevel level, IntBinaryOperator groundY) {
         Map<Long, Boolean> cells = new HashMap<>();
         return (x, z) -> cells.computeIfAbsent(((long) (x >> 2) << 32) ^ ((z >> 2) & 0xFFFFFFFFL),
+                //? if >=26.4-alpha {
+                /*cell -> level.getBiome(x, groundY.applyAsInt(x, z), z).is(REFUSED_BIOMES));
+                *///?} else {
                 cell -> level.getNoiseBiome(x >> 2, groundY.applyAsInt(x, z) >> 2, z >> 2)
                         .is(REFUSED_BIOMES));
+                //?}
     }
 }

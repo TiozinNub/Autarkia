@@ -10,7 +10,12 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *///?}
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+//? if >=26.4-alpha {
+/*import net.minecraft.client.gui.GuiPipeline;
+import net.minecraft.client.gui.screens.social.EntityPortraitWidget;
+*///?} else {
 import net.minecraft.client.renderer.RenderPipelines;
+//?}
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import java.util.function.IntFunction;
@@ -222,7 +227,28 @@ public class PersonInventoryScreen extends AbstractContainerScreen<PersonInvento
         this.titleLabelY = 12;
     }
 
-    //? if >=26.1 {
+    //? if >=26.4-alpha {
+    /*@Override
+    public void extractBackground(GuiGraphicsExtractor extractor) {
+        int x = (this.width - this.imageWidth) / 2;
+        int y = (this.height - this.imageHeight) / 2;
+        extractor.blit(GuiPipeline.TEXTURED, TEXTURE, x, y, 0.0F, 0.0F,
+                this.imageWidth, this.imageHeight, TEX_SIZE, TEX_SIZE);
+        SpriteBlitter blit = (sprite, px, py, w, h) ->
+                extractor.blitSprite(GuiPipeline.TEXTURED, sprite, px, py, w, h);
+        // The selected hotbar slot — synced, so it needs no entity and draws even if the doll can't.
+        drawHandFrame(blit, x, y);
+        // Paper doll: This Person in the inset, following the mouse (read off the extractor). The
+        // offhand slot draws on top afterwards.
+        if (this.minecraft != null && this.minecraft.level != null
+                && this.minecraft.level.getEntity(getMenu().personEntityId()) instanceof LivingEntity person) {
+            EntityPortraitWidget.extractEntityInInventoryFollowsMouse(
+                    extractor, x + 26, y + 8, x + 74, y + 77, 30, 0.0625F, person);
+            // Armor / health / hunger, stacked vanilla HUD rows in the empty panel beside the doll.
+            drawVitals(blit, x, y, person);
+        }
+    }
+    *///?} elif >=26.1 {
     @Override
     public void extractBackground(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
         int x = (this.width - this.imageWidth) / 2;
