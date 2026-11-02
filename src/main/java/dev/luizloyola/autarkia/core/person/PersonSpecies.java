@@ -106,19 +106,19 @@ public final class PersonSpecies {
             // Between lonely (0.50) and mind.preempt (0.60): an idle settler comes when called,
             // one mid-chop finishes the tree first. That gap IS "he was busy".
             .set(ProfileAspect.SOCIAL_HAIL_ANSWER_PRESSURE, 0.55)
-            // Company, as a band a settler tries to sit in: [0.35, 0.85], wide enough that most of a
-            // working day passes with nothing to say about it. The two rates only mean anything
-            // against each other: two in-game days of solitude empties a settler, one neighbour
-            // fills at twice that, so company nets upward in company and downward alone.
+            // Company, as a band a settler tries to sit in: [0.35, 0.85]. Talk holds it up and
+            // standing near people only trickles: two in-game days alone empty a settler, and a
+            // neighbour fills at a quarter of that, so a party of three still drains without chat.
+            // At 24,000 a neighbour, every settled party sat pinned at crowded and nobody talked
+            // (forest, 2026-11-02).
             .set(ProfileAspect.SOCIAL_COMPANY_SOLITUDE_TICKS, 48_000)
-            .set(ProfileAspect.SOCIAL_COMPANY_PROXIMITY_TICKS, 24_000)
-            // Conversation is counted in LINES, not time — see the aspect. Thirty fills a settler
-            // from empty, so the social spec's worked transcript (about fifteen lines) is half a
-            // bar. Starting values, to be tuned in world.
-            .set(ProfileAspect.SOCIAL_COMPANY_UTTERANCES, 30)
-            // Six new faces against thirty lines of chat: a new person is worth about five
-            // conversations. A starting value, to be tuned in world.
-            .set(ProfileAspect.SOCIAL_COMPANY_MEETINGS, 6)
+            .set(ProfileAspect.SOCIAL_COMPANY_PROXIMITY_TICKS, 192_000)
+            // Counted in LINES, not time — see the aspect. A typical first chat (about twenty
+            // lines) is a third of a bar, so a settler wants a chat or two a day; at 30 one chat
+            // took a desolate settler to 0.81 (Luiz, 2026-11-02: "needs retuning").
+            .set(ProfileAspect.SOCIAL_COMPANY_UTTERANCES, 60)
+            // A new face is worth about a tenth of a bar, half a chat.
+            .set(ProfileAspect.SOCIAL_COMPANY_MEETINGS, 10)
             // Chat is for someone already close — well inside sight, let alone the hail.
             .set(ProfileAspect.SOCIAL_CHAT_RADIUS, 12)
             // Fifteen seconds on an unanswered question before it reads as a snub.
