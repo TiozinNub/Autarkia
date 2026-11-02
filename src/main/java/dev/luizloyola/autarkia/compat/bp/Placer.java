@@ -99,8 +99,6 @@ public final class Placer {
      * two halves together. False, with nothing written, when a chunk it needs is unloaded.
      */
     public static boolean step(ServerLevel level, BlockPos anchor, BuildPlan plan, Placement placement, Step step) {
-        Mirror mirror = placement.flip() ? Mirror.FRONT_BACK : Mirror.NONE;
-        Rotation rotation = TURNS[placement.turns()];
         List<Write> writes = new ArrayList<>();
         for (int k = 0; k < step.cells().size(); k++) {
             BlockPos pos = at(anchor, plan, placement, step.cells().get(k));
@@ -108,7 +106,7 @@ public final class Placer {
             if (!level.isLoaded(pos) || state.isEmpty()) {
                 return false;
             }
-            writes.add(new Write(pos, state.get().mirror(mirror).rotate(rotation)));
+            writes.add(new Write(pos, turned(state.get(), placement)));
         }
         // As place's two passes, a step long: the neighbours reshape to what is set, then what is set
         // to them. Both halves go in before either is shaped — a door's lower half alone shapes
@@ -134,8 +132,7 @@ public final class Placer {
         if (resolved.isEmpty()) {
             return Optional.empty();
         }
-        BlockState state = resolved.get().mirror(placement.flip() ? Mirror.FRONT_BACK : Mirror.NONE)
-                .rotate(TURNS[placement.turns()]);
+        BlockState state = turned(resolved.get(), placement);
         Making making = Making.of(state.getBlock());
         Item item = making != null ? making.base().asItem() : state.getBlock().asItem();
         if (item == Items.AIR) {
@@ -182,6 +179,23 @@ public final class Placer {
         return property.getName(state.getValue(property));
     }
 
+    /**
+     * A block as placed: vanilla's mirror, then its rotate. Vanilla's chest mirror turns the facing
+     * and keeps the half, so a flipped pair's halves would point away from each other and both
+     * stand single; the half is swapped here.
+     */
+    static BlockState turned(BlockState state, Placement placement) {
+        BlockState out = state;
+        if (placement.flip()) {
+            out = out.mirror(Mirror.FRONT_BACK);
+            if (out.hasProperty(BlockStateProperties.CHEST_TYPE)) {
+                out = out.setValue(BlockStateProperties.CHEST_TYPE,
+                        out.getValue(BlockStateProperties.CHEST_TYPE).getOpposite());
+            }
+        }
+        return out.rotate(TURNS[placement.turns()]);
+    }
+
     /** Where a cell of the drawing lands, the plan turned and mirrored as placed; cells outside it too. */
     public static BlockPos at(BlockPos anchor, BuildPlan plan, Placement placement, Cell cell) {
         int[] turned = placement.cell(cell.x(), cell.z(), plan.width(), plan.depth());
@@ -209,8 +223,6 @@ public final class Placer {
                 }
             }
         }
-        Mirror mirror = placement.flip() ? Mirror.FRONT_BACK : Mirror.NONE;
-        Rotation rotation = TURNS[placement.turns()];
         Map<Outcome, Optional<BlockState>> resolved = new HashMap<>();
         List<Write> writes = new ArrayList<>();
         int[] counts = new int[3];
@@ -236,7 +248,7 @@ public final class Placer {
                     if (block.isEmpty()) {
                         unknown[0] = state.block() + state.props();
                     } else if (blocks) {
-                        writes.add(new Write(pos, block.get().mirror(mirror).rotate(rotation)));
+                        writes.add(new Write(pos, turned(block.get(), placement)));
                         counts[0]++;
                     }
                 }
